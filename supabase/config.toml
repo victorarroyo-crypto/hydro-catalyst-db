@@ -2,3 +2,6 @@ project_id = "bdmpshiqspkxcisnnlyr"
 
 [functions.migrate-technologies]
 verify_jwt = false
+
+[functions.review-edit]
+verify_jwt = false
