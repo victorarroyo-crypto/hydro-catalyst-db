@@ -1,1 +1,4 @@
 project_id = "bdmpshiqspkxcisnnlyr"
+
+[functions.migrate-technologies]
+verify_jwt = false
