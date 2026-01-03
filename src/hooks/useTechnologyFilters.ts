@@ -2,12 +2,17 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { TechnologyFilters } from '@/types/database';
 
+export interface FilterOptionWithCount {
+  value: string;
+  count: number;
+}
+
 export interface FilterOptions {
-  tiposTecnologia: string[];
-  subcategorias: string[];
-  paises: string[];
-  sectores: string[];
-  estados: string[];
+  tiposTecnologia: FilterOptionWithCount[];
+  subcategorias: FilterOptionWithCount[];
+  paises: FilterOptionWithCount[];
+  sectores: FilterOptionWithCount[];
+  estados: FilterOptionWithCount[];
 }
 
 export function useTechnologyFilters() {
@@ -22,25 +27,36 @@ export function useTechnologyFilters() {
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
-      const [tipos, subcats, paises, sectores, estados] = await Promise.all([
-        supabase.from('technologies').select('"Tipo de tecnología"').not('"Tipo de tecnología"', 'is', null),
-        supabase.from('technologies').select('"Subcategoría"').not('"Subcategoría"', 'is', null),
-        supabase.from('technologies').select('"País de origen"').not('"País de origen"', 'is', null),
-        supabase.from('technologies').select('"Sector y subsector"').not('"Sector y subsector"', 'is', null),
-        supabase.from('technologies').select('status').not('status', 'is', null),
-      ]);
+      // Fetch all technologies for counting
+      const { data: allTech } = await supabase
+        .from('technologies')
+        .select('"Tipo de tecnología", "Subcategoría", "País de origen", "Sector y subsector", status');
 
-      const unique = (arr: any[], key: string) => {
-        const values = arr?.map((item) => item[key]).filter(Boolean) || [];
-        return [...new Set(values)].sort();
+      if (!allTech) {
+        setLoading(false);
+        return;
+      }
+
+      // Count occurrences for each filter
+      const countByField = (field: string): FilterOptionWithCount[] => {
+        const counts: Record<string, number> = {};
+        allTech.forEach((item: any) => {
+          const value = item[field];
+          if (value) {
+            counts[value] = (counts[value] || 0) + 1;
+          }
+        });
+        return Object.entries(counts)
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => a.value.localeCompare(b.value));
       };
 
       setFilterOptions({
-        tiposTecnologia: unique(tipos.data || [], 'Tipo de tecnología'),
-        subcategorias: unique(subcats.data || [], 'Subcategoría'),
-        paises: unique(paises.data || [], 'País de origen'),
-        sectores: unique(sectores.data || [], 'Sector y subsector'),
-        estados: unique(estados.data || [], 'status'),
+        tiposTecnologia: countByField('Tipo de tecnología'),
+        subcategorias: countByField('Subcategoría'),
+        paises: countByField('País de origen'),
+        sectores: countByField('Sector y subsector'),
+        estados: countByField('status'),
       });
       setLoading(false);
     };
