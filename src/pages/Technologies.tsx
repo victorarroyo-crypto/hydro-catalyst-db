@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { TechnologyFiltersPanel } from '@/components/TechnologyFiltersPanel';
 import { TechnologyCard } from '@/components/TechnologyCard';
 import { TechnologyTable } from '@/components/TechnologyTable';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
+import { TechnologyFormModal } from '@/components/TechnologyFormModal';
 import { useTechnologyFilters } from '@/hooks/useTechnologyFilters';
 import { 
   Search, 
@@ -15,18 +17,26 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  Plus,
 } from 'lucide-react';
 import type { Technology, TechnologyFilters } from '@/types/database';
 
 const ITEMS_PER_PAGE = 20;
 
 const Technologies: React.FC = () => {
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
   const { filterOptions, defaultFilters } = useTechnologyFilters();
   const [filters, setFilters] = useState<TechnologyFilters>(defaultFilters);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [page, setPage] = useState(1);
   const [selectedTechnology, setSelectedTechnology] = useState<Technology | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingTechnology, setEditingTechnology] = useState<Technology | null>(null);
+
+  // Check if user can create/edit technologies
+  const canEdit = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['technologies', filters, page],
@@ -41,7 +51,6 @@ const Technologies: React.FC = () => {
 
       if (error) throw error;
 
-      // Client-side filtering for complex column names
       let filtered = (data || []) as Technology[];
       
       return { technologies: filtered, count: count || 0 };
@@ -60,18 +69,43 @@ const Technologies: React.FC = () => {
 
   const handleTechnologyClick = (tech: Technology) => {
     setSelectedTechnology(tech);
-    setModalOpen(true);
+    setDetailModalOpen(true);
+  };
+
+  const handleEditTechnology = (tech: Technology) => {
+    setEditingTechnology(tech);
+    setDetailModalOpen(false);
+    setFormModalOpen(true);
+  };
+
+  const handleCreateTechnology = () => {
+    setEditingTechnology(null);
+    setFormModalOpen(true);
+  };
+
+  const handleFormSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['technologies'] });
+    setFormModalOpen(false);
+    setEditingTechnology(null);
   };
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-2xl font-display font-bold text-foreground mb-2">
-          Consulta de Tecnologías
-        </h1>
-        <p className="text-muted-foreground">
-          Explora y filtra tecnologías de tratamiento de agua industrial
-        </p>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-display font-bold text-foreground mb-2">
+            Consulta de Tecnologías
+          </h1>
+          <p className="text-muted-foreground">
+            Explora y filtra tecnologías de tratamiento de agua industrial
+          </p>
+        </div>
+        {canEdit && (
+          <Button onClick={handleCreateTechnology}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Tecnología
+          </Button>
+        )}
       </div>
 
       <div className="flex gap-6">
@@ -235,8 +269,17 @@ const Technologies: React.FC = () => {
       {/* Technology Detail Modal */}
       <TechnologyDetailModal
         technology={selectedTechnology}
-        open={modalOpen}
-        onOpenChange={setModalOpen}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+        onEdit={canEdit ? () => handleEditTechnology(selectedTechnology!) : undefined}
+      />
+
+      {/* Technology Form Modal */}
+      <TechnologyFormModal
+        technology={editingTechnology}
+        open={formModalOpen}
+        onOpenChange={setFormModalOpen}
+        onSuccess={handleFormSuccess}
       />
     </div>
   );
