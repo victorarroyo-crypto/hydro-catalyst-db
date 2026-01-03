@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
   Droplets,
+  ClipboardCheck,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -30,6 +31,10 @@ const mainNavItems = [
   { title: 'Consultar Tecnologías', url: '/technologies', icon: Search },
   { title: 'Mis Proyectos', url: '/projects', icon: FolderOpen },
   { title: 'Favoritos', url: '/favorites', icon: Star },
+];
+
+const internalNavItems = [
+  { title: 'Control de Calidad', url: '/quality-control', icon: ClipboardCheck },
 ];
 
 const settingsItems = [
@@ -93,6 +98,38 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Internal Navigation - Only for admin/supervisor/analyst */}
+        {profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role) && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/50 uppercase text-xs tracking-wider px-3 mb-2">
+              {!collapsed && 'Interno'}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {internalNavItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                      className={cn(
+                        'transition-all duration-200',
+                        isActive(item.url)
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                      )}
+                    >
+                      <Link to={item.url} className="flex items-center gap-3">
+                        <item.icon className="w-5 h-5" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup className="mt-auto">
           <SidebarGroupLabel className="text-sidebar-foreground/50 uppercase text-xs tracking-wider px-3 mb-2">

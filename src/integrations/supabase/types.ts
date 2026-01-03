@@ -194,6 +194,56 @@ export type Database = {
         }
         Relationships: []
       }
+      technology_edits: {
+        Row: {
+          comments: string | null
+          created_at: string
+          created_by: string
+          id: string
+          original_data: Json | null
+          proposed_changes: Json
+          review_comments: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["edit_status"]
+          technology_id: string
+        }
+        Insert: {
+          comments?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          original_data?: Json | null
+          proposed_changes: Json
+          review_comments?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["edit_status"]
+          technology_id: string
+        }
+        Update: {
+          comments?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          original_data?: Json | null
+          proposed_changes?: Json
+          review_comments?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["edit_status"]
+          technology_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "technology_edits_technology_id_fkey"
+            columns: ["technology_id"]
+            isOneToOne: false
+            referencedRelation: "technologies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_favorites: {
         Row: {
           created_at: string
@@ -262,6 +312,7 @@ export type Database = {
         | "client_basic"
         | "client_professional"
         | "client_enterprise"
+      edit_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -397,6 +448,7 @@ export const Constants = {
         "client_professional",
         "client_enterprise",
       ],
+      edit_status: ["pending", "approved", "rejected"],
     },
   },
 } as const

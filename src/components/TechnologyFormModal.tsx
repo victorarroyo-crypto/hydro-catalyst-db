@@ -4,16 +4,18 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2, Save, AlertTriangle } from 'lucide-react';
 import type { Technology } from '@/types/database';
 
 interface TechnologyFormModalProps {
@@ -32,11 +34,16 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   onOpenChange,
   onSuccess,
 }) => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [editComment, setEditComment] = useState('');
   
   const isEditing = !!technology;
+  
+  // Check user role - analysts need approval, supervisors/admins can edit directly
+  const isAnalyst = profile?.role === 'analyst';
+  const canEditDirectly = profile?.role && ['admin', 'supervisor'].includes(profile.role);
   
   const [formData, setFormData] = useState({
     "Nombre de la tecnología": '',
@@ -85,8 +92,8 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
         status: technology.status || 'active',
         quality_score: technology.quality_score || 0,
       });
+      setEditComment('');
     } else {
-      // Reset form for new technology
       setFormData({
         "Nombre de la tecnología": '',
         "Proveedor / Empresa": '',
@@ -109,6 +116,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
         status: 'active',
         quality_score: 0,
       });
+      setEditComment('');
     }
   }, [technology, open]);
 
@@ -143,26 +151,64 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       ...formData,
       "Fecha de scouting": formData["Fecha de scouting"] || null,
       "Grado de madurez (TRL)": formData["Grado de madurez (TRL)"] || null,
-      updated_by: user?.id,
     };
 
     try {
       if (isEditing && technology) {
-        const { error } = await supabase
-          .from('technologies')
-          .update(dataToSave)
-          .eq('id', technology.id);
+        if (isAnalyst) {
+          // Analysts create edit proposals
+          const { error } = await supabase
+            .from('technology_edits')
+            .insert([{
+              technology_id: technology.id,
+              proposed_changes: JSON.parse(JSON.stringify(dataToSave)),
+              original_data: JSON.parse(JSON.stringify(technology)),
+              status: 'pending' as const,
+              comments: editComment || null,
+              created_by: user?.id!,
+            }]);
 
-        if (error) throw error;
+          if (error) throw error;
 
-        toast({
-          title: 'Tecnología actualizada',
-          description: 'Los cambios se han guardado correctamente',
-        });
+          toast({
+            title: 'Propuesta enviada',
+            description: 'Tu edición ha sido enviada para revisión. Un supervisor la aprobará.',
+          });
+        } else {
+          // Supervisors/Admins can edit directly
+          const { error } = await supabase
+            .from('technologies')
+            .update({
+              ...dataToSave,
+              updated_by: user?.id,
+            })
+            .eq('id', technology.id);
+
+          if (error) throw error;
+
+          toast({
+            title: 'Tecnología actualizada',
+            description: 'Los cambios se han guardado correctamente',
+          });
+        }
       } else {
+        // Creating new technology
+        if (isAnalyst) {
+          // Analysts can't create new technologies directly, only propose
+          toast({
+            title: 'Sin permisos',
+            description: 'Solo supervisores y administradores pueden crear nuevas tecnologías',
+            variant: 'destructive',
+          });
+          return;
+        }
+
         const { error } = await supabase
           .from('technologies')
-          .insert(dataToSave);
+          .insert({
+            ...dataToSave,
+            updated_by: user?.id,
+          });
 
         if (error) throw error;
 
@@ -250,7 +296,21 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
           <DialogTitle className="text-xl font-display">
             {isEditing ? 'Editar Tecnología' : 'Nueva Tecnología'}
           </DialogTitle>
+          {isEditing && isAnalyst && (
+            <DialogDescription>
+              Tu edición será enviada para revisión antes de publicarse.
+            </DialogDescription>
+          )}
         </DialogHeader>
+
+        {isEditing && isAnalyst && (
+          <Alert className="border-warning/50 bg-warning/10">
+            <AlertTriangle className="w-4 h-4 text-warning" />
+            <AlertDescription className="text-sm">
+              Como analista, tus cambios serán revisados por un supervisor o administrador antes de aplicarse.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6 pt-4">
           {/* General Info */}
@@ -333,6 +393,22 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
             <FormField label="Quality Score" field="quality_score" type="number" />
           </FormSection>
 
+          {/* Edit comment for analysts */}
+          {isEditing && isAnalyst && (
+            <div className="space-y-2">
+              <Label htmlFor="edit-comment" className="text-sm font-semibold">
+                Comentario de la edición (opcional)
+              </Label>
+              <Textarea
+                id="edit-comment"
+                value={editComment}
+                onChange={(e) => setEditComment(e.target.value)}
+                placeholder="Explica brevemente los cambios realizados..."
+                rows={2}
+              />
+            </div>
+          )}
+
           {/* Submit */}
           <div className="flex justify-end gap-3 pt-4 border-t">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -342,12 +418,15 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Guardando...
+                  {isAnalyst && isEditing ? 'Enviando...' : 'Guardando...'}
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4 mr-2" />
-                  {isEditing ? 'Guardar cambios' : 'Crear tecnología'}
+                  {isEditing 
+                    ? (isAnalyst ? 'Enviar para revisión' : 'Guardar cambios')
+                    : 'Crear tecnología'
+                  }
                 </>
               )}
             </Button>
