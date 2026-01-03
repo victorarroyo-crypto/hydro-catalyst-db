@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.review-edit]
 verify_jwt = false
+
+[functions.ai-search-technologies]
+verify_jwt = false
