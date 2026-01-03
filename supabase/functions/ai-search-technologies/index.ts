@@ -32,7 +32,7 @@ serve(async (req) => {
     const { data: technologies, error: fetchError } = await supabase
       .from('technologies')
       .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Subcategoría", "Sector y subsector", "Aplicación principal", "Descripción técnica breve", "Ventaja competitiva clave", "Porque es innovadora", "Casos de referencia", "Paises donde actua", "País de origen", "Proveedor / Empresa", "Grado de madurez (TRL)", status')
-      .eq('status', 'active');
+      .or('status.eq.approved,status.eq.active,status.is.null');
 
     if (fetchError) {
       console.error('Error fetching technologies:', fetchError);
