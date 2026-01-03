@@ -88,15 +88,41 @@ Deno.serve(async (req) => {
     }
 
     // Action is 'approve' - apply changes
-    const proposedChanges = edit.proposed_changes
+    const proposedChanges = edit.proposed_changes as Record<string, unknown>
+    const approvalDate = new Date().toISOString()
 
-    // Update local technology
+    // Get analyst name (the one who created the edit)
+    const { data: analystProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('full_name')
+      .eq('user_id', edit.created_by)
+      .maybeSingle()
+
+    // Get reviewer name (current user - admin/supervisor)
+    const { data: reviewerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('full_name')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    // Get reviewer role
+    const reviewerRole = roles[0]?.role === 'admin' ? 'Admin' : 'Supervisor'
+
+    const analystName = analystProfile?.full_name || 'Analista'
+    const reviewerName = reviewerProfile?.full_name || reviewerRole
+
+    // Build the tracking status message
+    const estadoSeguimiento = `Edición revisada por ${analystName} y aprobada por ${reviewerName} (${reviewerRole})`
+
+    // Update local technology with proposed changes + tracking fields
     const { error: localUpdateError } = await supabaseAdmin
       .from('technologies')
       .update({
         ...proposedChanges,
+        'Fecha de scouting': approvalDate.split('T')[0], // Only date part YYYY-MM-DD
+        'Estado del seguimiento': estadoSeguimiento,
         updated_by: user.id,
-        updated_at: new Date().toISOString(),
+        updated_at: approvalDate,
       })
       .eq('id', edit.technology_id)
 
@@ -104,7 +130,7 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to update local technology: ${localUpdateError.message}`)
     }
 
-    console.log('Local technology updated successfully')
+    console.log('Local technology updated with tracking info:', estadoSeguimiento)
 
     // Sync to external Supabase
     const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')
@@ -114,8 +140,7 @@ Deno.serve(async (req) => {
       try {
         const externalSupabase = createClient(externalUrl, externalKey)
 
-        // Get the original technology ID from external DB
-        // First, get the current technology to find matching criteria
+        // Get the current technology to find matching criteria
         const { data: currentTech } = await supabaseAdmin
           .from('technologies')
           .select('*')
@@ -123,10 +148,16 @@ Deno.serve(async (req) => {
           .single()
 
         if (currentTech) {
-          // Try to find and update in external DB by name
+          // Sync to external DB including tracking fields
+          const externalUpdate = {
+            ...proposedChanges,
+            'Fecha de scouting': approvalDate.split('T')[0],
+            'Estado del seguimiento': estadoSeguimiento,
+          }
+          
           const { error: externalError } = await externalSupabase
             .from('technologies')
-            .update(proposedChanges)
+            .update(externalUpdate)
             .eq('"Nombre de la tecnología"', currentTech["Nombre de la tecnología"])
 
           if (externalError) {
