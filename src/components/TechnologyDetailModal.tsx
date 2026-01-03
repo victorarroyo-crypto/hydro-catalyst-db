@@ -44,11 +44,15 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   onOpenChange,
   onEdit,
 }) => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [isFavoriting, setIsFavoriting] = useState(false);
 
   if (!technology) return null;
+
+  // Check if user has internal role (can see internal information)
+  const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
+  const canEdit = isInternalUser;
 
   const handleAddFavorite = async () => {
     if (!user) return;
@@ -134,7 +138,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
         <div className="space-y-6">
           {/* Action Buttons */}
           <div className="flex gap-2 flex-wrap">
-            {onEdit && (
+            {canEdit && onEdit && (
               <Button variant="outline" size="sm" onClick={onEdit}>
                 <Edit className="w-4 h-4 mr-2" />
                 Editar
@@ -235,8 +239,8 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
             </>
           )}
 
-          {/* Internal */}
-          {(technology["Comentarios del analista"] || technology["Fecha de scouting"] || technology["Estado del seguimiento"]) && (
+          {/* Internal - Only visible to internal users */}
+          {isInternalUser && (technology["Comentarios del analista"] || technology["Fecha de scouting"] || technology["Estado del seguimiento"]) && (
             <>
               <Separator />
               <div>
@@ -253,11 +257,13 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
             </>
           )}
 
-          {/* Metadata */}
-          <div className="text-xs text-muted-foreground pt-4 border-t flex justify-between">
-            <span>Quality Score: {technology.quality_score ?? '—'}</span>
-            <span>Actualizado: {new Date(technology.updated_at).toLocaleDateString('es-ES')}</span>
-          </div>
+          {/* Metadata - Only visible to internal users */}
+          {isInternalUser && (
+            <div className="text-xs text-muted-foreground pt-4 border-t flex justify-between">
+              <span>Quality Score: {technology.quality_score ?? '—'}</span>
+              <span>Actualizado: {new Date(technology.updated_at).toLocaleDateString('es-ES')}</span>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
