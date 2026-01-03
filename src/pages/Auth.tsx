@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Droplets, Loader2, Mail, Lock, User } from 'lucide-react';
+import { Droplets, Loader2, Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -146,7 +147,14 @@ const Auth: React.FC = () => {
       </div>
 
       {/* Right side - Auth form */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-background">
+      <div className="flex-1 flex items-center justify-center p-6 bg-background relative">
+        <Link 
+          to="/" 
+          className="absolute top-6 left-6 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm">Volver al inicio</span>
+        </Link>
         <Card className="w-full max-w-md border-0 shadow-lg">
           <CardHeader className="text-center pb-2">
             <div className="lg:hidden flex justify-center mb-4">
