@@ -10,7 +10,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Mail, Lock, User, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
-import vandarumIcon from '@/assets/vandarum-icon.png';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -131,7 +130,6 @@ const Auth: React.FC = () => {
         </div>
         
         <div className="relative z-10 text-center text-primary-foreground max-w-lg">
-          <img src={vandarumIcon} alt="Vandarum" className="w-20 h-20 mx-auto mb-8" />
           <h1 className="text-4xl font-display font-bold mb-4">
             Vandarum
           </h1>
@@ -156,9 +154,6 @@ const Auth: React.FC = () => {
         </Link>
         <Card className="w-full max-w-md border-0 shadow-lg">
           <CardHeader className="text-center pb-2">
-            <div className="lg:hidden flex justify-center mb-4">
-              <img src={vandarumIcon} alt="Vandarum" className="w-14 h-14" />
-            </div>
             <CardTitle className="text-2xl font-display">Accede a tu cuenta</CardTitle>
             <CardDescription>
               Gestiona tecnologías de tratamiento de agua
