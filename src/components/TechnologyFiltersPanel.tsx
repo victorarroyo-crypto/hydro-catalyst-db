@@ -1,10 +1,10 @@
 import React from 'react';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { X, SlidersHorizontal } from 'lucide-react';
 import type { TechnologyFilters } from '@/types/database';
 import type { FilterOptions } from '@/hooks/useTechnologyFilters';
@@ -64,9 +64,12 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
             </SelectTrigger>
             <SelectContent className="max-h-60 bg-popover">
               <SelectItem value="all">Todos los tipos</SelectItem>
-              {filterOptions.tiposTecnologia.map((tipo) => (
-                <SelectItem key={tipo} value={tipo}>
-                  {tipo}
+              {filterOptions.tiposTecnologia.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <span className="flex items-center justify-between w-full gap-2">
+                    <span className="truncate">{option.value}</span>
+                    <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -85,9 +88,12 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
             </SelectTrigger>
             <SelectContent className="max-h-60 bg-popover">
               <SelectItem value="all">Todas las subcategorías</SelectItem>
-              {filterOptions.subcategorias.map((sub) => (
-                <SelectItem key={sub} value={sub}>
-                  {sub}
+              {filterOptions.subcategorias.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <span className="flex items-center justify-between w-full gap-2">
+                    <span className="truncate">{option.value}</span>
+                    <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -127,9 +133,12 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
             </SelectTrigger>
             <SelectContent className="max-h-60 bg-popover">
               <SelectItem value="all">Todos los países</SelectItem>
-              {filterOptions.paises.map((pais) => (
-                <SelectItem key={pais} value={pais}>
-                  {pais}
+              {filterOptions.paises.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <span className="flex items-center justify-between w-full gap-2">
+                    <span className="truncate">{option.value}</span>
+                    <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -148,9 +157,12 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
             </SelectTrigger>
             <SelectContent className="max-h-60 bg-popover">
               <SelectItem value="all">Todos los sectores</SelectItem>
-              {filterOptions.sectores.map((sector) => (
-                <SelectItem key={sector} value={sector}>
-                  {sector}
+              {filterOptions.sectores.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <span className="flex items-center justify-between w-full gap-2">
+                    <span className="truncate">{option.value}</span>
+                    <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -169,9 +181,12 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
             </SelectTrigger>
             <SelectContent className="bg-popover">
               <SelectItem value="all">Todos los estados</SelectItem>
-              {filterOptions.estados.map((estado) => (
-                <SelectItem key={estado} value={estado}>
-                  {estado}
+              {filterOptions.estados.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <span className="flex items-center justify-between w-full gap-2">
+                    <span className="truncate">{option.value}</span>
+                    <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

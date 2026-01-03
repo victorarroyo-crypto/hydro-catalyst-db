@@ -44,16 +44,73 @@ const Technologies: React.FC = () => {
       const from = (page - 1) * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
-      const { data, error, count } = await supabase
+      // Build filter conditions
+      const conditions: string[] = [];
+      
+      if (filters.search) {
+        const searchTerm = filters.search.toLowerCase();
+        conditions.push(
+          `or("Nombre de la tecnología".ilike.%${searchTerm}%,"Proveedor / Empresa".ilike.%${searchTerm}%)`
+        );
+      }
+
+      // Use RPC or direct fetch with client-side filtering for complex queries
+      const { data: allData, error, count } = await supabase
         .from('technologies')
-        .select('*', { count: 'exact' })
-        .range(from, to);
+        .select('*', { count: 'exact' });
 
       if (error) throw error;
 
-      let filtered = (data || []) as Technology[];
-      
-      return { technologies: filtered, count: count || 0 };
+      // Apply filters client-side for reliability with Spanish column names
+      let filtered = (allData || []) as Technology[];
+
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        filtered = filtered.filter(t => 
+          t["Nombre de la tecnología"]?.toLowerCase().includes(searchLower) ||
+          t["Proveedor / Empresa"]?.toLowerCase().includes(searchLower) ||
+          t["Descripción técnica breve"]?.toLowerCase().includes(searchLower)
+        );
+      }
+
+      if (filters.tipoTecnologia) {
+        filtered = filtered.filter(t => t["Tipo de tecnología"] === filters.tipoTecnologia);
+      }
+
+      if (filters.subcategoria) {
+        filtered = filtered.filter(t => t["Subcategoría"] === filters.subcategoria);
+      }
+
+      if (filters.pais) {
+        filtered = filtered.filter(t => t["País de origen"] === filters.pais);
+      }
+
+      if (filters.sector) {
+        filtered = filtered.filter(t => t["Sector y subsector"] === filters.sector);
+      }
+
+      if (filters.status) {
+        filtered = filtered.filter(t => t.status === filters.status);
+      }
+
+      if (filters.trlMin > 1 || filters.trlMax < 9) {
+        filtered = filtered.filter(t => {
+          const trl = t["Grado de madurez (TRL)"];
+          if (trl === null || trl === undefined) return false;
+          return trl >= filters.trlMin && trl <= filters.trlMax;
+        });
+      }
+
+      // Sort by name
+      filtered.sort((a, b) => 
+        (a["Nombre de la tecnología"] || '').localeCompare(b["Nombre de la tecnología"] || '')
+      );
+
+      // Apply pagination
+      const totalCount = filtered.length;
+      const paginatedData = filtered.slice(from, to + 1);
+
+      return { technologies: paginatedData, count: totalCount };
     },
   });
 
