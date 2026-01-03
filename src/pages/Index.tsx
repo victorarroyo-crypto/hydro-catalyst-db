@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import vandarumLogo from "@/assets/vandarum-logo-main.jpg";
+import vandarumLogo from "@/assets/vandarum-logo-transparent.png";
 import { 
   Droplets, 
   Search, 
@@ -194,7 +194,7 @@ const Index = () => {
             <img 
               src={vandarumLogo} 
               alt="Vandarum" 
-              className="h-10 w-auto brightness-0 invert opacity-80"
+              className="h-10 w-auto"
             />
             <p className="text-sm text-sidebar-foreground/60">
               © {new Date().getFullYear()} Vandarum. Todos los derechos reservados.
