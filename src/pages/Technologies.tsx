@@ -9,6 +9,7 @@ import { TechnologyCard } from '@/components/TechnologyCard';
 import { TechnologyTable } from '@/components/TechnologyTable';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
 import { TechnologyFormModal } from '@/components/TechnologyFormModal';
+import { AISearchBar } from '@/components/AISearchBar';
 import { useTechnologyFilters } from '@/hooks/useTechnologyFilters';
 import { 
   Search, 
@@ -34,12 +35,16 @@ const Technologies: React.FC = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [editingTechnology, setEditingTechnology] = useState<Technology | null>(null);
+  
+  // AI Search state
+  const [aiSearchIds, setAiSearchIds] = useState<string[] | null>(null);
+  const [isAiSearching, setIsAiSearching] = useState(false);
 
   // Check if user can create/edit technologies
   const canEdit = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['technologies', filters, page],
+    queryKey: ['technologies', filters, page, aiSearchIds],
     queryFn: async () => {
       const from = (page - 1) * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
@@ -64,47 +69,59 @@ const Technologies: React.FC = () => {
       // Apply filters client-side for reliability with Spanish column names
       let filtered = (allData || []) as Technology[];
 
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        filtered = filtered.filter(t => 
-          t["Nombre de la tecnología"]?.toLowerCase().includes(searchLower) ||
-          t["Proveedor / Empresa"]?.toLowerCase().includes(searchLower) ||
-          t["Descripción técnica breve"]?.toLowerCase().includes(searchLower)
+      // If AI search is active, filter by AI results first
+      if (aiSearchIds && aiSearchIds.length > 0) {
+        const idsSet = new Set(aiSearchIds);
+        filtered = filtered.filter(t => idsSet.has(t.id));
+        // Sort by AI relevance order
+        filtered.sort((a, b) => aiSearchIds.indexOf(a.id) - aiSearchIds.indexOf(b.id));
+      } else if (aiSearchIds && aiSearchIds.length === 0) {
+        // AI search returned no results
+        filtered = [];
+      } else {
+        // Normal filtering when no AI search is active
+        if (filters.search) {
+          const searchLower = filters.search.toLowerCase();
+          filtered = filtered.filter(t => 
+            t["Nombre de la tecnología"]?.toLowerCase().includes(searchLower) ||
+            t["Proveedor / Empresa"]?.toLowerCase().includes(searchLower) ||
+            t["Descripción técnica breve"]?.toLowerCase().includes(searchLower)
+          );
+        }
+
+        if (filters.tipoTecnologia) {
+          filtered = filtered.filter(t => t["Tipo de tecnología"] === filters.tipoTecnologia);
+        }
+
+        if (filters.subcategoria) {
+          filtered = filtered.filter(t => t["Subcategoría"] === filters.subcategoria);
+        }
+
+        if (filters.pais) {
+          filtered = filtered.filter(t => t["País de origen"] === filters.pais);
+        }
+
+        if (filters.sector) {
+          filtered = filtered.filter(t => t["Sector y subsector"] === filters.sector);
+        }
+
+        if (filters.status) {
+          filtered = filtered.filter(t => t.status === filters.status);
+        }
+
+        if (filters.trlMin > 1 || filters.trlMax < 9) {
+          filtered = filtered.filter(t => {
+            const trl = t["Grado de madurez (TRL)"];
+            if (trl === null || trl === undefined) return false;
+            return trl >= filters.trlMin && trl <= filters.trlMax;
+          });
+        }
+
+        // Sort by name only when not using AI search
+        filtered.sort((a, b) => 
+          (a["Nombre de la tecnología"] || '').localeCompare(b["Nombre de la tecnología"] || '')
         );
       }
-
-      if (filters.tipoTecnologia) {
-        filtered = filtered.filter(t => t["Tipo de tecnología"] === filters.tipoTecnologia);
-      }
-
-      if (filters.subcategoria) {
-        filtered = filtered.filter(t => t["Subcategoría"] === filters.subcategoria);
-      }
-
-      if (filters.pais) {
-        filtered = filtered.filter(t => t["País de origen"] === filters.pais);
-      }
-
-      if (filters.sector) {
-        filtered = filtered.filter(t => t["Sector y subsector"] === filters.sector);
-      }
-
-      if (filters.status) {
-        filtered = filtered.filter(t => t.status === filters.status);
-      }
-
-      if (filters.trlMin > 1 || filters.trlMax < 9) {
-        filtered = filtered.filter(t => {
-          const trl = t["Grado de madurez (TRL)"];
-          if (trl === null || trl === undefined) return false;
-          return trl >= filters.trlMin && trl <= filters.trlMax;
-        });
-      }
-
-      // Sort by name
-      filtered.sort((a, b) => 
-        (a["Nombre de la tecnología"] || '').localeCompare(b["Nombre de la tecnología"] || '')
-      );
 
       // Apply pagination
       const totalCount = filtered.length;
@@ -121,7 +138,17 @@ const Technologies: React.FC = () => {
 
   const handleResetFilters = () => {
     setFilters(defaultFilters);
+    setAiSearchIds(null);
     setPage(1);
+  };
+
+  const handleAiSearchResults = (ids: string[] | null) => {
+    setAiSearchIds(ids);
+    setPage(1);
+    // Clear regular filters when AI search is active
+    if (ids !== null) {
+      setFilters(defaultFilters);
+    }
   };
 
   const handleTechnologyClick = (tech: Technology) => {
@@ -165,6 +192,15 @@ const Technologies: React.FC = () => {
         )}
       </div>
 
+      {/* AI Search Bar */}
+      <div className="mb-6">
+        <AISearchBar 
+          onResults={handleAiSearchResults}
+          isSearching={isAiSearching}
+          setIsSearching={setIsAiSearching}
+        />
+      </div>
+
       <div className="flex gap-6">
         {/* Filters Sidebar */}
         <aside className="w-72 shrink-0 hidden lg:block">
@@ -172,6 +208,7 @@ const Technologies: React.FC = () => {
             filters={filters}
             onFiltersChange={(newFilters) => {
               setFilters(newFilters);
+              setAiSearchIds(null); // Clear AI search when using regular filters
               setPage(1);
             }}
             filterOptions={filterOptions}
@@ -190,6 +227,7 @@ const Technologies: React.FC = () => {
                 value={filters.search}
                 onChange={(e) => {
                   setFilters({ ...filters, search: e.target.value });
+                  setAiSearchIds(null); // Clear AI search when using text search
                   setPage(1);
                 }}
                 className="pl-10 h-11"
@@ -216,13 +254,16 @@ const Technologies: React.FC = () => {
           {/* Results Count */}
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">
-              {isLoading ? (
+              {isLoading || isAiSearching ? (
                 'Cargando...'
               ) : (
                 <>
+                  {aiSearchIds !== null && (
+                    <span className="text-primary font-medium mr-2">🤖 Búsqueda IA:</span>
+                  )}
                   Mostrando{' '}
                   <span className="font-medium text-foreground">
-                    {((page - 1) * ITEMS_PER_PAGE) + 1}-
+                    {data?.count ? ((page - 1) * ITEMS_PER_PAGE) + 1 : 0}-
                     {Math.min(page * ITEMS_PER_PAGE, data?.count || 0)}
                   </span>{' '}
                   de{' '}
@@ -233,13 +274,13 @@ const Technologies: React.FC = () => {
                 </>
               )}
             </p>
-            {isFetching && !isLoading && (
+            {(isFetching && !isLoading) || isAiSearching ? (
               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-            )}
+            ) : null}
           </div>
 
           {/* Results */}
-          {isLoading ? (
+          {isLoading || isAiSearching ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
@@ -250,7 +291,10 @@ const Technologies: React.FC = () => {
                 No se encontraron tecnologías
               </h3>
               <p className="text-muted-foreground max-w-md">
-                Intenta ajustar los filtros o el término de búsqueda
+                {aiSearchIds !== null 
+                  ? 'Intenta reformular tu búsqueda con IA o usa los filtros tradicionales'
+                  : 'Intenta ajustar los filtros o el término de búsqueda'
+                }
               </p>
               <Button variant="outline" onClick={handleResetFilters} className="mt-4">
                 Limpiar filtros
