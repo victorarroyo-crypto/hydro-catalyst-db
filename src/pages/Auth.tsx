@@ -137,8 +137,7 @@ const Auth: React.FC = () => {
             Water Technology Hub
           </p>
           <p className="text-primary-foreground/70 leading-relaxed">
-            Plataforma de consultoría especializada en tecnologías de tratamiento de agua industrial. 
-            Conectamos innovación, datos e inteligencia aplicada para transformar la eficiencia hídrica.
+            Plataforma de innovación en tecnologías de agua. Conectamos innovación, datos e inteligencia aplicada para transformar la eficiencia hídrica.
           </p>
         </div>
       </div>
