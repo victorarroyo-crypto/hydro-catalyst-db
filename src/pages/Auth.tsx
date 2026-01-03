@@ -7,9 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Mail, Lock, User, ArrowLeft, Droplets } from 'lucide-react';
+import { Loader2, Mail, Lock, User, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
+import vandarumIcon from '@/assets/vandarum-icon.png';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -130,9 +131,7 @@ const Auth: React.FC = () => {
         </div>
         
         <div className="relative z-10 text-center text-primary-foreground max-w-lg">
-          <div className="w-20 h-20 rounded-2xl bg-primary-foreground/10 backdrop-blur-sm flex items-center justify-center mx-auto mb-8 shadow-glow">
-            <Droplets className="w-12 h-12" />
-          </div>
+          <img src={vandarumIcon} alt="Vandarum" className="w-20 h-20 mx-auto mb-8" />
           <h1 className="text-4xl font-display font-bold mb-4">
             Vandarum
           </h1>
@@ -158,9 +157,7 @@ const Auth: React.FC = () => {
         <Card className="w-full max-w-md border-0 shadow-lg">
           <CardHeader className="text-center pb-2">
             <div className="lg:hidden flex justify-center mb-4">
-              <div className="w-14 h-14 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
-                <Droplets className="w-8 h-8 text-primary-foreground" />
-              </div>
+              <img src={vandarumIcon} alt="Vandarum" className="w-14 h-14" />
             </div>
             <CardTitle className="text-2xl font-display">Accede a tu cuenta</CardTitle>
             <CardDescription>
