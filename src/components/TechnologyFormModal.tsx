@@ -25,8 +25,101 @@ interface TechnologyFormModalProps {
   onSuccess: () => void;
 }
 
+interface FormData {
+  "Nombre de la tecnología": string;
+  "Proveedor / Empresa": string;
+  "País de origen": string;
+  "Web de la empresa": string;
+  "Email de contacto": string;
+  "Tipo de tecnología": string;
+  "Subcategoría": string;
+  "Sector y subsector": string;
+  "Aplicación principal": string;
+  "Descripción técnica breve": string;
+  "Ventaja competitiva clave": string;
+  "Porque es innovadora": string;
+  "Casos de referencia": string;
+  "Paises donde actua": string;
+  "Comentarios del analista": string;
+  "Fecha de scouting": string;
+  "Estado del seguimiento": string;
+  "Grado de madurez (TRL)": number | null;
+  status: string;
+  quality_score: number;
+}
+
 const TRL_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const STATUS_OPTIONS = ['active', 'inactive', 'pending', 'archived'];
+
+// Move these components outside to prevent re-creation on each render
+const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="space-y-4">
+    <h3 className="text-sm font-semibold text-foreground border-b pb-2">{title}</h3>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {children}
+    </div>
+  </div>
+);
+
+interface FormFieldProps {
+  label: string;
+  field: keyof FormData;
+  value: string | number | null;
+  onChange: (field: keyof FormData, value: string | number | null) => void;
+  required?: boolean;
+  type?: 'text' | 'email' | 'url' | 'date' | 'number';
+  fullWidth?: boolean;
+}
+
+const FormField = ({ 
+  label, 
+  field, 
+  value,
+  onChange,
+  required = false,
+  type = 'text',
+  fullWidth = false,
+}: FormFieldProps) => (
+  <div className={fullWidth ? 'md:col-span-2' : ''}>
+    <Label htmlFor={field} className="text-sm">
+      {label} {required && <span className="text-destructive">*</span>}
+    </Label>
+    <Input
+      id={field}
+      type={type}
+      value={(value as string) || ''}
+      onChange={(e) => onChange(field, type === 'number' ? Number(e.target.value) : e.target.value)}
+      className="mt-1"
+    />
+  </div>
+);
+
+interface FormTextareaProps {
+  label: string;
+  field: keyof FormData;
+  value: string | number | null;
+  onChange: (field: keyof FormData, value: string | number | null) => void;
+  rows?: number;
+}
+
+const FormTextarea = ({ 
+  label, 
+  field,
+  value,
+  onChange,
+  rows = 3,
+}: FormTextareaProps) => (
+  <div className="md:col-span-2">
+    <Label htmlFor={field} className="text-sm">{label}</Label>
+    <Textarea
+      id={field}
+      value={(value as string) || ''}
+      onChange={(e) => onChange(field, e.target.value)}
+      rows={rows}
+      className="mt-1"
+    />
+  </div>
+);
 
 export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   technology,
@@ -43,9 +136,8 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   
   // Check user role - analysts need approval, supervisors/admins can edit directly
   const isAnalyst = profile?.role === 'analyst';
-  const canEditDirectly = profile?.role && ['admin', 'supervisor'].includes(profile.role);
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     "Nombre de la tecnología": '',
     "Proveedor / Empresa": '',
     "País de origen": '',
@@ -63,7 +155,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     "Comentarios del analista": '',
     "Fecha de scouting": '',
     "Estado del seguimiento": '',
-    "Grado de madurez (TRL)": null as number | null,
+    "Grado de madurez (TRL)": null,
     status: 'active',
     quality_score: 0,
   });
@@ -120,7 +212,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     }
   }, [technology, open]);
 
-  const handleChange = (field: string, value: string | number | null) => {
+  const handleChange = (field: keyof FormData, value: string | number | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -232,63 +324,6 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     }
   };
 
-  const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-foreground border-b pb-2">{title}</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {children}
-      </div>
-    </div>
-  );
-
-  const FormField = ({ 
-    label, 
-    field, 
-    required = false,
-    type = 'text',
-    fullWidth = false,
-  }: { 
-    label: string; 
-    field: string; 
-    required?: boolean;
-    type?: 'text' | 'email' | 'url' | 'date' | 'number';
-    fullWidth?: boolean;
-  }) => (
-    <div className={fullWidth ? 'md:col-span-2' : ''}>
-      <Label htmlFor={field} className="text-sm">
-        {label} {required && <span className="text-destructive">*</span>}
-      </Label>
-      <Input
-        id={field}
-        type={type}
-        value={formData[field as keyof typeof formData] as string || ''}
-        onChange={(e) => handleChange(field, type === 'number' ? Number(e.target.value) : e.target.value)}
-        className="mt-1"
-      />
-    </div>
-  );
-
-  const FormTextarea = ({ 
-    label, 
-    field,
-    rows = 3,
-  }: { 
-    label: string; 
-    field: string;
-    rows?: number;
-  }) => (
-    <div className="md:col-span-2">
-      <Label htmlFor={field} className="text-sm">{label}</Label>
-      <Textarea
-        id={field}
-        value={formData[field as keyof typeof formData] as string || ''}
-        onChange={(e) => handleChange(field, e.target.value)}
-        rows={rows}
-        className="mt-1"
-      />
-    </div>
-  );
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -315,19 +350,69 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-6 pt-4">
           {/* General Info */}
           <FormSection title="Información General">
-            <FormField label="Nombre de la tecnología" field="Nombre de la tecnología" required fullWidth />
-            <FormField label="Proveedor / Empresa" field="Proveedor / Empresa" />
-            <FormField label="País de origen" field="País de origen" />
-            <FormField label="Web de la empresa" field="Web de la empresa" type="url" />
-            <FormField label="Email de contacto" field="Email de contacto" type="email" />
+            <FormField 
+              label="Nombre de la tecnología" 
+              field="Nombre de la tecnología" 
+              value={formData["Nombre de la tecnología"]}
+              onChange={handleChange}
+              required 
+              fullWidth 
+            />
+            <FormField 
+              label="Proveedor / Empresa" 
+              field="Proveedor / Empresa" 
+              value={formData["Proveedor / Empresa"]}
+              onChange={handleChange}
+            />
+            <FormField 
+              label="País de origen" 
+              field="País de origen" 
+              value={formData["País de origen"]}
+              onChange={handleChange}
+            />
+            <FormField 
+              label="Web de la empresa" 
+              field="Web de la empresa" 
+              value={formData["Web de la empresa"]}
+              onChange={handleChange}
+              type="url" 
+            />
+            <FormField 
+              label="Email de contacto" 
+              field="Email de contacto" 
+              value={formData["Email de contacto"]}
+              onChange={handleChange}
+              type="email" 
+            />
           </FormSection>
 
           {/* Classification */}
           <FormSection title="Clasificación">
-            <FormField label="Tipo de tecnología" field="Tipo de tecnología" required />
-            <FormField label="Subcategoría" field="Subcategoría" />
-            <FormField label="Sector y subsector" field="Sector y subsector" />
-            <FormField label="Aplicación principal" field="Aplicación principal" />
+            <FormField 
+              label="Tipo de tecnología" 
+              field="Tipo de tecnología" 
+              value={formData["Tipo de tecnología"]}
+              onChange={handleChange}
+              required 
+            />
+            <FormField 
+              label="Subcategoría" 
+              field="Subcategoría" 
+              value={formData["Subcategoría"]}
+              onChange={handleChange}
+            />
+            <FormField 
+              label="Sector y subsector" 
+              field="Sector y subsector" 
+              value={formData["Sector y subsector"]}
+              onChange={handleChange}
+            />
+            <FormField 
+              label="Aplicación principal" 
+              field="Aplicación principal" 
+              value={formData["Aplicación principal"]}
+              onChange={handleChange}
+            />
             
             <div>
               <Label className="text-sm">Grado de madurez (TRL)</Label>
@@ -370,27 +455,75 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           {/* Description */}
           <FormSection title="Descripción">
-            <FormTextarea label="Descripción técnica breve" field="Descripción técnica breve" rows={4} />
+            <FormTextarea 
+              label="Descripción técnica breve" 
+              field="Descripción técnica breve" 
+              value={formData["Descripción técnica breve"]}
+              onChange={handleChange}
+              rows={4} 
+            />
           </FormSection>
 
           {/* Differentiation */}
           <FormSection title="Diferenciación">
-            <FormTextarea label="Ventaja competitiva clave" field="Ventaja competitiva clave" />
-            <FormTextarea label="Por qué es innovadora" field="Porque es innovadora" />
+            <FormTextarea 
+              label="Ventaja competitiva clave" 
+              field="Ventaja competitiva clave" 
+              value={formData["Ventaja competitiva clave"]}
+              onChange={handleChange}
+            />
+            <FormTextarea 
+              label="Por qué es innovadora" 
+              field="Porque es innovadora" 
+              value={formData["Porque es innovadora"]}
+              onChange={handleChange}
+            />
           </FormSection>
 
           {/* References */}
           <FormSection title="Referencias">
-            <FormTextarea label="Casos de referencia" field="Casos de referencia" />
-            <FormTextarea label="Países donde actúa" field="Paises donde actua" />
+            <FormTextarea 
+              label="Casos de referencia" 
+              field="Casos de referencia" 
+              value={formData["Casos de referencia"]}
+              onChange={handleChange}
+            />
+            <FormTextarea 
+              label="Países donde actúa" 
+              field="Paises donde actua" 
+              value={formData["Paises donde actua"]}
+              onChange={handleChange}
+            />
           </FormSection>
 
           {/* Internal */}
           <FormSection title="Información Interna">
-            <FormTextarea label="Comentarios del analista" field="Comentarios del analista" />
-            <FormField label="Fecha de scouting" field="Fecha de scouting" type="date" />
-            <FormField label="Estado del seguimiento" field="Estado del seguimiento" />
-            <FormField label="Quality Score" field="quality_score" type="number" />
+            <FormTextarea 
+              label="Comentarios del analista" 
+              field="Comentarios del analista" 
+              value={formData["Comentarios del analista"]}
+              onChange={handleChange}
+            />
+            <FormField 
+              label="Fecha de scouting" 
+              field="Fecha de scouting" 
+              value={formData["Fecha de scouting"]}
+              onChange={handleChange}
+              type="date" 
+            />
+            <FormField 
+              label="Estado del seguimiento" 
+              field="Estado del seguimiento" 
+              value={formData["Estado del seguimiento"]}
+              onChange={handleChange}
+            />
+            <FormField 
+              label="Quality Score" 
+              field="quality_score" 
+              value={formData.quality_score}
+              onChange={handleChange}
+              type="number" 
+            />
           </FormSection>
 
           {/* Edit comment for analysts */}
