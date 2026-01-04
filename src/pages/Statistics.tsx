@@ -73,15 +73,30 @@ const CHART_COLORS = [
 const Statistics: React.FC = () => {
   const { user } = useAuth();
 
-  // Fetch all technologies
+  // Fetch all technologies - use range to bypass 1000 row limit
   const { data: technologies, isLoading: loadingTech } = useQuery({
     queryKey: ['technologies-stats'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('technologies')
-        .select('id, tipo_id, subcategoria_id, sector_id, "País de origen", status');
-      if (error) throw error;
-      return data;
+      const allTechnologies: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      
+      while (true) {
+        const { data, error } = await supabase
+          .from('technologies')
+          .select('id, tipo_id, subcategoria_id, sector_id, "País de origen", status')
+          .range(from, from + pageSize - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        allTechnologies.push(...data);
+        
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      
+      return allTechnologies;
     },
     enabled: !!user,
   });
