@@ -57,7 +57,7 @@ export const AIClassificationPanel: React.FC = () => {
   const classifyMutation = useMutation({
     mutationFn: async (): Promise<ClassificationResponse> => {
       const { data, error } = await supabase.functions.invoke('classify-technologies', {
-        body: { batchSize: 15 },
+        body: { batchSize: 40 },
       });
 
       if (error) throw error;
@@ -81,7 +81,7 @@ export const AIClassificationPanel: React.FC = () => {
       if (data.remaining > 0 && isRunning) {
         setTimeout(() => {
           classifyMutation.mutate();
-        }, 1000); // Small delay between batches
+        }, 2000); // Delay between batches to avoid rate limits
       } else {
         setIsRunning(false);
         if (data.remaining === 0) {
