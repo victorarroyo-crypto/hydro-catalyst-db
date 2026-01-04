@@ -12,7 +12,14 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   Building2, 
   MapPin, 
@@ -27,7 +34,7 @@ import {
   Calendar,
   Star,
   Edit,
-  Plus,
+  FolderPlus,
   ExternalLink,
   SendHorizonal,
   Loader2,
@@ -55,12 +62,66 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   const [isFavoriting, setIsFavoriting] = useState(false);
   const [isSendingToReview, setIsSendingToReview] = useState(false);
   const [isMovingToTrends, setIsMovingToTrends] = useState(false);
+  const [isAddingToProject, setIsAddingToProject] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+
+  // Fetch user's active projects
+  const { data: userProjects } = useQuery({
+    queryKey: ['user-projects-for-add', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, status')
+        .in('status', ['draft', 'active', 'on_hold'])
+        .order('updated_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && open,
+  });
 
   if (!technology) return null;
 
   // Check if user has internal role (can see internal information)
   const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
   const canEdit = isInternalUser;
+  const hasProjects = userProjects && userProjects.length > 0;
+
+  const handleAddToProject = async () => {
+    if (!user || !selectedProjectId) return;
+    
+    setIsAddingToProject(true);
+    const { error } = await supabase.from('project_technologies').insert({
+      project_id: selectedProjectId,
+      technology_id: technology.id,
+      added_by: user.id,
+    });
+    setIsAddingToProject(false);
+
+    if (error) {
+      if (error.code === '23505') {
+        toast({
+          title: 'Ya añadida',
+          description: 'Esta tecnología ya está en el proyecto seleccionado',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo añadir al proyecto',
+          variant: 'destructive',
+        });
+      }
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['project-technologies'] });
+      queryClient.invalidateQueries({ queryKey: ['project-tech-counts'] });
+      toast({
+        title: 'Añadida al proyecto',
+        description: 'La tecnología se ha añadido al proyecto',
+      });
+      setSelectedProjectId('');
+    }
+  };
 
   const handleAddFavorite = async () => {
     if (!user) return;
@@ -240,10 +301,35 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                 Editar
               </Button>
             )}
-            <Button variant="outline" size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Añadir a proyecto
-            </Button>
+            {hasProjects && (
+              <div className="flex items-center gap-2">
+                <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                  <SelectTrigger className="w-[180px] h-9 text-sm">
+                    <SelectValue placeholder="Seleccionar proyecto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {userProjects?.map(project => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleAddToProject}
+                  disabled={!selectedProjectId || isAddingToProject}
+                >
+                  {isAddingToProject ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <FolderPlus className="w-4 h-4 mr-2" />
+                  )}
+                  Añadir
+                </Button>
+              </div>
+            )}
             <Button 
               variant="outline" 
               size="sm" 
