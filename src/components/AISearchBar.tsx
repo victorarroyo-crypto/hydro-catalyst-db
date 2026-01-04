@@ -1,16 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Sparkles, Search, X, Loader2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 interface AISearchBarProps {
   onResults: (ids: string[] | null, explanation?: string) => void;
   isSearching: boolean;
   setIsSearching: (value: boolean) => void;
 }
+
+// Static fallback suggestions
+const staticSuggestions = [
+  'TRL alto',
+  'detección de fugas',
+  'oxidación avanzada',
+];
 
 export const AISearchBar: React.FC<AISearchBarProps> = ({ 
   onResults, 
@@ -20,6 +28,58 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
   const [query, setQuery] = useState('');
   const [explanation, setExplanation] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // Fetch top sectors and tech types for dynamic suggestions
+  const { data: dynamicData } = useQuery({
+    queryKey: ['ai-search-suggestions'],
+    queryFn: async () => {
+      const { data: technologies } = await supabase
+        .from('technologies')
+        .select('"Sector y subsector", "Tipo de tecnología"')
+        .or('status.eq.active,status.is.null');
+
+      if (!technologies) return { sectors: [], types: [] };
+
+      // Count occurrences
+      const sectorCounts: Record<string, number> = {};
+      const typeCounts: Record<string, number> = {};
+
+      technologies.forEach((t) => {
+        const sector = t['Sector y subsector'];
+        const type = t['Tipo de tecnología'];
+        if (sector) sectorCounts[sector] = (sectorCounts[sector] || 0) + 1;
+        if (type) typeCounts[type] = (typeCounts[type] || 0) + 1;
+      });
+
+      // Get top 3 of each
+      const topSectors = Object.entries(sectorCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name]) => name);
+
+      const topTypes = Object.entries(typeCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name]) => name);
+
+      return { sectors: topSectors, types: topTypes };
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  const searchSuggestions = useMemo(() => {
+    const dynamic: string[] = [];
+    if (dynamicData?.sectors) {
+      dynamicData.sectors.forEach((s) => dynamic.push(`sector ${s.toLowerCase()}`));
+    }
+    if (dynamicData?.types) {
+      dynamicData.types.forEach((t) => dynamic.push(t));
+    }
+    // Combine with static, dedupe, limit to 8
+    const all = [...staticSuggestions, ...dynamic];
+    const unique = Array.from(new Set(all));
+    return unique.slice(0, 8);
+  }, [dynamicData]);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -116,15 +176,6 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
       handleSearch();
     }
   };
-
-  const searchSuggestions = [
-    'TRL alto',
-    'sector agua',
-    'detección de fugas',
-    'oxidación avanzada',
-    'tratamiento aguas residuales',
-    'monitorización inteligente',
-  ];
 
   const handleSuggestionClick = (suggestion: string) => {
     setQuery(suggestion);
