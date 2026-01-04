@@ -373,9 +373,11 @@ const ProjectDetail: React.FC = () => {
                   Comparar
                 </Button>
               )}
-              <Button onClick={() => setAddTechModalOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Añadir
+              <Button asChild>
+                <Link to="/technologies">
+                  <Search className="w-4 h-4 mr-2" />
+                  Elegir tecnologías
+                </Link>
               </Button>
             </div>
           </div>
@@ -392,9 +394,11 @@ const ProjectDetail: React.FC = () => {
                 <p className="text-muted-foreground text-center mb-4">
                   Añade tecnologías a este proyecto para evaluarlas
                 </p>
-                <Button onClick={() => setAddTechModalOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Añadir tecnología
+                <Button asChild>
+                  <Link to="/technologies">
+                    <Search className="w-4 h-4 mr-2" />
+                    Elegir tecnologías
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
