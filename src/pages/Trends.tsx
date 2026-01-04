@@ -8,7 +8,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, TrendingUp, Lightbulb, Tag, Calendar, RotateCcw } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Loader2, TrendingUp, Lightbulb, Tag, Calendar, RotateCcw, Edit } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +41,16 @@ const Trends = () => {
   const [selectedTrend, setSelectedTrend] = useState<TechnologicalTrend | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [trendToRestore, setTrendToRestore] = useState<TechnologicalTrend | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingTrend, setEditingTrend] = useState<TechnologicalTrend | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    technology_type: '',
+    subcategory: '',
+    sector: '',
+  });
+  const [isSaving, setIsSaving] = useState(false);
 
   const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
@@ -150,6 +163,53 @@ const Trends = () => {
       });
     },
   });
+
+  const handleEditClick = (trend: TechnologicalTrend) => {
+    setEditingTrend(trend);
+    setEditForm({
+      name: trend.name,
+      description: trend.description || '',
+      technology_type: trend.technology_type,
+      subcategory: trend.subcategory || '',
+      sector: trend.sector || '',
+    });
+    setShowEditModal(true);
+    setSelectedTrend(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingTrend) return;
+    
+    setIsSaving(true);
+    const { error } = await supabase
+      .from('technological_trends')
+      .update({
+        name: editForm.name,
+        description: editForm.description || null,
+        technology_type: editForm.technology_type,
+        subcategory: editForm.subcategory || null,
+        sector: editForm.sector || null,
+      })
+      .eq('id', editingTrend.id);
+    
+    setIsSaving(false);
+    
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar los cambios',
+        variant: 'destructive',
+      });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['technological-trends'] });
+      setShowEditModal(false);
+      setEditingTrend(null);
+      toast({
+        title: 'Guardado',
+        description: 'Los cambios se han guardado correctamente',
+      });
+    }
+  };
 
   const handleRestoreClick = (trend: TechnologicalTrend) => {
     setTrendToRestore(trend);
@@ -312,8 +372,17 @@ const Trends = () => {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => handleEditClick(selectedTrend)}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Editar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleRestoreClick(selectedTrend)}
                         disabled={restoreMutation.isPending}
+                        className="text-green-600 border-green-300 hover:bg-green-50"
                       >
                         <RotateCcw className="w-4 h-4 mr-2" />
                         Restaurar como tecnología
@@ -366,6 +435,72 @@ const Trends = () => {
                 <RotateCcw className="w-4 h-4 mr-2" />
               )}
               Confirmar y restaurar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5 text-primary" />
+              Editar Tendencia
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Nombre</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Descripción</Label>
+              <Textarea
+                id="edit-description"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={4}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-type">Tipo de tecnología</Label>
+              <Input
+                id="edit-type"
+                value={editForm.technology_type}
+                onChange={(e) => setEditForm({ ...editForm, technology_type: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-subcategory">Subcategoría</Label>
+                <Input
+                  id="edit-subcategory"
+                  value={editForm.subcategory}
+                  onChange={(e) => setEditForm({ ...editForm, subcategory: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-sector">Sector</Label>
+                <Input
+                  id="edit-sector"
+                  value={editForm.sector}
+                  onChange={(e) => setEditForm({ ...editForm, sector: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={isSaving || !editForm.name || !editForm.technology_type}>
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Guardar cambios
             </Button>
           </DialogFooter>
         </DialogContent>
