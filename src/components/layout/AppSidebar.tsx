@@ -9,6 +9,7 @@ import {
   LogOut,
   Droplets,
   ClipboardCheck,
+  ClipboardList,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -35,6 +36,7 @@ const mainNavItems = [
 
 const internalNavItems = [
   { title: 'Control de Calidad', url: '/quality-control', icon: ClipboardCheck },
+  { title: 'Cola de Revisión', url: '/reviews', icon: ClipboardList },
 ];
 
 const settingsItems = [
