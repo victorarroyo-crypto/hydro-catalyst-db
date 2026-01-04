@@ -23,7 +23,16 @@ import Privacy from "./pages/Privacy";
 import Cookies from "./pages/Cookies";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes - data stays fresh
+      gcTime: 1000 * 60 * 30, // 30 minutes - cache retained
+      refetchOnWindowFocus: false, // Don't refetch on every tab switch
+      retry: 2, // Retry failed requests twice
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
