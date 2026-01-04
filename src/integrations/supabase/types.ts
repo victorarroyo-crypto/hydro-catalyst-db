@@ -197,6 +197,7 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          original_data: Json | null
           sector: string | null
           source_technology_id: string | null
           subcategory: string | null
@@ -208,6 +209,7 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          original_data?: Json | null
           sector?: string | null
           source_technology_id?: string | null
           subcategory?: string | null
@@ -219,6 +221,7 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          original_data?: Json | null
           sector?: string | null
           source_technology_id?: string | null
           subcategory?: string | null
