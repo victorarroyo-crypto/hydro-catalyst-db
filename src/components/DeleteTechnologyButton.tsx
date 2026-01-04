@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { syncTechnologyDelete } from '@/lib/syncToExternal';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -62,6 +63,13 @@ export const DeleteTechnologyButton: React.FC<DeleteTechnologyButtonProps> = ({
         .eq('id', technologyId);
 
       if (error) throw error;
+
+      // Sync deletion to external Supabase
+      try {
+        await syncTechnologyDelete(technologyId);
+      } catch (syncError) {
+        console.error('External sync failed:', syncError);
+      }
 
       toast.success('Tecnología eliminada correctamente');
       queryClient.invalidateQueries({ queryKey: ['technologies'] });
