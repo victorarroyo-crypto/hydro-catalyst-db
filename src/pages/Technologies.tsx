@@ -10,6 +10,7 @@ import { TechnologyTable } from '@/components/TechnologyTable';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
 import { TechnologyFormModal } from '@/components/TechnologyFormModal';
 import { AISearchBar } from '@/components/AISearchBar';
+import { AIClassificationPanel } from '@/components/AIClassificationPanel';
 import { useTechnologyFilters, TaxonomyFilters } from '@/hooks/useTechnologyFilters';
 import { 
   Search, 
@@ -19,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Bot,
 } from 'lucide-react';
 import type { Technology, TechnologyFilters } from '@/types/database';
 
@@ -47,6 +49,7 @@ const Technologies: React.FC = () => {
   // AI Search state
   const [aiSearchIds, setAiSearchIds] = useState<string[] | null>(null);
   const [isAiSearching, setIsAiSearching] = useState(false);
+  const [showClassificationPanel, setShowClassificationPanel] = useState(false);
 
   // Check if user can create/edit technologies
   const canEdit = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
@@ -199,12 +202,28 @@ const Technologies: React.FC = () => {
           </p>
         </div>
         {canEdit && (
-          <Button onClick={handleCreateTechnology}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nueva Tecnología
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowClassificationPanel(!showClassificationPanel)}
+            >
+              <Bot className="w-4 h-4 mr-2" />
+              Clasificar con IA
+            </Button>
+            <Button onClick={handleCreateTechnology}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva Tecnología
+            </Button>
+          </div>
         )}
       </div>
+
+      {/* AI Classification Panel */}
+      {showClassificationPanel && canEdit && (
+        <div className="mb-6">
+          <AIClassificationPanel />
+        </div>
+      )}
 
       {/* AI Search Bar */}
       <div className="mb-6">
