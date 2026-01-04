@@ -10,6 +10,7 @@ import {
   Droplets,
   ClipboardCheck,
   ClipboardList,
+  TrendingUp,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -37,6 +38,7 @@ const mainNavItems = [
 const internalNavItems = [
   { title: 'Control de Calidad', url: '/quality-control', icon: ClipboardCheck },
   { title: 'Cola de Revisión', url: '/reviews', icon: ClipboardList },
+  { title: 'Tendencias', url: '/trends', icon: TrendingUp },
 ];
 
 const settingsItems = [
