@@ -23,6 +23,7 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
   showActions = true,
 }) => {
   const isUnclassified = (technology as any).tipo_id === null || (technology as any).tipo_id === undefined;
+  const isInactive = technology.status === 'inactive';
   
   // Fetch taxonomy data for display
   const { data: taxonomyData } = useQuery({
@@ -73,14 +74,21 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
 
   return (
     <Card 
-      className="card-hover cursor-pointer group"
+      className={`card-hover cursor-pointer group ${isInactive ? 'opacity-60 border-destructive/50 bg-destructive/5' : ''}`}
       onClick={onClick}
     >
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-2 mb-3">
-          <h3 className="font-semibold text-foreground line-clamp-2 group-hover:text-primary transition-colors flex-1">
-            {technology["Nombre de la tecnología"]}
-          </h3>
+          <div className="flex-1">
+            <h3 className={`font-semibold line-clamp-2 group-hover:text-primary transition-colors ${isInactive ? 'text-muted-foreground' : 'text-foreground'}`}>
+              {technology["Nombre de la tecnología"]}
+            </h3>
+            {isInactive && (
+              <Badge variant="destructive" className="text-[10px] mt-1">
+                Inactiva
+              </Badge>
+            )}
+          </div>
           <div className="flex items-center gap-1 shrink-0">
             {showActions && (
               <DeleteTechnologyButton 

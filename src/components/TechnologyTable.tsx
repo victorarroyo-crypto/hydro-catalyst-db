@@ -230,14 +230,23 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
           </TableRow>
         </TableHeader>
         <TableBody>
-          {technologies.map((tech) => (
+          {technologies.map((tech) => {
+            const isInactive = tech.status === 'inactive';
+            return (
             <TableRow 
               key={tech.id}
-              className="cursor-pointer hover:bg-muted/50 transition-colors"
+              className={`cursor-pointer hover:bg-muted/50 transition-colors ${isInactive ? 'bg-destructive/5 opacity-70' : ''}`}
               onClick={() => onRowClick(tech)}
             >
               <TableCell className="font-medium max-w-xs">
-                <span className="line-clamp-2">{tech["Nombre de la tecnología"]}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`line-clamp-2 ${isInactive ? 'text-muted-foreground' : ''}`}>{tech["Nombre de la tecnología"]}</span>
+                  {isInactive && (
+                    <Badge variant="destructive" className="text-[10px] shrink-0">
+                      Inactiva
+                    </Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell className="text-muted-foreground max-w-[150px]">
                 <span className="line-clamp-1">{tech["Proveedor / Empresa"] || '—'}</span>
@@ -258,7 +267,8 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
                 {tech["País de origen"] || '—'}
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>
