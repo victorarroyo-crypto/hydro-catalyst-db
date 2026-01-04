@@ -12,6 +12,7 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   Building2, 
   MapPin, 
@@ -27,7 +28,10 @@ import {
   Star,
   Edit,
   Plus,
-  ExternalLink
+  ExternalLink,
+  SendHorizonal,
+  Loader2,
+  ClipboardList
 } from 'lucide-react';
 import type { Technology } from '@/types/database';
 
@@ -46,7 +50,9 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
 }) => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isFavoriting, setIsFavoriting] = useState(false);
+  const [isSendingToReview, setIsSendingToReview] = useState(false);
 
   if (!technology) return null;
 
@@ -84,6 +90,41 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
       });
     }
   };
+
+  const handleSendToReview = async () => {
+    if (!user) return;
+    
+    setIsSendingToReview(true);
+    const { error } = await supabase
+      .from('technologies')
+      .update({
+        review_status: 'pending',
+        review_requested_at: new Date().toISOString(),
+        review_requested_by: user.id,
+      })
+      .eq('id', technology.id);
+    setIsSendingToReview(false);
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo enviar a revisión',
+        variant: 'destructive',
+      });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['technologies-reviews'] });
+      queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      toast({
+        title: 'Enviado a revisión',
+        description: 'La tecnología ha sido añadida a la cola de revisión',
+      });
+      onOpenChange(false);
+    }
+  };
+
+  // Check if technology is already in review process
+  const reviewStatus = (technology as any).review_status;
+  const isInReviewProcess = reviewStatus && reviewStatus !== 'none' && reviewStatus !== 'completed';
 
   const InfoRow = ({ icon: Icon, label, value, isLink = false }: { 
     icon: React.ElementType; 
@@ -157,6 +198,27 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               <Star className="w-4 h-4 mr-2" />
               Favorito
             </Button>
+            {isInternalUser && !isInReviewProcess && (
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={handleSendToReview}
+                disabled={isSendingToReview}
+              >
+                {isSendingToReview ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <SendHorizonal className="w-4 h-4 mr-2" />
+                )}
+                Enviar a revisión
+              </Button>
+            )}
+            {isInternalUser && isInReviewProcess && (
+              <Badge variant="outline" className="gap-1 py-1.5">
+                <ClipboardList className="w-3 h-3" />
+                {reviewStatus === 'pending' ? 'Pendiente de revisión' : 'En revisión'}
+              </Badge>
+            )}
           </div>
 
           {/* General Info */}

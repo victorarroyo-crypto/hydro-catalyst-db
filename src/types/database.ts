@@ -31,6 +31,10 @@ export interface Technology {
   "Grado de madurez (TRL)": number | null;
   status: string | null;
   quality_score: number | null;
+  review_status: 'none' | 'pending' | 'in_review' | 'completed' | null;
+  reviewer_id: string | null;
+  review_requested_at: string | null;
+  review_requested_by: string | null;
   created_at: string;
   updated_at: string;
   updated_by: string | null;

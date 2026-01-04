@@ -13,6 +13,7 @@ import Projects from "./pages/Projects";
 import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
 import QualityControl from "./pages/QualityControl";
+import Reviews from "./pages/Reviews";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/projects" element={<Projects />} />
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/quality-control" element={<QualityControl />} />
+              <Route path="/reviews" element={<Reviews />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />

@@ -131,6 +131,10 @@ export type Database = {
           "Porque es innovadora": string | null
           "Proveedor / Empresa": string | null
           quality_score: number | null
+          review_requested_at: string | null
+          review_requested_by: string | null
+          review_status: string | null
+          reviewer_id: string | null
           "Sector y subsector": string | null
           status: string | null
           Subcategoría: string | null
@@ -157,6 +161,10 @@ export type Database = {
           "Porque es innovadora"?: string | null
           "Proveedor / Empresa"?: string | null
           quality_score?: number | null
+          review_requested_at?: string | null
+          review_requested_by?: string | null
+          review_status?: string | null
+          reviewer_id?: string | null
           "Sector y subsector"?: string | null
           status?: string | null
           Subcategoría?: string | null
@@ -183,6 +191,10 @@ export type Database = {
           "Porque es innovadora"?: string | null
           "Proveedor / Empresa"?: string | null
           quality_score?: number | null
+          review_requested_at?: string | null
+          review_requested_by?: string | null
+          review_status?: string | null
+          reviewer_id?: string | null
           "Sector y subsector"?: string | null
           status?: string | null
           Subcategoría?: string | null
