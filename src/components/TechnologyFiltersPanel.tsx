@@ -101,14 +101,28 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
           <div className="space-y-2">
             <Label className="text-sm font-medium">Tipo</Label>
             <Select
-              value={taxonomyFilters.tipoId?.toString() || 'all'}
-              onValueChange={(value) => updateTaxonomyFilter('tipoId', value === 'all' ? null : parseInt(value))}
+              value={taxonomyFilters.tipoId === -1 ? 'unclassified' : (taxonomyFilters.tipoId?.toString() || 'all')}
+              onValueChange={(value) => {
+                if (value === 'all') {
+                  updateTaxonomyFilter('tipoId', null);
+                } else if (value === 'unclassified') {
+                  updateTaxonomyFilter('tipoId', -1); // Special value for unclassified
+                } else {
+                  updateTaxonomyFilter('tipoId', parseInt(value));
+                }
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Todos los tipos" />
               </SelectTrigger>
               <SelectContent className="max-h-60 bg-popover z-50">
                 <SelectItem value="all">Todos los tipos</SelectItem>
+                <SelectItem value="unclassified">
+                  <span className="flex items-center gap-2 text-amber-600">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    No clasificada
+                  </span>
+                </SelectItem>
                 {taxonomyTipos.map((tipo) => (
                   <SelectItem key={tipo.id} value={tipo.id.toString()}>
                     <span className="flex items-center gap-2">

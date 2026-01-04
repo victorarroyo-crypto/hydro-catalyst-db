@@ -92,7 +92,12 @@ const Technologies: React.FC = () => {
 
         // New taxonomy filters
         if (taxonomyFilters.tipoId) {
-          filtered = filtered.filter(t => (t as any).tipo_id === taxonomyFilters.tipoId);
+          if (taxonomyFilters.tipoId === -1) {
+            // Filter unclassified technologies (tipo_id is null)
+            filtered = filtered.filter(t => (t as any).tipo_id === null || (t as any).tipo_id === undefined);
+          } else {
+            filtered = filtered.filter(t => (t as any).tipo_id === taxonomyFilters.tipoId);
+          }
         }
 
         if (taxonomyFilters.subcategoriaId) {
