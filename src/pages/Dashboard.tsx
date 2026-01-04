@@ -43,21 +43,33 @@ const Dashboard: React.FC = () => {
   const { data: pendingEdits } = useQuery({
     queryKey: ['pending-edits-dashboard'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch pending technology edits
+      const { data: editsData, error: editsError } = await supabase
         .from('technology_edits')
         .select('edit_type')
         .eq('status', 'pending');
       
-      if (error) throw error;
+      if (editsError) throw editsError;
       
-      const total = data?.length || 0;
+      // Fetch technologies pending review
+      const { count: reviewCount, error: reviewError } = await supabase
+        .from('technologies')
+        .select('id', { count: 'exact', head: true })
+        .eq('review_status', 'pending');
+      
+      if (reviewError) throw reviewError;
+      
+      const editsTotal = editsData?.length || 0;
+      const reviewsTotal = reviewCount || 0;
+      
       const byType = {
-        create: data?.filter(e => e.edit_type === 'create').length || 0,
-        classify: data?.filter(e => e.edit_type === 'classify').length || 0,
-        update: data?.filter(e => e.edit_type === 'update').length || 0,
+        create: editsData?.filter(e => e.edit_type === 'create').length || 0,
+        classify: editsData?.filter(e => e.edit_type === 'classify').length || 0,
+        update: editsData?.filter(e => e.edit_type === 'update').length || 0,
+        review: reviewsTotal,
       };
       
-      return { total, byType };
+      return { total: editsTotal + reviewsTotal, byType };
     },
     enabled: !!canReviewEdits,
   });
@@ -179,6 +191,12 @@ const Dashboard: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{pendingEdits.byType.update}</Badge>
                   <span className="text-muted-foreground">Ediciones</span>
+                </div>
+              )}
+              {pendingEdits.byType.review > 0 && (
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-blue-500 hover:bg-blue-600">{pendingEdits.byType.review}</Badge>
+                  <span className="text-muted-foreground">En cola de revisión</span>
                 </div>
               )}
             </div>
