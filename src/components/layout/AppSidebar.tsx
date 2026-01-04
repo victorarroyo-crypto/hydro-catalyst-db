@@ -8,8 +8,7 @@ import {
   Settings,
   LogOut,
   Droplets,
-  ClipboardCheck,
-  ClipboardList,
+  ShieldCheck,
   TrendingUp,
 } from 'lucide-react';
 import {
@@ -36,8 +35,7 @@ const mainNavItems = [
 ];
 
 const internalNavItems = [
-  { title: 'Control de Calidad', url: '/quality-control', icon: ClipboardCheck },
-  { title: 'Cola de Revisión', url: '/reviews', icon: ClipboardList },
+  { title: 'Centro de Supervisión', url: '/quality-control', icon: ShieldCheck },
   { title: 'Tendencias', url: '/trends', icon: TrendingUp },
 ];
 
