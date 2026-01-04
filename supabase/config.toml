@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.move-to-case-studies]
 verify_jwt = false
+
+[functions.compare-databases]
+verify_jwt = false
