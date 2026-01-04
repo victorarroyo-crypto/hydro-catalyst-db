@@ -8,13 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   Cpu, 
-  Rocket, 
   FolderOpen, 
   Search, 
   Star, 
   ArrowRight,
   Droplets,
   TrendingUp,
+  BarChart3,
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
@@ -101,13 +101,15 @@ const Dashboard: React.FC = () => {
           icon={Cpu}
           variant="primary"
         />
-        <StatsCard
-          title="TRL 7+"
-          value={stats?.highTrlTechnologies?.toLocaleString() || '—'}
-          subtitle="Listas para producción"
-          icon={Rocket}
-          variant="secondary"
-        />
+        <Link to="/statistics" className="block">
+          <StatsCard
+            title="Estadísticas"
+            value="Ver análisis"
+            subtitle="Distribución por tipo, país, sector"
+            icon={BarChart3}
+            variant="secondary"
+          />
+        </Link>
         <StatsCard
           title="Proyectos Activos"
           value={stats?.activeProjects?.toLocaleString() || '—'}
