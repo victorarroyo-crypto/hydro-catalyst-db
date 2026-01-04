@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,7 +8,32 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
+import { 
+  User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, 
+  CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle,
+  Users, Crown, Eye, Edit, Briefcase, Building, Star, RefreshCw
+} from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 interface ComparisonResult {
   table: string;
@@ -32,6 +57,101 @@ interface ComparisonResponse {
   results: ComparisonResult[];
 }
 
+interface UserWithRole {
+  user_id: string;
+  role: string;
+  full_name: string | null;
+  email?: string;
+  created_at: string;
+}
+
+const ROLE_INFO = {
+  admin: {
+    label: 'Administrador',
+    icon: Crown,
+    color: 'text-red-500',
+    bgColor: 'bg-red-500/10',
+    description: 'Control total del sistema',
+    permissions: [
+      'Gestionar usuarios y roles',
+      'Acceso completo a todas las tecnologías',
+      'Aprobar/rechazar ediciones',
+      'Gestionar taxonomías',
+      'Sincronización con base externa',
+      'Eliminar cualquier registro',
+    ],
+  },
+  supervisor: {
+    label: 'Supervisor',
+    icon: Eye,
+    color: 'text-orange-500',
+    bgColor: 'bg-orange-500/10',
+    description: 'Supervisión y aprobación',
+    permissions: [
+      'Ver todas las tecnologías',
+      'Aprobar/rechazar ediciones de analistas',
+      'Editar tecnologías',
+      'Gestionar proyectos',
+      'Ver casos de estudio y tendencias',
+    ],
+  },
+  analyst: {
+    label: 'Analista',
+    icon: Edit,
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-500/10',
+    description: 'Creación y edición de contenido',
+    permissions: [
+      'Crear nuevas tecnologías',
+      'Editar tecnologías existentes',
+      'Proponer cambios (requieren aprobación)',
+      'Clasificar tecnologías con IA',
+      'Mover a casos de estudio/tendencias',
+    ],
+  },
+  client_enterprise: {
+    label: 'Cliente Enterprise',
+    icon: Building,
+    color: 'text-purple-500',
+    bgColor: 'bg-purple-500/10',
+    description: 'Acceso empresarial completo',
+    permissions: [
+      'Ver todas las tecnologías',
+      'Crear y gestionar proyectos ilimitados',
+      'Búsqueda avanzada con IA',
+      'Exportar fichas tecnológicas',
+      'Acceso a estadísticas completas',
+    ],
+  },
+  client_professional: {
+    label: 'Cliente Profesional',
+    icon: Star,
+    color: 'text-yellow-500',
+    bgColor: 'bg-yellow-500/10',
+    description: 'Acceso profesional',
+    permissions: [
+      'Ver todas las tecnologías',
+      'Crear hasta 10 proyectos',
+      'Búsqueda con IA',
+      'Exportar fichas tecnológicas',
+      'Favoritos ilimitados',
+    ],
+  },
+  client_basic: {
+    label: 'Cliente Básico',
+    icon: Briefcase,
+    color: 'text-gray-500',
+    bgColor: 'bg-gray-500/10',
+    description: 'Acceso de lectura',
+    permissions: [
+      'Ver tecnologías publicadas',
+      'Crear hasta 3 proyectos',
+      'Guardar favoritos (máx. 50)',
+      'Ver detalles básicos',
+    ],
+  },
+};
+
 const Settings: React.FC = () => {
   const { profile, user } = useAuth();
   const { toast } = useToast();
@@ -39,6 +159,87 @@ const Settings: React.FC = () => {
   const [isBulkSyncing, setIsBulkSyncing] = useState(false);
   const [isComparing, setIsComparing] = useState(false);
   const [comparisonResults, setComparisonResults] = useState<ComparisonResponse | null>(null);
+  const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+
+  // Load users for admin
+  useEffect(() => {
+    if (isAdmin) {
+      loadUsers();
+    }
+  }, [isAdmin]);
+
+  const loadUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select(`
+          user_id,
+          role,
+          profiles!inner(full_name, created_at)
+        `)
+        .order('role');
+
+      if (error) throw error;
+
+      const formattedUsers: UserWithRole[] = (data || []).map((u: any) => ({
+        user_id: u.user_id,
+        role: u.role,
+        full_name: u.profiles?.full_name,
+        created_at: u.profiles?.created_at,
+      }));
+
+      setUsers(formattedUsers);
+    } catch (error: any) {
+      console.error('Error loading users:', error);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  const handleRoleChange = async (userId: string, newRole: string) => {
+    setUpdatingUserId(userId);
+    try {
+      // Cast to the expected type for Supabase
+      const roleValue = newRole as "admin" | "supervisor" | "analyst" | "client_basic" | "client_professional" | "client_enterprise";
+      
+      // Update user_roles table
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .update({ role: roleValue })
+        .eq('user_id', userId);
+
+      if (roleError) throw roleError;
+
+      // Also update profiles table for consistency
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ role: roleValue })
+        .eq('user_id', userId);
+
+      if (profileError) throw profileError;
+
+      // Update local state
+      setUsers(prev => prev.map(u => 
+        u.user_id === userId ? { ...u, role: newRole } : u
+      ));
+
+      toast({
+        title: 'Rol actualizado',
+        description: `El usuario ahora tiene el rol de ${ROLE_INFO[newRole as keyof typeof ROLE_INFO]?.label || newRole}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error al actualizar rol',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
 
   const handleBulkSync = async () => {
     setIsBulkSyncing(true);
@@ -166,9 +367,168 @@ const Settings: React.FC = () => {
           </CardContent>
         </Card>
 
+        {/* Access Levels Info - Visible to all users */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              Niveles de Acceso
+            </CardTitle>
+            <CardDescription>
+              Descripción de los diferentes roles y sus permisos en la plataforma
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="single" collapsible className="w-full">
+              {Object.entries(ROLE_INFO).map(([roleKey, roleData]) => {
+                const IconComponent = roleData.icon;
+                const isCurrentRole = profile?.role === roleKey;
+                return (
+                  <AccordionItem key={roleKey} value={roleKey}>
+                    <AccordionTrigger className="hover:no-underline">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${roleData.bgColor}`}>
+                          <IconComponent className={`w-4 h-4 ${roleData.color}`} />
+                        </div>
+                        <div className="text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{roleData.label}</span>
+                            {isCurrentRole && (
+                              <Badge variant="outline" className="text-xs">Tu rol</Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground font-normal">
+                            {roleData.description}
+                          </p>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <ul className="space-y-2 pl-12">
+                        {roleData.permissions.map((permission, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />
+                            {permission}
+                          </li>
+                        ))}
+                      </ul>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          </CardContent>
+        </Card>
+
         {/* Admin Section */}
         {isAdmin && (
           <>
+            {/* User Management */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  Gestión de Usuarios
+                </CardTitle>
+                <CardDescription>
+                  Administra los roles de los usuarios del sistema
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-end">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={loadUsers}
+                    disabled={isLoadingUsers}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${isLoadingUsers ? 'animate-spin' : ''}`} />
+                    Actualizar
+                  </Button>
+                </div>
+
+                {isLoadingUsers ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : users.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">
+                    No hay usuarios registrados
+                  </p>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Usuario</TableHead>
+                          <TableHead>Rol Actual</TableHead>
+                          <TableHead>Cambiar Rol</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map((u) => {
+                          const roleInfo = ROLE_INFO[u.role as keyof typeof ROLE_INFO];
+                          const IconComponent = roleInfo?.icon || User;
+                          const isCurrentUser = u.user_id === user?.id;
+                          
+                          return (
+                            <TableRow key={u.user_id}>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">
+                                    {u.full_name || 'Sin nombre'}
+                                  </span>
+                                  {isCurrentUser && (
+                                    <Badge variant="outline" className="text-xs">Tú</Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Desde {new Date(u.created_at).toLocaleDateString('es-ES')}
+                                </p>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <div className={`p-1.5 rounded ${roleInfo?.bgColor || 'bg-gray-100'}`}>
+                                    <IconComponent className={`w-3 h-3 ${roleInfo?.color || 'text-gray-500'}`} />
+                                  </div>
+                                  <span className="text-sm">{roleInfo?.label || u.role}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Select
+                                  value={u.role}
+                                  onValueChange={(value) => handleRoleChange(u.user_id, value)}
+                                  disabled={updatingUserId === u.user_id || isCurrentUser}
+                                >
+                                  <SelectTrigger className="w-[180px]">
+                                    {updatingUserId === u.user_id ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <SelectValue />
+                                    )}
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {Object.entries(ROLE_INFO).map(([key, info]) => (
+                                      <SelectItem key={key} value={key}>
+                                        <div className="flex items-center gap-2">
+                                          <info.icon className={`w-3 h-3 ${info.color}`} />
+                                          {info.label}
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -190,14 +550,13 @@ const Settings: React.FC = () => {
                   ) : (
                     <CloudUpload className="w-4 h-4 mr-2" />
                   )}
-                  {isBulkSyncing ? 'Sincronizando todo...' : 'Sincronizar TODO a Supabase externo'}
+                  {isBulkSyncing ? 'Sincronizando todo...' : 'Sincronizar TODO a base externa'}
                 </Button>
                 <p className="text-xs text-muted-foreground mt-2">
                   Sincroniza tecnologías, casos de estudio, tendencias, proyectos y taxonomías
                 </p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
