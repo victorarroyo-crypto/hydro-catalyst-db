@@ -105,7 +105,7 @@ const Index = () => {
               Todo lo que necesitas para encontrar la tecnología ideal
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Nuestra plataforma centraliza información de las mejores tecnologías de tratamiento de agua del mundo
+              Nuestra plataforma centraliza información de las mejores tecnologías del agua del mundo
             </p>
           </div>
 
