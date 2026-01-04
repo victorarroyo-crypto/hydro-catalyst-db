@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { TechnologyFilters } from '@/types/database';
 
@@ -7,12 +8,38 @@ export interface FilterOptionWithCount {
   count: number;
 }
 
+export interface TaxonomyTipo {
+  id: number;
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+}
+
+export interface TaxonomySubcategoria {
+  id: number;
+  tipo_id: number;
+  codigo: string;
+  nombre: string;
+}
+
+export interface TaxonomySector {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+}
+
 export interface FilterOptions {
   tiposTecnologia: FilterOptionWithCount[];
   subcategorias: FilterOptionWithCount[];
   paises: FilterOptionWithCount[];
   sectores: FilterOptionWithCount[];
   estados: FilterOptionWithCount[];
+}
+
+export interface TaxonomyFilters {
+  tipoId: number | null;
+  subcategoriaId: number | null;
+  sectorId: string | null;
 }
 
 export function useTechnologyFilters() {
@@ -24,6 +51,43 @@ export function useTechnologyFilters() {
     estados: [],
   });
   const [loading, setLoading] = useState(true);
+
+  // Fetch taxonomy data
+  const { data: taxonomyTipos } = useQuery({
+    queryKey: ['taxonomy-tipos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_tipos')
+        .select('*')
+        .order('id');
+      if (error) throw error;
+      return data as TaxonomyTipo[];
+    },
+  });
+
+  const { data: taxonomySubcategorias } = useQuery({
+    queryKey: ['taxonomy-subcategorias'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_subcategorias')
+        .select('*')
+        .order('codigo');
+      if (error) throw error;
+      return data as TaxonomySubcategoria[];
+    },
+  });
+
+  const { data: taxonomySectores } = useQuery({
+    queryKey: ['taxonomy-sectores'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_sectores')
+        .select('*')
+        .order('id');
+      if (error) throw error;
+      return data as TaxonomySector[];
+    },
+  });
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
@@ -75,5 +139,19 @@ export function useTechnologyFilters() {
     status: '',
   };
 
-  return { filterOptions, loading, defaultFilters };
+  const defaultTaxonomyFilters: TaxonomyFilters = {
+    tipoId: null,
+    subcategoriaId: null,
+    sectorId: null,
+  };
+
+  return { 
+    filterOptions, 
+    loading, 
+    defaultFilters,
+    defaultTaxonomyFilters,
+    taxonomyTipos: taxonomyTipos || [],
+    taxonomySubcategorias: taxonomySubcategorias || [],
+    taxonomySectores: taxonomySectores || [],
+  };
 }
