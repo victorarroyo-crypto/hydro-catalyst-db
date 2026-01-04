@@ -49,6 +49,17 @@ const Trends = () => {
     technology_type: '',
     subcategory: '',
     sector: '',
+    // Original data fields
+    proveedor: '',
+    pais_origen: '',
+    web: '',
+    email: '',
+    ventaja_competitiva: '',
+    porque_innovadora: '',
+    casos_referencia: '',
+    comentarios_analista: '',
+    aplicacion_principal: '',
+    paises_actua: '',
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -166,12 +177,23 @@ const Trends = () => {
 
   const handleEditClick = (trend: TechnologicalTrend) => {
     setEditingTrend(trend);
+    const od = trend.original_data || {};
     setEditForm({
       name: trend.name,
       description: trend.description || '',
       technology_type: trend.technology_type,
       subcategory: trend.subcategory || '',
       sector: trend.sector || '',
+      proveedor: String(od["Proveedor / Empresa"] || ''),
+      pais_origen: String(od["País de origen"] || ''),
+      web: String(od["Web de la empresa"] || ''),
+      email: String(od["Email de contacto"] || ''),
+      ventaja_competitiva: String(od["Ventaja competitiva clave"] || ''),
+      porque_innovadora: String(od["Porque es innovadora"] || ''),
+      casos_referencia: String(od["Casos de referencia"] || ''),
+      comentarios_analista: String(od["Comentarios del analista"] || ''),
+      aplicacion_principal: String(od["Aplicación principal"] || ''),
+      paises_actua: String(od["Paises donde actua"] || ''),
     });
     setShowEditModal(true);
     setSelectedTrend(null);
@@ -181,6 +203,27 @@ const Trends = () => {
     if (!editingTrend) return;
     
     setIsSaving(true);
+    
+    // Update original_data with new values
+    const updatedOriginalData = {
+      ...(editingTrend.original_data || {}),
+      "Nombre de la tecnología": editForm.name,
+      "Descripción técnica breve": editForm.description || null,
+      "Tipo de tecnología": editForm.technology_type,
+      "Subcategoría": editForm.subcategory || null,
+      "Sector y subsector": editForm.sector || null,
+      "Proveedor / Empresa": editForm.proveedor || null,
+      "País de origen": editForm.pais_origen || null,
+      "Web de la empresa": editForm.web || null,
+      "Email de contacto": editForm.email || null,
+      "Ventaja competitiva clave": editForm.ventaja_competitiva || null,
+      "Porque es innovadora": editForm.porque_innovadora || null,
+      "Casos de referencia": editForm.casos_referencia || null,
+      "Comentarios del analista": editForm.comentarios_analista || null,
+      "Aplicación principal": editForm.aplicacion_principal || null,
+      "Paises donde actua": editForm.paises_actua || null,
+    };
+    
     const { error } = await supabase
       .from('technological_trends')
       .update({
@@ -189,6 +232,7 @@ const Trends = () => {
         technology_type: editForm.technology_type,
         subcategory: editForm.subcategory || null,
         sector: editForm.sector || null,
+        original_data: updatedOriginalData,
       })
       .eq('id', editingTrend.id);
     
@@ -449,32 +493,26 @@ const Trends = () => {
               Editar Tendencia
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            {/* Basic Info */}
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Nombre</Label>
+              <Label htmlFor="edit-name">Nombre *</Label>
               <Input
                 id="edit-name"
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
               />
             </div>
+            
             <div className="space-y-2">
-              <Label htmlFor="edit-description">Descripción</Label>
-              <Textarea
-                id="edit-description"
-                value={editForm.description}
-                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                rows={4}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-type">Tipo de tecnología</Label>
+              <Label htmlFor="edit-type">Tipo de tecnología *</Label>
               <Input
                 id="edit-type"
                 value={editForm.technology_type}
                 onChange={(e) => setEditForm({ ...editForm, technology_type: e.target.value })}
               />
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-subcategory">Subcategoría</Label>
@@ -492,6 +530,135 @@ const Trends = () => {
                   onChange={(e) => setEditForm({ ...editForm, sector: e.target.value })}
                 />
               </div>
+            </div>
+
+            <Separator />
+
+            {/* Company Info */}
+            <h4 className="text-sm font-semibold text-muted-foreground">Información de la empresa</h4>
+            
+            <div className="space-y-2">
+              <Label htmlFor="edit-proveedor">Proveedor / Empresa</Label>
+              <Input
+                id="edit-proveedor"
+                value={editForm.proveedor}
+                onChange={(e) => setEditForm({ ...editForm, proveedor: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-pais">País de origen</Label>
+                <Input
+                  id="edit-pais"
+                  value={editForm.pais_origen}
+                  onChange={(e) => setEditForm({ ...editForm, pais_origen: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-paises">Países donde actúa</Label>
+                <Input
+                  id="edit-paises"
+                  value={editForm.paises_actua}
+                  onChange={(e) => setEditForm({ ...editForm, paises_actua: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-web">Web</Label>
+                <Input
+                  id="edit-web"
+                  value={editForm.web}
+                  onChange={(e) => setEditForm({ ...editForm, web: e.target.value })}
+                  placeholder="https://..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">Email de contacto</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Descriptions */}
+            <h4 className="text-sm font-semibold text-muted-foreground">Descripciones</h4>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Descripción técnica</Label>
+              <Textarea
+                id="edit-description"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-aplicacion">Aplicación principal</Label>
+              <Textarea
+                id="edit-aplicacion"
+                value={editForm.aplicacion_principal}
+                onChange={(e) => setEditForm({ ...editForm, aplicacion_principal: e.target.value })}
+                rows={2}
+              />
+            </div>
+
+            <Separator />
+
+            {/* Differentiation */}
+            <h4 className="text-sm font-semibold text-muted-foreground">Diferenciación</h4>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-ventaja">Ventaja competitiva clave</Label>
+              <Textarea
+                id="edit-ventaja"
+                value={editForm.ventaja_competitiva}
+                onChange={(e) => setEditForm({ ...editForm, ventaja_competitiva: e.target.value })}
+                rows={2}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-innovadora">Por qué es innovadora</Label>
+              <Textarea
+                id="edit-innovadora"
+                value={editForm.porque_innovadora}
+                onChange={(e) => setEditForm({ ...editForm, porque_innovadora: e.target.value })}
+                rows={2}
+              />
+            </div>
+
+            <Separator />
+
+            {/* References and Comments */}
+            <h4 className="text-sm font-semibold text-muted-foreground">Referencias y comentarios</h4>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-casos">Casos de referencia</Label>
+              <Textarea
+                id="edit-casos"
+                value={editForm.casos_referencia}
+                onChange={(e) => setEditForm({ ...editForm, casos_referencia: e.target.value })}
+                rows={2}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-comentarios">Comentarios del analista</Label>
+              <Textarea
+                id="edit-comentarios"
+                value={editForm.comentarios_analista}
+                onChange={(e) => setEditForm({ ...editForm, comentarios_analista: e.target.value })}
+                rows={3}
+              />
             </div>
           </div>
           <DialogFooter>
