@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { InviteUsersSection } from '@/components/settings/InviteUsersSection';
+import { AuditLogSection } from '@/components/settings/AuditLogSection';
+import { ExportDataSection } from '@/components/settings/ExportDataSection';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -186,6 +189,11 @@ const Settings: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  
+  // Profile edit state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(profile?.full_name || '');
+  const [isSavingName, setIsSavingName] = useState(false);
 
   // Load users for admin
   useEffect(() => {
@@ -364,6 +372,52 @@ const Settings: React.FC = () => {
     }
   };
 
+  const handleSaveName = async () => {
+    if (!editedName.trim()) {
+      toast({
+        title: 'Nombre requerido',
+        description: 'Por favor, introduce un nombre válido',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSavingName(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ full_name: editedName.trim() })
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+
+      // Log the action
+      await supabase.from('audit_logs').insert({
+        user_id: user?.id,
+        action: 'UPDATE_PROFILE',
+        entity_type: 'profile',
+        details: { field: 'full_name', new_value: editedName.trim() },
+      });
+
+      toast({
+        title: 'Nombre actualizado',
+        description: 'Tu nombre ha sido cambiado correctamente',
+      });
+
+      setIsEditingName(false);
+      // Reload the page to get fresh profile data
+      window.location.reload();
+    } catch (error: any) {
+      toast({
+        title: 'Error al actualizar nombre',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
   const handleBulkSync = async () => {
     setIsBulkSyncing(true);
     try {
@@ -453,7 +507,46 @@ const Settings: React.FC = () => {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Nombre completo</Label>
-              <Input value={profile?.full_name || ''} disabled />
+              {isEditingName ? (
+                <div className="flex gap-2">
+                  <Input 
+                    value={editedName} 
+                    onChange={(e) => setEditedName(e.target.value)}
+                    placeholder="Tu nombre"
+                  />
+                  <Button 
+                    size="sm" 
+                    onClick={handleSaveName}
+                    disabled={isSavingName}
+                  >
+                    {isSavingName ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditingName(false);
+                      setEditedName(profile?.full_name || '');
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Input value={profile?.full_name || ''} disabled className="flex-1" />
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      setEditedName(profile?.full_name || '');
+                      setIsEditingName(true);
+                    }}
+                  >
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Email</Label>
@@ -785,6 +878,12 @@ const Settings: React.FC = () => {
               </CardContent>
             </Card>
 
+            {/* Invite Users */}
+            <InviteUsersSection />
+
+            {/* Audit Log */}
+            <AuditLogSection />
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -949,6 +1048,9 @@ const Settings: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Export Data - Available to all users */}
+        <ExportDataSection />
 
         {/* Legal Links */}
         <Card>
