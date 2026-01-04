@@ -5,14 +5,18 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, MapPin, Tag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { QuickClassifyButton } from '@/components/QuickClassifyButton';
 import type { Technology } from '@/types/database';
 
 interface TechnologyCardProps {
   technology: Technology;
   onClick: () => void;
+  showQuickClassify?: boolean;
 }
 
-export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onClick }) => {
+export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onClick, showQuickClassify = false }) => {
+  const isUnclassified = (technology as any).tipo_id === null || (technology as any).tipo_id === undefined;
+  
   // Fetch taxonomy data for display
   const { data: taxonomyData } = useQuery({
     queryKey: ['taxonomy-display', (technology as any).tipo_id, (technology as any).subcategoria_id, (technology as any).sector_id],
@@ -115,10 +119,15 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onCl
           )}
           
           {/* Fallback to legacy type if no taxonomy */}
-          {!hasTaxonomy && technology["Tipo de tecnología"] && (
+          {!hasTaxonomy && technology["Tipo de tecnología"] && !showQuickClassify && (
             <Badge variant="outline" className="text-xs text-muted-foreground">
               {technology["Tipo de tecnología"]}
             </Badge>
+          )}
+          
+          {/* Quick classify button for unclassified technologies */}
+          {showQuickClassify && isUnclassified && (
+            <QuickClassifyButton technologyId={technology.id} />
           )}
         </div>
       </CardContent>
