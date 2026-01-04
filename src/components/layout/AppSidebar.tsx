@@ -10,6 +10,7 @@ import {
   Droplets,
   ShieldCheck,
   TrendingUp,
+  BookOpen,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -37,6 +38,7 @@ const mainNavItems = [
 const internalNavItems = [
   { title: 'Centro de Supervisión', url: '/quality-control', icon: ShieldCheck },
   { title: 'Tendencias', url: '/trends', icon: TrendingUp },
+  { title: 'Casos de Estudio', url: '/case-studies', icon: BookOpen },
 ];
 
 const settingsItems = [
