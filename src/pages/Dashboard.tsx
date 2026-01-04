@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { StatsCard } from '@/components/StatsCard';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   Cpu, 
@@ -15,10 +16,12 @@ import {
   Droplets,
   TrendingUp,
   BarChart3,
+  ClipboardList,
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const { profile } = useAuth();
+  const canReviewEdits = profile?.role && ['admin', 'supervisor'].includes(profile.role);
 
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -35,6 +38,28 @@ const Dashboard: React.FC = () => {
         activeProjects: projectsCount.count || 0,
       };
     },
+  });
+
+  const { data: pendingEdits } = useQuery({
+    queryKey: ['pending-edits-dashboard'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('technology_edits')
+        .select('edit_type')
+        .eq('status', 'pending');
+      
+      if (error) throw error;
+      
+      const total = data?.length || 0;
+      const byType = {
+        create: data?.filter(e => e.edit_type === 'create').length || 0,
+        classify: data?.filter(e => e.edit_type === 'classify').length || 0,
+        update: data?.filter(e => e.edit_type === 'update').length || 0,
+      };
+      
+      return { total, byType };
+    },
+    enabled: !!canReviewEdits,
   });
 
   const quickActions = [
@@ -118,6 +143,54 @@ const Dashboard: React.FC = () => {
           variant="accent"
         />
       </div>
+
+      {/* Pending Suggestions Widget - Only for Admin/Supervisor */}
+      {canReviewEdits && pendingEdits && pendingEdits.total > 0 && (
+        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center">
+                  <ClipboardList className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Sugerencias Pendientes</CardTitle>
+                  <CardDescription>Requieren tu revisión</CardDescription>
+                </div>
+              </div>
+              <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">{pendingEdits.total}</div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-4 mb-4 text-sm">
+              {pendingEdits.byType.create > 0 && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="default">{pendingEdits.byType.create}</Badge>
+                  <span className="text-muted-foreground">Nuevas tecnologías</span>
+                </div>
+              )}
+              {pendingEdits.byType.classify > 0 && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{pendingEdits.byType.classify}</Badge>
+                  <span className="text-muted-foreground">Clasificaciones</span>
+                </div>
+              )}
+              {pendingEdits.byType.update > 0 && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{pendingEdits.byType.update}</Badge>
+                  <span className="text-muted-foreground">Ediciones</span>
+                </div>
+              )}
+            </div>
+            <Button asChild className="w-full">
+              <Link to="/quality-control">
+                Revisar Sugerencias
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       <div>
