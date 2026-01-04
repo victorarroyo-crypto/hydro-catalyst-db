@@ -1,8 +1,10 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { TRLBadge } from '@/components/TRLBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Building2, MapPin } from 'lucide-react';
+import { Building2, MapPin, Tag } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import type { Technology } from '@/types/database';
 
 interface TechnologyCardProps {
@@ -11,6 +13,42 @@ interface TechnologyCardProps {
 }
 
 export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onClick }) => {
+  // Fetch taxonomy data for display
+  const { data: taxonomyData } = useQuery({
+    queryKey: ['taxonomy-display', (technology as any).tipo_id, (technology as any).subcategoria_id],
+    queryFn: async () => {
+      const tipoId = (technology as any).tipo_id;
+      const subcategoriaId = (technology as any).subcategoria_id;
+      
+      let tipo = null;
+      let subcategoria = null;
+      
+      if (tipoId) {
+        const { data } = await supabase
+          .from('taxonomy_tipos')
+          .select('codigo, nombre')
+          .eq('id', tipoId)
+          .maybeSingle();
+        tipo = data;
+      }
+      
+      if (subcategoriaId) {
+        const { data } = await supabase
+          .from('taxonomy_subcategorias')
+          .select('codigo, nombre')
+          .eq('id', subcategoriaId)
+          .maybeSingle();
+        subcategoria = data;
+      }
+      
+      return { tipo, subcategoria };
+    },
+    enabled: !!(technology as any).tipo_id || !!(technology as any).subcategoria_id,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+
+  const hasTaxonomy = taxonomyData?.tipo || taxonomyData?.subcategoria;
+
   return (
     <Card 
       className="card-hover cursor-pointer group"
@@ -39,13 +77,33 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onCl
           )}
         </div>
 
-        {technology["Tipo de tecnología"] && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <Badge variant="secondary" className="text-xs">
+        <div className="mt-3 pt-3 border-t border-border space-y-2">
+          {/* New Taxonomy badges */}
+          {hasTaxonomy && (
+            <div className="flex flex-wrap gap-1.5">
+              {taxonomyData?.tipo && (
+                <Badge variant="default" className="text-xs gap-1">
+                  <Tag className="w-3 h-3" />
+                  <span className="font-mono text-[10px] opacity-70">{taxonomyData.tipo.codigo}</span>
+                  {taxonomyData.tipo.nombre}
+                </Badge>
+              )}
+              {taxonomyData?.subcategoria && (
+                <Badge variant="secondary" className="text-xs">
+                  <span className="font-mono text-[10px] opacity-70 mr-1">{taxonomyData.subcategoria.codigo}</span>
+                  {taxonomyData.subcategoria.nombre}
+                </Badge>
+              )}
+            </div>
+          )}
+          
+          {/* Fallback to legacy type if no taxonomy */}
+          {!hasTaxonomy && technology["Tipo de tecnología"] && (
+            <Badge variant="outline" className="text-xs text-muted-foreground">
               {technology["Tipo de tecnología"]}
             </Badge>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );
