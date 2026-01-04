@@ -38,7 +38,7 @@ const Dashboard: React.FC = () => {
       const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount] = await Promise.all([
         supabase.from('technologies').select('id', { count: 'exact', head: true }),
         supabase.from('technologies').select('id', { count: 'exact', head: true }).gte('"Grado de madurez (TRL)"', 7),
-        supabase.from('projects').select('id', { count: 'exact', head: true }).eq('status', 'in_progress'),
+        supabase.from('projects').select('id', { count: 'exact', head: true }).in('status', ['active', 'in_progress', 'draft']),
         supabase.from('casos_de_estudio').select('id', { count: 'exact', head: true }),
         supabase.from('technological_trends').select('id', { count: 'exact', head: true }),
       ]);
@@ -166,9 +166,9 @@ const Dashboard: React.FC = () => {
           variant="accent"
         />
         <StatsCard
-          title="Proyectos Activos"
+          title="Mis Proyectos"
           value={stats?.activeProjects?.toLocaleString() || '—'}
-          subtitle="En progreso"
+          subtitle="Total de proyectos"
           icon={FolderOpen}
           variant="primary"
         />
