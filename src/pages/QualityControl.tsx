@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Dialog, 
@@ -26,8 +28,10 @@ import {
   Eye,
   Check,
   X,
-  User,
   Calendar,
+  Tag,
+  CheckCircle2,
+  ArrowRight,
 } from 'lucide-react';
 
 interface TechnologyEdit {
@@ -64,6 +68,38 @@ const QualityControl: React.FC = () => {
       
       if (error) throw error;
       return data as TechnologyEdit[];
+    },
+  });
+
+  // Fetch taxonomy classification stats
+  const { data: taxonomyStats } = useQuery({
+    queryKey: ['taxonomy-classification-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('technologies')
+        .select('id, tipo_id, subcategoria_id, sector_id');
+      
+      if (error) throw error;
+      
+      const total = data?.length || 0;
+      const withTipo = data?.filter(t => t.tipo_id !== null).length || 0;
+      const withSubcategoria = data?.filter(t => t.subcategoria_id !== null).length || 0;
+      const withSector = data?.filter(t => t.sector_id !== null).length || 0;
+      const fullyClassified = data?.filter(t => t.tipo_id !== null && t.subcategoria_id !== null).length || 0;
+      const pending = total - withTipo;
+      
+      return {
+        total,
+        withTipo,
+        withSubcategoria,
+        withSector,
+        fullyClassified,
+        pending,
+        tipoPercentage: total > 0 ? Math.round((withTipo / total) * 100) : 0,
+        subcategoriaPercentage: total > 0 ? Math.round((withSubcategoria / total) * 100) : 0,
+        sectorPercentage: total > 0 ? Math.round((withSector / total) * 100) : 0,
+        fullyClassifiedPercentage: total > 0 ? Math.round((fullyClassified / total) * 100) : 0,
+      };
     },
   });
 
@@ -209,24 +245,114 @@ const QualityControl: React.FC = () => {
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       ) : (
-        <Tabs defaultValue="pending" className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="pending" className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Pendientes
-              {pendingEdits.length > 0 && (
-                <Badge variant="secondary" className="ml-1">{pendingEdits.length}</Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="approved" className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              Aprobadas
-            </TabsTrigger>
-            <TabsTrigger value="rejected" className="flex items-center gap-2">
-              <XCircle className="w-4 h-4" />
-              Rechazadas
-            </TabsTrigger>
-          </TabsList>
+        <div className="space-y-8">
+          {/* Taxonomy Classification Stats */}
+          {taxonomyStats && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                      <Tag className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">Estado de Clasificación Taxonómica</CardTitle>
+                      <CardDescription>Progreso de la nueva taxonomía estandarizada</CardDescription>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {taxonomyStats.fullyClassified.toLocaleString()} clasificadas
+                    </Badge>
+                    <Badge variant="outline" className="gap-1">
+                      <Clock className="w-3 h-3" />
+                      {taxonomyStats.pending.toLocaleString()} pendientes
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Overall Progress */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">Clasificación completa (Tipo + Subcategoría)</span>
+                    <span className="text-muted-foreground">
+                      {taxonomyStats.fullyClassified.toLocaleString()} / {taxonomyStats.total.toLocaleString()} ({taxonomyStats.fullyClassifiedPercentage}%)
+                    </span>
+                  </div>
+                  <Progress value={taxonomyStats.fullyClassifiedPercentage} className="h-3" />
+                </div>
+
+                {/* Detailed Progress */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span>Con Tipo asignado</span>
+                      <span className="font-medium">{taxonomyStats.tipoPercentage}%</span>
+                    </div>
+                    <Progress value={taxonomyStats.tipoPercentage} className="h-2" />
+                    <p className="text-xs text-muted-foreground">
+                      {taxonomyStats.withTipo.toLocaleString()} tecnologías
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span>Con Subcategoría</span>
+                      <span className="font-medium">{taxonomyStats.subcategoriaPercentage}%</span>
+                    </div>
+                    <Progress value={taxonomyStats.subcategoriaPercentage} className="h-2" />
+                    <p className="text-xs text-muted-foreground">
+                      {taxonomyStats.withSubcategoria.toLocaleString()} tecnologías
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span>Con Sector</span>
+                      <span className="font-medium">{taxonomyStats.sectorPercentage}%</span>
+                    </div>
+                    <Progress value={taxonomyStats.sectorPercentage} className="h-2" />
+                    <p className="text-xs text-muted-foreground">
+                      {taxonomyStats.withSector.toLocaleString()} tecnologías
+                    </p>
+                  </div>
+                </div>
+
+                {/* Action Button */}
+                <div className="flex justify-end pt-2">
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/technologies" className="gap-2">
+                      <Tag className="w-4 h-4" />
+                      Clasificar tecnologías
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Edits Tabs */}
+          <Tabs defaultValue="pending" className="w-full">
+            <TabsList className="mb-6">
+              <TabsTrigger value="pending" className="flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Pendientes
+                {pendingEdits.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">{pendingEdits.length}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="approved" className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4" />
+                Aprobadas
+              </TabsTrigger>
+              <TabsTrigger value="rejected" className="flex items-center gap-2">
+                <XCircle className="w-4 h-4" />
+                Rechazadas
+              </TabsTrigger>
+            </TabsList>
 
           <TabsContent value="pending">
             {pendingEdits.length === 0 ? (
@@ -284,6 +410,7 @@ const QualityControl: React.FC = () => {
             )}
           </TabsContent>
         </Tabs>
+        </div>
       )}
 
       {/* Review Modal */}
