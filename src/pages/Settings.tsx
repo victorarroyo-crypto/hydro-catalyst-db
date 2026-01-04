@@ -12,8 +12,19 @@ import {
   User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, 
   CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle,
   Users, Crown, Eye, Edit, Briefcase, Building, Star, RefreshCw, Key, Sun, Moon,
-  Info, ExternalLink, FileText, HelpCircle
+  Info, ExternalLink, FileText, HelpCircle, Trash2
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useTheme } from 'next-themes';
 import {
   Select,
@@ -168,6 +179,7 @@ const Settings: React.FC = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -262,6 +274,46 @@ const Settings: React.FC = () => {
       });
     } finally {
       setUpdatingUserId(null);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    setDeletingUserId(userId);
+    try {
+      // Delete from user_roles first
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId);
+
+      if (roleError) throw roleError;
+
+      // Delete from profiles
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('user_id', userId);
+
+      if (profileError) throw profileError;
+
+      // Note: The actual auth user can only be deleted via Supabase Admin API
+      // This removes the user from the application's role/profile system
+      
+      // Update local state
+      setUsers(prev => prev.filter(u => u.user_id !== userId));
+
+      toast({
+        title: 'Usuario eliminado',
+        description: `${userName || 'El usuario'} ha sido eliminado del sistema`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error al eliminar usuario',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingUserId(null);
     }
   };
 
@@ -627,6 +679,7 @@ const Settings: React.FC = () => {
                           <TableHead>Usuario</TableHead>
                           <TableHead>Rol Actual</TableHead>
                           <TableHead>Cambiar Rol</TableHead>
+                          <TableHead className="w-[80px]">Acciones</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -664,7 +717,7 @@ const Settings: React.FC = () => {
                                   onValueChange={(value) => handleRoleChange(u.user_id, value)}
                                   disabled={updatingUserId === u.user_id || isCurrentUser}
                                 >
-                                  <SelectTrigger className="w-[180px]">
+                                  <SelectTrigger className="w-[160px]">
                                     {updatingUserId === u.user_id ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
                                     ) : (
@@ -682,6 +735,45 @@ const Settings: React.FC = () => {
                                     ))}
                                   </SelectContent>
                                 </Select>
+                              </TableCell>
+                              <TableCell>
+                                {!isCurrentUser && (
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        disabled={deletingUserId === u.user_id}
+                                      >
+                                        {deletingUserId === u.user_id ? (
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="w-4 h-4" />
+                                        )}
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>¿Eliminar usuario?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Esta acción eliminará a <strong>{u.full_name || 'este usuario'}</strong> del sistema.
+                                          El usuario perderá todos sus permisos y acceso a la plataforma.
+                                          Esta acción no se puede deshacer.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleDeleteUser(u.user_id, u.full_name || '')}
+                                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                        >
+                                          Eliminar usuario
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                )}
                               </TableCell>
                             </TableRow>
                           );
