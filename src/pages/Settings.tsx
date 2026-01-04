@@ -185,23 +185,35 @@ const Settings: React.FC = () => {
   const loadUsers = async () => {
     setIsLoadingUsers(true);
     try {
-      const { data, error } = await supabase
+      // First get all user roles
+      const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
-        .select(`
-          user_id,
-          role,
-          profiles!inner(full_name, created_at)
-        `)
+        .select('user_id, role')
         .order('role');
 
-      if (error) throw error;
+      if (rolesError) throw rolesError;
 
-      const formattedUsers: UserWithRole[] = (data || []).map((u: any) => ({
-        user_id: u.user_id,
-        role: u.role,
-        full_name: u.profiles?.full_name,
-        created_at: u.profiles?.created_at,
-      }));
+      // Then get profiles for those users
+      const userIds = (rolesData || []).map(r => r.user_id);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, full_name, created_at')
+        .in('user_id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Merge the data
+      const profilesMap = new Map((profilesData || []).map(p => [p.user_id, p]));
+      
+      const formattedUsers: UserWithRole[] = (rolesData || []).map((r) => {
+        const profile = profilesMap.get(r.user_id);
+        return {
+          user_id: r.user_id,
+          role: r.role,
+          full_name: profile?.full_name || null,
+          created_at: profile?.created_at || '',
+        };
+      });
 
       setUsers(formattedUsers);
     } catch (error: any) {
