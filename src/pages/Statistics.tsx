@@ -17,6 +17,19 @@ import {
   ArrowLeft,
   Globe,
 } from 'lucide-react';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
 
 interface StatItem {
   name: string;
@@ -41,6 +54,21 @@ interface TaxonomySector {
   id: string;
   nombre: string;
 }
+
+const CHART_COLORS = [
+  'hsl(var(--primary))',
+  'hsl(var(--chart-1))',
+  'hsl(var(--chart-2))',
+  'hsl(var(--chart-3))',
+  'hsl(var(--chart-4))',
+  'hsl(var(--chart-5))',
+  '#8b5cf6',
+  '#ec4899',
+  '#f97316',
+  '#14b8a6',
+  '#84cc16',
+  '#a855f7',
+];
 
 const Statistics: React.FC = () => {
   const { user } = useAuth();
@@ -202,44 +230,75 @@ const Statistics: React.FC = () => {
     };
   }, [technologies, total]);
 
-  const StatSection = ({ 
-    title, 
-    icon: Icon, 
-    stats, 
-    emptyMessage 
-  }: { 
-    title: string; 
-    icon: React.ElementType; 
-    stats: StatItem[]; 
-    emptyMessage: string;
-  }) => (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Icon className="w-4 h-4 text-primary" />
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {stats.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
-        ) : (
-          stats.map((stat, idx) => (
-            <div key={idx} className="space-y-1">
-              <div className="flex items-center justify-between text-sm">
-                <span className="truncate max-w-[200px]" title={stat.name}>{stat.name}</span>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">{stat.count}</Badge>
-                  <span className="text-muted-foreground text-xs w-10 text-right">{stat.percentage}%</span>
-                </div>
-              </div>
-              <Progress value={stat.percentage} className="h-1.5" />
-            </div>
-          ))
-        )}
-      </CardContent>
-    </Card>
-  );
+  // Pie chart data for classification
+  const classificationPieData = React.useMemo(() => [
+    { name: 'Clasificadas', value: classificationStats.classified },
+    { name: 'Pendientes', value: classificationStats.pending },
+  ], [classificationStats]);
+
+  // Pie chart data for status
+  const statusPieData = React.useMemo(() => 
+    statusStats.filter(s => s.count > 0).map(s => ({
+      name: s.name,
+      value: s.count,
+    })),
+  [statusStats]);
+
+  // Bar chart data for tipos (top 8)
+  const tipoBarData = React.useMemo(() => 
+    tipoStats.filter(t => t.count > 0).slice(0, 8).map(t => ({
+      name: t.name.split(' - ')[0], // Use only code for brevity
+      fullName: t.name,
+      count: t.count,
+    })),
+  [tipoStats]);
+
+  // Bar chart data for countries (top 10)
+  const countryBarData = React.useMemo(() => 
+    countryStats.slice(0, 10).map(c => ({
+      name: c.name.length > 10 ? c.name.substring(0, 10) + '...' : c.name,
+      fullName: c.name,
+      count: c.count,
+    })),
+  [countryStats]);
+
+  // Bar chart data for sectors
+  const sectorBarData = React.useMemo(() => 
+    sectorStats.filter(s => s.count > 0).slice(0, 8).map(s => ({
+      name: s.name.split(' - ')[0],
+      fullName: s.name,
+      count: s.count,
+    })),
+  [sectorStats]);
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
+          <p className="font-medium text-sm">{data.fullName || data.name}</p>
+          <p className="text-muted-foreground text-sm">
+            {payload[0].value.toLocaleString()} tecnologías
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const PieTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
+          <p className="font-medium text-sm">{payload[0].name}</p>
+          <p className="text-muted-foreground text-sm">
+            {payload[0].value.toLocaleString()} tecnologías ({Math.round((payload[0].value / total) * 100)}%)
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   if (loadingTech) {
     return (
@@ -272,76 +331,230 @@ const Statistics: React.FC = () => {
         </Button>
       </div>
 
-      {/* Classification Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-primary" />
-            Estado de Clasificación
-          </CardTitle>
-          <CardDescription>
-            Progreso de asignación de la nueva taxonomía
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span>Tecnologías clasificadas</span>
-              <span className="font-medium">
-                {classificationStats.classified.toLocaleString()} / {total.toLocaleString()} ({classificationStats.percentage}%)
-              </span>
+      {/* Classification Overview with Pie Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-primary" />
+              Estado de Clasificación
+            </CardTitle>
+            <CardDescription>
+              Progreso de asignación de la nueva taxonomía
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={classificationPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    <Cell fill="hsl(var(--primary))" />
+                    <Cell fill="hsl(var(--muted))" />
+                  </Pie>
+                  <Tooltip content={<PieTooltip />} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-            <Progress value={classificationStats.percentage} className="h-3" />
-            <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-primary" />
-                {classificationStats.classified.toLocaleString()} clasificadas
+            <div className="flex items-center justify-center gap-6 mt-2 text-sm">
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-primary" />
+                {classificationStats.classified.toLocaleString()} clasificadas ({classificationStats.percentage}%)
               </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-muted" />
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-muted" />
                 {classificationStats.pending.toLocaleString()} pendientes
               </span>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Stats Grid */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-primary" />
+              Distribución por Estado
+            </CardTitle>
+            <CardDescription>
+              Estado actual de las tecnologías
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={statusPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {statusPieData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<PieTooltip />} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bar Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Tipo Bar Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Tag className="w-5 h-5 text-primary" />
+              Por Tipo de Tecnología
+            </CardTitle>
+            <CardDescription>
+              Distribución de tecnologías por tipo
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tipoBarData} layout="vertical" margin={{ left: 10, right: 30 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={50} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sector Bar Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-primary" />
+              Por Sector
+            </CardTitle>
+            <CardDescription>
+              Distribución de tecnologías por sector
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={sectorBarData} layout="vertical" margin={{ left: 10, right: 30 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={50} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="count" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Country Bar Chart */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-primary" />
+              Top 10 Países
+            </CardTitle>
+            <CardDescription>
+              Principales países de origen de las tecnologías
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={countryBarData} margin={{ left: 10, right: 30, bottom: 50 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 11 }} 
+                    angle={-45} 
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="count" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Detailed Stats Tables */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <StatSection
-          title="Por Tipo de Tecnología"
-          icon={Tag}
-          stats={tipoStats}
-          emptyMessage="No hay tecnologías clasificadas por tipo"
-        />
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Tag className="w-4 h-4 text-primary" />
+              Top 15 Subcategorías
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {subcategoriaStats.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No hay tecnologías con subcategoría asignada</p>
+            ) : (
+              subcategoriaStats.map((stat, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="truncate max-w-[200px]" title={stat.name}>{stat.name}</span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">{stat.count}</Badge>
+                      <span className="text-muted-foreground text-xs w-10 text-right">{stat.percentage}%</span>
+                    </div>
+                  </div>
+                  <Progress value={stat.percentage} className="h-1.5" />
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
 
-        <StatSection
-          title="Por Sector"
-          icon={Building2}
-          stats={sectorStats}
-          emptyMessage="No hay tecnologías clasificadas por sector"
-        />
-
-        <StatSection
-          title="Top 15 Subcategorías"
-          icon={Tag}
-          stats={subcategoriaStats}
-          emptyMessage="No hay tecnologías con subcategoría asignada"
-        />
-
-        <StatSection
-          title="Top 15 Países"
-          icon={Globe}
-          stats={countryStats}
-          emptyMessage="No hay información de países"
-        />
-
-        <StatSection
-          title="Por Estado"
-          icon={CheckCircle2}
-          stats={statusStats}
-          emptyMessage="No hay información de estados"
-        />
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Globe className="w-4 h-4 text-primary" />
+              Todos los Países
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {countryStats.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No hay información de países</p>
+            ) : (
+              countryStats.map((stat, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="truncate max-w-[200px]" title={stat.name}>{stat.name}</span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">{stat.count}</Badge>
+                      <span className="text-muted-foreground text-xs w-10 text-right">{stat.percentage}%</span>
+                    </div>
+                  </div>
+                  <Progress value={stat.percentage} className="h-1.5" />
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
