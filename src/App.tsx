@@ -14,6 +14,7 @@ import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
 import QualityControl from "./pages/QualityControl";
 import Reviews from "./pages/Reviews";
+import Trends from "./pages/Trends";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => (
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/reviews" element={<Reviews />} />
+              <Route path="/trends" element={<Trends />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />

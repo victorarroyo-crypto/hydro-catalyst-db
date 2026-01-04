@@ -31,7 +31,8 @@ import {
   ExternalLink,
   SendHorizonal,
   Loader2,
-  ClipboardList
+  ClipboardList,
+  TrendingUp
 } from 'lucide-react';
 import type { Technology } from '@/types/database';
 
@@ -53,6 +54,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   const queryClient = useQueryClient();
   const [isFavoriting, setIsFavoriting] = useState(false);
   const [isSendingToReview, setIsSendingToReview] = useState(false);
+  const [isMovingToTrends, setIsMovingToTrends] = useState(false);
 
   if (!technology) return null;
 
@@ -122,11 +124,64 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     }
   };
 
+  const handleMoveToTrends = async () => {
+    if (!user) return;
+    
+    setIsMovingToTrends(true);
+    
+    // First, insert into technological_trends
+    const { error: insertError } = await supabase
+      .from('technological_trends')
+      .insert({
+        name: technology["Nombre de la tecnología"],
+        description: technology["Descripción técnica breve"],
+        technology_type: technology["Tipo de tecnología"],
+        subcategory: technology["Subcategoría"],
+        sector: technology["Sector y subsector"],
+        source_technology_id: technology.id,
+        created_by: user.id,
+      });
+
+    if (insertError) {
+      setIsMovingToTrends(false);
+      toast({
+        title: 'Error',
+        description: 'No se pudo mover a tendencias',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Then delete from technologies
+    const { error: deleteError } = await supabase
+      .from('technologies')
+      .delete()
+      .eq('id', technology.id);
+
+    setIsMovingToTrends(false);
+
+    if (deleteError) {
+      toast({
+        title: 'Error',
+        description: 'Se creó la tendencia pero no se pudo eliminar la tecnología original',
+        variant: 'destructive',
+      });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      queryClient.invalidateQueries({ queryKey: ['technological-trends'] });
+      toast({
+        title: 'Movido a tendencias',
+        description: 'La tecnología ha sido movida a tendencias tecnológicas',
+      });
+      onOpenChange(false);
+    }
+  };
+
   // Check if technology is already in review process
   const reviewStatus = (technology as any).review_status;
   const isInReviewProcess = reviewStatus && reviewStatus !== 'none' && reviewStatus !== 'completed';
 
-  const InfoRow = ({ icon: Icon, label, value, isLink = false }: { 
+  const InfoRow = ({ icon: Icon, label, value, isLink = false }: {
     icon: React.ElementType; 
     label: string; 
     value: string | null; 
@@ -218,6 +273,22 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                 <ClipboardList className="w-3 h-3" />
                 {reviewStatus === 'pending' ? 'Pendiente de revisión' : 'En revisión'}
               </Badge>
+            )}
+            {isInternalUser && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleMoveToTrends}
+                disabled={isMovingToTrends}
+                className="text-orange-600 border-orange-300 hover:bg-orange-50"
+              >
+                {isMovingToTrends ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <TrendingUp className="w-4 h-4 mr-2" />
+                )}
+                Mover a tendencias
+              </Button>
             )}
           </div>
 

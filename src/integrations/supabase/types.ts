@@ -113,6 +113,42 @@ export type Database = {
         }
         Relationships: []
       }
+      technological_trends: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          sector: string | null
+          source_technology_id: string | null
+          subcategory: string | null
+          technology_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          sector?: string | null
+          source_technology_id?: string | null
+          subcategory?: string | null
+          technology_type: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          sector?: string | null
+          source_technology_id?: string | null
+          subcategory?: string | null
+          technology_type?: string
+        }
+        Relationships: []
+      }
       technologies: {
         Row: {
           "Aplicación principal": string | null
