@@ -20,16 +20,24 @@ const Settings: React.FC = () => {
     setIsBulkSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke('bulk-sync-to-external', {
-        body: {
-          tables: ['taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores', 'technologies'],
-        },
+        body: {},
       });
 
       if (error) throw error;
 
+      const results = data.results || {};
+      const totalSynced = Object.values(results).reduce((sum: number, r: any) => sum + (r.synced || 0), 0);
+      const hasErrors = Object.values(results).some((r: any) => r.errors?.length > 0);
+
       toast({
-        title: 'Sincronización completada',
-        description: `Se sincronizaron ${data.results?.taxonomy_tipos?.synced || 0} tipos, ${data.results?.taxonomy_subcategorias?.synced || 0} subcategorías, ${data.results?.taxonomy_sectores?.synced || 0} sectores y ${data.results?.technologies?.synced || 0} tecnologías`,
+        title: hasErrors ? 'Sincronización con advertencias' : 'Sincronización completada',
+        description: `Total sincronizado: ${totalSynced} registros
+• Tecnologías: ${results.technologies?.synced || 0}
+• Casos de Estudio: ${results.casos_de_estudio?.synced || 0}
+• Tendencias: ${results.technological_trends?.synced || 0}
+• Proyectos: ${results.projects?.synced || 0}
+• Taxonomías: ${(results.taxonomy_tipos?.synced || 0) + (results.taxonomy_subcategorias?.synced || 0) + (results.taxonomy_sectores?.synced || 0)}`,
+        variant: hasErrors ? 'destructive' : 'default',
       });
     } catch (error: any) {
       toast({
@@ -128,10 +136,10 @@ const Settings: React.FC = () => {
                   ) : (
                     <CloudUpload className="w-4 h-4 mr-2" />
                   )}
-                  {isBulkSyncing ? 'Sincronizando...' : 'Sincronizar todo a Supabase externo'}
+                  {isBulkSyncing ? 'Sincronizando todo...' : 'Sincronizar TODO a Supabase externo'}
                 </Button>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Sincroniza taxonomías y tecnologías completas
+                  Sincroniza tecnologías, casos de estudio, tendencias, proyectos y taxonomías
                 </p>
               </CardContent>
             </Card>
