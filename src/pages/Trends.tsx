@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { syncTechnologyInsert, syncTrendDelete } from "@/lib/syncToExternal";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -100,11 +101,20 @@ const Trends = () => {
       };
 
       // Insert back into technologies with all original data
-      const { error: insertError } = await supabase
+      const { data: insertedTech, error: insertError } = await supabase
         .from('technologies')
-        .insert(technologyData);
+        .insert(technologyData)
+        .select()
+        .single();
 
       if (insertError) throw insertError;
+
+      // Sync to external Supabase
+      try {
+        await syncTechnologyInsert({ ...technologyData, id: insertedTech.id });
+      } catch (syncError) {
+        console.error('External sync failed:', syncError);
+      }
 
       // Then delete from trends
       const { error: deleteError } = await supabase
@@ -113,6 +123,13 @@ const Trends = () => {
         .eq('id', trend.id);
 
       if (deleteError) throw deleteError;
+
+      // Sync deletion to external
+      try {
+        await syncTrendDelete(trend.id);
+      } catch (syncError) {
+        console.error('External sync failed:', syncError);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['technological-trends'] });
@@ -122,7 +139,7 @@ const Trends = () => {
       setTrendToRestore(null);
       toast({
         title: 'Restaurada como tecnología',
-        description: 'La tendencia ha sido restaurada al catálogo de tecnologías',
+        description: 'La tendencia ha sido restaurada y sincronizada con Supabase externo',
       });
     },
     onError: () => {

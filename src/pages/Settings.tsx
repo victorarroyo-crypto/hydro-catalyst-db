@@ -1,13 +1,16 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { User, Mail, Shield, Calendar } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon } from 'lucide-react';
 
 const Settings: React.FC = () => {
   const { profile, user } = useAuth();
+  const isAdmin = profile?.role === 'admin';
 
   return (
     <div className="animate-fade-in max-w-2xl">
@@ -70,6 +73,32 @@ const Settings: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Admin Section */}
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <SettingsIcon className="w-5 h-5" />
+                Administración
+              </CardTitle>
+              <CardDescription>
+                Herramientas de administración del sistema
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button asChild variant="outline" className="w-full justify-between">
+                <Link to="/taxonomy-admin">
+                  <span className="flex items-center gap-2">
+                    <Tag className="w-4 h-4" />
+                    Gestión de Taxonomía
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import Settings from "./pages/Settings";
 import QualityControl from "./pages/QualityControl";
 import Trends from "./pages/Trends";
 import Statistics from "./pages/Statistics";
+import TaxonomyAdmin from "./pages/TaxonomyAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
               <Route path="/trends" element={<Trends />} />
               <Route path="/statistics" element={<Statistics />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/taxonomy-admin" element={<TaxonomyAdmin />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

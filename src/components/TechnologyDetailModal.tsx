@@ -14,6 +14,7 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { syncTrendInsert, syncTechnologyDelete } from '@/lib/syncToExternal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Select,
@@ -223,18 +224,22 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     }));
     
     // Insert into technological_trends with all original data preserved
-    const { error: insertError } = await supabase
+    const trendData = {
+      name: technology["Nombre de la tecnología"],
+      description: technology["Descripción técnica breve"],
+      technology_type: technology["Tipo de tecnología"],
+      subcategory: technology["Subcategoría"],
+      sector: technology["Sector y subsector"],
+      source_technology_id: technology.id,
+      created_by: user.id,
+      original_data: originalData,
+    };
+    
+    const { data: insertedTrend, error: insertError } = await supabase
       .from('technological_trends')
-      .insert([{
-        name: technology["Nombre de la tecnología"],
-        description: technology["Descripción técnica breve"],
-        technology_type: technology["Tipo de tecnología"],
-        subcategory: technology["Subcategoría"],
-        sector: technology["Sector y subsector"],
-        source_technology_id: technology.id,
-        created_by: user.id,
-        original_data: originalData,
-      }]);
+      .insert([trendData])
+      .select()
+      .single();
 
     if (insertError) {
       setIsMovingToTrends(false);
@@ -246,11 +251,25 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
       return;
     }
 
+    // Sync to external Supabase
+    try {
+      await syncTrendInsert({ ...trendData, id: insertedTrend.id });
+    } catch (syncError) {
+      console.error('External sync failed:', syncError);
+    }
+
     // Then delete from technologies
     const { error: deleteError } = await supabase
       .from('technologies')
       .delete()
       .eq('id', technology.id);
+
+    // Sync deletion to external
+    try {
+      await syncTechnologyDelete(technology.id);
+    } catch (syncError) {
+      console.error('External sync failed:', syncError);
+    }
 
     setIsMovingToTrends(false);
 
@@ -265,7 +284,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
       queryClient.invalidateQueries({ queryKey: ['technological-trends'] });
       toast({
         title: 'Movido a tendencias',
-        description: 'La tecnología ha sido movida a tendencias tecnológicas',
+        description: 'La tecnología ha sido movida y sincronizada con Supabase externo',
       });
       onOpenChange(false);
     }
