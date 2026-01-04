@@ -15,13 +15,15 @@ interface TechnologyCardProps {
 export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onClick }) => {
   // Fetch taxonomy data for display
   const { data: taxonomyData } = useQuery({
-    queryKey: ['taxonomy-display', (technology as any).tipo_id, (technology as any).subcategoria_id],
+    queryKey: ['taxonomy-display', (technology as any).tipo_id, (technology as any).subcategoria_id, (technology as any).sector_id],
     queryFn: async () => {
       const tipoId = (technology as any).tipo_id;
       const subcategoriaId = (technology as any).subcategoria_id;
+      const sectorId = (technology as any).sector_id;
       
       let tipo = null;
       let subcategoria = null;
+      let sector = null;
       
       if (tipoId) {
         const { data } = await supabase
@@ -40,14 +42,23 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onCl
           .maybeSingle();
         subcategoria = data;
       }
+
+      if (sectorId) {
+        const { data } = await supabase
+          .from('taxonomy_sectores')
+          .select('id, nombre')
+          .eq('id', sectorId)
+          .maybeSingle();
+        sector = data;
+      }
       
-      return { tipo, subcategoria };
+      return { tipo, subcategoria, sector };
     },
-    enabled: !!(technology as any).tipo_id || !!(technology as any).subcategoria_id,
+    enabled: !!(technology as any).tipo_id || !!(technology as any).subcategoria_id || !!(technology as any).sector_id,
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 
-  const hasTaxonomy = taxonomyData?.tipo || taxonomyData?.subcategoria;
+  const hasTaxonomy = taxonomyData?.tipo || taxonomyData?.subcategoria || taxonomyData?.sector;
 
   return (
     <Card 
@@ -92,6 +103,12 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onCl
                 <Badge variant="secondary" className="text-xs">
                   <span className="font-mono text-[10px] opacity-70 mr-1">{taxonomyData.subcategoria.codigo}</span>
                   {taxonomyData.subcategoria.nombre}
+                </Badge>
+              )}
+              {taxonomyData?.sector && (
+                <Badge variant="outline" className="text-xs">
+                  <span className="font-mono text-[10px] opacity-70 mr-1">{taxonomyData.sector.id}</span>
+                  {taxonomyData.sector.nombre}
                 </Badge>
               )}
             </div>
