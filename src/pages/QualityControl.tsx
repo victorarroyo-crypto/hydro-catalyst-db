@@ -593,90 +593,75 @@ const QualityControl: React.FC = () => {
 
   const TechnologyReviewCard = ({ tech, showActions = true }: { tech: TechnologyWithReview; showActions?: boolean }) => {
     return (
-      <Card className="hover:shadow-sm transition-shadow">
-        <CardContent className="p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h4 className="font-medium text-sm text-foreground truncate">
-                  {tech["Nombre de la tecnología"]}
-                </h4>
-                <Badge variant="outline" className="text-xs shrink-0 hidden sm:inline-flex">{tech["Tipo de tecnología"]}</Badge>
-                <TRLBadge trl={tech["Grado de madurez (TRL)"]} />
-              </div>
-              <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1 truncate">
-                  <Building2 className="w-3 h-3 shrink-0" />
-                  {tech["Proveedor / Empresa"] || 'Sin proveedor'}
-                </span>
-                {tech.review_requested_at && (
-                  <span className="flex items-center gap-1 shrink-0">
-                    <Clock className="w-3 h-3" />
-                    {new Date(tech.review_requested_at).toLocaleDateString('es-ES')}
-                  </span>
-                )}
-                {tech.reviewer_id && tech.review_status === 'in_review' && (
-                  <span className="flex items-center gap-1 text-primary shrink-0">
-                    <User className="w-3 h-3" />
-                    {tech.reviewer_id === user?.id ? 'Tú' : getProfileName(tech.reviewer_id)}
-                  </span>
-                )}
-              </div>
+      <Card className="hover:shadow-sm transition-shadow h-full">
+        <CardContent className="p-3 flex flex-col h-full">
+          <div className="flex-1 min-w-0">
+            <h4 className="font-medium text-sm text-foreground line-clamp-2 mb-1">
+              {tech["Nombre de la tecnología"]}
+            </h4>
+            <p className="text-xs text-muted-foreground truncate mb-2">
+              {tech["Proveedor / Empresa"] || 'Sin proveedor'}
+            </p>
+            <div className="flex items-center gap-1 flex-wrap">
+              <TRLBadge trl={tech["Grado de madurez (TRL)"]} />
+              {tech.review_status === 'in_review' && tech.reviewer_id === user?.id && (
+                <Badge variant="secondary" className="text-xs">Tuya</Badge>
+              )}
             </div>
-            
-            {showActions && (
-              <div className="flex items-center gap-2 shrink-0">
+          </div>
+          
+          {showActions && (
+            <div className="flex items-center gap-1 mt-2 pt-2 border-t">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleEditTechnology(tech.id)}
+                className="h-7 px-2 flex-1"
+              >
+                <Edit className="w-3 h-3 mr-1" />
+                Editar
+              </Button>
+              
+              {tech.review_status === 'pending' && (
                 <Button
                   size="sm"
-                  variant="ghost"
-                  onClick={() => handleEditTechnology(tech.id)}
-                  className="h-8 px-2"
+                  onClick={() => claimMutation.mutate(tech.id)}
+                  disabled={claimMutation.isPending}
+                  className="h-7 px-2 flex-1"
                 >
-                  <Edit className="w-4 h-4" />
+                  <Play className="w-3 h-3 mr-1" />
+                  Tomar
                 </Button>
-                
-                {tech.review_status === 'pending' && (
+              )}
+              {tech.review_status === 'in_review' && tech.reviewer_id === user?.id && (
+                <>
                   <Button
                     size="sm"
-                    onClick={() => claimMutation.mutate(tech.id)}
-                    disabled={claimMutation.isPending}
-                    className="h-8"
+                    onClick={() => completeMutation.mutate(tech.id)}
+                    disabled={completeMutation.isPending}
+                    className="h-7 px-2 flex-1"
                   >
-                    <Play className="w-4 h-4 mr-1" />
-                    Tomar
-                  </Button>
-                )}
-                {tech.review_status === 'in_review' && tech.reviewer_id === user?.id && (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={() => completeMutation.mutate(tech.id)}
-                      disabled={completeMutation.isPending}
-                      className="h-8"
-                    >
-                      <CheckCircle2 className="w-4 h-4 mr-1" />
-                      Completar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => cancelMutation.mutate(tech.id)}
-                      disabled={cancelMutation.isPending}
-                      className="h-8 px-2"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </Button>
-                  </>
-                )}
-                {tech.review_status === 'completed' && (
-                  <Badge variant="secondary" className="gap-1 text-xs">
                     <CheckCircle2 className="w-3 h-3" />
-                    Completada
-                  </Badge>
-                )}
-              </div>
-            )}
-          </div>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => cancelMutation.mutate(tech.id)}
+                    disabled={cancelMutation.isPending}
+                    className="h-7 px-2"
+                  >
+                    <XCircle className="w-3 h-3" />
+                  </Button>
+                </>
+              )}
+              {tech.review_status === 'completed' && (
+                <Badge variant="secondary" className="text-xs">
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  OK
+                </Badge>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -922,7 +907,7 @@ const QualityControl: React.FC = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                   {pendingTechs.map(tech => (
                     <TechnologyReviewCard key={tech.id} tech={tech} />
                   ))}
@@ -945,7 +930,7 @@ const QualityControl: React.FC = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                   {myReviews.map(tech => (
                     <TechnologyReviewCard key={tech.id} tech={tech} />
                   ))}
