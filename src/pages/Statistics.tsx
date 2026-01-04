@@ -76,12 +76,13 @@ const CHART_COLORS = [
 ];
 
 const Statistics: React.FC = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isInternalUser = profile?.role && ['admin', 'supervisor'].includes(profile.role);
 
   // Subscribe to real-time updates
   useRealtimeSubscription({
     tables: ['technologies', 'taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores'],
-    queryKeys: [['technologies-stats'], ['taxonomy-tipos'], ['taxonomy-subcategorias'], ['taxonomy-sectores']],
+    queryKeys: [['technologies-stats', isInternalUser ? 'internal' : 'public'], ['taxonomy-tipos'], ['taxonomy-subcategorias'], ['taxonomy-sectores']],
   });
 
   // Fetch case studies count
@@ -109,18 +110,26 @@ const Statistics: React.FC = () => {
   });
 
   // Fetch all technologies - use range to bypass 1000 row limit
+  // For regular users, only fetch active/published technologies
+  // For admin/supervisor, fetch all technologies
   const { data: technologies, isLoading: loadingTech } = useQuery({
-    queryKey: ['technologies-stats'],
+    queryKey: ['technologies-stats', isInternalUser ? 'internal' : 'public'],
     queryFn: async () => {
       const allTechnologies: any[] = [];
       let from = 0;
       const pageSize = 1000;
       
       while (true) {
-        const { data, error } = await supabase
+        let query = supabase
           .from('technologies')
-          .select('id, tipo_id, subcategoria_id, sector_id, "País de origen", status')
-          .range(from, from + pageSize - 1);
+          .select('id, tipo_id, subcategoria_id, sector_id, "País de origen", status');
+        
+        // Regular users only see active technologies
+        if (!isInternalUser) {
+          query = query.eq('status', 'active');
+        }
+        
+        const { data, error } = await query.range(from, from + pageSize - 1);
         
         if (error) throw error;
         if (!data || data.length === 0) break;
