@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { TechnologyCard } from '@/components/TechnologyCard';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,12 @@ const Favorites: React.FC = () => {
   const queryClient = useQueryClient();
   const [selectedTechnology, setSelectedTechnology] = useState<Technology | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+
+  // Subscribe to real-time updates
+  useRealtimeSubscription({
+    tables: ['user_favorites', 'technologies'],
+    queryKeys: [['favorites', user?.id || '']],
+  });
 
   const { data: favorites, isLoading } = useQuery({
     queryKey: ['favorites', user?.id],
