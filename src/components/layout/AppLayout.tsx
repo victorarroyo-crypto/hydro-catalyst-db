@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react';
 
 export const AppLayout: React.FC = () => {
   const { user, loading } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   if (loading) {
     return (
@@ -24,7 +25,7 @@ export const AppLayout: React.FC = () => {
   }
 
   return (
-    <SidebarProvider defaultOpen>
+    <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <SidebarInset className="flex-1">
