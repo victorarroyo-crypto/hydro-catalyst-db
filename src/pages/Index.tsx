@@ -44,7 +44,7 @@ const Index = () => {
             <img 
               src={vandarumLogo} 
               alt="Vandarum" 
-              className="h-32 md:h-40 w-auto rounded-xl shadow-lg"
+              className="h-32 md:h-40 w-auto"
             />
           </div>
 
