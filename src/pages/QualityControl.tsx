@@ -349,6 +349,7 @@ const QualityControl: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['technologies-reviews'] });
       queryClient.invalidateQueries({ queryKey: ['pending-edits-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast({
         title: 'Revisión completada',
         description: 'La tecnología ha sido marcada como revisada',
