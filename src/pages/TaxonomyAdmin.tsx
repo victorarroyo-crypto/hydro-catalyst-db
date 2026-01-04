@@ -56,8 +56,6 @@ import {
   Loader2,
   Settings,
   ArrowLeft,
-  RefreshCw,
-  CloudUpload,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -101,7 +99,7 @@ const TaxonomyAdmin: React.FC = () => {
   const [sectorModalOpen, setSectorModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: string; id: string | number; name: string } | null>(null);
-  const [isBulkSyncing, setIsBulkSyncing] = useState(false);
+  
 
   // Form states
   const [editingTipo, setEditingTipo] = useState<TaxonomyTipo | null>(null);
@@ -316,32 +314,6 @@ const TaxonomyAdmin: React.FC = () => {
     },
   });
 
-  // Bulk sync function
-  const handleBulkSync = async () => {
-    setIsBulkSyncing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('bulk-sync-to-external', {
-        body: {
-          tables: ['taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores', 'technologies'],
-        },
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: 'Sincronización completada',
-        description: `Se sincronizaron ${data.results?.taxonomy_tipos?.synced || 0} tipos, ${data.results?.taxonomy_subcategorias?.synced || 0} subcategorías, ${data.results?.taxonomy_sectores?.synced || 0} sectores y ${data.results?.technologies?.synced || 0} tecnologías`,
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Error de sincronización',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsBulkSyncing(false);
-    }
-  };
 
   if (!isAdmin) {
     return (
@@ -369,18 +341,6 @@ const TaxonomyAdmin: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={handleBulkSync}
-            disabled={isBulkSyncing}
-          >
-            {isBulkSyncing ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <CloudUpload className="w-4 h-4 mr-2" />
-            )}
-            Sincronizar todo a Supabase externo
-          </Button>
           <Button asChild variant="outline">
             <Link to="/settings" className="gap-2">
               <ArrowLeft className="w-4 h-4" />
