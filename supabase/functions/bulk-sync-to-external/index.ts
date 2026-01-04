@@ -99,15 +99,31 @@ Deno.serve(async (req) => {
 
         if (allData.length === 0) continue
 
-        // Clean user reference fields for technologies table
+        // Enrich and clean technologies table
         if (table === 'technologies') {
+          // Fetch taxonomy lookup tables
+          const { data: tipos } = await internalSupabase.from('taxonomy_tipos').select('id, nombre')
+          const { data: subcategorias } = await internalSupabase.from('taxonomy_subcategorias').select('id, nombre')
+          const { data: sectores } = await internalSupabase.from('taxonomy_sectores').select('id, nombre')
+          
+          const tiposMap = new Map((tipos || []).map(t => [t.id, t.nombre]))
+          const subcategoriasMap = new Map((subcategorias || []).map(s => [s.id, s.nombre]))
+          const sectoresMap = new Map((sectores || []).map(s => [s.id, s.nombre]))
+          
+          console.log(`Loaded taxonomy maps: ${tiposMap.size} tipos, ${subcategoriasMap.size} subcategorias, ${sectoresMap.size} sectores`)
+          
           allData = allData.map(record => ({
             ...record,
+            // Populate text fields from taxonomy IDs
+            "Tipo de tecnología": record.tipo_id ? tiposMap.get(record.tipo_id) || record["Tipo de tecnología"] : record["Tipo de tecnología"],
+            "Subcategoría": record.subcategoria_id ? subcategoriasMap.get(record.subcategoria_id) || record["Subcategoría"] : record["Subcategoría"],
+            "Sector y subsector": record.sector_id ? sectoresMap.get(record.sector_id) || record["Sector y subsector"] : record["Sector y subsector"],
+            // Clean user reference fields (users don't exist in external DB)
             updated_by: null,
             reviewer_id: null,
             review_requested_by: null,
           }))
-          console.log(`Cleaned user reference fields for ${allData.length} technology records`)
+          console.log(`Enriched ${allData.length} technology records with taxonomy names`)
         }
 
         // INSERT fresh data in batches
