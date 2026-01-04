@@ -23,6 +23,7 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  Tag,
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
@@ -57,14 +58,15 @@ const Dashboard: React.FC = () => {
         supabase.from('technological_trends').select('id', { count: 'exact', head: true }),
       ];
 
-      // For internal users, also get status breakdown
+      // For internal users, also get status breakdown and pending classification
       if (isInternalUser) {
         const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount, 
-               activeCount, inReviewCount, inactiveCount] = await Promise.all([
+               activeCount, inReviewCount, inactiveCount, pendingClassificationCount] = await Promise.all([
           ...baseQueries,
           supabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'active'),
           supabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'en_revision'),
           supabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'inactive'),
+          supabase.from('technologies').select('id', { count: 'exact', head: true }).is('tipo_id', null),
         ]);
         
         return {
@@ -77,6 +79,7 @@ const Dashboard: React.FC = () => {
             active: activeCount.count || 0,
             en_revision: inReviewCount.count || 0,
             inactive: inactiveCount.count || 0,
+            pendingClassification: pendingClassificationCount.count || 0,
           },
         };
       }
@@ -238,7 +241,7 @@ const Dashboard: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="flex items-center gap-3 p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
                 <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
                 <div>
@@ -264,6 +267,15 @@ const Dashboard: React.FC = () => {
                     {stats.statusBreakdown.inactive.toLocaleString()}
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Inactivas</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
+                <Tag className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+                <div>
+                  <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                    {stats.statusBreakdown.pendingClassification.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-purple-600 dark:text-purple-400">Sin Clasificar</p>
                 </div>
               </div>
             </div>
