@@ -6,15 +6,22 @@ import { Badge } from '@/components/ui/badge';
 import { Building2, MapPin, Tag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { QuickClassifyButton } from '@/components/QuickClassifyButton';
+import { DeleteTechnologyButton } from '@/components/DeleteTechnologyButton';
 import type { Technology } from '@/types/database';
 
 interface TechnologyCardProps {
   technology: Technology;
   onClick: () => void;
   showQuickClassify?: boolean;
+  showActions?: boolean;
 }
 
-export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onClick, showQuickClassify = false }) => {
+export const TechnologyCard: React.FC<TechnologyCardProps> = ({ 
+  technology, 
+  onClick, 
+  showQuickClassify = false,
+  showActions = true,
+}) => {
   const isUnclassified = (technology as any).tipo_id === null || (technology as any).tipo_id === undefined;
   
   // Fetch taxonomy data for display
@@ -70,11 +77,19 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({ technology, onCl
       onClick={onClick}
     >
       <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 className="font-semibold text-foreground line-clamp-2 group-hover:text-primary transition-colors">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <h3 className="font-semibold text-foreground line-clamp-2 group-hover:text-primary transition-colors flex-1">
             {technology["Nombre de la tecnología"]}
           </h3>
-          <TRLBadge trl={technology["Grado de madurez (TRL)"]} size="sm" />
+          <div className="flex items-center gap-1 shrink-0">
+            {showActions && (
+              <DeleteTechnologyButton 
+                technologyId={technology.id} 
+                technologyName={technology["Nombre de la tecnología"]} 
+              />
+            )}
+            <TRLBadge trl={technology["Grado de madurez (TRL)"]} size="sm" />
+          </div>
         </div>
         
         <div className="space-y-2 text-sm text-muted-foreground">
