@@ -38,13 +38,17 @@ const Index = () => {
         </div>
 
         <div className="relative container mx-auto px-6 py-8">
-          {/* Navigation */}
-          <nav className="flex items-center justify-between mb-16">
+          {/* Logo centered and large */}
+          <div className="flex justify-center mb-12">
             <img 
               src={vandarumLogo} 
               alt="Vandarum" 
-              className="h-14 w-auto"
+              className="h-32 md:h-40 w-auto"
             />
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex items-center justify-center mb-12">
             <Button 
               onClick={handleGetStarted}
               className="gradient-primary text-primary-foreground shadow-glow"
