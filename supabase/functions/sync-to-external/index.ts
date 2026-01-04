@@ -24,6 +24,9 @@ const FIELDS_TO_EXCLUDE: Record<string, string[]> = {
     'approved_at',
     'version',
   ],
+  project_technologies: [
+    'added_by',
+  ],
   // Add other tables here if needed
 }
 
