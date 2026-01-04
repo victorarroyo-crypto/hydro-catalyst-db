@@ -25,6 +25,8 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { syncTechnologyInsert, syncCaseStudyDelete } from '@/lib/syncToExternal';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { 
   BookOpen, 
   Search, 
@@ -43,6 +45,7 @@ import {
   Trophy,
   MessageSquare,
   Users,
+  Edit,
 } from 'lucide-react';
 import { TRLBadge } from '@/components/TRLBadge';
 
@@ -69,6 +72,16 @@ const CaseStudies: React.FC = () => {
   const [selectedCase, setSelectedCase] = useState<CaseStudy | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCase, setEditingCase] = useState<CaseStudy | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    entity_type: '',
+    country: '',
+    sector: '',
+  });
+  const [isSaving, setIsSaving] = useState(false);
 
   const isAdmin = profile?.role === 'admin';
   const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
@@ -209,6 +222,53 @@ const CaseStudies: React.FC = () => {
       toast({
         title: 'Restaurado a tecnologías',
         description: 'El caso de estudio ha sido restaurado como tecnología',
+      });
+    }
+  };
+
+  const handleEditClick = (caseStudy: CaseStudy) => {
+    setEditingCase(caseStudy);
+    setEditForm({
+      name: caseStudy.name,
+      description: caseStudy.description || '',
+      entity_type: caseStudy.entity_type || '',
+      country: caseStudy.country || '',
+      sector: caseStudy.sector || '',
+    });
+    setShowEditModal(true);
+    setSelectedCase(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingCase) return;
+    
+    setIsSaving(true);
+    const { error } = await supabase
+      .from('casos_de_estudio')
+      .update({
+        name: editForm.name,
+        description: editForm.description || null,
+        entity_type: editForm.entity_type || null,
+        country: editForm.country || null,
+        sector: editForm.sector || null,
+      })
+      .eq('id', editingCase.id);
+    
+    setIsSaving(false);
+    
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar los cambios',
+        variant: 'destructive',
+      });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['case-studies'] });
+      setShowEditModal(false);
+      setEditingCase(null);
+      toast({
+        title: 'Guardado',
+        description: 'Los cambios se han guardado correctamente',
       });
     }
   };
@@ -395,17 +455,27 @@ const CaseStudies: React.FC = () => {
 
               <div className="space-y-6">
                 {/* Action buttons */}
-                {isInternalUser && selectedCase.original_data && (
+                {isInternalUser && (
                   <div className="flex gap-2">
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => setShowRestoreConfirm(true)}
-                      className="text-green-600 border-green-300 hover:bg-green-50"
+                      onClick={() => handleEditClick(selectedCase)}
                     >
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Restaurar a tecnologías
+                      <Edit className="w-4 h-4 mr-2" />
+                      Editar
                     </Button>
+                    {selectedCase.original_data && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setShowRestoreConfirm(true)}
+                        className="text-green-600 border-green-300 hover:bg-green-50"
+                      >
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Restaurar a tecnologías
+                      </Button>
+                    )}
                   </div>
                 )}
 
@@ -628,6 +698,73 @@ const CaseStudies: React.FC = () => {
                 <RotateCcw className="w-4 h-4 mr-2" />
               )}
               Confirmar y restaurar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5 text-primary" />
+              Editar Caso de Estudio
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Nombre</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Descripción</Label>
+              <Textarea
+                id="edit-description"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={4}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-entity-type">Tipo de entidad</Label>
+                <Input
+                  id="edit-entity-type"
+                  value={editForm.entity_type}
+                  onChange={(e) => setEditForm({ ...editForm, entity_type: e.target.value })}
+                  placeholder="municipal, technology, etc."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-country">País</Label>
+                <Input
+                  id="edit-country"
+                  value={editForm.country}
+                  onChange={(e) => setEditForm({ ...editForm, country: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-sector">Sector</Label>
+              <Input
+                id="edit-sector"
+                value={editForm.sector}
+                onChange={(e) => setEditForm({ ...editForm, sector: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={isSaving || !editForm.name}>
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Guardar cambios
             </Button>
           </DialogFooter>
         </DialogContent>
