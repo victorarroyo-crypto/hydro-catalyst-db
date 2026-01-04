@@ -4,7 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp, Lightbulb } from "lucide-react";
+import { Loader2, TrendingUp, Lightbulb, Tag, Calendar } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 
 interface TechnologicalTrend {
   id: string;
@@ -18,6 +25,7 @@ interface TechnologicalTrend {
 
 const Trends = () => {
   const { user } = useAuth();
+  const [selectedTrend, setSelectedTrend] = useState<TechnologicalTrend | null>(null);
 
   const { data: trends, isLoading } = useQuery({
     queryKey: ['technological-trends'],
@@ -69,7 +77,11 @@ const Trends = () => {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {trends?.map((trend) => (
-            <Card key={trend.id} className="hover:shadow-md transition-shadow">
+            <Card 
+              key={trend.id} 
+              className="hover:shadow-md transition-shadow cursor-pointer hover:border-primary/50"
+              onClick={() => setSelectedTrend(trend)}
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-lg leading-tight">{trend.name}</CardTitle>
@@ -101,6 +113,92 @@ const Trends = () => {
           ))}
         </div>
       )}
+
+      {/* Trend Detail Modal */}
+      <Dialog open={!!selectedTrend} onOpenChange={(open) => !open && setSelectedTrend(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {selectedTrend && (
+            <>
+              <DialogHeader className="pb-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                    <TrendingUp className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div className="flex-1">
+                    <DialogTitle className="text-xl font-display mb-2">
+                      {selectedTrend.name}
+                    </DialogTitle>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="secondary">{selectedTrend.technology_type}</Badge>
+                      {selectedTrend.subcategory && (
+                        <Badge variant="outline">{selectedTrend.subcategory}</Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                {/* Description */}
+                {selectedTrend.description && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <Lightbulb className="w-4 h-4" />
+                      Descripción
+                    </h3>
+                    <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
+                      {selectedTrend.description}
+                    </p>
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Classification */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Tag className="w-4 h-4" />
+                    Clasificación
+                  </h3>
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <Tag className="w-4 h-4 text-muted-foreground mt-0.5" />
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5">Tipo de tecnología</p>
+                        <p className="text-sm">{selectedTrend.technology_type}</p>
+                      </div>
+                    </div>
+                    {selectedTrend.subcategory && (
+                      <div className="flex items-start gap-3">
+                        <Tag className="w-4 h-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Subcategoría</p>
+                          <p className="text-sm">{selectedTrend.subcategory}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedTrend.sector && (
+                      <div className="flex items-start gap-3">
+                        <Tag className="w-4 h-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Sector</p>
+                          <p className="text-sm">{selectedTrend.sector}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Metadata */}
+                <div className="text-xs text-muted-foreground pt-4 border-t flex items-center gap-2">
+                  <Calendar className="w-3 h-3" />
+                  <span>Registrado: {new Date(selectedTrend.created_at).toLocaleDateString('es-ES')}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
