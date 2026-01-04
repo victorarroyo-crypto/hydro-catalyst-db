@@ -354,6 +354,7 @@ const Technologies: React.FC = () => {
                   key={tech.id}
                   technology={tech}
                   onClick={() => handleTechnologyClick(tech)}
+                  showQuickClassify={taxonomyFilters.tipoId === -1}
                 />
               ))}
             </div>
