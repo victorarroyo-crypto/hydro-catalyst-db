@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import vandarumLogo from "@/assets/vandarum-logo-main.jpg";
+import vandarumSymbol from "@/assets/vandarum-symbol-orange.jpg";
 import { 
   Droplets, 
   Search, 
@@ -173,7 +174,11 @@ const Index = () => {
       {/* CTA Section */}
       <section className="py-24 gradient-hero">
         <div className="container mx-auto px-6 text-center">
-          <Droplets className="w-16 h-16 text-secondary mx-auto mb-6" />
+          <img 
+            src={vandarumSymbol} 
+            alt="Vandarum" 
+            className="h-16 w-auto mx-auto mb-6 object-contain"
+          />
           <h2 className="text-3xl md:text-4xl font-display font-bold text-primary-foreground mb-4">
             Comienza a explorar tecnologías hoy
           </h2>
