@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { syncTechnologyInsert, syncCaseStudyDelete } from '@/lib/syncToExternal';
+import { syncTechnologyUpsert, syncCaseStudyDelete } from '@/lib/syncToExternal';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { 
@@ -197,8 +197,9 @@ const CaseStudies: React.FC = () => {
     }
 
     // Sync to external
+    // Sync to external Supabase (use UPSERT in case the technology already exists)
     try {
-      await syncTechnologyInsert({ ...technologyData, id: insertedTech.id });
+      await syncTechnologyUpsert({ ...technologyData, id: insertedTech.id });
     } catch (syncError) {
       console.error('External sync failed:', syncError);
     }
