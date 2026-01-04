@@ -10,7 +10,6 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TRLBadge } from '@/components/TRLBadge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Dialog, 
   DialogContent, 
@@ -43,7 +42,6 @@ import {
   Trash2,
   AlertTriangle,
   Edit,
-  CheckSquare,
 } from 'lucide-react';
 
 // ============ TYPES ============
@@ -111,7 +109,6 @@ const QualityControl: React.FC = () => {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [activeTab, setActiveTab] = useState('approvals');
-  const [selectedTechIds, setSelectedTechIds] = useState<Set<string>>(new Set());
 
   const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
   const canReview = profile?.role && ['admin', 'supervisor'].includes(profile.role);
@@ -399,68 +396,6 @@ const QualityControl: React.FC = () => {
     },
   });
 
-  // Bulk claim multiple technologies
-  const bulkClaimMutation = useMutation({
-    mutationFn: async (techIds: string[]) => {
-      const { error } = await supabase
-        .from('technologies')
-        .update({
-          review_status: 'in_review',
-          reviewer_id: user?.id,
-        })
-        .in('id', techIds)
-        .eq('review_status', 'pending');
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['technologies-reviews'] });
-      queryClient.invalidateQueries({ queryKey: ['pending-edits-dashboard'] });
-      setSelectedTechIds(new Set());
-      toast({
-        title: 'Revisiones asignadas',
-        description: `Has tomado ${selectedTechIds.size} tecnologías para revisar`,
-      });
-    },
-    onError: () => {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron asignar las revisiones',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // Bulk complete multiple technologies
-  const bulkCompleteMutation = useMutation({
-    mutationFn: async (techIds: string[]) => {
-      const { error } = await supabase
-        .from('technologies')
-        .update({
-          review_status: 'completed',
-        })
-        .in('id', techIds);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['technologies-reviews'] });
-      queryClient.invalidateQueries({ queryKey: ['pending-edits-dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      setSelectedTechIds(new Set());
-      toast({
-        title: 'Revisiones completadas',
-        description: `Se han marcado ${selectedTechIds.size} tecnologías como revisadas`,
-      });
-    },
-    onError: () => {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron completar las revisiones',
-        variant: 'destructive',
-      });
-    },
-  });
 
   // Approve deletion request
   const approveDeletionMutation = useMutation({
@@ -559,35 +494,8 @@ const QualityControl: React.FC = () => {
     setReviewComment('');
   };
 
-  const toggleTechSelection = (techId: string) => {
-    setSelectedTechIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(techId)) {
-        newSet.delete(techId);
-      } else {
-        newSet.add(techId);
-      }
-      return newSet;
-    });
-  };
-
-  const selectAllPending = () => {
-    setSelectedTechIds(new Set(pendingTechs.map(t => t.id)));
-  };
-
-  const selectAllMyReviews = () => {
-    setSelectedTechIds(new Set(myReviews.map(t => t.id)));
-  };
-
-  const clearSelection = () => {
-    setSelectedTechIds(new Set());
-  };
-
-  const handleEditSelectedTechnology = () => {
-    if (selectedTechIds.size === 1) {
-      const techId = Array.from(selectedTechIds)[0];
-      navigate(`/technologies?edit=${techId}`);
-    }
+  const handleEditTechnology = (techId: string) => {
+    navigate(`/technologies?edit=${techId}`);
   };
 
   const getChangedFields = (original: Record<string, unknown>, proposed: Record<string, unknown>) => {
@@ -683,93 +591,92 @@ const QualityControl: React.FC = () => {
     );
   };
 
-  const TechnologyReviewCard = ({ tech, showActions = true, showCheckbox = false }: { tech: TechnologyWithReview; showActions?: boolean; showCheckbox?: boolean }) => {
-    const isSelected = selectedTechIds.has(tech.id);
-    
+  const TechnologyReviewCard = ({ tech, showActions = true }: { tech: TechnologyWithReview; showActions?: boolean }) => {
     return (
-      <Card className={`hover:shadow-md transition-shadow ${isSelected ? 'ring-2 ring-primary bg-primary/5' : ''}`}>
+      <Card className="hover:shadow-md transition-shadow">
         <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            {showCheckbox && (
-              <Checkbox
-                checked={isSelected}
-                onCheckedChange={() => toggleTechSelection(tech.id)}
-                className="mt-1"
-              />
-            )}
-            <div className="flex-1 min-w-0 flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <h4 className="font-medium text-foreground truncate">
-                  {tech["Nombre de la tecnología"]}
-                </h4>
-                <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                  <Building2 className="w-3 h-3" />
-                  <span className="truncate">{tech["Proveedor / Empresa"] || 'Sin proveedor'}</span>
-                </div>
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <Badge variant="outline" className="text-xs">{tech["Tipo de tecnología"]}</Badge>
-                  <TRLBadge trl={tech["Grado de madurez (TRL)"]} />
-                </div>
-                {tech.review_requested_at && (
-                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    Solicitado: {new Date(tech.review_requested_at).toLocaleDateString('es-ES')}
-                    {tech.review_requested_by && (
-                      <span> por {getProfileName(tech.review_requested_by)}</span>
-                    )}
-                  </p>
-                )}
-                {tech.reviewer_id && tech.review_status === 'in_review' && (
-                  <p className="text-xs text-primary mt-1 flex items-center gap-1">
-                    <User className="w-3 h-3" />
-                    Revisando: {getProfileName(tech.reviewer_id)}
-                    {tech.reviewer_id === user?.id && ' (tú)'}
-                  </p>
-                )}
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-foreground truncate">
+                {tech["Nombre de la tecnología"]}
+              </h4>
+              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                <Building2 className="w-3 h-3" />
+                <span className="truncate">{tech["Proveedor / Empresa"] || 'Sin proveedor'}</span>
               </div>
-              
-              {showActions && !showCheckbox && (
-                <div className="flex flex-col gap-2">
-                  {tech.review_status === 'pending' && (
-                    <Button
-                      size="sm"
-                      onClick={() => claimMutation.mutate(tech.id)}
-                      disabled={claimMutation.isPending}
-                    >
-                      <Play className="w-4 h-4 mr-1" />
-                      Tomar
-                    </Button>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <Badge variant="outline" className="text-xs">{tech["Tipo de tecnología"]}</Badge>
+                <TRLBadge trl={tech["Grado de madurez (TRL)"]} />
+              </div>
+              {tech.review_requested_at && (
+                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Solicitado: {new Date(tech.review_requested_at).toLocaleDateString('es-ES')}
+                  {tech.review_requested_by && (
+                    <span> por {getProfileName(tech.review_requested_by)}</span>
                   )}
-                  {tech.review_status === 'in_review' && tech.reviewer_id === user?.id && (
-                    <>
-                      <Button
-                        size="sm"
-                        onClick={() => completeMutation.mutate(tech.id)}
-                        disabled={completeMutation.isPending}
-                      >
-                        <CheckCircle2 className="w-4 h-4 mr-1" />
-                        Completar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => cancelMutation.mutate(tech.id)}
-                        disabled={cancelMutation.isPending}
-                      >
-                        <XCircle className="w-4 h-4 mr-1" />
-                        Liberar
-                      </Button>
-                    </>
-                  )}
-                  {tech.review_status === 'completed' && (
-                    <Badge variant="secondary" className="gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Completada
-                    </Badge>
-                  )}
-                </div>
+                </p>
+              )}
+              {tech.reviewer_id && tech.review_status === 'in_review' && (
+                <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                  <User className="w-3 h-3" />
+                  Revisando: {getProfileName(tech.reviewer_id)}
+                  {tech.reviewer_id === user?.id && ' (tú)'}
+                </p>
               )}
             </div>
+            
+            {showActions && (
+              <div className="flex flex-col gap-2">
+                {/* Edit button - always visible */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleEditTechnology(tech.id)}
+                >
+                  <Edit className="w-4 h-4 mr-1" />
+                  Editar
+                </Button>
+                
+                {tech.review_status === 'pending' && (
+                  <Button
+                    size="sm"
+                    onClick={() => claimMutation.mutate(tech.id)}
+                    disabled={claimMutation.isPending}
+                  >
+                    <Play className="w-4 h-4 mr-1" />
+                    Tomar
+                  </Button>
+                )}
+                {tech.review_status === 'in_review' && tech.reviewer_id === user?.id && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => completeMutation.mutate(tech.id)}
+                      disabled={completeMutation.isPending}
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-1" />
+                      Completar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => cancelMutation.mutate(tech.id)}
+                      disabled={cancelMutation.isPending}
+                    >
+                      <XCircle className="w-4 h-4 mr-1" />
+                      Liberar
+                    </Button>
+                  </>
+                )}
+                {tech.review_status === 'completed' && (
+                  <Badge variant="secondary" className="gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Completada
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1016,72 +923,10 @@ const QualityControl: React.FC = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-4">
-                  {/* Selection toolbar */}
-                  <Card className="bg-muted/50">
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
-                          <Checkbox
-                            checked={selectedTechIds.size === pendingTechs.length && pendingTechs.length > 0}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                selectAllPending();
-                              } else {
-                                clearSelection();
-                              }
-                            }}
-                          />
-                          <span className="text-sm text-muted-foreground">
-                            {selectedTechIds.size > 0 
-                              ? `${selectedTechIds.size} seleccionadas` 
-                              : 'Seleccionar todo'}
-                          </span>
-                        </div>
-                        
-                        {selectedTechIds.size > 0 && (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Button
-                              size="sm"
-                              onClick={() => bulkClaimMutation.mutate(Array.from(selectedTechIds))}
-                              disabled={bulkClaimMutation.isPending}
-                            >
-                              {bulkClaimMutation.isPending ? (
-                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                              ) : (
-                                <Play className="w-4 h-4 mr-1" />
-                              )}
-                              Tomar {selectedTechIds.size} seleccionadas
-                            </Button>
-                            {selectedTechIds.size === 1 && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={handleEditSelectedTechnology}
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                Editar
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={clearSelection}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Tech list */}
-                  <div className="space-y-2">
-                    {pendingTechs.map(tech => (
-                      <TechnologyReviewCard key={tech.id} tech={tech} showCheckbox />
-                    ))}
-                  </div>
+                <div className="space-y-2">
+                  {pendingTechs.map(tech => (
+                    <TechnologyReviewCard key={tech.id} tech={tech} />
+                  ))}
                 </div>
               )}
             </TabsContent>
@@ -1101,72 +946,10 @@ const QualityControl: React.FC = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-4">
-                  {/* Selection toolbar for my reviews */}
-                  <Card className="bg-muted/50">
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
-                          <Checkbox
-                            checked={selectedTechIds.size === myReviews.length && myReviews.length > 0}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                selectAllMyReviews();
-                              } else {
-                                clearSelection();
-                              }
-                            }}
-                          />
-                          <span className="text-sm text-muted-foreground">
-                            {selectedTechIds.size > 0 
-                              ? `${selectedTechIds.size} seleccionadas` 
-                              : 'Seleccionar todo'}
-                          </span>
-                        </div>
-                        
-                        {selectedTechIds.size > 0 && (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Button
-                              size="sm"
-                              onClick={() => bulkCompleteMutation.mutate(Array.from(selectedTechIds))}
-                              disabled={bulkCompleteMutation.isPending}
-                            >
-                              {bulkCompleteMutation.isPending ? (
-                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                              ) : (
-                                <CheckSquare className="w-4 h-4 mr-1" />
-                              )}
-                              Completar {selectedTechIds.size} seleccionadas
-                            </Button>
-                            {selectedTechIds.size === 1 && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={handleEditSelectedTechnology}
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                Editar
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={clearSelection}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Tech list */}
-                  <div className="space-y-2">
-                    {myReviews.map(tech => (
-                      <TechnologyReviewCard key={tech.id} tech={tech} showCheckbox />
-                    ))}
-                  </div>
+                <div className="space-y-2">
+                  {myReviews.map(tech => (
+                    <TechnologyReviewCard key={tech.id} tech={tech} />
+                  ))}
                 </div>
               )}
             </TabsContent>
