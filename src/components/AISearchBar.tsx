@@ -27,6 +27,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [activeSuggestion, setActiveSuggestion] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Fetch top sectors and tech types for dynamic suggestions
@@ -173,6 +174,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
   };
 
   const handleSearch = () => {
+    setActiveSuggestion(null);
     executeSearch(query);
   };
 
@@ -183,6 +185,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
   };
 
   const handleSuggestionClick = (suggestion: string) => {
+    setActiveSuggestion(suggestion);
     executeSearch(suggestion);
   };
 
@@ -230,16 +233,24 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
       {/* Quick search suggestions */}
       <div className="flex flex-wrap gap-2">
         <span className="text-xs text-muted-foreground self-center">Sugerencias:</span>
-        {searchSuggestions.map((suggestion) => (
-          <Badge
-            key={suggestion}
-            variant="outline"
-            className="cursor-pointer hover:bg-primary/10 hover:border-primary/50 transition-colors text-xs"
-            onClick={() => handleSuggestionClick(suggestion)}
-          >
-            {suggestion}
-          </Badge>
-        ))}
+        {searchSuggestions.map((suggestion) => {
+          const isActive = isSearching && activeSuggestion === suggestion;
+          return (
+            <Badge
+              key={suggestion}
+              variant="outline"
+              className={`cursor-pointer transition-colors text-xs ${
+                isActive 
+                  ? 'bg-primary/20 border-primary text-primary' 
+                  : 'hover:bg-primary/10 hover:border-primary/50'
+              } ${isSearching ? 'pointer-events-none opacity-70' : ''}`}
+              onClick={() => handleSuggestionClick(suggestion)}
+            >
+              {isActive && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+              {suggestion}
+            </Badge>
+          );
+        })}
       </div>
       
       {explanation && (
