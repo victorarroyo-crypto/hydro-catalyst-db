@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { syncProjectTechnologyDelete, syncProjectTechnologyInsert } from '@/lib/syncToExternal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -189,15 +190,30 @@ const ProjectDetail: React.FC = () => {
   // Add technology to project
   const addTechMutation = useMutation({
     mutationFn: async (technologyId: string) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('project_technologies')
         .insert({
           project_id: id,
           technology_id: technologyId,
           added_by: user?.id,
-        });
+        })
+        .select()
+        .single();
       
       if (error) throw error;
+
+      // Sync to external Supabase
+      try {
+        await syncProjectTechnologyInsert({
+          id: data.id,
+          project_id: id,
+          technology_id: technologyId,
+          added_by: user?.id,
+          added_at: data.added_at,
+        });
+      } catch (syncError) {
+        console.error('External sync failed:', syncError);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project-technologies', id] });
@@ -218,6 +234,13 @@ const ProjectDetail: React.FC = () => {
         .eq('id', projectTechId);
       
       if (error) throw error;
+
+      // Sync deletion to external Supabase
+      try {
+        await syncProjectTechnologyDelete(projectTechId);
+      } catch (syncError) {
+        console.error('External sync failed:', syncError);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project-technologies', id] });

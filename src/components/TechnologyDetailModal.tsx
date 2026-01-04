@@ -14,7 +14,7 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { syncTrendInsert, syncTechnologyDelete } from '@/lib/syncToExternal';
+import { syncTrendInsert, syncTechnologyDelete, syncProjectTechnologyInsert } from '@/lib/syncToExternal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Select,
@@ -135,11 +135,11 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     if (!user || !selectedProjectId) return;
     
     setIsAddingToProject(true);
-    const { error } = await supabase.from('project_technologies').insert({
+    const { data, error } = await supabase.from('project_technologies').insert({
       project_id: selectedProjectId,
       technology_id: technology.id,
       added_by: user.id,
-    });
+    }).select().single();
     setIsAddingToProject(false);
 
     if (error) {
@@ -156,6 +156,19 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
         });
       }
     } else {
+      // Sync to external Supabase
+      try {
+        await syncProjectTechnologyInsert({
+          id: data.id,
+          project_id: selectedProjectId,
+          technology_id: technology.id,
+          added_by: user.id,
+          added_at: data.added_at,
+        });
+      } catch (syncError) {
+        console.error('External sync failed:', syncError);
+      }
+
       queryClient.invalidateQueries({ queryKey: ['project-technologies'] });
       queryClient.invalidateQueries({ queryKey: ['project-tech-counts'] });
       toast({
