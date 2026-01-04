@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 type SyncAction = 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT';
-type SyncTable = 'technologies' | 'technological_trends' | 'taxonomy_tipos' | 'taxonomy_subcategorias' | 'taxonomy_sectores' | 'project_technologies' | 'projects';
+type SyncTable = 'technologies' | 'technological_trends' | 'casos_de_estudio' | 'taxonomy_tipos' | 'taxonomy_subcategorias' | 'taxonomy_sectores' | 'project_technologies' | 'projects';
 
 interface SyncOptions {
   table: SyncTable;
@@ -83,6 +83,13 @@ export const syncTrendInsert = (trend: Record<string, unknown>) =>
 
 export const syncTrendDelete = (id: string) => 
   syncToExternalSupabase({ table: 'technological_trends', action: 'DELETE', recordId: id });
+
+// Casos de Estudio helpers
+export const syncCaseStudyInsert = (caseStudy: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'casos_de_estudio', action: 'INSERT', record: caseStudy });
+
+export const syncCaseStudyDelete = (id: string) => 
+  syncToExternalSupabase({ table: 'casos_de_estudio', action: 'DELETE', recordId: id });
 
 // Project helpers
 export const syncProjectInsert = (project: Record<string, unknown>) => 
