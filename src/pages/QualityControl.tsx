@@ -175,21 +175,34 @@ const QualityControl: React.FC = () => {
     enabled: canReview,
   });
 
-  // Fetch taxonomy classification stats
+  // Fetch taxonomy classification stats - paginated to bypass 1000 row limit
   const { data: taxonomyStats } = useQuery({
     queryKey: ['taxonomy-classification-stats'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('technologies')
-        .select('id, tipo_id, subcategoria_id, sector_id');
+      const allTechnologies: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
       
-      if (error) throw error;
+      while (true) {
+        const { data, error } = await supabase
+          .from('technologies')
+          .select('id, tipo_id, subcategoria_id, sector_id')
+          .range(from, from + pageSize - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        allTechnologies.push(...data);
+        
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
       
-      const total = data?.length || 0;
-      const withTipo = data?.filter(t => t.tipo_id !== null).length || 0;
-      const withSubcategoria = data?.filter(t => t.subcategoria_id !== null).length || 0;
-      const withSector = data?.filter(t => t.sector_id !== null).length || 0;
-      const fullyClassified = data?.filter(t => t.tipo_id !== null && t.subcategoria_id !== null).length || 0;
+      const total = allTechnologies.length;
+      const withTipo = allTechnologies.filter(t => t.tipo_id !== null).length;
+      const withSubcategoria = allTechnologies.filter(t => t.subcategoria_id !== null).length;
+      const withSector = allTechnologies.filter(t => t.sector_id !== null).length;
+      const fullyClassified = allTechnologies.filter(t => t.tipo_id !== null && t.subcategoria_id !== null).length;
       const pending = total - withTipo;
       
       return {
