@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import vandarumLogo from "@/assets/vandarum-logo-main.jpg";
-import vandarumSymbol from "@/assets/vandarum-symbol-orange.jpg";
+import vandarumSymbol from "@/assets/vandarum-symbol-transparent.png";
 import { 
   Droplets, 
   Search, 
@@ -177,7 +177,7 @@ const Index = () => {
           <img 
             src={vandarumSymbol} 
             alt="Vandarum" 
-            className="h-16 w-auto mx-auto mb-6 object-contain mix-blend-lighten"
+            className="h-16 w-auto mx-auto mb-6 object-contain"
           />
           <h2 className="text-3xl md:text-4xl font-display font-bold text-primary-foreground mb-4">
             Comienza a explorar tecnologías hoy
