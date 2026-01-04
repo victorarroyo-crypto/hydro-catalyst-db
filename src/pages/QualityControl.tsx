@@ -127,18 +127,32 @@ const QualityControl: React.FC = () => {
     },
   });
 
-  // Fetch technologies pending review
+  // Fetch technologies pending review - paginated to get all
   const { data: technologies, isLoading: loadingReviews } = useQuery({
     queryKey: ['technologies-reviews'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('technologies')
-        .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Proveedor / Empresa", "Grado de madurez (TRL)", review_status, reviewer_id, review_requested_at, review_requested_by')
-        .neq('review_status', 'none')
-        .order('review_requested_at', { ascending: false });
+      const allTechnologies: TechnologyWithReview[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      
+      while (true) {
+        const { data, error } = await supabase
+          .from('technologies')
+          .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Proveedor / Empresa", "Grado de madurez (TRL)", review_status, reviewer_id, review_requested_at, review_requested_by')
+          .neq('review_status', 'none')
+          .order('review_requested_at', { ascending: false })
+          .range(from, from + pageSize - 1);
 
-      if (error) throw error;
-      return data as TechnologyWithReview[];
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        allTechnologies.push(...(data as TechnologyWithReview[]));
+        
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      
+      return allTechnologies;
     },
     enabled: isInternalUser,
   });
