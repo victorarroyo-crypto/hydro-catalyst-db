@@ -42,9 +42,12 @@ import {
   Search,
   MapPin,
   ExternalLink,
+  Download,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 interface Technology {
   id: string;
@@ -279,6 +282,38 @@ const ProjectDetail: React.FC = () => {
 
   const alreadyAdded = (techId: string) => {
     return projectTechnologies?.some(pt => pt.technology_id === techId);
+  };
+
+  const exportToExcel = () => {
+    if (!technologies.length || !project) return;
+
+    const data = technologies.map(tech => ({
+      'Nombre': tech["Nombre de la tecnología"],
+      'Proveedor / Empresa': tech["Proveedor / Empresa"] || '',
+      'País de origen': tech["País de origen"] || '',
+      'TRL (Madurez)': tech["Grado de madurez (TRL)"] || '',
+      'Tipo de tecnología': tech["Tipo de tecnología"],
+      'Ventaja competitiva clave': tech["Ventaja competitiva clave"] || '',
+      'Aplicación principal': tech["Aplicación principal"] || '',
+      'Web de la empresa': tech["Web de la empresa"] || '',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Tecnologías');
+    
+    // Auto-size columns
+    const maxWidth = 50;
+    const colWidths = Object.keys(data[0] || {}).map(key => ({
+      wch: Math.min(maxWidth, Math.max(key.length, ...data.map(row => String(row[key as keyof typeof row] || '').length)))
+    }));
+    worksheet['!cols'] = colWidths;
+
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `Comparativa_${project.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    
+    toast({ title: 'Excel exportado correctamente' });
   };
 
   if (loadingProject) {
@@ -738,7 +773,11 @@ const ProjectDetail: React.FC = () => {
             </div>
           )}
           
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={exportToExcel} disabled={technologies.length < 2}>
+              <Download className="w-4 h-4 mr-2" />
+              Exportar Excel
+            </Button>
             <Button variant="outline" onClick={() => setCompareModalOpen(false)}>
               Cerrar
             </Button>
