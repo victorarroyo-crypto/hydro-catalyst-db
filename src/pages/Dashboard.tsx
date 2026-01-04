@@ -25,19 +25,30 @@ import {
 const Dashboard: React.FC = () => {
   const { profile } = useAuth();
   const canReviewEdits = profile?.role && ['admin', 'supervisor'].includes(profile.role);
+  const isInternalUser = profile?.role && ['admin', 'supervisor'].includes(profile.role);
 
   // Subscribe to real-time updates
   useRealtimeSubscription({
     tables: ['technologies', 'projects', 'technology_edits'],
-    queryKeys: [['dashboard-stats'], ['pending-edits-dashboard']],
+    queryKeys: [['dashboard-stats', isInternalUser ? 'internal' : 'public'], ['pending-edits-dashboard']],
   });
 
   const { data: stats } = useQuery({
-    queryKey: ['dashboard-stats'],
+    queryKey: ['dashboard-stats', isInternalUser ? 'internal' : 'public'],
     queryFn: async () => {
+      // For regular users, only count active/published technologies
+      // For admin/supervisor, count all technologies
+      let techQuery = supabase.from('technologies').select('id', { count: 'exact', head: true });
+      let highTrlQuery = supabase.from('technologies').select('id', { count: 'exact', head: true }).gte('"Grado de madurez (TRL)"', 7);
+      
+      if (!isInternalUser) {
+        techQuery = techQuery.eq('status', 'active');
+        highTrlQuery = highTrlQuery.eq('status', 'active');
+      }
+      
       const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount] = await Promise.all([
-        supabase.from('technologies').select('id', { count: 'exact', head: true }),
-        supabase.from('technologies').select('id', { count: 'exact', head: true }).gte('"Grado de madurez (TRL)"', 7),
+        techQuery,
+        highTrlQuery,
         supabase.from('projects').select('id', { count: 'exact', head: true }).in('status', ['active', 'in_progress', 'draft']),
         supabase.from('casos_de_estudio').select('id', { count: 'exact', head: true }),
         supabase.from('technological_trends').select('id', { count: 'exact', head: true }),
