@@ -164,23 +164,21 @@ Deno.serve(async (req) => {
           console.log(`Cleaned ${allData.length} technological_trends records`)
         }
 
-        // Clean user references for projects table
+        // Clean user references for projects table - remove columns that don't exist in external
         if (table === 'projects') {
-          allData = allData.map(record => ({
-            ...record,
-            created_by: null,
-            client_id: null,
-            responsible_user_id: null,
-          }))
+          allData = allData.map(record => {
+            const { created_by, client_id, responsible_user_id, ...rest } = record
+            return rest
+          })
           console.log(`Cleaned ${allData.length} project records`)
         }
 
-        // Clean user references for project_technologies table
+        // Clean user references for project_technologies table - remove columns that don't exist in external
         if (table === 'project_technologies') {
-          allData = allData.map(record => ({
-            ...record,
-            added_by: null,
-          }))
+          allData = allData.map(record => {
+            const { added_by, ...rest } = record
+            return rest
+          })
           console.log(`Cleaned ${allData.length} project_technologies records`)
         }
 
