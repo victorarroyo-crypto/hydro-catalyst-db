@@ -7,12 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -22,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { syncTechnologyInsert, syncCaseStudyDelete } from '@/lib/syncToExternal';
 import { 
   BookOpen, 
   Search, 
@@ -32,7 +35,16 @@ import {
   ExternalLink,
   Trash2,
   Loader2,
+  RotateCcw,
+  Globe,
+  Mail,
+  FileText,
+  Lightbulb,
+  Trophy,
+  MessageSquare,
+  Users,
 } from 'lucide-react';
+import { TRLBadge } from '@/components/TRLBadge';
 
 interface CaseStudy {
   id: string;
@@ -55,8 +67,11 @@ const CaseStudies: React.FC = () => {
   const [countryFilter, setCountryFilter] = useState<string>('all');
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>('all');
   const [selectedCase, setSelectedCase] = useState<CaseStudy | null>(null);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const isAdmin = profile?.role === 'admin';
+  const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
   // Fetch case studies
   const { data: caseStudies, isLoading } = useQuery({
@@ -80,6 +95,13 @@ const CaseStudies: React.FC = () => {
         .delete()
         .eq('id', id);
       if (error) throw error;
+      
+      // Sync deletion to external
+      try {
+        await syncCaseStudyDelete(id);
+      } catch (syncError) {
+        console.error('External sync failed:', syncError);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['case-studies'] });
@@ -90,6 +112,106 @@ const CaseStudies: React.FC = () => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     },
   });
+
+  // Restore to technology
+  const handleRestoreToTechnology = async () => {
+    if (!selectedCase?.original_data) {
+      toast({
+        title: 'Error',
+        description: 'No hay datos originales para restaurar',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsRestoring(true);
+    
+    const originalData = selectedCase.original_data as Record<string, unknown>;
+    
+    // Reconstruct the technology from original data with proper type casting
+    const technologyData = {
+      "Nombre de la tecnología": String(originalData["Nombre de la tecnología"] || selectedCase.name),
+      "Proveedor / Empresa": originalData["Proveedor / Empresa"] as string | null,
+      "País de origen": (originalData["País de origen"] || selectedCase.country) as string | null,
+      "Web de la empresa": originalData["Web de la empresa"] as string | null,
+      "Email de contacto": originalData["Email de contacto"] as string | null,
+      "Tipo de tecnología": String(originalData["Tipo de tecnología"] || (selectedCase.technology_types?.[0] || 'Sin clasificar')),
+      "Subcategoría": originalData["Subcategoría"] as string | null,
+      "Sector y subsector": (originalData["Sector y subsector"] || selectedCase.sector) as string | null,
+      "Aplicación principal": originalData["Aplicación principal"] as string | null,
+      "Descripción técnica breve": (originalData["Descripción técnica breve"] || selectedCase.description) as string | null,
+      "Ventaja competitiva clave": originalData["Ventaja competitiva clave"] as string | null,
+      "Porque es innovadora": originalData["Porque es innovadora"] as string | null,
+      "Casos de referencia": originalData["Casos de referencia"] as string | null,
+      "Paises donde actua": originalData["Paises donde actua"] as string | null,
+      "Comentarios del analista": originalData["Comentarios del analista"] as string | null,
+      "Fecha de scouting": originalData["Fecha de scouting"] as string | null,
+      "Estado del seguimiento": originalData["Estado del seguimiento"] as string | null,
+      "Grado de madurez (TRL)": originalData["Grado de madurez (TRL)"] as number | null,
+      quality_score: (originalData.quality_score as number) || 0,
+      status: (originalData.status as string) || 'active',
+      sector_id: originalData.sector_id as string | null,
+      tipo_id: originalData.tipo_id as number | null,
+      subcategoria_id: originalData.subcategoria_id as number | null,
+      subsector_industrial: originalData.subsector_industrial as string | null,
+    };
+
+    // Insert back into technologies
+    const { data: insertedTech, error: insertError } = await supabase
+      .from('technologies')
+      .insert([technologyData])
+      .select()
+      .single();
+
+    if (insertError) {
+      setIsRestoring(false);
+      toast({
+        title: 'Error',
+        description: 'No se pudo restaurar la tecnología: ' + insertError.message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Sync to external
+    try {
+      await syncTechnologyInsert({ ...technologyData, id: insertedTech.id });
+    } catch (syncError) {
+      console.error('External sync failed:', syncError);
+    }
+
+    // Delete from case studies
+    const { error: deleteError } = await supabase
+      .from('casos_de_estudio')
+      .delete()
+      .eq('id', selectedCase.id);
+
+    // Sync deletion to external
+    try {
+      await syncCaseStudyDelete(selectedCase.id);
+    } catch (syncError) {
+      console.error('External sync failed:', syncError);
+    }
+
+    setIsRestoring(false);
+    setShowRestoreConfirm(false);
+
+    if (deleteError) {
+      toast({
+        title: 'Advertencia',
+        description: 'Tecnología restaurada pero no se pudo eliminar el caso de estudio',
+        variant: 'destructive',
+      });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['case-studies'] });
+      queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      setSelectedCase(null);
+      toast({
+        title: 'Restaurado a tecnologías',
+        description: 'El caso de estudio ha sido restaurado como tecnología',
+      });
+    }
+  };
 
   // Get unique countries and entity types for filters
   const countries = [...new Set(caseStudies?.map(c => c.country).filter(Boolean) || [])].sort();
@@ -249,62 +371,199 @@ const CaseStudies: React.FC = () => {
       )}
 
       {/* Detail Modal */}
-      <Dialog open={!!selectedCase} onOpenChange={() => setSelectedCase(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <Dialog open={!!selectedCase && !showRestoreConfirm} onOpenChange={() => setSelectedCase(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           {selectedCase && (
             <>
-              <DialogHeader>
-                <DialogTitle className="text-xl">{selectedCase.name}</DialogTitle>
-                <DialogDescription className="flex items-center gap-4 flex-wrap">
-                  {selectedCase.country && (
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-4 h-4" />
-                      {selectedCase.country}
-                    </span>
-                  )}
-                  {selectedCase.entity_type && (
-                    <Badge variant="secondary">{selectedCase.entity_type}</Badge>
-                  )}
-                </DialogDescription>
+              <DialogHeader className="pb-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <DialogTitle className="text-xl font-display mb-2">
+                      {selectedCase.name}
+                    </DialogTitle>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {selectedCase.original_data?.["Grado de madurez (TRL)"] && (
+                        <TRLBadge trl={selectedCase.original_data["Grado de madurez (TRL)"] as number} />
+                      )}
+                      {selectedCase.entity_type && (
+                        <Badge variant="secondary">{selectedCase.entity_type}</Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </DialogHeader>
 
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Action buttons */}
+                {isInternalUser && selectedCase.original_data && (
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowRestoreConfirm(true)}
+                      className="text-green-600 border-green-300 hover:bg-green-50"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Restaurar a tecnologías
+                    </Button>
+                  </div>
+                )}
+
+                {/* General Info */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                    <Building2 className="w-4 h-4" />
+                    Información General
+                  </h3>
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                    {selectedCase.original_data?.["Proveedor / Empresa"] && (
+                      <div className="flex items-start gap-3">
+                        <Building2 className="w-4 h-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Proveedor / Empresa</p>
+                          <p className="text-sm">{String(selectedCase.original_data["Proveedor / Empresa"])}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedCase.country && (
+                      <div className="flex items-start gap-3">
+                        <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">País de origen</p>
+                          <p className="text-sm">{selectedCase.country}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedCase.original_data?.["Web de la empresa"] && (
+                      <div className="flex items-start gap-3">
+                        <Globe className="w-4 h-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Web</p>
+                          <a 
+                            href={String(selectedCase.original_data["Web de la empresa"])}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            {String(selectedCase.original_data["Web de la empresa"])}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    {selectedCase.original_data?.["Email de contacto"] && (
+                      <div className="flex items-start gap-3">
+                        <Mail className="w-4 h-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Email</p>
+                          <p className="text-sm">{String(selectedCase.original_data["Email de contacto"])}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Classification */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                    <Tag className="w-4 h-4" />
+                    Clasificación
+                  </h3>
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                    {selectedCase.technology_types && selectedCase.technology_types.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedCase.technology_types.map((type, i) => (
+                          <Badge key={i} variant="default">{type}</Badge>
+                        ))}
+                      </div>
+                    )}
+                    {selectedCase.sector && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs text-muted-foreground">Sector:</span>
+                        <Badge variant="outline">{selectedCase.sector}</Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Description */}
                 {selectedCase.description && (
-                  <div>
-                    <h4 className="text-sm font-semibold mb-2">Descripción</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedCase.description}
-                    </p>
-                  </div>
-                )}
-
-                {selectedCase.sector && (
-                  <div>
-                    <h4 className="text-sm font-semibold mb-2">Sector</h4>
-                    <Badge variant="outline">{selectedCase.sector}</Badge>
-                  </div>
-                )}
-
-                {selectedCase.technology_types && selectedCase.technology_types.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-semibold mb-2">Tipos de Tecnología</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedCase.technology_types.map((type, i) => (
-                        <Badge key={i} variant="secondary">{type}</Badge>
-                      ))}
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        Descripción Técnica
+                      </h3>
+                      <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
+                        {selectedCase.description}
+                      </p>
                     </div>
-                  </div>
+                  </>
                 )}
 
-                {selectedCase.original_data && (
-                  <div>
-                    <h4 className="text-sm font-semibold mb-2">Datos Originales</h4>
-                    <div className="bg-muted/50 rounded-lg p-3 text-xs font-mono overflow-auto max-h-48">
-                      <pre>{JSON.stringify(selectedCase.original_data, null, 2)}</pre>
+                {/* Differentiation */}
+                {(selectedCase.original_data?.["Ventaja competitiva clave"] || selectedCase.original_data?.["Porque es innovadora"]) && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                        <Lightbulb className="w-4 h-4" />
+                        Diferenciación
+                      </h3>
+                      <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+                        {selectedCase.original_data?.["Ventaja competitiva clave"] && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Ventaja competitiva clave</p>
+                            <p className="text-sm">{String(selectedCase.original_data["Ventaja competitiva clave"])}</p>
+                          </div>
+                        )}
+                        {selectedCase.original_data?.["Porque es innovadora"] && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Por qué es innovadora</p>
+                            <p className="text-sm">{String(selectedCase.original_data["Porque es innovadora"])}</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
 
+                {/* Cases of reference */}
+                {selectedCase.original_data?.["Casos de referencia"] && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                        <Users className="w-4 h-4" />
+                        Casos de Referencia
+                      </h3>
+                      <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
+                        {String(selectedCase.original_data["Casos de referencia"])}
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {/* Analyst Comments */}
+                {selectedCase.original_data?.["Comentarios del analista"] && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4" />
+                        Comentarios del Analista
+                      </h3>
+                      <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
+                        {String(selectedCase.original_data["Comentarios del analista"])}
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {/* Footer */}
                 <div className="flex items-center justify-between pt-4 border-t">
                   <span className="text-xs text-muted-foreground">
                     <Calendar className="w-3 h-3 inline mr-1" />
@@ -332,6 +591,45 @@ const CaseStudies: React.FC = () => {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Restore Confirmation Dialog */}
+      <Dialog open={showRestoreConfirm} onOpenChange={setShowRestoreConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-green-600" />
+              Restaurar a Tecnologías
+            </DialogTitle>
+            <DialogDescription className="text-left pt-2 space-y-3">
+              <p>
+                Al confirmar, este caso de estudio se convertirá de nuevo en una <strong>tecnología</strong> y:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Se recuperarán todos los datos originales</li>
+                <li>Aparecerá en el catálogo de tecnologías</li>
+                <li>Se eliminará de casos de estudio</li>
+              </ul>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowRestoreConfirm(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleRestoreToTechnology}
+              disabled={isRestoring}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isRestoring ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4 mr-2" />
+              )}
+              Confirmar y restaurar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
