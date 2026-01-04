@@ -169,7 +169,7 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
           </Select>
         </div>
 
-        {/* Estado */}
+        {/* Estado (Activo/Inactivo) */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">Estado</Label>
           <Select
@@ -181,14 +181,18 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
             </SelectTrigger>
             <SelectContent className="bg-popover">
               <SelectItem value="all">Todos los estados</SelectItem>
-              {filterOptions.estados.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  <span className="flex items-center justify-between w-full gap-2">
-                    <span className="truncate">{option.value}</span>
-                    <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
-                  </span>
-                </SelectItem>
-              ))}
+              <SelectItem value="active">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                  Activo
+                </span>
+              </SelectItem>
+              <SelectItem value="inactive">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-gray-400" />
+                  Inactivo
+                </span>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
