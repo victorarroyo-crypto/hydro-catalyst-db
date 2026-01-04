@@ -36,9 +36,9 @@ Deno.serve(async (req) => {
     const results: Record<string, { synced: number; errors: string[] }> = {}
     
     // Tables in order for INSERT (respecting FK dependencies)
-    const insertOrder = ['taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores', 'technologies']
+    const insertOrder = ['taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores', 'technologies', 'projects', 'project_technologies']
     // Tables in reverse order for DELETE (respecting FK dependencies)
-    const deleteOrder = ['technologies', 'taxonomy_subcategorias', 'taxonomy_tipos', 'taxonomy_sectores']
+    const deleteOrder = ['project_technologies', 'projects', 'technologies', 'taxonomy_subcategorias', 'taxonomy_tipos', 'taxonomy_sectores']
 
     // Initialize results
     for (const table of insertOrder) {
@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
 
         if (allData.length === 0) continue
 
-        // Enrich and clean technologies table
+        // Clean user reference fields for specific tables
         if (table === 'technologies') {
           // Fetch taxonomy lookup tables
           const { data: tipos } = await internalSupabase.from('taxonomy_tipos').select('id, nombre')
@@ -124,6 +124,26 @@ Deno.serve(async (req) => {
             review_requested_by: null,
           }))
           console.log(`Enriched ${allData.length} technology records with taxonomy names`)
+        }
+
+        // Clean user references for projects table
+        if (table === 'projects') {
+          allData = allData.map(record => ({
+            ...record,
+            created_by: null,
+            client_id: null,
+            responsible_user_id: null,
+          }))
+          console.log(`Cleaned ${allData.length} project records`)
+        }
+
+        // Clean user references for project_technologies table
+        if (table === 'project_technologies') {
+          allData = allData.map(record => ({
+            ...record,
+            added_by: null,
+          }))
+          console.log(`Cleaned ${allData.length} project_technologies records`)
         }
 
         // INSERT fresh data in batches

@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 type SyncAction = 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT';
-type SyncTable = 'technologies' | 'technological_trends' | 'taxonomy_tipos' | 'taxonomy_subcategorias' | 'taxonomy_sectores';
+type SyncTable = 'technologies' | 'technological_trends' | 'taxonomy_tipos' | 'taxonomy_subcategorias' | 'taxonomy_sectores' | 'project_technologies' | 'projects';
 
 interface SyncOptions {
   table: SyncTable;
@@ -83,3 +83,20 @@ export const syncTrendInsert = (trend: Record<string, unknown>) =>
 
 export const syncTrendDelete = (id: string) => 
   syncToExternalSupabase({ table: 'technological_trends', action: 'DELETE', recordId: id });
+
+// Project helpers
+export const syncProjectInsert = (project: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'projects', action: 'INSERT', record: project });
+
+export const syncProjectUpdate = (id: string, changes: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'projects', action: 'UPDATE', record: changes, recordId: id });
+
+export const syncProjectDelete = (id: string) => 
+  syncToExternalSupabase({ table: 'projects', action: 'DELETE', recordId: id });
+
+// Project Technologies helpers
+export const syncProjectTechnologyInsert = (projectTech: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'project_technologies', action: 'INSERT', record: projectTech });
+
+export const syncProjectTechnologyDelete = (id: string) => 
+  syncToExternalSupabase({ table: 'project_technologies', action: 'DELETE', recordId: id });
