@@ -10,10 +10,10 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Technologies from "./pages/Technologies";
 import Projects from "./pages/Projects";
+import ProjectDetail from "./pages/ProjectDetail";
 import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
 import QualityControl from "./pages/QualityControl";
-import Reviews from "./pages/Reviews";
 import Trends from "./pages/Trends";
 import Statistics from "./pages/Statistics";
 import NotFound from "./pages/NotFound";
@@ -34,6 +34,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/technologies" element={<Technologies />} />
               <Route path="/projects" element={<Projects />} />
+              <Route path="/projects/:id" element={<ProjectDetail />} />
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/reviews" element={<QualityControl />} />
