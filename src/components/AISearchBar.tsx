@@ -7,10 +7,24 @@ import { useToast } from '@/hooks/use-toast';
 import { Sparkles, Search, X, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
+export interface AISearchFilters {
+  tipoId?: number | null;
+  subcategoriaId?: number | null;
+  sectorId?: string | null;
+  tipoTecnologia?: string | null;
+  subcategoria?: string | null;
+  sector?: string | null;
+  pais?: string | null;
+  trlMin?: number | null;
+  trlMax?: number | null;
+  estado?: string | null;
+}
+
 interface AISearchBarProps {
   onResults: (ids: string[] | null, explanation?: string) => void;
   isSearching: boolean;
   setIsSearching: (value: boolean) => void;
+  activeFilters?: AISearchFilters;
 }
 
 // Static fallback suggestions
@@ -23,7 +37,8 @@ const staticSuggestions = [
 export const AISearchBar: React.FC<AISearchBarProps> = ({ 
   onResults, 
   isSearching, 
-  setIsSearching 
+  setIsSearching,
+  activeFilters 
 }) => {
   const [query, setQuery] = useState('');
   const [explanation, setExplanation] = useState<string | null>(null);
@@ -83,6 +98,12 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
     return unique.slice(0, 8);
   }, [dynamicData]);
 
+  // Count active filters for display
+  const activeFilterCount = useMemo(() => {
+    if (!activeFilters) return 0;
+    return Object.values(activeFilters).filter(v => v !== null && v !== undefined).length;
+  }, [activeFilters]);
+
   const executeSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
 
@@ -92,7 +113,10 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-search-technologies', {
-        body: { query: searchQuery.trim() }
+        body: { 
+          query: searchQuery.trim(),
+          filters: activeFilters 
+        }
       });
 
       // Handle HTTP-level errors from invoke (e.g., network issues)
@@ -242,6 +266,11 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
             <>
               <Search className="w-4 h-4" />
               Buscar con IA
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px]">
+                  +{activeFilterCount} filtros
+                </Badge>
+              )}
             </>
           )}
         </Button>
