@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { TechnologyFiltersPanel } from '@/components/TechnologyFiltersPanel';
@@ -55,6 +56,12 @@ const Technologies: React.FC = () => {
   const canEdit = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
   // Only admins can use AI features
   const canUseAI = profile?.role === 'admin';
+
+  // Subscribe to real-time updates
+  useRealtimeSubscription({
+    tables: ['technologies', 'taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores'],
+    queryKeys: [['technologies']],
+  });
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['technologies', filters, taxonomyFilters, page, aiSearchIds],
