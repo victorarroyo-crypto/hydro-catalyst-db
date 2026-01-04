@@ -53,6 +53,17 @@ interface TechnologyDetailModalProps {
   onEdit?: () => void;
 }
 
+interface TaxonomyTipo {
+  id: number;
+  codigo: string;
+  nombre: string;
+}
+
+interface TechnologyTipoRelation {
+  tipo_id: number;
+  is_primary: boolean;
+}
+
 export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   technology,
   open,
@@ -83,6 +94,34 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
       return data;
     },
     enabled: !!user && open,
+  });
+
+  // Fetch taxonomy tipos
+  const { data: tipos } = useQuery({
+    queryKey: ['taxonomy-tipos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_tipos')
+        .select('id, codigo, nombre');
+      if (error) throw error;
+      return data as TaxonomyTipo[];
+    },
+    staleTime: 1000 * 60 * 10,
+  });
+
+  // Fetch technology tipos relationship
+  const { data: technologyTipos } = useQuery({
+    queryKey: ['technology-tipos', technology?.id],
+    queryFn: async () => {
+      if (!technology?.id) return [];
+      const { data, error } = await supabase
+        .from('technology_tipos')
+        .select('tipo_id, is_primary')
+        .eq('technology_id', technology.id);
+      if (error) throw error;
+      return data as TechnologyTipoRelation[];
+    },
+    enabled: !!technology?.id && open,
   });
 
   if (!technology) return null;
@@ -449,8 +488,43 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               <Tag className="w-4 h-4" />
               Clasificación
             </h3>
-            <div className="bg-muted/30 rounded-lg p-4 space-y-1">
-              <InfoRow icon={Tag} label="Tipo de tecnología" value={technology["Tipo de tecnología"]} />
+            <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+              {/* Multiple tipos display */}
+              <div className="flex items-start gap-3 py-2">
+                <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground mb-1">Tipos de tecnología</p>
+                  <div className="flex flex-wrap gap-2">
+                    {technologyTipos && technologyTipos.length > 0 ? (
+                      [...technologyTipos]
+                        .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
+                        .map(tt => {
+                          const tipo = tipos?.find(t => t.id === tt.tipo_id);
+                          if (!tipo) return null;
+                          return (
+                            <Badge 
+                              key={tt.tipo_id} 
+                              variant={tt.is_primary ? "default" : "secondary"}
+                              className="flex items-center gap-1"
+                            >
+                              {tt.is_primary && technologyTipos.length > 1 && (
+                                <Star className="w-3 h-3 fill-current" />
+                              )}
+                              <span className="font-mono text-xs opacity-70">{tipo.codigo}</span>
+                              {tipo.nombre}
+                            </Badge>
+                          );
+                        })
+                    ) : technology["Tipo de tecnología"] ? (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        {technology["Tipo de tecnología"]}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
               <InfoRow icon={Tag} label="Subcategoría" value={technology["Subcategoría"]} />
               <InfoRow icon={Tag} label="Sector y subsector" value={technology["Sector y subsector"]} />
               <InfoRow icon={Tag} label="Aplicación principal" value={technology["Aplicación principal"]} />
