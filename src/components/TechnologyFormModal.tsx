@@ -13,11 +13,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { syncTechnologyUpdate, syncTechnologyInsert } from '@/lib/syncToExternal';
-import { Loader2, Save, AlertTriangle } from 'lucide-react';
+import { Loader2, Save, AlertTriangle, X, Star } from 'lucide-react';
 import type { Technology } from '@/types/database';
 
 interface TechnologyFormModalProps {
@@ -45,6 +47,11 @@ interface TaxonomySector {
   id: string;
   nombre: string;
   descripcion: string | null;
+}
+
+interface SelectedTipo {
+  tipo_id: number;
+  is_primary: boolean;
 }
 
 interface FormData {
@@ -176,7 +183,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [editComment, setEditComment] = useState('');
-  
+  const [selectedTipos, setSelectedTipos] = useState<SelectedTipo[]>([]);
   const isEditing = !!technology;
   
   // Check user role - analysts need approval, supervisors/admins can edit directly
@@ -218,6 +225,21 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       return data as TaxonomySector[];
     },
   });
+
+  // Fetch existing technology tipos relationship
+  const { data: existingTipos } = useQuery({
+    queryKey: ['technology-tipos', technology?.id],
+    queryFn: async () => {
+      if (!technology?.id) return [];
+      const { data, error } = await supabase
+        .from('technology_tipos')
+        .select('tipo_id, is_primary')
+        .eq('technology_id', technology.id);
+      if (error) throw error;
+      return data as SelectedTipo[];
+    },
+    enabled: !!technology?.id,
+  });
   
   const [formData, setFormData] = useState<FormData>({
     "Nombre de la tecnología": '',
@@ -246,10 +268,69 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     subsector_industrial: '',
   });
 
-  // Filter subcategories based on selected tipo
+  // Filter subcategories based on selected primary tipo
+  const primaryTipoId = selectedTipos.find(t => t.is_primary)?.tipo_id || formData.tipo_id;
   const filteredSubcategorias = allSubcategorias?.filter(
-    (sub) => sub.tipo_id === formData.tipo_id
+    (sub) => sub.tipo_id === primaryTipoId
   ) || [];
+
+  // Load existing tipos when editing
+  useEffect(() => {
+    if (existingTipos && existingTipos.length > 0) {
+      setSelectedTipos(existingTipos);
+    } else if ((technology as any)?.tipo_id) {
+      // Fallback to legacy tipo_id if no relationship exists
+      setSelectedTipos([{ tipo_id: (technology as any).tipo_id, is_primary: true }]);
+    }
+  }, [existingTipos, technology]);
+
+  // Helper functions for managing multiple tipos
+  const handleTipoToggle = (tipoId: number, checked: boolean) => {
+    if (checked) {
+      const isFirst = selectedTipos.length === 0;
+      setSelectedTipos(prev => [...prev, { tipo_id: tipoId, is_primary: isFirst }]);
+      
+      // Update legacy field with primary tipo name
+      if (isFirst) {
+        const tipo = tipos?.find(t => t.id === tipoId);
+        if (tipo) {
+          handleChange('tipo_id', tipoId);
+          handleChange('Tipo de tecnología', tipo.nombre);
+        }
+      }
+    } else {
+      const removedTipo = selectedTipos.find(t => t.tipo_id === tipoId);
+      const newTipos = selectedTipos.filter(t => t.tipo_id !== tipoId);
+      
+      // If we removed the primary, set first remaining as primary
+      if (removedTipo?.is_primary && newTipos.length > 0) {
+        newTipos[0].is_primary = true;
+        const tipo = tipos?.find(t => t.id === newTipos[0].tipo_id);
+        if (tipo) {
+          handleChange('tipo_id', newTipos[0].tipo_id);
+          handleChange('Tipo de tecnología', tipo.nombre);
+        }
+      } else if (newTipos.length === 0) {
+        handleChange('tipo_id', null);
+        handleChange('Tipo de tecnología', '');
+      }
+      
+      setSelectedTipos(newTipos);
+    }
+  };
+
+  const handleSetPrimary = (tipoId: number) => {
+    setSelectedTipos(prev => prev.map(t => ({
+      ...t,
+      is_primary: t.tipo_id === tipoId
+    })));
+    
+    const tipo = tipos?.find(t => t.id === tipoId);
+    if (tipo) {
+      handleChange('tipo_id', tipoId);
+      handleChange('Tipo de tecnología', tipo.nombre);
+    }
+  };
 
   useEffect(() => {
     if (technology) {
@@ -308,6 +389,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
         subsector_industrial: '',
       });
       setEditComment('');
+      setSelectedTipos([]);
     }
   }, [technology, open]);
 
@@ -359,10 +441,10 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       return;
     }
 
-    if (!formData["Tipo de tecnología"].trim() && !formData.tipo_id) {
+    if (selectedTipos.length === 0 && !formData["Tipo de tecnología"].trim()) {
       toast({
         title: 'Campo requerido',
-        description: 'El tipo de tecnología es obligatorio',
+        description: 'Debes seleccionar al menos un tipo de tecnología',
         variant: 'destructive',
       });
       return;
@@ -430,12 +512,33 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           if (error) throw error;
 
+          // Update technology_tipos relationship
+          // First delete existing
+          await supabase
+            .from('technology_tipos')
+            .delete()
+            .eq('technology_id', technology.id);
+
+          // Then insert new ones
+          if (selectedTipos.length > 0) {
+            const tiposToInsert = selectedTipos.map(t => ({
+              technology_id: technology.id,
+              tipo_id: t.tipo_id,
+              is_primary: t.is_primary,
+            }));
+            
+            const { error: tiposError } = await supabase
+              .from('technology_tipos')
+              .insert(tiposToInsert);
+            
+            if (tiposError) console.error('Error saving tipos:', tiposError);
+          }
+
           // Sync to external Supabase
           try {
             await syncTechnologyUpdate(technology.id, dataToSave);
           } catch (syncError) {
             console.error('External sync failed:', syncError);
-            // Don't fail the main operation, just log the sync error
           }
 
           toast({
@@ -477,6 +580,21 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
             .single();
 
           if (error) throw error;
+
+          // Insert technology_tipos relationships
+          if (selectedTipos.length > 0) {
+            const tiposToInsert = selectedTipos.map(t => ({
+              technology_id: insertedData.id,
+              tipo_id: t.tipo_id,
+              is_primary: t.is_primary,
+            }));
+            
+            const { error: tiposError } = await supabase
+              .from('technology_tipos')
+              .insert(tiposToInsert);
+            
+            if (tiposError) console.error('Error saving tipos:', tiposError);
+          }
 
           // Sync to external Supabase
           try {
@@ -576,33 +694,74 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           {/* Taxonomy Classification */}
           <FormSection title="Clasificación (Nueva Taxonomía)">
-            <div>
+            <div className="md:col-span-2">
               <Label className="text-sm">
-                Tipo de Tecnología <span className="text-destructive">*</span>
+                Tipos de Tecnología <span className="text-destructive">*</span>
               </Label>
-              <Select
-                value={formData.tipo_id?.toString() || ''}
-                onValueChange={(value) => handleChange('tipo_id', value ? parseInt(value) : null)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Seleccionar tipo..." />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  {tipos?.map((tipo) => (
-                    <SelectItem key={tipo.id} value={tipo.id.toString()}>
-                      <span className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground mb-2">
+                Selecciona uno o más tipos. Haz clic en ⭐ para marcar como principal.
+              </p>
+              
+              {/* Selected tipos badges */}
+              {selectedTipos.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {selectedTipos.map(st => {
+                    const tipo = tipos?.find(t => t.id === st.tipo_id);
+                    if (!tipo) return null;
+                    return (
+                      <Badge 
+                        key={st.tipo_id} 
+                        variant={st.is_primary ? "default" : "secondary"}
+                        className="flex items-center gap-1 pr-1"
+                      >
+                        {st.is_primary && <Star className="w-3 h-3 fill-current" />}
+                        <span className="font-mono text-xs mr-1">{tipo.codigo}</span>
+                        {tipo.nombre}
+                        {!st.is_primary && (
+                          <button
+                            type="button"
+                            onClick={() => handleSetPrimary(st.tipo_id)}
+                            className="ml-1 p-0.5 hover:bg-primary/20 rounded"
+                            title="Marcar como principal"
+                          >
+                            <Star className="w-3 h-3" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleTipoToggle(st.tipo_id, false)}
+                          className="ml-1 p-0.5 hover:bg-destructive/20 rounded"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+              
+              {/* Checkbox list of tipos */}
+              <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                {tipos?.map((tipo) => {
+                  const isSelected = selectedTipos.some(st => st.tipo_id === tipo.id);
+                  return (
+                    <div key={tipo.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`tipo-${tipo.id}`}
+                        checked={isSelected}
+                        onCheckedChange={(checked) => handleTipoToggle(tipo.id, !!checked)}
+                      />
+                      <label
+                        htmlFor={`tipo-${tipo.id}`}
+                        className="text-sm flex items-center gap-2 cursor-pointer flex-1"
+                      >
                         <span className="font-mono text-xs text-muted-foreground">{tipo.codigo}</span>
                         {tipo.nombre}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formData.tipo_id && tipos && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {tipos.find(t => t.id === formData.tipo_id)?.descripcion}
-                </p>
-              )}
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div>
@@ -610,10 +769,10 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               <Select
                 value={formData.subcategoria_id?.toString() || ''}
                 onValueChange={(value) => handleChange('subcategoria_id', value ? parseInt(value) : null)}
-                disabled={!formData.tipo_id}
+                disabled={selectedTipos.length === 0}
               >
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder={formData.tipo_id ? "Seleccionar subcategoría..." : "Primero selecciona un tipo"} />
+                  <SelectValue placeholder={selectedTipos.length > 0 ? "Seleccionar subcategoría..." : "Primero selecciona un tipo"} />
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50 max-h-60">
                   {filteredSubcategorias.map((sub) => (
@@ -626,6 +785,9 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Basado en el tipo principal seleccionado
+              </p>
             </div>
 
             <div>
