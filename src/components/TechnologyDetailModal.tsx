@@ -484,13 +484,16 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" aria-describedby="tech-detail-description">
         <DialogHeader className="pb-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <DialogTitle className="text-xl font-display mb-2">
                 {technology["Nombre de la tecnología"]}
               </DialogTitle>
+              <DialogDescription id="tech-detail-description" className="sr-only">
+                Detalles de la tecnología {technology["Nombre de la tecnología"]}
+              </DialogDescription>
               <div className="flex items-center gap-2 flex-wrap">
                 <TRLBadge trl={technology["Grado de madurez (TRL)"]} />
                 {technology.status && (
