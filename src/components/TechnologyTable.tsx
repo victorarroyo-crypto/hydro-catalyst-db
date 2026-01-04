@@ -25,6 +25,11 @@ interface TaxonomySubcategoria {
   nombre: string;
 }
 
+interface TaxonomySector {
+  id: string;
+  nombre: string;
+}
+
 interface TechnologyTableProps {
   technologies: Technology[];
   onRowClick: (tech: Technology) => void;
@@ -56,6 +61,18 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
     staleTime: 1000 * 60 * 10, // Cache for 10 minutes
   });
 
+  const { data: sectores } = useQuery({
+    queryKey: ['taxonomy-sectores'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_sectores')
+        .select('id, nombre');
+      if (error) throw error;
+      return data as TaxonomySector[];
+    },
+    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+  });
+
   // Create lookup maps for efficient access
   const tiposMap = React.useMemo(() => {
     const map = new Map<number, TaxonomyTipo>();
@@ -68,6 +85,12 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
     subcategorias?.forEach(s => map.set(s.id, s));
     return map;
   }, [subcategorias]);
+
+  const sectoresMap = React.useMemo(() => {
+    const map = new Map<string, TaxonomySector>();
+    sectores?.forEach(s => map.set(s.id, s));
+    return map;
+  }, [sectores]);
 
   const getTipoDisplay = (tech: Technology) => {
     const tipoId = (tech as any).tipo_id;
@@ -113,6 +136,20 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
     return <span className="text-muted-foreground">—</span>;
   };
 
+  const getSectorDisplay = (tech: Technology) => {
+    const sectorId = (tech as any).sector_id;
+    if (sectorId && sectoresMap.has(sectorId)) {
+      const sector = sectoresMap.get(sectorId)!;
+      return (
+        <Badge variant="outline" className="text-xs">
+          <span className="font-mono text-[10px] opacity-70 mr-1">{sector.id}</span>
+          <span className="hidden xl:inline">{sector.nombre}</span>
+        </Badge>
+      );
+    }
+    return <span className="text-muted-foreground">—</span>;
+  };
+
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
       <Table>
@@ -122,6 +159,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
             <TableHead className="font-semibold">Proveedor</TableHead>
             <TableHead className="font-semibold">Tipo</TableHead>
             <TableHead className="font-semibold">Subcategoría</TableHead>
+            <TableHead className="font-semibold">Sector</TableHead>
             <TableHead className="font-semibold text-center">TRL</TableHead>
             <TableHead className="font-semibold">País</TableHead>
           </TableRow>
@@ -144,6 +182,9 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
               </TableCell>
               <TableCell>
                 {getSubcategoriaDisplay(tech)}
+              </TableCell>
+              <TableCell>
+                {getSectorDisplay(tech)}
               </TableCell>
               <TableCell className="text-center">
                 <TRLBadge trl={tech["Grado de madurez (TRL)"]} size="sm" />
