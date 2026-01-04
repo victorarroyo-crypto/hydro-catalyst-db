@@ -11,8 +11,10 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, 
   CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle,
-  Users, Crown, Eye, Edit, Briefcase, Building, Star, RefreshCw
+  Users, Crown, Eye, Edit, Briefcase, Building, Star, RefreshCw, Key, Sun, Moon,
+  Info, ExternalLink, FileText, HelpCircle
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import {
   Select,
   SelectContent,
@@ -152,9 +154,13 @@ const ROLE_INFO = {
   },
 };
 
+const APP_VERSION = '1.0.0';
+const SUPPORT_EMAIL = 'soporte@vandarum.com';
+
 const Settings: React.FC = () => {
   const { profile, user } = useAuth();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
   const isAdmin = profile?.role === 'admin';
   const [isBulkSyncing, setIsBulkSyncing] = useState(false);
   const [isComparing, setIsComparing] = useState(false);
@@ -162,6 +168,12 @@ const Settings: React.FC = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Load users for admin
   useEffect(() => {
@@ -238,6 +250,53 @@ const Settings: React.FC = () => {
       });
     } finally {
       setUpdatingUserId(null);
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: 'Las contraseñas no coinciden',
+        description: 'Por favor, verifica que ambas contraseñas sean iguales',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: 'Contraseña muy corta',
+        description: 'La contraseña debe tener al menos 6 caracteres',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Contraseña actualizada',
+        description: 'Tu contraseña ha sido cambiada exitosamente',
+      });
+
+      // Clear form
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      toast({
+        title: 'Error al cambiar contraseña',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -362,6 +421,99 @@ const Settings: React.FC = () => {
                     : '—'
                   }
                 </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Security - Password Change */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5" />
+              Seguridad
+            </CardTitle>
+            <CardDescription>
+              Cambia tu contraseña de acceso
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">Nueva contraseña</Label>
+              <Input
+                id="new-password"
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirmar contraseña</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                placeholder="Repite la nueva contraseña"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+            <Button 
+              onClick={handlePasswordChange}
+              disabled={isChangingPassword || !newPassword || !confirmPassword}
+              className="w-full"
+            >
+              {isChangingPassword ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Key className="w-4 h-4 mr-2" />
+              )}
+              {isChangingPassword ? 'Cambiando...' : 'Cambiar contraseña'}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Appearance - Theme Toggle */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+              Apariencia
+            </CardTitle>
+            <CardDescription>
+              Personaliza el aspecto de la aplicación
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">Tema de la interfaz</p>
+                <p className="text-sm text-muted-foreground">
+                  {theme === 'dark' ? 'Modo oscuro activado' : theme === 'light' ? 'Modo claro activado' : 'Siguiendo el sistema'}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant={theme === 'light' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTheme('light')}
+                >
+                  <Sun className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={theme === 'dark' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTheme('dark')}
+                >
+                  <Moon className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={theme === 'system' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTheme('system')}
+                >
+                  Auto
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -656,6 +808,82 @@ const Settings: React.FC = () => {
             </Card>
           </>
         )}
+
+        {/* App Info & Support */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Info className="w-5 h-5" />
+              Información de la Aplicación
+            </CardTitle>
+            <CardDescription>
+              Detalles de la versión y contacto de soporte
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Versión</p>
+                <p className="font-medium">{APP_VERSION}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Última actualización</p>
+                <p className="font-medium">Enero 2026</p>
+              </div>
+            </div>
+            <div className="pt-2 border-t">
+              <div className="flex items-center gap-2 text-sm">
+                <HelpCircle className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Soporte:</span>
+                <a 
+                  href={`mailto:${SUPPORT_EMAIL}`}
+                  className="text-primary hover:underline"
+                >
+                  {SUPPORT_EMAIL}
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Legal Links */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Legal
+            </CardTitle>
+            <CardDescription>
+              Documentos legales y políticas
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <a 
+              href="/terms" 
+              target="_blank"
+              className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+            >
+              <span className="font-medium">Términos de Servicio</span>
+              <ExternalLink className="w-4 h-4 text-muted-foreground" />
+            </a>
+            <a 
+              href="/privacy" 
+              target="_blank"
+              className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+            >
+              <span className="font-medium">Política de Privacidad</span>
+              <ExternalLink className="w-4 h-4 text-muted-foreground" />
+            </a>
+            <a 
+              href="/cookies" 
+              target="_blank"
+              className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+            >
+              <span className="font-medium">Política de Cookies</span>
+              <ExternalLink className="w-4 h-4 text-muted-foreground" />
+            </a>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
