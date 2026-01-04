@@ -28,6 +28,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
   const [query, setQuery] = useState('');
   const [explanation, setExplanation] = useState<string | null>(null);
   const [activeSuggestion, setActiveSuggestion] = useState<string | null>(null);
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   // Fetch top sectors and tech types for dynamic suggestions
@@ -185,8 +186,24 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
   };
 
   const handleSuggestionClick = (suggestion: string) => {
-    setActiveSuggestion(suggestion);
-    executeSearch(suggestion);
+    // Toggle selection
+    setSelectedSuggestions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(suggestion)) {
+        newSet.delete(suggestion);
+      } else {
+        newSet.add(suggestion);
+      }
+      return newSet;
+    });
+  };
+
+  const handleCombinedSearch = () => {
+    if (selectedSuggestions.size === 0) return;
+    const combinedQuery = Array.from(selectedSuggestions).join(', ');
+    setActiveSuggestion(combinedQuery);
+    executeSearch(combinedQuery);
+    setSelectedSuggestions(new Set());
   };
 
   return (
@@ -234,23 +251,47 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
       <div className="flex flex-wrap gap-2">
         <span className="text-xs text-muted-foreground self-center">Sugerencias:</span>
         {searchSuggestions.map((suggestion) => {
-          const isActive = isSearching && activeSuggestion === suggestion;
+          const isSelected = selectedSuggestions.has(suggestion);
+          const isActiveSearching = isSearching && activeSuggestion?.includes(suggestion);
           return (
             <Badge
               key={suggestion}
-              variant="outline"
+              variant={isSelected ? "default" : "outline"}
               className={`cursor-pointer transition-colors text-xs ${
-                isActive 
+                isActiveSearching 
                   ? 'bg-primary/20 border-primary text-primary' 
-                  : 'hover:bg-primary/10 hover:border-primary/50'
+                  : isSelected
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-primary/10 hover:border-primary/50'
               } ${isSearching ? 'pointer-events-none opacity-70' : ''}`}
               onClick={() => handleSuggestionClick(suggestion)}
             >
-              {isActive && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+              {isActiveSearching && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
               {suggestion}
             </Badge>
           );
         })}
+        {selectedSuggestions.size > 0 && !isSearching && (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-xs text-muted-foreground"
+              onClick={() => setSelectedSuggestions(new Set())}
+            >
+              <X className="w-3 h-3 mr-1" />
+              Limpiar
+            </Button>
+            <Button
+              size="sm"
+              className="h-6 px-3 text-xs gap-1"
+              onClick={handleCombinedSearch}
+            >
+              <Search className="w-3 h-3" />
+              Buscar ({selectedSuggestions.size})
+            </Button>
+          </>
+        )}
       </div>
       
       {explanation && (
