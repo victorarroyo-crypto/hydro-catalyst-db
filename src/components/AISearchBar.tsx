@@ -32,16 +32,46 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
         body: { query: query.trim() }
       });
 
+      // Handle HTTP-level errors from invoke (e.g., network issues)
       if (error) {
         throw new Error(error.message);
       }
 
+      // Handle application-level errors returned in the response body
       if (data.error) {
-        toast({
-          title: 'Error en búsqueda',
-          description: data.error,
-          variant: 'destructive',
-        });
+        // Detect specific status codes via error message content
+        const errMsg: string = data.error;
+
+        if (errMsg.includes('demasiado amplia') || errMsg.toLowerCase().includes('context')) {
+          // 400 - context too long
+          toast({
+            title: 'Búsqueda demasiado amplia',
+            description: 'Prueba añadir más palabras clave: sector, aplicación, TRL o proveedor para afinar la búsqueda.',
+            variant: 'destructive',
+          });
+        } else if (errMsg.includes('Límite de tasa') || errMsg.includes('rate')) {
+          // 429 - rate limit
+          toast({
+            title: 'Demasiadas solicitudes',
+            description: 'Has realizado muchas búsquedas seguidas. Espera unos segundos e inténtalo de nuevo.',
+            variant: 'destructive',
+          });
+        } else if (errMsg.includes('pago') || errMsg.includes('payment') || errMsg.includes('402')) {
+          // 402 - payment required
+          toast({
+            title: 'Créditos agotados',
+            description: 'Se requiere recargar créditos de IA. Contacta al administrador.',
+            variant: 'destructive',
+          });
+        } else {
+          // Generic error
+          toast({
+            title: 'Error en búsqueda',
+            description: errMsg,
+            variant: 'destructive',
+          });
+        }
+
         onResults(null);
         return;
       }
@@ -52,7 +82,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
       if (matchingIds.length === 0) {
         toast({
           title: 'Sin resultados',
-          description: data.explanation || 'No se encontraron tecnologías que coincidan con tu búsqueda.',
+          description: data.explanation || 'No se encontraron tecnologías que coincidan con tu búsqueda. Intenta con términos más generales o sinónimos.',
         });
       } else {
         toast({
@@ -65,8 +95,8 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
     } catch (error) {
       console.error('AI search error:', error);
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Error al realizar la búsqueda',
+        title: 'Error de conexión',
+        description: 'No se pudo conectar con el servicio de IA. Verifica tu conexión e inténtalo de nuevo.',
         variant: 'destructive',
       });
       onResults(null);
