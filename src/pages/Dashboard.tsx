@@ -202,7 +202,7 @@ const Dashboard: React.FC = () => {
             </div>
             <Button asChild className="w-full">
               <Link to="/quality-control">
-                Revisar Sugerencias
+                Ir al Centro de Supervisión
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>
