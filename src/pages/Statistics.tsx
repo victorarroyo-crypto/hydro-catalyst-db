@@ -17,7 +17,11 @@ import {
   Loader2,
   ArrowLeft,
   Globe,
+  Cpu,
+  BookOpen,
+  Lightbulb,
 } from 'lucide-react';
+import { StatsCard } from '@/components/StatsCard';
 import {
   PieChart,
   Pie,
@@ -78,6 +82,30 @@ const Statistics: React.FC = () => {
   useRealtimeSubscription({
     tables: ['technologies', 'taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores'],
     queryKeys: [['technologies-stats'], ['taxonomy-tipos'], ['taxonomy-subcategorias'], ['taxonomy-sectores']],
+  });
+
+  // Fetch case studies count
+  const { data: caseStudiesCount } = useQuery({
+    queryKey: ['case-studies-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('casos_de_estudio')
+        .select('id', { count: 'exact', head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  // Fetch trends count
+  const { data: trendsCount } = useQuery({
+    queryKey: ['trends-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('technological_trends')
+        .select('id', { count: 'exact', head: true });
+      if (error) throw error;
+      return count || 0;
+    },
   });
 
   // Fetch all technologies - use range to bypass 1000 row limit
@@ -339,9 +367,9 @@ const Statistics: React.FC = () => {
             <BarChart3 className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Estadísticas de Tecnologías</h1>
+            <h1 className="text-2xl font-bold">Estadísticas Generales</h1>
             <p className="text-muted-foreground">
-              Análisis de la distribución de {total.toLocaleString()} tecnologías
+              Resumen de la base de datos
             </p>
           </div>
         </div>
@@ -351,6 +379,31 @@ const Statistics: React.FC = () => {
             Volver
           </Link>
         </Button>
+      </div>
+
+      {/* Summary Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatsCard
+          title="Tecnologías"
+          value={total.toLocaleString()}
+          subtitle="En la base de datos"
+          icon={Cpu}
+          variant="primary"
+        />
+        <StatsCard
+          title="Casos de Estudio"
+          value={(caseStudiesCount || 0).toLocaleString()}
+          subtitle="Implementaciones reales"
+          icon={BookOpen}
+          variant="secondary"
+        />
+        <StatsCard
+          title="Tendencias"
+          value={(trendsCount || 0).toLocaleString()}
+          subtitle="Análisis de tendencias"
+          icon={Lightbulb}
+          variant="accent"
+        />
       </div>
 
       {/* Classification Overview with Pie Chart */}

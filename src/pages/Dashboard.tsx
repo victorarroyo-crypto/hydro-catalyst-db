@@ -18,6 +18,8 @@ import {
   TrendingUp,
   BarChart3,
   ClipboardList,
+  BookOpen,
+  Lightbulb,
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
@@ -33,16 +35,20 @@ const Dashboard: React.FC = () => {
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const [techCount, highTrlCount, projectsCount] = await Promise.all([
+      const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount] = await Promise.all([
         supabase.from('technologies').select('id', { count: 'exact', head: true }),
         supabase.from('technologies').select('id', { count: 'exact', head: true }).gte('"Grado de madurez (TRL)"', 7),
         supabase.from('projects').select('id', { count: 'exact', head: true }).eq('status', 'in_progress'),
+        supabase.from('casos_de_estudio').select('id', { count: 'exact', head: true }),
+        supabase.from('technological_trends').select('id', { count: 'exact', head: true }),
       ]);
       
       return {
         totalTechnologies: techCount.count || 0,
         highTrlTechnologies: highTrlCount.count || 0,
         activeProjects: projectsCount.count || 0,
+        caseStudies: caseStudiesCount.count || 0,
+        trends: trendsCount.count || 0,
       };
     },
   });
@@ -137,30 +143,44 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatsCard
-          title="Total Tecnologías"
+          title="Tecnologías"
           value={stats?.totalTechnologies?.toLocaleString() || '—'}
           subtitle="En la base de datos"
           icon={Cpu}
+          variant="primary"
+        />
+        <StatsCard
+          title="Casos de Estudio"
+          value={stats?.caseStudies?.toLocaleString() || '—'}
+          subtitle="Implementaciones reales"
+          icon={BookOpen}
+          variant="secondary"
+        />
+        <StatsCard
+          title="Tendencias"
+          value={stats?.trends?.toLocaleString() || '—'}
+          subtitle="Análisis de tendencias"
+          icon={Lightbulb}
+          variant="accent"
+        />
+        <StatsCard
+          title="Proyectos Activos"
+          value={stats?.activeProjects?.toLocaleString() || '—'}
+          subtitle="En progreso"
+          icon={FolderOpen}
           variant="primary"
         />
         <Link to="/statistics" className="block">
           <StatsCard
             title="Estadísticas"
             value="Ver análisis"
-            subtitle="Distribución por tipo, país, sector"
+            subtitle="Distribución completa"
             icon={BarChart3}
             variant="secondary"
           />
         </Link>
-        <StatsCard
-          title="Proyectos Activos"
-          value={stats?.activeProjects?.toLocaleString() || '—'}
-          subtitle="En progreso"
-          icon={FolderOpen}
-          variant="accent"
-        />
       </div>
 
       {/* Pending Suggestions Widget - Only for Admin/Supervisor */}
