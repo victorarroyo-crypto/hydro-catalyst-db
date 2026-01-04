@@ -113,6 +113,74 @@ export type Database = {
         }
         Relationships: []
       }
+      taxonomy_sectores: {
+        Row: {
+          descripcion: string | null
+          id: string
+          nombre: string
+        }
+        Insert: {
+          descripcion?: string | null
+          id: string
+          nombre: string
+        }
+        Update: {
+          descripcion?: string | null
+          id?: string
+          nombre?: string
+        }
+        Relationships: []
+      }
+      taxonomy_subcategorias: {
+        Row: {
+          codigo: string
+          id: number
+          nombre: string
+          tipo_id: number | null
+        }
+        Insert: {
+          codigo: string
+          id?: number
+          nombre: string
+          tipo_id?: number | null
+        }
+        Update: {
+          codigo?: string
+          id?: number
+          nombre?: string
+          tipo_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "taxonomy_subcategorias_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_tipos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      taxonomy_tipos: {
+        Row: {
+          codigo: string
+          descripcion: string | null
+          id: number
+          nombre: string
+        }
+        Insert: {
+          codigo: string
+          descripcion?: string | null
+          id?: number
+          nombre: string
+        }
+        Update: {
+          codigo?: string
+          descripcion?: string | null
+          id?: number
+          nombre?: string
+        }
+        Relationships: []
+      }
       technological_trends: {
         Row: {
           created_at: string
@@ -172,9 +240,13 @@ export type Database = {
           review_status: string | null
           reviewer_id: string | null
           "Sector y subsector": string | null
+          sector_id: string | null
           status: string | null
           Subcategoría: string | null
+          subcategoria_id: number | null
+          subsector_industrial: string | null
           "Tipo de tecnología": string
+          tipo_id: number | null
           updated_at: string
           updated_by: string | null
           "Ventaja competitiva clave": string | null
@@ -202,9 +274,13 @@ export type Database = {
           review_status?: string | null
           reviewer_id?: string | null
           "Sector y subsector"?: string | null
+          sector_id?: string | null
           status?: string | null
           Subcategoría?: string | null
+          subcategoria_id?: number | null
+          subsector_industrial?: string | null
           "Tipo de tecnología": string
+          tipo_id?: number | null
           updated_at?: string
           updated_by?: string | null
           "Ventaja competitiva clave"?: string | null
@@ -232,15 +308,41 @@ export type Database = {
           review_status?: string | null
           reviewer_id?: string | null
           "Sector y subsector"?: string | null
+          sector_id?: string | null
           status?: string | null
           Subcategoría?: string | null
+          subcategoria_id?: number | null
+          subsector_industrial?: string | null
           "Tipo de tecnología"?: string
+          tipo_id?: number | null
           updated_at?: string
           updated_by?: string | null
           "Ventaja competitiva clave"?: string | null
           "Web de la empresa"?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "technologies_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_sectores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technologies_subcategoria_id_fkey"
+            columns: ["subcategoria_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_subcategorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technologies_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_tipos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       technology_edits: {
         Row: {
