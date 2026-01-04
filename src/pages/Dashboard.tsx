@@ -20,6 +20,9 @@ import {
   ClipboardList,
   BookOpen,
   Lightbulb,
+  CheckCircle,
+  Clock,
+  XCircle,
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
@@ -37,7 +40,7 @@ const Dashboard: React.FC = () => {
     queryKey: ['dashboard-stats', isInternalUser ? 'internal' : 'public'],
     queryFn: async () => {
       // For regular users, only count active/published technologies
-      // For admin/supervisor, count all technologies
+      // For admin/supervisor, count all technologies with breakdown by status
       let techQuery = supabase.from('technologies').select('id', { count: 'exact', head: true });
       let highTrlQuery = supabase.from('technologies').select('id', { count: 'exact', head: true }).gte('"Grado de madurez (TRL)"', 7);
       
@@ -46,13 +49,39 @@ const Dashboard: React.FC = () => {
         highTrlQuery = highTrlQuery.eq('status', 'active');
       }
       
-      const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount] = await Promise.all([
+      const baseQueries = [
         techQuery,
         highTrlQuery,
         supabase.from('projects').select('id', { count: 'exact', head: true }).in('status', ['active', 'in_progress', 'draft']),
         supabase.from('casos_de_estudio').select('id', { count: 'exact', head: true }),
         supabase.from('technological_trends').select('id', { count: 'exact', head: true }),
-      ]);
+      ];
+
+      // For internal users, also get status breakdown
+      if (isInternalUser) {
+        const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount, 
+               activeCount, inReviewCount, inactiveCount] = await Promise.all([
+          ...baseQueries,
+          supabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+          supabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'en_revision'),
+          supabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'inactive'),
+        ]);
+        
+        return {
+          totalTechnologies: techCount.count || 0,
+          highTrlTechnologies: highTrlCount.count || 0,
+          activeProjects: projectsCount.count || 0,
+          caseStudies: caseStudiesCount.count || 0,
+          trends: trendsCount.count || 0,
+          statusBreakdown: {
+            active: activeCount.count || 0,
+            en_revision: inReviewCount.count || 0,
+            inactive: inactiveCount.count || 0,
+          },
+        };
+      }
+      
+      const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount] = await Promise.all(baseQueries);
       
       return {
         totalTechnologies: techCount.count || 0,
@@ -193,6 +222,54 @@ const Dashboard: React.FC = () => {
           />
         </Link>
       </div>
+
+      {/* Technology Status Breakdown - Only for Admin/Supervisor */}
+      {isInternalUser && stats?.statusBreakdown && (
+        <Card className="border-primary/20">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Cpu className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Estado de Tecnologías</CardTitle>
+                <CardDescription>Desglose por estado de publicación</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+                <div>
+                  <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                    {stats.statusBreakdown.active.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-green-600 dark:text-green-400">Activas / Publicadas</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800">
+                <Clock className="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
+                <div>
+                  <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
+                    {stats.statusBreakdown.en_revision.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400">En Revisión</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-950/20 border border-gray-200 dark:border-gray-700">
+                <XCircle className="w-8 h-8 text-gray-500 dark:text-gray-400" />
+                <div>
+                  <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">
+                    {stats.statusBreakdown.inactive.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Inactivas</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pending Suggestions Widget - Only for Admin/Supervisor */}
       {canReviewEdits && pendingEdits && pendingEdits.total > 0 && (
