@@ -53,6 +53,8 @@ const Technologies: React.FC = () => {
 
   // Check if user can create/edit technologies
   const canEdit = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
+  // Only admins can use AI features
+  const canUseAI = profile?.role === 'admin';
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['technologies', filters, taxonomyFilters, page, aiSearchIds],
@@ -229,8 +231,8 @@ const Technologies: React.FC = () => {
             Explora y filtra tecnologías de tratamiento de agua industrial
           </p>
         </div>
-        {canEdit && (
-          <div className="flex gap-2">
+        <div className="flex gap-2">
+          {canUseAI && (
             <Button 
               variant="outline" 
               onClick={() => setShowClassificationPanel(!showClassificationPanel)}
@@ -238,41 +240,45 @@ const Technologies: React.FC = () => {
               <Bot className="w-4 h-4 mr-2" />
               Clasificar con IA
             </Button>
+          )}
+          {canEdit && (
             <Button onClick={handleCreateTechnology}>
               <Plus className="w-4 h-4 mr-2" />
               Nueva Tecnología
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* AI Classification Panel */}
-      {showClassificationPanel && canEdit && (
+      {/* AI Classification Panel - Admin only */}
+      {showClassificationPanel && canUseAI && (
         <div className="mb-6">
           <AIClassificationPanel />
         </div>
       )}
 
-      {/* AI Search Bar */}
-      <div className="mb-6">
-        <AISearchBar 
-          onResults={handleAiSearchResults}
-          isSearching={isAiSearching}
-          setIsSearching={setIsAiSearching}
-          activeFilters={{
-            tipoId: taxonomyFilters.tipoId,
-            subcategoriaId: taxonomyFilters.subcategoriaId,
-            sectorId: taxonomyFilters.sectorId,
-            tipoTecnologia: filters.tipoTecnologia || null,
-            subcategoria: filters.subcategoria || null,
-            sector: filters.sector || null,
-            pais: filters.pais || null,
-            trlMin: filters.trlMin || null,
-            trlMax: filters.trlMax || null,
-            estado: filters.status || null,
-          } as AISearchFilters}
-        />
-      </div>
+      {/* AI Search Bar - Admin only */}
+      {canUseAI && (
+        <div className="mb-6">
+          <AISearchBar 
+            onResults={handleAiSearchResults}
+            isSearching={isAiSearching}
+            setIsSearching={setIsAiSearching}
+            activeFilters={{
+              tipoId: taxonomyFilters.tipoId,
+              subcategoriaId: taxonomyFilters.subcategoriaId,
+              sectorId: taxonomyFilters.sectorId,
+              tipoTecnologia: filters.tipoTecnologia || null,
+              subcategoria: filters.subcategoria || null,
+              sector: filters.sector || null,
+              pais: filters.pais || null,
+              trlMin: filters.trlMin || null,
+              trlMax: filters.trlMax || null,
+              estado: filters.status || null,
+            } as AISearchFilters}
+          />
+        </div>
+      )}
 
       <div className="flex gap-6">
         {/* Filters Sidebar */}

@@ -349,6 +349,7 @@ export type Database = {
           comments: string | null
           created_at: string
           created_by: string
+          edit_type: string | null
           id: string
           original_data: Json | null
           proposed_changes: Json
@@ -356,12 +357,13 @@ export type Database = {
           reviewed_at: string | null
           reviewed_by: string | null
           status: Database["public"]["Enums"]["edit_status"]
-          technology_id: string
+          technology_id: string | null
         }
         Insert: {
           comments?: string | null
           created_at?: string
           created_by: string
+          edit_type?: string | null
           id?: string
           original_data?: Json | null
           proposed_changes: Json
@@ -369,12 +371,13 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["edit_status"]
-          technology_id: string
+          technology_id?: string | null
         }
         Update: {
           comments?: string | null
           created_at?: string
           created_by?: string
+          edit_type?: string | null
           id?: string
           original_data?: Json | null
           proposed_changes?: Json
@@ -382,7 +385,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["edit_status"]
-          technology_id?: string
+          technology_id?: string | null
         }
         Relationships: [
           {
