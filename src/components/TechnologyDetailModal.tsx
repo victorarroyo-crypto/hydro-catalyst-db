@@ -193,10 +193,39 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     
     setIsMovingToTrends(true);
     
-    // First, insert into technological_trends
+    // Store ALL original technology data to preserve it
+    const techData = technology as unknown as Record<string, unknown>;
+    const originalData = JSON.parse(JSON.stringify({
+      "Nombre de la tecnología": technology["Nombre de la tecnología"],
+      "Proveedor / Empresa": technology["Proveedor / Empresa"],
+      "País de origen": technology["País de origen"],
+      "Web de la empresa": technology["Web de la empresa"],
+      "Email de contacto": technology["Email de contacto"],
+      "Tipo de tecnología": technology["Tipo de tecnología"],
+      "Subcategoría": technology["Subcategoría"],
+      "Sector y subsector": technology["Sector y subsector"],
+      "Aplicación principal": technology["Aplicación principal"],
+      "Descripción técnica breve": technology["Descripción técnica breve"],
+      "Ventaja competitiva clave": technology["Ventaja competitiva clave"],
+      "Porque es innovadora": technology["Porque es innovadora"],
+      "Casos de referencia": technology["Casos de referencia"],
+      "Paises donde actua": technology["Paises donde actua"],
+      "Comentarios del analista": technology["Comentarios del analista"],
+      "Fecha de scouting": technology["Fecha de scouting"],
+      "Estado del seguimiento": technology["Estado del seguimiento"],
+      "Grado de madurez (TRL)": technology["Grado de madurez (TRL)"],
+      quality_score: technology.quality_score,
+      status: technology.status,
+      sector_id: techData.sector_id,
+      tipo_id: techData.tipo_id,
+      subcategoria_id: techData.subcategoria_id,
+      subsector_industrial: techData.subsector_industrial,
+    }));
+    
+    // Insert into technological_trends with all original data preserved
     const { error: insertError } = await supabase
       .from('technological_trends')
-      .insert({
+      .insert([{
         name: technology["Nombre de la tecnología"],
         description: technology["Descripción técnica breve"],
         technology_type: technology["Tipo de tecnología"],
@@ -204,7 +233,8 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
         sector: technology["Sector y subsector"],
         source_technology_id: technology.id,
         created_by: user.id,
-      });
+        original_data: originalData,
+      }]);
 
     if (insertError) {
       setIsMovingToTrends(false);
@@ -501,7 +531,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               <ul className="list-disc list-inside space-y-1 text-sm">
                 <li>Se eliminará del catálogo de tecnologías</li>
                 <li>Aparecerá en la sección de Tendencias</li>
-                <li>Se perderán algunos campos específicos de tecnología (TRL, proveedor, etc.)</li>
+                <li>Todos los datos se guardarán y podrán recuperarse si la restauras como tecnología</li>
               </ul>
               <p className="text-sm font-medium">
                 Usa esta opción para tecnologías que representan categorías o tendencias generales, no productos específicos.

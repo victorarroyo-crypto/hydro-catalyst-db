@@ -26,6 +26,7 @@ interface TechnologicalTrend {
   sector: string | null;
   created_at: string;
   source_technology_id: string | null;
+  original_data: Record<string, unknown> | null;
 }
 
 const Trends = () => {
@@ -55,16 +56,46 @@ const Trends = () => {
   // Mutation to restore trend as technology
   const restoreMutation = useMutation({
     mutationFn: async (trend: TechnologicalTrend) => {
-      // First, insert back into technologies
+      // Use original_data if available, otherwise fallback to trend's basic info
+      const originalData = trend.original_data as Record<string, unknown> | null;
+      
+      const technologyData = originalData ? {
+        "Nombre de la tecnología": originalData["Nombre de la tecnología"] as string || trend.name,
+        "Proveedor / Empresa": originalData["Proveedor / Empresa"] as string | null,
+        "País de origen": originalData["País de origen"] as string | null,
+        "Web de la empresa": originalData["Web de la empresa"] as string | null,
+        "Email de contacto": originalData["Email de contacto"] as string | null,
+        "Tipo de tecnología": originalData["Tipo de tecnología"] as string || trend.technology_type,
+        "Subcategoría": originalData["Subcategoría"] as string | null || trend.subcategory,
+        "Sector y subsector": originalData["Sector y subsector"] as string | null || trend.sector,
+        "Aplicación principal": originalData["Aplicación principal"] as string | null,
+        "Descripción técnica breve": originalData["Descripción técnica breve"] as string | null || trend.description,
+        "Ventaja competitiva clave": originalData["Ventaja competitiva clave"] as string | null,
+        "Porque es innovadora": originalData["Porque es innovadora"] as string | null,
+        "Casos de referencia": originalData["Casos de referencia"] as string | null,
+        "Paises donde actua": originalData["Paises donde actua"] as string | null,
+        "Comentarios del analista": originalData["Comentarios del analista"] as string | null,
+        "Fecha de scouting": originalData["Fecha de scouting"] as string | null,
+        "Estado del seguimiento": originalData["Estado del seguimiento"] as string | null,
+        "Grado de madurez (TRL)": originalData["Grado de madurez (TRL)"] as number | null,
+        quality_score: originalData.quality_score as number | null,
+        status: originalData.status as string | null || 'active',
+        sector_id: originalData.sector_id as string | null,
+        tipo_id: originalData.tipo_id as number | null,
+        subcategoria_id: originalData.subcategoria_id as number | null,
+        subsector_industrial: originalData.subsector_industrial as string | null,
+      } : {
+        "Nombre de la tecnología": trend.name,
+        "Descripción técnica breve": trend.description,
+        "Tipo de tecnología": trend.technology_type,
+        "Subcategoría": trend.subcategory,
+        "Sector y subsector": trend.sector,
+      };
+
+      // Insert back into technologies with all original data
       const { error: insertError } = await supabase
         .from('technologies')
-        .insert({
-          "Nombre de la tecnología": trend.name,
-          "Descripción técnica breve": trend.description,
-          "Tipo de tecnología": trend.technology_type,
-          "Subcategoría": trend.subcategory,
-          "Sector y subsector": trend.sector,
-        });
+        .insert(technologyData);
 
       if (insertError) throw insertError;
 
@@ -293,7 +324,7 @@ const Trends = () => {
               <ul className="list-disc list-inside space-y-1 text-sm">
                 <li>Aparecerá en el catálogo de tecnologías</li>
                 <li>Se eliminará de la sección de Tendencias</li>
-                <li>Podrás completar los campos adicionales (TRL, proveedor, etc.)</li>
+                <li>Se recuperarán todos los datos originales (TRL, proveedor, etc.) si estaban guardados</li>
               </ul>
             </DialogDescription>
           </DialogHeader>
