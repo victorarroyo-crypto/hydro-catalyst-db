@@ -193,6 +193,12 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
                   Inactivo
                 </span>
               </SelectItem>
+              <SelectItem value="en_revision">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                  En revisión
+                </span>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
