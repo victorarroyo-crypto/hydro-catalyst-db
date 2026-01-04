@@ -66,6 +66,17 @@ Deno.serve(async (req) => {
 
         if (allData.length === 0) continue
 
+        // Clean user reference fields for technologies table (users don't exist in external DB)
+        if (table === 'technologies') {
+          allData = allData.map(record => ({
+            ...record,
+            updated_by: null,
+            reviewer_id: null,
+            review_requested_by: null,
+          }))
+          console.log(`Cleaned user reference fields for ${allData.length} technology records`)
+        }
+
         // Upsert to external in batches
         const upsertBatchSize = 100
         for (let i = 0; i < allData.length; i += upsertBatchSize) {
