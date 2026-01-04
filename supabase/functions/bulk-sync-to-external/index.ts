@@ -36,9 +36,27 @@ Deno.serve(async (req) => {
     const results: Record<string, { synced: number; errors: string[] }> = {}
     
     // Tables in order for INSERT (respecting FK dependencies)
-    const insertOrder = ['taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores', 'technologies', 'projects', 'project_technologies']
+    const insertOrder = [
+      'taxonomy_tipos', 
+      'taxonomy_subcategorias', 
+      'taxonomy_sectores', 
+      'technologies', 
+      'casos_de_estudio',
+      'technological_trends',
+      'projects', 
+      'project_technologies'
+    ]
     // Tables in reverse order for DELETE (respecting FK dependencies)
-    const deleteOrder = ['project_technologies', 'projects', 'technologies', 'taxonomy_subcategorias', 'taxonomy_tipos', 'taxonomy_sectores']
+    const deleteOrder = [
+      'project_technologies', 
+      'projects', 
+      'technological_trends',
+      'casos_de_estudio',
+      'technologies', 
+      'taxonomy_subcategorias', 
+      'taxonomy_tipos', 
+      'taxonomy_sectores'
+    ]
 
     // Initialize results
     for (const table of insertOrder) {
@@ -124,6 +142,26 @@ Deno.serve(async (req) => {
             review_requested_by: null,
           }))
           console.log(`Enriched ${allData.length} technology records with taxonomy names`)
+        }
+
+        // Clean user references for casos_de_estudio table
+        if (table === 'casos_de_estudio') {
+          allData = allData.map(record => ({
+            ...record,
+            created_by: null,
+            source_technology_id: null, // Don't reference internal tech IDs
+          }))
+          console.log(`Cleaned ${allData.length} casos_de_estudio records`)
+        }
+
+        // Clean user references for technological_trends table
+        if (table === 'technological_trends') {
+          allData = allData.map(record => ({
+            ...record,
+            created_by: null,
+            source_technology_id: null, // Don't reference internal tech IDs
+          }))
+          console.log(`Cleaned ${allData.length} technological_trends records`)
         }
 
         // Clean user references for projects table
