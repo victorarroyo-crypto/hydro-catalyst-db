@@ -49,7 +49,11 @@ interface FormData {
 }
 
 const TRL_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-const STATUS_OPTIONS = ['active', 'inactive', 'pending', 'archived'];
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Activo' },
+  { value: 'inactive', label: 'Inactivo' },
+  { value: 'en_revision', label: 'En revisión' }
+];
 
 // Move these components outside to prevent re-creation on each render
 const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -444,8 +448,14 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
                 </SelectTrigger>
                 <SelectContent className="bg-popover">
                   {STATUS_OPTIONS.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    <SelectItem key={status.value} value={status.value}>
+                      <span className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${
+                          status.value === 'active' ? 'bg-green-500' : 
+                          status.value === 'inactive' ? 'bg-gray-400' : 'bg-yellow-500'
+                        }`} />
+                        {status.label}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
