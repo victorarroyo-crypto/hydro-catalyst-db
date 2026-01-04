@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TRLBadge } from '@/components/TRLBadge';
 import { Textarea } from '@/components/ui/textarea';
+import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
 import {
   Dialog,
   DialogContent,
@@ -93,6 +94,8 @@ const ProjectDetail: React.FC = () => {
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [addTechModalOpen, setAddTechModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTechnology, setSelectedTechnology] = useState<any>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
@@ -463,13 +466,16 @@ const ProjectDetail: React.FC = () => {
                         {pt.technology["País de origen"]}
                       </div>
                     )}
-                    <Link 
-                      to={`/technologies?search=${encodeURIComponent(pt.technology["Nombre de la tecnología"])}`}
+                    <button 
+                      onClick={() => {
+                        setSelectedTechnology(pt.technology);
+                        setDetailModalOpen(true);
+                      }}
                       className="text-sm text-primary hover:underline mt-2 inline-flex items-center gap-1"
                     >
                       Ver detalles
                       <ExternalLink className="w-3 h-3" />
-                    </Link>
+                    </button>
                   </CardContent>
                 </Card>
               ))}
@@ -739,6 +745,16 @@ const ProjectDetail: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Technology Detail Modal */}
+      <TechnologyDetailModal
+        technology={selectedTechnology}
+        open={detailModalOpen}
+        onOpenChange={(open) => {
+          setDetailModalOpen(open);
+          if (!open) setSelectedTechnology(null);
+        }}
+      />
     </div>
   );
 };
