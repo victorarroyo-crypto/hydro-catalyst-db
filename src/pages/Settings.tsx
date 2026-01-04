@@ -1,16 +1,46 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, CloudUpload, Loader2, Database } from 'lucide-react';
 
 const Settings: React.FC = () => {
   const { profile, user } = useAuth();
+  const { toast } = useToast();
   const isAdmin = profile?.role === 'admin';
+  const [isBulkSyncing, setIsBulkSyncing] = useState(false);
+
+  const handleBulkSync = async () => {
+    setIsBulkSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('bulk-sync-to-external', {
+        body: {
+          tables: ['taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores', 'technologies'],
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Sincronización completada',
+        description: `Se sincronizaron ${data.results?.taxonomy_tipos?.synced || 0} tipos, ${data.results?.taxonomy_subcategorias?.synced || 0} subcategorías, ${data.results?.taxonomy_sectores?.synced || 0} sectores y ${data.results?.technologies?.synced || 0} tecnologías`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error de sincronización',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkSyncing(false);
+    }
+  };
 
   return (
     <div className="animate-fade-in max-w-2xl">
@@ -76,28 +106,59 @@ const Settings: React.FC = () => {
 
         {/* Admin Section */}
         {isAdmin && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <SettingsIcon className="w-5 h-5" />
-                Administración
-              </CardTitle>
-              <CardDescription>
-                Herramientas de administración del sistema
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button asChild variant="outline" className="w-full justify-between">
-                <Link to="/taxonomy-admin">
-                  <span className="flex items-center gap-2">
-                    <Tag className="w-4 h-4" />
-                    Gestión de Taxonomía
-                  </span>
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  Sincronización Externa
+                </CardTitle>
+                <CardDescription>
+                  Sincroniza todos los datos con la base de datos externa
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  onClick={handleBulkSync}
+                  disabled={isBulkSyncing}
+                  className="w-full"
+                >
+                  {isBulkSyncing ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <CloudUpload className="w-4 h-4 mr-2" />
+                  )}
+                  {isBulkSyncing ? 'Sincronizando...' : 'Sincronizar todo a Supabase externo'}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Sincroniza taxonomías y tecnologías completas
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <SettingsIcon className="w-5 h-5" />
+                  Administración
+                </CardTitle>
+                <CardDescription>
+                  Herramientas de administración del sistema
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button asChild variant="outline" className="w-full justify-between">
+                  <Link to="/taxonomy-admin">
+                    <span className="flex items-center gap-2">
+                      <Tag className="w-4 h-4" />
+                      Gestión de Taxonomía
+                    </span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </>
         )}
       </div>
     </div>
