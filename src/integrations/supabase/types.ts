@@ -409,6 +409,45 @@ export type Database = {
           },
         ]
       }
+      technology_tipos: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_primary: boolean | null
+          technology_id: string
+          tipo_id: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          technology_id: string
+          tipo_id: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          technology_id?: string
+          tipo_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "technology_tipos_technology_id_fkey"
+            columns: ["technology_id"]
+            isOneToOne: false
+            referencedRelation: "technologies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technology_tipos_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_tipos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_favorites: {
         Row: {
           created_at: string
