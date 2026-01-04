@@ -302,10 +302,12 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               </Button>
             )}
             {hasProjects && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border">
+                <FolderPlus className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-sm text-muted-foreground whitespace-nowrap">Añadir a:</span>
                 <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                  <SelectTrigger className="w-[180px] h-9 text-sm">
-                    <SelectValue placeholder="Seleccionar proyecto" />
+                  <SelectTrigger className="w-[160px] h-8 text-sm">
+                    <SelectValue placeholder="Elige proyecto" />
                   </SelectTrigger>
                   <SelectContent>
                     {userProjects?.map(project => (
@@ -316,17 +318,16 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                   </SelectContent>
                 </Select>
                 <Button 
-                  variant="outline" 
-                  size="sm" 
+                  size="sm"
+                  className="h-8"
                   onClick={handleAddToProject}
                   disabled={!selectedProjectId || isAddingToProject}
                 >
                   {isAddingToProject ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <FolderPlus className="w-4 h-4 mr-2" />
+                    'Añadir'
                   )}
-                  Añadir
                 </Button>
               </div>
             )}
