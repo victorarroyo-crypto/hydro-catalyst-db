@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/s
 import { AppSidebar } from './AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 
 export const AppLayout: React.FC = () => {
   const { user, loading } = useAuth();
@@ -41,8 +42,9 @@ export const AppLayout: React.FC = () => {
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <SidebarInset className="flex-1">
-          <header className="h-14 flex items-center border-b border-border bg-card px-4 sticky top-0 z-10">
+          <header className="h-14 flex items-center justify-between border-b border-border bg-card px-4 sticky top-0 z-10">
             <SidebarTrigger className="mr-4" />
+            <SyncStatusIndicator />
           </header>
           <main className="flex-1 p-6 overflow-auto">
             <Outlet />
