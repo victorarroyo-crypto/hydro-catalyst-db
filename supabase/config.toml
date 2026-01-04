@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.ai-search-technologies]
 verify_jwt = false
+
+[functions.classify-technologies]
+verify_jwt = false
