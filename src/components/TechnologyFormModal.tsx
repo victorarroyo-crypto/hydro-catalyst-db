@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { syncTechnologyUpdate, syncTechnologyInsert } from '@/lib/syncToExternal';
 import { Loader2, Save, AlertTriangle } from 'lucide-react';
 import type { Technology } from '@/types/database';
 
@@ -429,6 +430,14 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           if (error) throw error;
 
+          // Sync to external Supabase
+          try {
+            await syncTechnologyUpdate(technology.id, dataToSave);
+          } catch (syncError) {
+            console.error('External sync failed:', syncError);
+            // Don't fail the main operation, just log the sync error
+          }
+
           toast({
             title: 'Tecnología actualizada',
             description: 'Los cambios se han guardado correctamente',
@@ -458,14 +467,23 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
           });
         } else {
           // Admin/Supervisor: Create directly
-          const { error } = await supabase
+          const { data: insertedData, error } = await supabase
             .from('technologies')
             .insert({
               ...dataToSave,
               updated_by: user?.id,
-            });
+            })
+            .select()
+            .single();
 
           if (error) throw error;
+
+          // Sync to external Supabase
+          try {
+            await syncTechnologyInsert({ ...dataToSave, id: insertedData.id });
+          } catch (syncError) {
+            console.error('External sync failed:', syncError);
+          }
 
           toast({
             title: 'Tecnología creada',
