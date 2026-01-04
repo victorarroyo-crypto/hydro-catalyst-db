@@ -117,6 +117,19 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
     }
   };
 
+  const searchSuggestions = [
+    'TRL alto',
+    'sector agua',
+    'detección de fugas',
+    'oxidación avanzada',
+    'tratamiento aguas residuales',
+    'monitorización inteligente',
+  ];
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setQuery(suggestion);
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -156,6 +169,21 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
             </>
           )}
         </Button>
+      </div>
+
+      {/* Quick search suggestions */}
+      <div className="flex flex-wrap gap-2">
+        <span className="text-xs text-muted-foreground self-center">Sugerencias:</span>
+        {searchSuggestions.map((suggestion) => (
+          <Badge
+            key={suggestion}
+            variant="outline"
+            className="cursor-pointer hover:bg-primary/10 hover:border-primary/50 transition-colors text-xs"
+            onClick={() => handleSuggestionClick(suggestion)}
+          >
+            {suggestion}
+          </Badge>
+        ))}
       </div>
       
       {explanation && (
