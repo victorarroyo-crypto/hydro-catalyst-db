@@ -11,6 +11,7 @@ import {
   TableRow 
 } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
+import { Star } from 'lucide-react';
 import type { Technology } from '@/types/database';
 
 interface TaxonomyTipo {
@@ -30,6 +31,12 @@ interface TaxonomySector {
   nombre: string;
 }
 
+interface TechnologyTipoRelation {
+  technology_id: string;
+  tipo_id: number;
+  is_primary: boolean;
+}
+
 interface TechnologyTableProps {
   technologies: Technology[];
   onRowClick: (tech: Technology) => void;
@@ -46,7 +53,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
       if (error) throw error;
       return data as TaxonomyTipo[];
     },
-    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+    staleTime: 1000 * 60 * 10,
   });
 
   const { data: subcategorias } = useQuery({
@@ -58,7 +65,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
       if (error) throw error;
       return data as TaxonomySubcategoria[];
     },
-    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+    staleTime: 1000 * 60 * 10,
   });
 
   const { data: sectores } = useQuery({
@@ -70,7 +77,24 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
       if (error) throw error;
       return data as TaxonomySector[];
     },
-    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+    staleTime: 1000 * 60 * 10,
+  });
+
+  // Fetch technology_tipos relationships for all displayed technologies
+  const technologyIds = technologies.map(t => t.id);
+  const { data: technologyTipos } = useQuery({
+    queryKey: ['technology-tipos-batch', technologyIds],
+    queryFn: async () => {
+      if (technologyIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('technology_tipos')
+        .select('technology_id, tipo_id, is_primary')
+        .in('technology_id', technologyIds);
+      if (error) throw error;
+      return data as TechnologyTipoRelation[];
+    },
+    staleTime: 1000 * 60 * 5,
+    enabled: technologyIds.length > 0,
   });
 
   // Create lookup maps for efficient access
@@ -92,7 +116,47 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
     return map;
   }, [sectores]);
 
+  // Create map of technology_id to tipos
+  const techTiposMap = React.useMemo(() => {
+    const map = new Map<string, TechnologyTipoRelation[]>();
+    technologyTipos?.forEach(tt => {
+      const existing = map.get(tt.technology_id) || [];
+      existing.push(tt);
+      map.set(tt.technology_id, existing);
+    });
+    return map;
+  }, [technologyTipos]);
+
   const getTipoDisplay = (tech: Technology) => {
+    const techTipos = techTiposMap.get(tech.id) || [];
+    
+    if (techTipos.length > 0) {
+      // Sort to show primary first
+      const sorted = [...techTipos].sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+      const primaryTipo = sorted[0];
+      const tipo = tiposMap.get(primaryTipo.tipo_id);
+      
+      if (tipo) {
+        return (
+          <div className="flex items-center gap-1 flex-wrap">
+            <Badge variant="default" className="text-xs gap-1">
+              {primaryTipo.is_primary && techTipos.length > 1 && (
+                <Star className="w-2.5 h-2.5 fill-current" />
+              )}
+              <span className="font-mono text-[10px] opacity-70">{tipo.codigo}</span>
+              <span className="hidden xl:inline">{tipo.nombre}</span>
+            </Badge>
+            {techTipos.length > 1 && (
+              <Badge variant="secondary" className="text-xs">
+                +{techTipos.length - 1}
+              </Badge>
+            )}
+          </div>
+        );
+      }
+    }
+    
+    // Fallback to legacy tipo_id
     const tipoId = (tech as any).tipo_id;
     if (tipoId && tiposMap.has(tipoId)) {
       const tipo = tiposMap.get(tipoId)!;
@@ -103,7 +167,8 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
         </Badge>
       );
     }
-    // Fallback to legacy
+    
+    // Fallback to legacy text
     if (tech["Tipo de tecnología"]) {
       return (
         <Badge variant="outline" className="text-xs text-muted-foreground">
