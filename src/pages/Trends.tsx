@@ -111,7 +111,8 @@ const Trends = () => {
         "Estado del seguimiento": originalData["Estado del seguimiento"] as string | null,
         "Grado de madurez (TRL)": originalData["Grado de madurez (TRL)"] as number | null,
         quality_score: originalData.quality_score as number | null,
-        status: originalData.status as string | null || 'active',
+        status: 'en_revision',
+        review_status: 'pending',
         sector_id: originalData.sector_id as string | null,
         tipo_id: originalData.tipo_id as number | null,
         subcategoria_id: originalData.subcategoria_id as number | null,
@@ -122,6 +123,8 @@ const Trends = () => {
         "Tipo de tecnología": trend.technology_type,
         "Subcategoría": trend.subcategory,
         "Sector y subsector": trend.sector,
+        status: 'en_revision',
+        review_status: 'pending',
       };
 
       // Insert back into technologies with all original data
