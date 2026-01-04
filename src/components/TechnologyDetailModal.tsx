@@ -43,8 +43,10 @@ import {
   Loader2,
   ClipboardList,
   TrendingUp,
-  BookOpen
+  BookOpen,
+  Download
 } from 'lucide-react';
+import { DownloadTechnologyButton } from '@/components/DownloadTechnologyButton';
 import type { Technology } from '@/types/database';
 
 interface TechnologyDetailModalProps {
@@ -543,6 +545,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                 </Button>
               </div>
             )}
+            <DownloadTechnologyButton technology={technology} variant="full" />
             <Button 
               variant="outline" 
               size="sm" 

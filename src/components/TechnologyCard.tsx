@@ -7,6 +7,7 @@ import { Building2, MapPin, Tag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { QuickClassifyButton } from '@/components/QuickClassifyButton';
 import { DeleteTechnologyButton } from '@/components/DeleteTechnologyButton';
+import { DownloadTechnologyButton } from '@/components/DownloadTechnologyButton';
 import type { Technology } from '@/types/database';
 
 interface TechnologyCardProps {
@@ -91,10 +92,13 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {showActions && (
-              <DeleteTechnologyButton 
-                technologyId={technology.id} 
-                technologyName={technology["Nombre de la tecnología"]} 
-              />
+              <>
+                <DownloadTechnologyButton technology={technology} />
+                <DeleteTechnologyButton 
+                  technologyId={technology.id} 
+                  technologyName={technology["Nombre de la tecnología"]} 
+                />
+              </>
             )}
             <TRLBadge trl={technology["Grado de madurez (TRL)"]} size="sm" />
           </div>

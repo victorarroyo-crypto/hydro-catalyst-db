@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { Star } from 'lucide-react';
+import { DownloadTechnologyButton } from '@/components/DownloadTechnologyButton';
 import type { Technology } from '@/types/database';
 
 interface TaxonomyTipo {
@@ -227,6 +228,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
             <TableHead className="font-semibold">Sector</TableHead>
             <TableHead className="font-semibold text-center">TRL</TableHead>
             <TableHead className="font-semibold">País</TableHead>
+            <TableHead className="font-semibold w-12"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -265,6 +267,9 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {tech["País de origen"] || '—'}
+              </TableCell>
+              <TableCell>
+                <DownloadTechnologyButton technology={tech} />
               </TableCell>
             </TableRow>
             );
