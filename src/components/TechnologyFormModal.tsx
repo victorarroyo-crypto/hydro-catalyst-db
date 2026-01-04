@@ -437,28 +437,41 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       } else {
         // Creating new technology
         if (isAnalyst) {
-          // Analysts can't create new technologies directly, only propose
+          // Analysts create proposal for new technology (technology_id = null)
+          const { error } = await supabase
+            .from('technology_edits')
+            .insert([{
+              technology_id: null,
+              proposed_changes: JSON.parse(JSON.stringify(dataToSave)),
+              original_data: null,
+              status: 'pending' as const,
+              edit_type: 'create',
+              comments: editComment || 'Sugerencia de nueva tecnología',
+              created_by: user?.id!,
+            }]);
+
+          if (error) throw error;
+
           toast({
-            title: 'Sin permisos',
-            description: 'Solo supervisores y administradores pueden crear nuevas tecnologías',
-            variant: 'destructive',
+            title: 'Propuesta enviada',
+            description: 'Tu sugerencia de nueva tecnología ha sido enviada para revisión',
           });
-          return;
+        } else {
+          // Admin/Supervisor: Create directly
+          const { error } = await supabase
+            .from('technologies')
+            .insert({
+              ...dataToSave,
+              updated_by: user?.id,
+            });
+
+          if (error) throw error;
+
+          toast({
+            title: 'Tecnología creada',
+            description: 'La nueva tecnología se ha añadido correctamente',
+          });
         }
-
-        const { error } = await supabase
-          .from('technologies')
-          .insert({
-            ...dataToSave,
-            updated_by: user?.id,
-          });
-
-        if (error) throw error;
-
-        toast({
-          title: 'Tecnología creada',
-          description: 'La nueva tecnología se ha añadido correctamente',
-        });
       }
 
       onSuccess();
@@ -482,18 +495,24 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
           <DialogTitle className="text-xl font-display">
             {isEditing ? 'Editar Tecnología' : 'Nueva Tecnología'}
           </DialogTitle>
-          {isEditing && isAnalyst && (
+          {isAnalyst && (
             <DialogDescription>
-              Tu edición será enviada para revisión antes de publicarse.
+              {isEditing 
+                ? 'Tu edición será enviada para revisión antes de publicarse.'
+                : 'Tu sugerencia de nueva tecnología será revisada antes de crearse.'
+              }
             </DialogDescription>
           )}
         </DialogHeader>
 
-        {isEditing && isAnalyst && (
+        {isAnalyst && (
           <Alert className="border-warning/50 bg-warning/10">
             <AlertTriangle className="w-4 h-4 text-warning" />
             <AlertDescription className="text-sm">
-              Como analista, tus cambios serán revisados por un supervisor o administrador antes de aplicarse.
+              {isEditing 
+                ? 'Como analista, tus cambios serán revisados por un supervisor o administrador antes de aplicarse.'
+                : 'Como analista, tu propuesta de nueva tecnología será revisada por un supervisor o administrador antes de crearse.'
+              }
             </AlertDescription>
           </Alert>
         )}

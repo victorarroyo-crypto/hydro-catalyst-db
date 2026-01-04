@@ -36,9 +36,9 @@ import {
 
 interface TechnologyEdit {
   id: string;
-  technology_id: string;
+  technology_id: string | null;
   proposed_changes: Record<string, unknown>;
-  original_data: Record<string, unknown>;
+  original_data: Record<string, unknown> | null;
   status: 'pending' | 'approved' | 'rejected';
   comments: string | null;
   created_by: string;
@@ -46,6 +46,7 @@ interface TechnologyEdit {
   reviewed_by: string | null;
   reviewed_at: string | null;
   review_comments: string | null;
+  edit_type?: 'create' | 'update' | 'classify';
 }
 
 const QualityControl: React.FC = () => {
@@ -172,14 +173,36 @@ const QualityControl: React.FC = () => {
     return changes;
   };
 
+  const getEditTypeLabel = (editType: string | undefined) => {
+    switch (editType) {
+      case 'create': return 'Nueva tecnología';
+      case 'classify': return 'Clasificación';
+      default: return 'Edición';
+    }
+  };
+
+  const getEditTypeVariant = (editType: string | undefined): 'default' | 'secondary' | 'outline' => {
+    switch (editType) {
+      case 'create': return 'default';
+      case 'classify': return 'secondary';
+      default: return 'outline';
+    }
+  };
+
   const EditCard = ({ edit, showActions = false }: { edit: TechnologyEdit; showActions?: boolean }) => {
     const techName = (edit.proposed_changes as any)["Nombre de la tecnología"] || 'Sin nombre';
+    const editType = edit.edit_type || 'update';
     
     return (
       <Card className="card-hover">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Badge variant={getEditTypeVariant(editType)} className="text-xs">
+                  {getEditTypeLabel(editType)}
+                </Badge>
+              </div>
               <CardTitle className="text-base line-clamp-1">{techName}</CardTitle>
               <CardDescription className="flex items-center gap-2 mt-1">
                 <Calendar className="w-3 h-3" />

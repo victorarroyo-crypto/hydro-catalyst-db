@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { editId, action } = await req.json()
+    const { editId, action, reviewComments } = await req.json()
 
     if (!editId || !['approve', 'reject'].includes(action)) {
       throw new Error('Invalid request: editId and action (approve/reject) required')
@@ -68,6 +68,9 @@ Deno.serve(async (req) => {
       throw new Error('Edit has already been processed')
     }
 
+    const editType = edit.edit_type || 'update'
+    console.log(`Edit type: ${editType}`)
+
     if (action === 'reject') {
       // Just update status to rejected
       const { error: updateError } = await supabaseAdmin
@@ -76,6 +79,7 @@ Deno.serve(async (req) => {
           status: 'rejected',
           reviewed_by: user.id,
           reviewed_at: new Date().toISOString(),
+          review_comments: reviewComments || null,
         })
         .eq('id', editId)
 
@@ -87,7 +91,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Action is 'approve' - apply changes
+    // Action is 'approve' - apply changes based on edit_type
     const proposedChanges = edit.proposed_changes as Record<string, unknown>
     const approvalDate = new Date().toISOString()
 
@@ -111,68 +115,113 @@ Deno.serve(async (req) => {
     const analystName = analystProfile?.full_name || 'Analista'
     const reviewerName = reviewerProfile?.full_name || reviewerRole
 
-    // Build the tracking status message
-    const estadoSeguimiento = `Edición revisada por ${analystName} y aprobada por ${reviewerName} (${reviewerRole})`
+    if (editType === 'create') {
+      // Create new technology from proposal
+      const estadoSeguimiento = `Propuesta por ${analystName} y aprobada por ${reviewerName} (${reviewerRole})`
+      
+      const { data: newTech, error: insertError } = await supabaseAdmin
+        .from('technologies')
+        .insert({
+          ...proposedChanges,
+          'Fecha de scouting': approvalDate.split('T')[0],
+          'Estado del seguimiento': estadoSeguimiento,
+          updated_by: user.id,
+        })
+        .select()
+        .single()
 
-    // Update local technology with proposed changes + tracking fields
-    const { error: localUpdateError } = await supabaseAdmin
-      .from('technologies')
-      .update({
-        ...proposedChanges,
-        'Fecha de scouting': approvalDate.split('T')[0], // Only date part YYYY-MM-DD
-        'Estado del seguimiento': estadoSeguimiento,
-        updated_by: user.id,
-        updated_at: approvalDate,
-      })
-      .eq('id', edit.technology_id)
-
-    if (localUpdateError) {
-      throw new Error(`Failed to update local technology: ${localUpdateError.message}`)
-    }
-
-    console.log('Local technology updated with tracking info:', estadoSeguimiento)
-
-    // Sync to external Supabase
-    const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')
-    const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_KEY')
-
-    if (externalUrl && externalKey) {
-      try {
-        const externalSupabase = createClient(externalUrl, externalKey)
-
-        // Get the current technology to find matching criteria
-        const { data: currentTech } = await supabaseAdmin
-          .from('technologies')
-          .select('*')
-          .eq('id', edit.technology_id)
-          .single()
-
-        if (currentTech) {
-          // Sync to external DB including tracking fields
-          const externalUpdate = {
-            ...proposedChanges,
-            'Fecha de scouting': approvalDate.split('T')[0],
-            'Estado del seguimiento': estadoSeguimiento,
-          }
-          
-          const { error: externalError } = await externalSupabase
-            .from('technologies')
-            .update(externalUpdate)
-            .eq('"Nombre de la tecnología"', currentTech["Nombre de la tecnología"])
-
-          if (externalError) {
-            console.error('External sync error:', externalError)
-            // Don't fail the whole operation, just log the error
-          } else {
-            console.log('External database synced successfully')
-          }
-        }
-      } catch (syncError) {
-        console.error('External sync failed:', syncError)
-        // Continue anyway - local update was successful
+      if (insertError) {
+        throw new Error(`Failed to create technology: ${insertError.message}`)
       }
+
+      console.log('New technology created:', newTech?.id)
+
+      // Update the edit with the new technology_id
+      await supabaseAdmin
+        .from('technology_edits')
+        .update({ technology_id: newTech?.id })
+        .eq('id', editId)
+
+    } else if (editType === 'classify') {
+      // Apply classification
+      const tipoId = proposedChanges.tipo_id as number
+
+      const { error: classifyError } = await supabaseAdmin
+        .from('technologies')
+        .update({
+          tipo_id: tipoId,
+          updated_by: user.id,
+          updated_at: approvalDate,
+        })
+        .eq('id', edit.technology_id)
+
+      if (classifyError) {
+        throw new Error(`Failed to classify technology: ${classifyError.message}`)
+      }
+
+      console.log('Technology classified with tipo_id:', tipoId)
+
     } else {
-      console.log('External Supabase not configured, skipping sync')
+      // Default 'update' type - existing behavior
+      const estadoSeguimiento = `Edición revisada por ${analystName} y aprobada por ${reviewerName} (${reviewerRole})`
+
+      const { error: localUpdateError } = await supabaseAdmin
+        .from('technologies')
+        .update({
+          ...proposedChanges,
+          'Fecha de scouting': approvalDate.split('T')[0],
+          'Estado del seguimiento': estadoSeguimiento,
+          updated_by: user.id,
+          updated_at: approvalDate,
+        })
+        .eq('id', edit.technology_id)
+
+      if (localUpdateError) {
+        throw new Error(`Failed to update local technology: ${localUpdateError.message}`)
+      }
+
+      console.log('Local technology updated with tracking info:', estadoSeguimiento)
+
+      // Sync to external Supabase
+      const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')
+      const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_KEY')
+
+      if (externalUrl && externalKey) {
+        try {
+          const externalSupabase = createClient(externalUrl, externalKey)
+
+          // Get the current technology to find matching criteria
+          const { data: currentTech } = await supabaseAdmin
+            .from('technologies')
+            .select('*')
+            .eq('id', edit.technology_id)
+            .single()
+
+          if (currentTech) {
+            // Sync to external DB including tracking fields
+            const externalUpdate = {
+              ...proposedChanges,
+              'Fecha de scouting': approvalDate.split('T')[0],
+              'Estado del seguimiento': estadoSeguimiento,
+            }
+            
+            const { error: externalError } = await externalSupabase
+              .from('technologies')
+              .update(externalUpdate)
+              .eq('"Nombre de la tecnología"', currentTech["Nombre de la tecnología"])
+
+            if (externalError) {
+              console.error('External sync error:', externalError)
+            } else {
+              console.log('External database synced successfully')
+            }
+          }
+        } catch (syncError) {
+          console.error('External sync failed:', syncError)
+        }
+      } else {
+        console.log('External Supabase not configured, skipping sync')
+      }
     }
 
     // Mark edit as approved
@@ -182,6 +231,7 @@ Deno.serve(async (req) => {
         status: 'approved',
         reviewed_by: user.id,
         reviewed_at: new Date().toISOString(),
+        review_comments: reviewComments || null,
       })
       .eq('id', editId)
 
@@ -190,8 +240,8 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Edit approved and applied successfully',
-        syncedToExternal: !!(externalUrl && externalKey)
+        message: `Edit ${editType} approved and applied successfully`,
+        editType,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
