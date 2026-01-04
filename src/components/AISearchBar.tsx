@@ -81,15 +81,16 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
     return unique.slice(0, 8);
   }, [dynamicData]);
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
+  const executeSearch = async (searchQuery: string) => {
+    if (!searchQuery.trim()) return;
 
+    setQuery(searchQuery);
     setIsSearching(true);
     setExplanation(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-search-technologies', {
-        body: { query: query.trim() }
+        body: { query: searchQuery.trim() }
       });
 
       // Handle HTTP-level errors from invoke (e.g., network issues)
@@ -171,6 +172,10 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
     onResults(null);
   };
 
+  const handleSearch = () => {
+    executeSearch(query);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !isSearching) {
       handleSearch();
@@ -178,7 +183,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
   };
 
   const handleSuggestionClick = (suggestion: string) => {
-    setQuery(suggestion);
+    executeSearch(suggestion);
   };
 
   return (
