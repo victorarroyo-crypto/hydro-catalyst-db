@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -72,6 +73,12 @@ const CHART_COLORS = [
 
 const Statistics: React.FC = () => {
   const { user } = useAuth();
+
+  // Subscribe to real-time updates
+  useRealtimeSubscription({
+    tables: ['technologies', 'taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores'],
+    queryKeys: [['technologies-stats'], ['taxonomy-tipos'], ['taxonomy-subcategorias'], ['taxonomy-sectores']],
+  });
 
   // Fetch all technologies - use range to bypass 1000 row limit
   const { data: technologies, isLoading: loadingTech } = useQuery({

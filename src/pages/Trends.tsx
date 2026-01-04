@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,12 @@ const Trends = () => {
   const [trendToRestore, setTrendToRestore] = useState<TechnologicalTrend | null>(null);
 
   const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
+
+  // Subscribe to real-time updates
+  useRealtimeSubscription({
+    tables: ['technological_trends', 'technologies'],
+    queryKeys: [['technological-trends'], ['technologies']],
+  });
 
   const { data: trends, isLoading } = useQuery({
     queryKey: ['technological-trends'],
