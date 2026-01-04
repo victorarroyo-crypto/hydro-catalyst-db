@@ -117,7 +117,7 @@ const Dashboard: React.FC = () => {
               ¡Bienvenido, {profile?.full_name || 'Usuario'}!
             </h1>
             <p className="text-primary-foreground/80 max-w-xl">
-              Accede a la base de datos más completa de tecnologías de tratamiento de agua industrial. 
+              Accede a la base de datos completa de tecnologías del agua. 
               Encuentra soluciones innovadoras para tus proyectos.
             </p>
           </div>
