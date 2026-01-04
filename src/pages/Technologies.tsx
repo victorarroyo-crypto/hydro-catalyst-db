@@ -9,7 +9,7 @@ import { TechnologyCard } from '@/components/TechnologyCard';
 import { TechnologyTable } from '@/components/TechnologyTable';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
 import { TechnologyFormModal } from '@/components/TechnologyFormModal';
-import { AISearchBar } from '@/components/AISearchBar';
+import { AISearchBar, AISearchFilters } from '@/components/AISearchBar';
 import { AIClassificationPanel } from '@/components/AIClassificationPanel';
 import { useTechnologyFilters, TaxonomyFilters } from '@/hooks/useTechnologyFilters';
 import { 
@@ -259,6 +259,18 @@ const Technologies: React.FC = () => {
           onResults={handleAiSearchResults}
           isSearching={isAiSearching}
           setIsSearching={setIsAiSearching}
+          activeFilters={{
+            tipoId: taxonomyFilters.tipoId,
+            subcategoriaId: taxonomyFilters.subcategoriaId,
+            sectorId: taxonomyFilters.sectorId,
+            tipoTecnologia: filters.tipoTecnologia || null,
+            subcategoria: filters.subcategoria || null,
+            sector: filters.sector || null,
+            pais: filters.pais || null,
+            trlMin: filters.trlMin || null,
+            trlMax: filters.trlMax || null,
+            estado: filters.status || null,
+          } as AISearchFilters}
         />
       </div>
 
