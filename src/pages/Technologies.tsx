@@ -61,14 +61,37 @@ const Technologies: React.FC = () => {
       const to = from + ITEMS_PER_PAGE - 1;
 
       // Use RPC or direct fetch with client-side filtering for complex queries
-      const { data: allData, error } = await supabase
-        .from('technologies')
-        .select('*');
-
-      if (error) throw error;
+      // Fetch all technologies (bypass 1000 row limit by fetching in batches)
+      const fetchAllTechnologies = async () => {
+        const allRecords: Technology[] = [];
+        const batchSize = 1000;
+        let from = 0;
+        let hasMore = true;
+        
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('technologies')
+            .select('*')
+            .range(from, from + batchSize - 1);
+          
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            allRecords.push(...(data as Technology[]));
+            from += batchSize;
+            hasMore = data.length === batchSize;
+          } else {
+            hasMore = false;
+          }
+        }
+        
+        return allRecords;
+      };
+      
+      const allData = await fetchAllTechnologies();
 
       // Apply filters client-side for reliability with Spanish column names
-      let filtered = (allData || []) as Technology[];
+      let filtered = allData;
 
       // If AI search is active, filter by AI results first
       if (aiSearchIds && aiSearchIds.length > 0) {
