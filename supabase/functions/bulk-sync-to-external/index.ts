@@ -11,10 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const body = await req.json().catch(() => ({}))
-    const { tables = ['taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores', 'technologies'] } = body
-
-    console.log('Starting bulk sync for tables:', tables)
+    console.log('Starting bulk sync...')
 
     // Internal Supabase client (source - Lovable Cloud)
     const internalUrl = Deno.env.get('SUPABASE_URL')
@@ -37,10 +34,46 @@ Deno.serve(async (req) => {
     const externalSupabase = createClient(externalUrl, externalKey)
 
     const results: Record<string, { synced: number; errors: string[] }> = {}
+    
+    // Tables in order for INSERT (respecting FK dependencies)
+    const insertOrder = ['taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores', 'technologies']
+    // Tables in reverse order for DELETE (respecting FK dependencies)
+    const deleteOrder = ['technologies', 'taxonomy_subcategorias', 'taxonomy_tipos', 'taxonomy_sectores']
 
-    for (const table of tables) {
-      console.log(`Syncing table: ${table}`)
+    // Initialize results
+    for (const table of insertOrder) {
       results[table] = { synced: 0, errors: [] }
+    }
+
+    // PHASE 1: Delete all data from external in reverse dependency order
+    console.log('PHASE 1: Deleting all existing data from external DB...')
+    for (const table of deleteOrder) {
+      console.log(`Deleting from ${table}...`)
+      
+      let deleteError;
+      if (table === 'taxonomy_tipos' || table === 'taxonomy_subcategorias') {
+        const result = await externalSupabase.from(table).delete().gt('id', 0)
+        deleteError = result.error
+      } else if (table === 'taxonomy_sectores') {
+        const result = await externalSupabase.from(table).delete().neq('id', '')
+        deleteError = result.error
+      } else {
+        const result = await externalSupabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        deleteError = result.error
+      }
+
+      if (deleteError) {
+        console.error(`Error deleting from ${table}:`, deleteError)
+        results[table].errors.push(`Delete failed: ${deleteError.message}`)
+      } else {
+        console.log(`Deleted all records from ${table}`)
+      }
+    }
+
+    // PHASE 2: Fetch and insert data in dependency order
+    console.log('PHASE 2: Fetching and inserting fresh data...')
+    for (const table of insertOrder) {
+      console.log(`Syncing table: ${table}`)
 
       try {
         // Fetch all data from internal
@@ -66,7 +99,7 @@ Deno.serve(async (req) => {
 
         if (allData.length === 0) continue
 
-        // Clean user reference fields for technologies table (users don't exist in external DB)
+        // Clean user reference fields for technologies table
         if (table === 'technologies') {
           allData = allData.map(record => ({
             ...record,
@@ -77,18 +110,18 @@ Deno.serve(async (req) => {
           console.log(`Cleaned user reference fields for ${allData.length} technology records`)
         }
 
-        // Upsert to external in batches
-        const upsertBatchSize = 100
-        for (let i = 0; i < allData.length; i += upsertBatchSize) {
-          const batch = allData.slice(i, i + upsertBatchSize)
+        // INSERT fresh data in batches
+        const insertBatchSize = 100
+        for (let i = 0; i < allData.length; i += insertBatchSize) {
+          const batch = allData.slice(i, i + insertBatchSize)
           
-          const { error: upsertError } = await externalSupabase
+          const { error: insertError } = await externalSupabase
             .from(table)
-            .upsert(batch, { onConflict: 'id' })
+            .insert(batch)
 
-          if (upsertError) {
-            console.error(`Error upserting batch to ${table}:`, upsertError)
-            results[table].errors.push(`Batch ${i}-${i + batch.length}: ${upsertError.message}`)
+          if (insertError) {
+            console.error(`Error inserting batch to ${table}:`, insertError)
+            results[table].errors.push(`Batch ${i}-${i + batch.length}: ${insertError.message}`)
           } else {
             results[table].synced += batch.length
           }
