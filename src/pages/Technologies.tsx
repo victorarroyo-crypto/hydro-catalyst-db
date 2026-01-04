@@ -10,7 +10,7 @@ import { TechnologyTable } from '@/components/TechnologyTable';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
 import { TechnologyFormModal } from '@/components/TechnologyFormModal';
 import { AISearchBar } from '@/components/AISearchBar';
-import { useTechnologyFilters } from '@/hooks/useTechnologyFilters';
+import { useTechnologyFilters, TaxonomyFilters } from '@/hooks/useTechnologyFilters';
 import { 
   Search, 
   LayoutGrid, 
@@ -27,8 +27,16 @@ const ITEMS_PER_PAGE = 20;
 const Technologies: React.FC = () => {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
-  const { filterOptions, defaultFilters } = useTechnologyFilters();
+  const { 
+    filterOptions, 
+    defaultFilters, 
+    defaultTaxonomyFilters,
+    taxonomyTipos,
+    taxonomySubcategorias,
+    taxonomySectores,
+  } = useTechnologyFilters();
   const [filters, setFilters] = useState<TechnologyFilters>(defaultFilters);
+  const [taxonomyFilters, setTaxonomyFilters] = useState<TaxonomyFilters>(defaultTaxonomyFilters);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [page, setPage] = useState(1);
   const [selectedTechnology, setSelectedTechnology] = useState<Technology | null>(null);
@@ -44,25 +52,15 @@ const Technologies: React.FC = () => {
   const canEdit = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['technologies', filters, page, aiSearchIds],
+    queryKey: ['technologies', filters, taxonomyFilters, page, aiSearchIds],
     queryFn: async () => {
       const from = (page - 1) * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
-      // Build filter conditions
-      const conditions: string[] = [];
-      
-      if (filters.search) {
-        const searchTerm = filters.search.toLowerCase();
-        conditions.push(
-          `or("Nombre de la tecnología".ilike.%${searchTerm}%,"Proveedor / Empresa".ilike.%${searchTerm}%)`
-        );
-      }
-
       // Use RPC or direct fetch with client-side filtering for complex queries
-      const { data: allData, error, count } = await supabase
+      const { data: allData, error } = await supabase
         .from('technologies')
-        .select('*', { count: 'exact' });
+        .select('*');
 
       if (error) throw error;
 
@@ -89,6 +87,20 @@ const Technologies: React.FC = () => {
           );
         }
 
+        // New taxonomy filters
+        if (taxonomyFilters.tipoId) {
+          filtered = filtered.filter(t => (t as any).tipo_id === taxonomyFilters.tipoId);
+        }
+
+        if (taxonomyFilters.subcategoriaId) {
+          filtered = filtered.filter(t => (t as any).subcategoria_id === taxonomyFilters.subcategoriaId);
+        }
+
+        if (taxonomyFilters.sectorId) {
+          filtered = filtered.filter(t => (t as any).sector_id === taxonomyFilters.sectorId);
+        }
+
+        // Legacy filters
         if (filters.tipoTecnologia) {
           filtered = filtered.filter(t => t["Tipo de tecnología"] === filters.tipoTecnologia);
         }
@@ -138,6 +150,7 @@ const Technologies: React.FC = () => {
 
   const handleResetFilters = () => {
     setFilters(defaultFilters);
+    setTaxonomyFilters(defaultTaxonomyFilters);
     setAiSearchIds(null);
     setPage(1);
   };
@@ -148,6 +161,7 @@ const Technologies: React.FC = () => {
     // Clear regular filters when AI search is active
     if (ids !== null) {
       setFilters(defaultFilters);
+      setTaxonomyFilters(defaultTaxonomyFilters);
     }
   };
 
@@ -213,6 +227,15 @@ const Technologies: React.FC = () => {
             }}
             filterOptions={filterOptions}
             onReset={handleResetFilters}
+            taxonomyFilters={taxonomyFilters}
+            onTaxonomyFiltersChange={(newTaxFilters) => {
+              setTaxonomyFilters(newTaxFilters);
+              setAiSearchIds(null);
+              setPage(1);
+            }}
+            taxonomyTipos={taxonomyTipos}
+            taxonomySubcategorias={taxonomySubcategorias}
+            taxonomySectores={taxonomySectores}
           />
         </aside>
 
