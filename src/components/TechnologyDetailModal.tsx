@@ -14,7 +14,7 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { syncTrendInsert, syncTechnologyDelete, syncProjectTechnologyInsert } from '@/lib/syncToExternal';
+import { syncTrendInsert, syncCaseStudyInsert, syncTechnologyDelete, syncProjectTechnologyInsert } from '@/lib/syncToExternal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Select,
@@ -42,7 +42,8 @@ import {
   SendHorizonal,
   Loader2,
   ClipboardList,
-  TrendingUp
+  TrendingUp,
+  BookOpen
 } from 'lucide-react';
 import type { Technology } from '@/types/database';
 
@@ -76,9 +77,11 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   const [isFavoriting, setIsFavoriting] = useState(false);
   const [isSendingToReview, setIsSendingToReview] = useState(false);
   const [isMovingToTrends, setIsMovingToTrends] = useState(false);
+  const [isMovingToCaseStudy, setIsMovingToCaseStudy] = useState(false);
   const [isAddingToProject, setIsAddingToProject] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [showTrendsConfirm, setShowTrendsConfirm] = useState(false);
+  const [showCaseStudyConfirm, setShowCaseStudyConfirm] = useState(false);
 
   // Fetch user's active projects
   const { data: userProjects } = useQuery({
@@ -342,6 +345,108 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     }
   };
 
+  const handleMoveToCaseStudy = async () => {
+    if (!user) return;
+    
+    setIsMovingToCaseStudy(true);
+    
+    // Store ALL original technology data to preserve it
+    const techData = technology as unknown as Record<string, unknown>;
+    const originalData = JSON.parse(JSON.stringify({
+      "Nombre de la tecnología": technology["Nombre de la tecnología"],
+      "Proveedor / Empresa": technology["Proveedor / Empresa"],
+      "País de origen": technology["País de origen"],
+      "Web de la empresa": technology["Web de la empresa"],
+      "Email de contacto": technology["Email de contacto"],
+      "Tipo de tecnología": technology["Tipo de tecnología"],
+      "Subcategoría": technology["Subcategoría"],
+      "Sector y subsector": technology["Sector y subsector"],
+      "Aplicación principal": technology["Aplicación principal"],
+      "Descripción técnica breve": technology["Descripción técnica breve"],
+      "Ventaja competitiva clave": technology["Ventaja competitiva clave"],
+      "Porque es innovadora": technology["Porque es innovadora"],
+      "Casos de referencia": technology["Casos de referencia"],
+      "Paises donde actua": technology["Paises donde actua"],
+      "Comentarios del analista": technology["Comentarios del analista"],
+      "Fecha de scouting": technology["Fecha de scouting"],
+      "Estado del seguimiento": technology["Estado del seguimiento"],
+      "Grado de madurez (TRL)": technology["Grado de madurez (TRL)"],
+      quality_score: technology.quality_score,
+      status: technology.status,
+      sector_id: techData.sector_id,
+      tipo_id: techData.tipo_id,
+      subcategoria_id: techData.subcategoria_id,
+      subsector_industrial: techData.subsector_industrial,
+    }));
+    
+    // Insert into casos_de_estudio with all original data preserved
+    const caseData = {
+      name: technology["Nombre de la tecnología"],
+      description: technology["Descripción técnica breve"],
+      technology_types: [technology["Tipo de tecnología"]],
+      sector: technology["Sector y subsector"],
+      country: technology["País de origen"],
+      entity_type: 'technology',
+      source_technology_id: technology.id,
+      created_by: user.id,
+      original_data: originalData,
+    };
+    
+    const { data: insertedCase, error: insertError } = await supabase
+      .from('casos_de_estudio')
+      .insert([caseData])
+      .select()
+      .single();
+
+    if (insertError) {
+      setIsMovingToCaseStudy(false);
+      toast({
+        title: 'Error',
+        description: 'No se pudo mover a casos de estudio',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Sync to external Supabase
+    try {
+      await syncCaseStudyInsert({ ...caseData, id: insertedCase.id });
+    } catch (syncError) {
+      console.error('External sync failed:', syncError);
+    }
+
+    // Then delete from technologies
+    const { error: deleteError } = await supabase
+      .from('technologies')
+      .delete()
+      .eq('id', technology.id);
+
+    // Sync deletion to external
+    try {
+      await syncTechnologyDelete(technology.id);
+    } catch (syncError) {
+      console.error('External sync failed:', syncError);
+    }
+
+    setIsMovingToCaseStudy(false);
+
+    if (deleteError) {
+      toast({
+        title: 'Error',
+        description: 'Se creó el caso de estudio pero no se pudo eliminar la tecnología original',
+        variant: 'destructive',
+      });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      queryClient.invalidateQueries({ queryKey: ['casos-de-estudio'] });
+      toast({
+        title: 'Movido a casos de estudio',
+        description: 'La tecnología ha sido movida y sincronizada',
+      });
+      onOpenChange(false);
+    }
+  };
+
   // Check if technology is already in review process
   const reviewStatus = (technology as any).review_status;
   const isInReviewProcess = reviewStatus && reviewStatus !== 'none' && reviewStatus !== 'completed';
@@ -466,16 +571,28 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               </Badge>
             )}
             {isInternalUser && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setShowTrendsConfirm(true)}
-                disabled={isMovingToTrends}
-                className="text-orange-600 border-orange-300 hover:bg-orange-50"
-              >
-                <TrendingUp className="w-4 h-4 mr-2" />
-                Mover a tendencias
-              </Button>
+              <div className="flex gap-1">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowTrendsConfirm(true)}
+                  disabled={isMovingToTrends}
+                  className="text-orange-600 border-orange-300 hover:bg-orange-50 h-7 text-xs px-2"
+                >
+                  <TrendingUp className="w-3 h-3 mr-1" />
+                  Tendencias
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowCaseStudyConfirm(true)}
+                  disabled={isMovingToCaseStudy}
+                  className="text-blue-600 border-blue-300 hover:bg-blue-50 h-7 text-xs px-2"
+                >
+                  <BookOpen className="w-3 h-3 mr-1" />
+                  Caso estudio
+                </Button>
+              </div>
             )}
           </div>
 
@@ -660,6 +777,51 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
                 <TrendingUp className="w-4 h-4 mr-2" />
+              )}
+              Confirmar y mover
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Move to Case Study Dialog */}
+      <Dialog open={showCaseStudyConfirm} onOpenChange={setShowCaseStudyConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-blue-600" />
+              Mover a Caso de Estudio
+            </DialogTitle>
+            <DialogDescription className="text-left pt-2 space-y-3">
+              <p>
+                Al confirmar, esta tecnología se convertirá en un <strong>caso de estudio</strong> y:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Se eliminará del catálogo de tecnologías</li>
+                <li>Aparecerá en la sección de Casos de Estudio</li>
+                <li>Todos los datos se guardarán y podrán recuperarse si la restauras como tecnología</li>
+              </ul>
+              <p className="text-sm font-medium">
+                Usa esta opción para tecnologías que representan implementaciones reales, proyectos municipales, u organizaciones.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowCaseStudyConfirm(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowCaseStudyConfirm(false);
+                handleMoveToCaseStudy();
+              }}
+              disabled={isMovingToCaseStudy}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isMovingToCaseStudy ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <BookOpen className="w-4 h-4 mr-2" />
               )}
               Confirmar y mover
             </Button>
