@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,26 @@ interface TechnologyFormModalProps {
   onSuccess: () => void;
 }
 
+interface TaxonomyTipo {
+  id: number;
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+}
+
+interface TaxonomySubcategoria {
+  id: number;
+  tipo_id: number;
+  codigo: string;
+  nombre: string;
+}
+
+interface TaxonomySector {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+}
+
 interface FormData {
   "Nombre de la tecnología": string;
   "Proveedor / Empresa": string;
@@ -46,6 +67,10 @@ interface FormData {
   "Grado de madurez (TRL)": number | null;
   status: string;
   quality_score: number;
+  tipo_id: number | null;
+  subcategoria_id: number | null;
+  sector_id: string | null;
+  subsector_industrial: string;
 }
 
 const TRL_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -53,6 +78,21 @@ const STATUS_OPTIONS = [
   { value: 'active', label: 'Activo' },
   { value: 'inactive', label: 'Inactivo' },
   { value: 'en_revision', label: 'En revisión' }
+];
+
+const SUBSECTORES_INDUSTRIALES = [
+  'Alimentación y Bebidas',
+  'Lácteo',
+  'Textil',
+  'Químico y Petroquímico',
+  'Farmacéutico',
+  'Papelero',
+  'Metalúrgico',
+  'Automoción',
+  'Electrónica',
+  'Energía',
+  'Minería',
+  'Otros'
 ];
 
 // Move these components outside to prevent re-creation on each render
@@ -140,6 +180,43 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   
   // Check user role - analysts need approval, supervisors/admins can edit directly
   const isAnalyst = profile?.role === 'analyst';
+
+  // Fetch taxonomy data
+  const { data: tipos } = useQuery({
+    queryKey: ['taxonomy-tipos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_tipos')
+        .select('*')
+        .order('id');
+      if (error) throw error;
+      return data as TaxonomyTipo[];
+    },
+  });
+
+  const { data: allSubcategorias } = useQuery({
+    queryKey: ['taxonomy-subcategorias'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_subcategorias')
+        .select('*')
+        .order('codigo');
+      if (error) throw error;
+      return data as TaxonomySubcategoria[];
+    },
+  });
+
+  const { data: sectores } = useQuery({
+    queryKey: ['taxonomy-sectores'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_sectores')
+        .select('*')
+        .order('id');
+      if (error) throw error;
+      return data as TaxonomySector[];
+    },
+  });
   
   const [formData, setFormData] = useState<FormData>({
     "Nombre de la tecnología": '',
@@ -162,7 +239,16 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     "Grado de madurez (TRL)": null,
     status: 'active',
     quality_score: 0,
+    tipo_id: null,
+    subcategoria_id: null,
+    sector_id: null,
+    subsector_industrial: '',
   });
+
+  // Filter subcategories based on selected tipo
+  const filteredSubcategorias = allSubcategorias?.filter(
+    (sub) => sub.tipo_id === formData.tipo_id
+  ) || [];
 
   useEffect(() => {
     if (technology) {
@@ -187,6 +273,10 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
         "Grado de madurez (TRL)": technology["Grado de madurez (TRL)"],
         status: technology.status || 'active',
         quality_score: technology.quality_score || 0,
+        tipo_id: (technology as any).tipo_id || null,
+        subcategoria_id: (technology as any).subcategoria_id || null,
+        sector_id: (technology as any).sector_id || null,
+        subsector_industrial: (technology as any).subsector_industrial || '',
       });
       setEditComment('');
     } else {
@@ -211,13 +301,49 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
         "Grado de madurez (TRL)": null,
         status: 'active',
         quality_score: 0,
+        tipo_id: null,
+        subcategoria_id: null,
+        sector_id: null,
+        subsector_industrial: '',
       });
       setEditComment('');
     }
   }, [technology, open]);
 
   const handleChange = (field: keyof FormData, value: string | number | null) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // If tipo_id changes, reset subcategoria_id and update "Tipo de tecnología" text
+      if (field === 'tipo_id') {
+        newData.subcategoria_id = null;
+        const selectedTipo = tipos?.find(t => t.id === value);
+        if (selectedTipo) {
+          newData["Tipo de tecnología"] = selectedTipo.nombre;
+        }
+      }
+      
+      // If subcategoria_id changes, update "Subcategoría" text
+      if (field === 'subcategoria_id') {
+        const selectedSub = allSubcategorias?.find(s => s.id === value);
+        if (selectedSub) {
+          newData["Subcategoría"] = selectedSub.nombre;
+        }
+      }
+      
+      // If sector_id changes, update "Sector y subsector" text and clear subsector if not industrial
+      if (field === 'sector_id') {
+        const selectedSector = sectores?.find(s => s.id === value);
+        if (selectedSector) {
+          newData["Sector y subsector"] = selectedSector.nombre;
+        }
+        if (value !== 'IND') {
+          newData.subsector_industrial = '';
+        }
+      }
+      
+      return newData;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -232,7 +358,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       return;
     }
 
-    if (!formData["Tipo de tecnología"].trim()) {
+    if (!formData["Tipo de tecnología"].trim() && !formData.tipo_id) {
       toast({
         title: 'Campo requerido',
         description: 'El tipo de tecnología es obligatorio',
@@ -244,9 +370,30 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     setIsLoading(true);
 
     const dataToSave = {
-      ...formData,
+      "Nombre de la tecnología": formData["Nombre de la tecnología"],
+      "Proveedor / Empresa": formData["Proveedor / Empresa"] || null,
+      "País de origen": formData["País de origen"] || null,
+      "Web de la empresa": formData["Web de la empresa"] || null,
+      "Email de contacto": formData["Email de contacto"] || null,
+      "Tipo de tecnología": formData["Tipo de tecnología"],
+      "Subcategoría": formData["Subcategoría"] || null,
+      "Sector y subsector": formData["Sector y subsector"] || null,
+      "Aplicación principal": formData["Aplicación principal"] || null,
+      "Descripción técnica breve": formData["Descripción técnica breve"] || null,
+      "Ventaja competitiva clave": formData["Ventaja competitiva clave"] || null,
+      "Porque es innovadora": formData["Porque es innovadora"] || null,
+      "Casos de referencia": formData["Casos de referencia"] || null,
+      "Paises donde actua": formData["Paises donde actua"] || null,
+      "Comentarios del analista": formData["Comentarios del analista"] || null,
       "Fecha de scouting": formData["Fecha de scouting"] || null,
+      "Estado del seguimiento": formData["Estado del seguimiento"] || null,
       "Grado de madurez (TRL)": formData["Grado de madurez (TRL)"] || null,
+      status: formData.status,
+      quality_score: formData.quality_score,
+      tipo_id: formData.tipo_id,
+      subcategoria_id: formData.subcategoria_id,
+      sector_id: formData.sector_id,
+      subsector_industrial: formData.subsector_industrial || null,
     };
 
     try {
@@ -390,23 +537,125 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
             />
           </FormSection>
 
-          {/* Classification */}
-          <FormSection title="Clasificación">
+          {/* Taxonomy Classification */}
+          <FormSection title="Clasificación (Nueva Taxonomía)">
+            <div>
+              <Label className="text-sm">
+                Tipo de Tecnología <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={formData.tipo_id?.toString() || ''}
+                onValueChange={(value) => handleChange('tipo_id', value ? parseInt(value) : null)}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Seleccionar tipo..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {tipos?.map((tipo) => (
+                    <SelectItem key={tipo.id} value={tipo.id.toString()}>
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">{tipo.codigo}</span>
+                        {tipo.nombre}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formData.tipo_id && tipos && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {tipos.find(t => t.id === formData.tipo_id)?.descripcion}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label className="text-sm">Subcategoría</Label>
+              <Select
+                value={formData.subcategoria_id?.toString() || ''}
+                onValueChange={(value) => handleChange('subcategoria_id', value ? parseInt(value) : null)}
+                disabled={!formData.tipo_id}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder={formData.tipo_id ? "Seleccionar subcategoría..." : "Primero selecciona un tipo"} />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50 max-h-60">
+                  {filteredSubcategorias.map((sub) => (
+                    <SelectItem key={sub.id} value={sub.id.toString()}>
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">{sub.codigo}</span>
+                        {sub.nombre}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-sm">Sector</Label>
+              <Select
+                value={formData.sector_id || ''}
+                onValueChange={(value) => handleChange('sector_id', value || null)}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Seleccionar sector..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {sectores?.map((sector) => (
+                    <SelectItem key={sector.id} value={sector.id}>
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">{sector.id}</span>
+                        {sector.nombre}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formData.sector_id && sectores && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {sectores.find(s => s.id === formData.sector_id)?.descripcion}
+                </p>
+              )}
+            </div>
+
+            {formData.sector_id === 'IND' && (
+              <div>
+                <Label className="text-sm">Subsector Industrial</Label>
+                <Select
+                  value={formData.subsector_industrial || ''}
+                  onValueChange={(value) => handleChange('subsector_industrial', value)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Seleccionar subsector..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    {SUBSECTORES_INDUSTRIALES.map((subsector) => (
+                      <SelectItem key={subsector} value={subsector}>
+                        {subsector}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </FormSection>
+
+          {/* Legacy Classification (read-only hint) */}
+          <FormSection title="Clasificación (Campos Legacy)">
             <FormField 
-              label="Tipo de tecnología" 
+              label="Tipo de tecnología (texto)" 
               field="Tipo de tecnología" 
               value={formData["Tipo de tecnología"]}
               onChange={handleChange}
-              required 
             />
             <FormField 
-              label="Subcategoría" 
+              label="Subcategoría (texto)" 
               field="Subcategoría" 
               value={formData["Subcategoría"]}
               onChange={handleChange}
             />
             <FormField 
-              label="Sector y subsector" 
+              label="Sector y subsector (texto)" 
               field="Sector y subsector" 
               value={formData["Sector y subsector"]}
               onChange={handleChange}
@@ -427,7 +676,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Seleccionar TRL" />
                 </SelectTrigger>
-                <SelectContent className="bg-popover">
+                <SelectContent className="bg-popover z-50">
                   {TRL_OPTIONS.map((trl) => (
                     <SelectItem key={trl} value={trl.toString()}>
                       TRL {trl}
@@ -446,7 +695,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-popover">
+                <SelectContent className="bg-popover z-50">
                   {STATUS_OPTIONS.map((status) => (
                     <SelectItem key={status.value} value={status.value}>
                       <span className="flex items-center gap-2">
