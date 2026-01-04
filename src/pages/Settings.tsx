@@ -8,13 +8,37 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, CloudUpload, Loader2, Database } from 'lucide-react';
+import { User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
+
+interface ComparisonResult {
+  table: string;
+  localCount: number;
+  externalCount: number;
+  difference: number;
+  status: 'synced' | 'out_of_sync' | 'error';
+  missingInExternal?: string[];
+  missingInLocal?: string[];
+}
+
+interface ComparisonResponse {
+  success: boolean;
+  summary: {
+    totalTables: number;
+    syncedTables: number;
+    outOfSyncTables: number;
+    errorTables: number;
+    timestamp: string;
+  };
+  results: ComparisonResult[];
+}
 
 const Settings: React.FC = () => {
   const { profile, user } = useAuth();
   const { toast } = useToast();
   const isAdmin = profile?.role === 'admin';
   const [isBulkSyncing, setIsBulkSyncing] = useState(false);
+  const [isComparing, setIsComparing] = useState(false);
+  const [comparisonResults, setComparisonResults] = useState<ComparisonResponse | null>(null);
 
   const handleBulkSync = async () => {
     setIsBulkSyncing(true);
@@ -47,6 +71,36 @@ const Settings: React.FC = () => {
       });
     } finally {
       setIsBulkSyncing(false);
+    }
+  };
+
+  const handleCompareDBs = async () => {
+    setIsComparing(true);
+    setComparisonResults(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('compare-databases', {
+        body: { detailed: true },
+      });
+
+      if (error) throw error;
+
+      setComparisonResults(data as ComparisonResponse);
+
+      const allSynced = data.summary.outOfSyncTables === 0 && data.summary.errorTables === 0;
+
+      toast({
+        title: allSynced ? 'Bases de datos sincronizadas' : 'Diferencias encontradas',
+        description: `${data.summary.syncedTables}/${data.summary.totalTables} tablas sincronizadas`,
+        variant: allSynced ? 'default' : 'destructive',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error al comparar',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsComparing(false);
     }
   };
 
@@ -141,6 +195,81 @@ const Settings: React.FC = () => {
                 <p className="text-xs text-muted-foreground mt-2">
                   Sincroniza tecnologías, casos de estudio, tendencias, proyectos y taxonomías
                 </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <GitCompare className="w-5 h-5" />
+                  Comparar Bases de Datos
+                </CardTitle>
+                <CardDescription>
+                  Verifica que los datos estén sincronizados entre ambas bases
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button 
+                  onClick={handleCompareDBs}
+                  disabled={isComparing}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {isComparing ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <GitCompare className="w-4 h-4 mr-2" />
+                  )}
+                  {isComparing ? 'Comparando...' : 'Comparar bases de datos'}
+                </Button>
+
+                {comparisonResults && (
+                  <div className="space-y-3 mt-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Última comparación:</span>
+                      <span className="text-xs">
+                        {new Date(comparisonResults.summary.timestamp).toLocaleString('es-ES')}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {comparisonResults.results.map((result) => (
+                        <div 
+                          key={result.table} 
+                          className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border"
+                        >
+                          <div className="flex items-center gap-2">
+                            {result.status === 'synced' && (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            )}
+                            {result.status === 'out_of_sync' && (
+                              <AlertCircle className="w-4 h-4 text-yellow-500" />
+                            )}
+                            {result.status === 'error' && (
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            )}
+                            <span className="font-medium text-sm">{result.table}</span>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <span>Local: {result.localCount}</span>
+                            <span>Externa: {result.externalCount}</span>
+                            {result.difference > 0 && (
+                              <Badge variant="destructive" className="text-xs">
+                                Δ {result.difference}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {comparisonResults.summary.outOfSyncTables > 0 && (
+                      <p className="text-xs text-yellow-600">
+                        Hay tablas desincronizadas. Considera ejecutar una sincronización completa.
+                      </p>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
