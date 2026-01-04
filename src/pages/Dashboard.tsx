@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { StatsCard } from '@/components/StatsCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +23,12 @@ import {
 const Dashboard: React.FC = () => {
   const { profile } = useAuth();
   const canReviewEdits = profile?.role && ['admin', 'supervisor'].includes(profile.role);
+
+  // Subscribe to real-time updates
+  useRealtimeSubscription({
+    tables: ['technologies', 'projects', 'technology_edits'],
+    queryKeys: [['dashboard-stats'], ['pending-edits-dashboard']],
+  });
 
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
