@@ -73,7 +73,7 @@ const Index = () => {
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground mb-8 animate-slide-up max-w-3xl mx-auto" style={{ animationDelay: "0.1s" }}>
-              Conectamos la industria con las soluciones tecnológicas más innovadoras para el tratamiento y gestión del agua
+              Conectamos usuarios finales con las soluciones tecnológicas más innovadoras para el tratamiento y gestión del agua
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up" style={{ animationDelay: "0.2s" }}>
