@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import vandarumLogo from "@/assets/vandarum-logo-transparent.png";
+import vandarumLogo from "@/assets/vandarum-logo-main.jpg";
 import { 
   Droplets, 
   Search, 
@@ -43,7 +43,7 @@ const Index = () => {
             <img 
               src={vandarumLogo} 
               alt="Vandarum" 
-              className="h-32 md:h-40 w-auto"
+              className="h-32 md:h-40 w-auto rounded-xl shadow-lg"
             />
           </div>
 
