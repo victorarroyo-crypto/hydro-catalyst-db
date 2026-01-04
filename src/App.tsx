@@ -15,6 +15,7 @@ import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
 import QualityControl from "./pages/QualityControl";
 import Trends from "./pages/Trends";
+import CaseStudies from "./pages/CaseStudies";
 import Statistics from "./pages/Statistics";
 import TaxonomyAdmin from "./pages/TaxonomyAdmin";
 import NotFound from "./pages/NotFound";
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/reviews" element={<QualityControl />} />
               <Route path="/trends" element={<Trends />} />
+              <Route path="/case-studies" element={<CaseStudies />} />
               <Route path="/statistics" element={<Statistics />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/taxonomy-admin" element={<TaxonomyAdmin />} />

@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.bulk-sync-to-external]
 verify_jwt = false
+
+[functions.move-to-case-studies]
+verify_jwt = false

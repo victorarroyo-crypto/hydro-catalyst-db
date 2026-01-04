@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      casos_de_estudio: {
+        Row: {
+          country: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          entity_type: string | null
+          id: string
+          name: string
+          original_data: Json | null
+          sector: string | null
+          source_technology_id: string | null
+          technology_types: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          country?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          entity_type?: string | null
+          id?: string
+          name: string
+          original_data?: Json | null
+          sector?: string | null
+          source_technology_id?: string | null
+          technology_types?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          country?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          entity_type?: string | null
+          id?: string
+          name?: string
+          original_data?: Json | null
+          sector?: string | null
+          source_technology_id?: string | null
+          technology_types?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
