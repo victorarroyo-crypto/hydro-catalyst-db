@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp, Lightbulb, Tag, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, TrendingUp, Lightbulb, Tag, Calendar, RotateCcw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 
@@ -21,11 +25,18 @@ interface TechnologicalTrend {
   subcategory: string | null;
   sector: string | null;
   created_at: string;
+  source_technology_id: string | null;
 }
 
 const Trends = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedTrend, setSelectedTrend] = useState<TechnologicalTrend | null>(null);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [trendToRestore, setTrendToRestore] = useState<TechnologicalTrend | null>(null);
+
+  const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
   const { data: trends, isLoading } = useQuery({
     queryKey: ['technological-trends'],
@@ -40,6 +51,55 @@ const Trends = () => {
     },
     enabled: !!user,
   });
+
+  // Mutation to restore trend as technology
+  const restoreMutation = useMutation({
+    mutationFn: async (trend: TechnologicalTrend) => {
+      // First, insert back into technologies
+      const { error: insertError } = await supabase
+        .from('technologies')
+        .insert({
+          "Nombre de la tecnología": trend.name,
+          "Descripción técnica breve": trend.description,
+          "Tipo de tecnología": trend.technology_type,
+          "Subcategoría": trend.subcategory,
+          "Sector y subsector": trend.sector,
+        });
+
+      if (insertError) throw insertError;
+
+      // Then delete from trends
+      const { error: deleteError } = await supabase
+        .from('technological_trends')
+        .delete()
+        .eq('id', trend.id);
+
+      if (deleteError) throw deleteError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['technological-trends'] });
+      queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      setSelectedTrend(null);
+      setShowRestoreConfirm(false);
+      setTrendToRestore(null);
+      toast({
+        title: 'Restaurada como tecnología',
+        description: 'La tendencia ha sido restaurada al catálogo de tecnologías',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'No se pudo restaurar la tecnología',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleRestoreClick = (trend: TechnologicalTrend) => {
+    setTrendToRestore(trend);
+    setShowRestoreConfirm(true);
+  };
 
   if (isLoading) {
     return (
@@ -189,6 +249,24 @@ const Trends = () => {
                   </div>
                 </div>
 
+                {/* Actions */}
+                {isInternalUser && (
+                  <>
+                    <Separator />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRestoreClick(selectedTrend)}
+                        disabled={restoreMutation.isPending}
+                      >
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Restaurar como tecnología
+                      </Button>
+                    </div>
+                  </>
+                )}
+
                 {/* Metadata */}
                 <div className="text-xs text-muted-foreground pt-4 border-t flex items-center gap-2">
                   <Calendar className="w-3 h-3" />
@@ -197,6 +275,44 @@ const Trends = () => {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Restore Confirmation Dialog */}
+      <Dialog open={showRestoreConfirm} onOpenChange={setShowRestoreConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-primary" />
+              Restaurar como Tecnología
+            </DialogTitle>
+            <DialogDescription className="text-left pt-2 space-y-3">
+              <p>
+                Al confirmar, esta tendencia se convertirá de nuevo en una <strong>tecnología</strong> y:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Aparecerá en el catálogo de tecnologías</li>
+                <li>Se eliminará de la sección de Tendencias</li>
+                <li>Podrás completar los campos adicionales (TRL, proveedor, etc.)</li>
+              </ul>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowRestoreConfirm(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => trendToRestore && restoreMutation.mutate(trendToRestore)}
+              disabled={restoreMutation.isPending}
+            >
+              {restoreMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4 mr-2" />
+              )}
+              Confirmar y restaurar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

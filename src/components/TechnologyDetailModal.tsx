@@ -4,6 +4,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -64,6 +66,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   const [isMovingToTrends, setIsMovingToTrends] = useState(false);
   const [isAddingToProject, setIsAddingToProject] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [showTrendsConfirm, setShowTrendsConfirm] = useState(false);
 
   // Fetch user's active projects
   const { data: userProjects } = useQuery({
@@ -365,15 +368,11 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={handleMoveToTrends}
+                onClick={() => setShowTrendsConfirm(true)}
                 disabled={isMovingToTrends}
                 className="text-orange-600 border-orange-300 hover:bg-orange-50"
               >
-                {isMovingToTrends ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                )}
+                <TrendingUp className="w-4 h-4 mr-2" />
                 Mover a tendencias
               </Button>
             )}
@@ -486,6 +485,51 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
           )}
         </div>
       </DialogContent>
+
+      {/* Confirm Move to Trends Dialog */}
+      <Dialog open={showTrendsConfirm} onOpenChange={setShowTrendsConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-orange-600" />
+              Mover a Tendencias
+            </DialogTitle>
+            <DialogDescription className="text-left pt-2 space-y-3">
+              <p>
+                Al confirmar, esta tecnología se convertirá en una <strong>tendencia tecnológica</strong> y:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Se eliminará del catálogo de tecnologías</li>
+                <li>Aparecerá en la sección de Tendencias</li>
+                <li>Se perderán algunos campos específicos de tecnología (TRL, proveedor, etc.)</li>
+              </ul>
+              <p className="text-sm font-medium">
+                Usa esta opción para tecnologías que representan categorías o tendencias generales, no productos específicos.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowTrendsConfirm(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowTrendsConfirm(false);
+                handleMoveToTrends();
+              }}
+              disabled={isMovingToTrends}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {isMovingToTrends ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <TrendingUp className="w-4 h-4 mr-2" />
+              )}
+              Confirmar y mover
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };
