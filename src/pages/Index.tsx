@@ -177,7 +177,7 @@ const Index = () => {
           <img 
             src={vandarumSymbol} 
             alt="Vandarum" 
-            className="h-16 w-auto mx-auto mb-6 object-contain"
+            className="h-16 w-auto mx-auto mb-6 object-contain mix-blend-screen"
           />
           <h2 className="text-3xl md:text-4xl font-display font-bold text-primary-foreground mb-4">
             Comienza a explorar tecnologías hoy
