@@ -7,7 +7,7 @@ interface SyncOptions {
   table: SyncTable;
   action: SyncAction;
   record?: Record<string, unknown>;
-  recordId?: string;
+  recordId?: string | number;
 }
 
 export const syncToExternalSupabase = async ({ table, action, record, recordId }: SyncOptions) => {
@@ -34,7 +34,7 @@ export const syncToExternalSupabase = async ({ table, action, record, recordId }
   }
 };
 
-// Helper functions for common operations
+// Technology helpers
 export const syncTechnologyInsert = (technology: Record<string, unknown>) => 
   syncToExternalSupabase({ table: 'technologies', action: 'INSERT', record: technology });
 
@@ -46,3 +46,40 @@ export const syncTechnologyDelete = (id: string) =>
 
 export const syncTechnologyUpsert = (technology: Record<string, unknown>) => 
   syncToExternalSupabase({ table: 'technologies', action: 'UPSERT', record: technology });
+
+// Taxonomy Tipos helpers
+export const syncTipoInsert = (tipo: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'taxonomy_tipos', action: 'INSERT', record: tipo });
+
+export const syncTipoUpdate = (id: number, changes: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'taxonomy_tipos', action: 'UPDATE', record: changes, recordId: id });
+
+export const syncTipoDelete = (id: number) => 
+  syncToExternalSupabase({ table: 'taxonomy_tipos', action: 'DELETE', recordId: id });
+
+// Taxonomy Subcategorías helpers
+export const syncSubcategoriaInsert = (subcategoria: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'taxonomy_subcategorias', action: 'INSERT', record: subcategoria });
+
+export const syncSubcategoriaUpdate = (id: number, changes: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'taxonomy_subcategorias', action: 'UPDATE', record: changes, recordId: id });
+
+export const syncSubcategoriaDelete = (id: number) => 
+  syncToExternalSupabase({ table: 'taxonomy_subcategorias', action: 'DELETE', recordId: id });
+
+// Taxonomy Sectores helpers
+export const syncSectorInsert = (sector: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'taxonomy_sectores', action: 'INSERT', record: sector });
+
+export const syncSectorUpdate = (id: string, changes: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'taxonomy_sectores', action: 'UPDATE', record: changes, recordId: id });
+
+export const syncSectorDelete = (id: string) => 
+  syncToExternalSupabase({ table: 'taxonomy_sectores', action: 'DELETE', recordId: id });
+
+// Technological Trends helpers
+export const syncTrendInsert = (trend: Record<string, unknown>) => 
+  syncToExternalSupabase({ table: 'technological_trends', action: 'INSERT', record: trend });
+
+export const syncTrendDelete = (id: string) => 
+  syncToExternalSupabase({ table: 'technological_trends', action: 'DELETE', recordId: id });
