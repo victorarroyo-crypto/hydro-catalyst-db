@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
@@ -8,6 +8,18 @@ import { Loader2 } from 'lucide-react';
 export const AppLayout: React.FC = () => {
   const { user, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Fuerza el sidebar a iniciar expandido aunque el navegador haya guardado un estado colapsado.
+  useEffect(() => {
+    const cookieValue = document.cookie
+      .split('; ')
+      .find((row) => row.startsWith('sidebar:state='))
+      ?.split('=')[1];
+
+    if (cookieValue === 'false') {
+      setSidebarOpen(true);
+    }
+  }, []);
 
   if (loading) {
     return (
