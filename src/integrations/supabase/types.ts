@@ -490,6 +490,45 @@ export type Database = {
           },
         ]
       }
+      technology_subcategorias: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_primary: boolean | null
+          subcategoria_id: number
+          technology_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          subcategoria_id: number
+          technology_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          subcategoria_id?: number
+          technology_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "technology_subcategorias_subcategoria_id_fkey"
+            columns: ["subcategoria_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_subcategorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technology_subcategorias_technology_id_fkey"
+            columns: ["technology_id"]
+            isOneToOne: false
+            referencedRelation: "technologies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       technology_tipos: {
         Row: {
           created_at: string | null
