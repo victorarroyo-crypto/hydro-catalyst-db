@@ -3,6 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Search,
+  Radar,
   FolderOpen,
   Star,
   Settings,
@@ -45,6 +46,7 @@ import { cn } from '@/lib/utils';
 const mainNavItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   { title: 'Consultar Tecnologías', url: '/technologies', icon: Search },
+  { title: 'Scouting', url: '/scouting', icon: Radar },
   { title: 'Mis Proyectos', url: '/projects', icon: FolderOpen },
   { title: 'Favoritos', url: '/favorites', icon: Star },
 ];
