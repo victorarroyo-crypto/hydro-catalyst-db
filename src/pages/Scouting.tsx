@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Radar, 
@@ -11,7 +11,13 @@ import {
   Rocket,
   Check,
   X,
-  Loader2
+  Loader2,
+  Eye,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,17 +40,30 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { TRLBadge } from '@/components/TRLBadge';
 
 const API_BASE = 'https://watertech-scouting-production.up.railway.app';
 
-// Types
+// Types based on actual API response
 interface ScoutingStats {
   scoutings_this_week: number;
   scoutings_this_month: number;
   cost_this_month: number;
   pending_technologies: number;
+  limits?: {
+    max_week: number;
+    max_month: number;
+    budget: number;
+  };
 }
 
 interface QueueItem {
@@ -57,13 +76,48 @@ interface QueueItem {
   status: string;
 }
 
+interface QueueResponse {
+  items: QueueItem[];
+  count: number;
+}
+
+interface ScoutingConfig {
+  pais: string | null;
+  tipo: string;
+  fuentes: string[];
+  trl_min: number | null;
+  keywords: string[];
+  subcategoria: string | null;
+  instrucciones_adicionales: string | null;
+}
+
+interface ScoutingLog {
+  level: 'info' | 'error' | 'warn';
+  phase: string;
+  message: string;
+  timestamp: string;
+}
+
 interface HistoryItem {
   id: string;
-  date: string;
-  type: string;
-  status: string;
-  found: number;
-  cost: number;
+  started_at: string;
+  completed_at: string | null;
+  status: 'running' | 'completed' | 'failed';
+  trigger_type: string;
+  triggered_by: string;
+  config: ScoutingConfig;
+  llm_model: string;
+  results_summary: string | null;
+  tokens_used: number | null;
+  estimated_cost: number | null;
+  error_message: string | null;
+  logs: ScoutingLog[];
+  created_at: string;
+}
+
+interface HistoryResponse {
+  items: HistoryItem[];
+  count: number;
 }
 
 // API functions
@@ -73,13 +127,13 @@ const fetchStats = async (): Promise<ScoutingStats> => {
   return res.json();
 };
 
-const fetchQueue = async (status: string): Promise<QueueItem[]> => {
+const fetchQueue = async (status: string): Promise<QueueResponse> => {
   const res = await fetch(`${API_BASE}/api/scouting/queue?status=${status}`);
   if (!res.ok) throw new Error('Error al cargar cola');
   return res.json();
 };
 
-const fetchHistory = async (): Promise<HistoryItem[]> => {
+const fetchHistory = async (): Promise<HistoryResponse> => {
   const res = await fetch(`${API_BASE}/api/scouting/history`);
   if (!res.ok) throw new Error('Error al cargar historial');
   return res.json();
@@ -117,6 +171,46 @@ const getScoreColor = (score: number): string => {
   return 'bg-red-500/20 text-red-600 border-red-500/30';
 };
 
+// Status helpers
+const getStatusBadge = (status: string) => {
+  switch (status) {
+    case 'completed':
+      return (
+        <Badge className="bg-green-500/20 text-green-600 border-green-500/30">
+          <CheckCircle2 className="w-3 h-3 mr-1" />
+          Completado
+        </Badge>
+      );
+    case 'running':
+      return (
+        <Badge className="bg-blue-500/20 text-blue-600 border-blue-500/30">
+          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+          En progreso
+        </Badge>
+      );
+    case 'failed':
+      return (
+        <Badge className="bg-red-500/20 text-red-600 border-red-500/30">
+          <XCircle className="w-3 h-3 mr-1" />
+          Fallido
+        </Badge>
+      );
+    default:
+      return <Badge variant="secondary">{status}</Badge>;
+  }
+};
+
+const getLogIcon = (level: string) => {
+  switch (level) {
+    case 'error':
+      return <XCircle className="w-4 h-4 text-red-500" />;
+    case 'warn':
+      return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+    default:
+      return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+  }
+};
+
 const Scouting = () => {
   const queryClient = useQueryClient();
   const [queueFilter, setQueueFilter] = useState('pending');
@@ -124,6 +218,7 @@ const Scouting = () => {
   const [tipo, setTipo] = useState('all');
   const [trlMin, setTrlMin] = useState('none');
   const [instructions, setInstructions] = useState('');
+  const [selectedReport, setSelectedReport] = useState<HistoryItem | null>(null);
 
   // Queries
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -131,12 +226,12 @@ const Scouting = () => {
     queryFn: fetchStats,
   });
 
-  const { data: queue, isLoading: queueLoading } = useQuery({
+  const { data: queueData, isLoading: queueLoading } = useQuery({
     queryKey: ['scouting-queue', queueFilter],
     queryFn: () => fetchQueue(queueFilter),
   });
 
-  const { data: history, isLoading: historyLoading } = useQuery({
+  const { data: historyData, isLoading: historyLoading } = useQuery({
     queryKey: ['scouting-history'],
     queryFn: fetchHistory,
   });
@@ -156,10 +251,10 @@ const Scouting = () => {
 
   const scoutingMutation = useMutation({
     mutationFn: runScouting,
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
       queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
-      toast.success('Scouting iniciado correctamente');
+      toast.success(`Scouting iniciado (Job ID: ${data.job_id?.slice(0, 8)}...)`);
       setKeywords('');
       setTipo('all');
       setTrlMin('none');
@@ -185,6 +280,9 @@ const Scouting = () => {
     });
   };
 
+  const queue = queueData?.items ?? [];
+  const history = historyData?.items ?? [];
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -209,6 +307,11 @@ const Scouting = () => {
             <div className="text-3xl font-bold">
               {statsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : stats?.scoutings_this_week ?? 0}
             </div>
+            {stats?.limits && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Límite: {stats.limits.max_week}/semana
+              </p>
+            )}
           </CardContent>
         </Card>
         
@@ -221,6 +324,11 @@ const Scouting = () => {
             <div className="text-3xl font-bold">
               {statsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : stats?.scoutings_this_month ?? 0}
             </div>
+            {stats?.limits && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Límite: {stats.limits.max_month}/mes
+              </p>
+            )}
           </CardContent>
         </Card>
         
@@ -233,6 +341,11 @@ const Scouting = () => {
             <div className="text-3xl font-bold text-primary">
               {statsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : `$${(stats?.cost_this_month ?? 0).toFixed(2)}`}
             </div>
+            {stats?.limits && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Presupuesto: ${stats.limits.budget.toFixed(2)}
+              </p>
+            )}
           </CardContent>
         </Card>
         
@@ -277,7 +390,7 @@ const Scouting = () => {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          ) : queue && queue.length > 0 ? (
+          ) : queue.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {queue.map((item) => (
                 <Card key={item.id} className="hover:shadow-md transition-shadow">
@@ -435,7 +548,7 @@ const Scouting = () => {
             <CardHeader>
               <CardTitle>Historial de Scoutings</CardTitle>
               <CardDescription>
-                Registro de todos los scoutings ejecutados
+                Registro de todos los scoutings ejecutados - Haz clic en "Ver informe" para detalles completos
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -443,36 +556,82 @@ const Scouting = () => {
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 </div>
-              ) : history && history.length > 0 ? (
+              ) : history.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Fecha</TableHead>
-                      <TableHead>Tipo</TableHead>
+                      <TableHead>Configuración</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead className="text-right">Encontradas</TableHead>
+                      <TableHead>Modelo</TableHead>
                       <TableHead className="text-right">Coste</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {history.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{new Date(item.date).toLocaleDateString('es-ES')}</TableCell>
+                      <TableRow key={item.id} className={item.status === 'failed' ? 'bg-red-50/50' : ''}>
                         <TableCell>
-                          <Badge variant="outline">{item.type}</Badge>
+                          <div className="space-y-1">
+                            <div className="font-medium">
+                              {new Date(item.started_at).toLocaleDateString('es-ES', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(item.started_at).toLocaleTimeString('es-ES', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell>
-                          <Badge 
-                            variant={item.status === 'completed' ? 'default' : 'secondary'}
-                            className={item.status === 'completed' ? 'bg-green-500/20 text-green-600' : ''}
+                          <div className="space-y-1">
+                            {item.config.keywords?.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {item.config.keywords.slice(0, 3).map((kw, i) => (
+                                  <Badge key={i} variant="outline" className="text-xs">
+                                    {kw}
+                                  </Badge>
+                                ))}
+                                {item.config.keywords.length > 3 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{item.config.keywords.length - 3}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                            {item.config.tipo && (
+                              <div className="text-xs text-muted-foreground">
+                                Tipo: {item.config.tipo}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(item.status)}</TableCell>
+                        <TableCell>
+                          <span className="text-xs text-muted-foreground">
+                            {item.llm_model || 'N/A'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.estimated_cost !== null 
+                            ? `$${item.estimated_cost.toFixed(4)}` 
+                            : '-'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setSelectedReport(item)}
                           >
-                            {item.status === 'completed' ? 'Completado' : 
-                             item.status === 'running' ? 'En progreso' : 
-                             item.status === 'failed' ? 'Fallido' : item.status}
-                          </Badge>
+                            <Eye className="w-4 h-4 mr-1" />
+                            Ver informe
+                          </Button>
                         </TableCell>
-                        <TableCell className="text-right font-medium">{item.found}</TableCell>
-                        <TableCell className="text-right">${item.cost.toFixed(2)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -490,6 +649,191 @@ const Scouting = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Report Detail Modal */}
+      <Dialog open={!!selectedReport} onOpenChange={() => setSelectedReport(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Informe de Scouting
+            </DialogTitle>
+            <DialogDescription>
+              Detalles completos del proceso de scouting
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedReport && (
+            <ScrollArea className="max-h-[calc(85vh-120px)]">
+              <div className="space-y-6 pr-4">
+                {/* Status Banner */}
+                <div className={`p-4 rounded-lg ${
+                  selectedReport.status === 'failed' 
+                    ? 'bg-red-50 border border-red-200' 
+                    : selectedReport.status === 'completed'
+                    ? 'bg-green-50 border border-green-200'
+                    : 'bg-blue-50 border border-blue-200'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    {selectedReport.status === 'failed' ? (
+                      <XCircle className="w-6 h-6 text-red-500" />
+                    ) : selectedReport.status === 'completed' ? (
+                      <CheckCircle2 className="w-6 h-6 text-green-500" />
+                    ) : (
+                      <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                    )}
+                    <div>
+                      <h3 className="font-semibold">
+                        {selectedReport.status === 'failed' 
+                          ? 'Scouting Fallido' 
+                          : selectedReport.status === 'completed'
+                          ? 'Scouting Completado'
+                          : 'Scouting en Progreso'}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Iniciado: {new Date(selectedReport.started_at).toLocaleString('es-ES')}
+                        {selectedReport.completed_at && (
+                          <> • Finalizado: {new Date(selectedReport.completed_at).toLocaleString('es-ES')}</>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Error Message */}
+                {selectedReport.error_message && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <h4 className="font-semibold text-red-700 flex items-center gap-2 mb-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      Error
+                    </h4>
+                    <pre className="text-xs text-red-600 whitespace-pre-wrap font-mono bg-red-100/50 p-3 rounded overflow-x-auto">
+                      {selectedReport.error_message}
+                    </pre>
+                  </div>
+                )}
+
+                {/* Configuration */}
+                <div>
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <Rocket className="w-4 h-4" />
+                    Configuración
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Keywords:</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {selectedReport.config.keywords?.map((kw, i) => (
+                          <Badge key={i} variant="secondary">{kw}</Badge>
+                        )) || <span className="text-muted-foreground">-</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Tipo:</span>
+                      <p className="font-medium">{selectedReport.config.tipo || 'Todos'}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">TRL mínimo:</span>
+                      <p className="font-medium">{selectedReport.config.trl_min ?? 'Sin mínimo'}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">País:</span>
+                      <p className="font-medium">{selectedReport.config.pais || 'Todos'}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Modelo LLM:</span>
+                      <p className="font-medium">{selectedReport.llm_model}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Iniciado por:</span>
+                      <p className="font-medium">{selectedReport.triggered_by} ({selectedReport.trigger_type})</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Results (if available) */}
+                {selectedReport.results_summary && (
+                  <div>
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Resultados
+                    </h4>
+                    <p className="text-sm">{selectedReport.results_summary}</p>
+                  </div>
+                )}
+
+                {/* Usage Stats */}
+                {(selectedReport.tokens_used || selectedReport.estimated_cost) && (
+                  <div>
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4" />
+                      Uso y Coste
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Tokens usados:</span>
+                        <p className="font-medium">{selectedReport.tokens_used?.toLocaleString() ?? 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Coste estimado:</span>
+                        <p className="font-medium">
+                          {selectedReport.estimated_cost !== null 
+                            ? `$${selectedReport.estimated_cost.toFixed(4)}` 
+                            : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Logs */}
+                {selectedReport.logs && selectedReport.logs.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Logs del Proceso ({selectedReport.logs.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {selectedReport.logs.map((log, index) => (
+                        <div 
+                          key={index} 
+                          className={`flex items-start gap-3 p-3 rounded-lg text-sm ${
+                            log.level === 'error' ? 'bg-red-50' : 
+                            log.level === 'warn' ? 'bg-yellow-50' : 'bg-muted/30'
+                          }`}
+                        >
+                          {getLogIcon(log.level)}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge variant="outline" className="text-xs">
+                                {log.phase}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(log.timestamp).toLocaleTimeString('es-ES')}
+                              </span>
+                            </div>
+                            <p className={`${log.level === 'error' ? 'text-red-700' : ''}`}>
+                              {log.message}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* No logs message */}
+                {(!selectedReport.logs || selectedReport.logs.length === 0) && (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>No hay logs disponibles para este scouting</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
