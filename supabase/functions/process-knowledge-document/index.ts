@@ -6,47 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Simple PDF text extraction using pdf-parse compatible approach
-async function extractTextFromPDF(pdfBuffer: ArrayBuffer): Promise<string> {
-  // Use a simple regex-based extraction for PDF text content
-  // This is a basic implementation - for production, consider using a proper PDF library
-  const uint8Array = new Uint8Array(pdfBuffer);
-  const text = new TextDecoder('utf-8', { fatal: false }).decode(uint8Array);
-  
-  // Extract text between stream and endstream markers
-  const textContent: string[] = [];
-  
-  // Try to find readable text patterns in the PDF
-  const matches = text.match(/\(([^)]+)\)/g);
-  if (matches) {
-    for (const match of matches) {
-      const content = match.slice(1, -1);
-      // Filter out binary/encoded content
-      if (content.length > 2 && /^[\x20-\x7E\xA0-\xFF\s]+$/.test(content)) {
-        textContent.push(content);
-      }
-    }
-  }
-  
-  // Also try BT/ET text blocks
-  const btMatches = text.match(/BT[\s\S]*?ET/g);
-  if (btMatches) {
-    for (const block of btMatches) {
-      const tjMatches = block.match(/\[([^\]]+)\]\s*TJ|\(([^)]+)\)\s*Tj/g);
-      if (tjMatches) {
-        for (const tj of tjMatches) {
-          const extracted = tj.replace(/\[|\]|TJ|Tj|\(|\)/g, ' ').trim();
-          if (extracted.length > 2) {
-            textContent.push(extracted);
-          }
-        }
-      }
-    }
-  }
-  
-  return textContent.join(' ').replace(/\s+/g, ' ').trim();
-}
-
 // Chunk text into smaller pieces for better retrieval
 function chunkText(text: string, chunkSize: number = 1000, overlap: number = 200): string[] {
   const chunks: string[] = [];
@@ -70,7 +29,113 @@ function chunkText(text: string, chunkSize: number = 1000, overlap: number = 200
     chunks.push(currentChunk.trim());
   }
   
-  return chunks.filter(c => c.length > 50); // Filter out very small chunks
+  return chunks.filter(c => c.length > 50);
+}
+
+// Basic PDF text extraction (fallback)
+function extractTextFromPDFBasic(pdfBuffer: ArrayBuffer): string {
+  const uint8Array = new Uint8Array(pdfBuffer);
+  const text = new TextDecoder('utf-8', { fatal: false }).decode(uint8Array);
+  
+  const textContent: string[] = [];
+  
+  // Extract text from parentheses
+  const matches = text.match(/\(([^)]+)\)/g);
+  if (matches) {
+    for (const match of matches) {
+      const content = match.slice(1, -1);
+      if (content.length > 2 && /^[\x20-\x7E\xA0-\xFF\s]+$/.test(content)) {
+        textContent.push(content);
+      }
+    }
+  }
+  
+  // Try BT/ET text blocks
+  const btMatches = text.match(/BT[\s\S]*?ET/g);
+  if (btMatches) {
+    for (const block of btMatches) {
+      const tjMatches = block.match(/\[([^\]]+)\]\s*TJ|\(([^)]+)\)\s*Tj/g);
+      if (tjMatches) {
+        for (const tj of tjMatches) {
+          const extracted = tj.replace(/\[|\]|TJ|Tj|\(|\)/g, ' ').trim();
+          if (extracted.length > 2) {
+            textContent.push(extracted);
+          }
+        }
+      }
+    }
+  }
+  
+  return textContent.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+// Use Gemini for OCR extraction from PDF
+async function extractTextWithGeminiOCR(pdfBuffer: ArrayBuffer, lovableApiKey: string): Promise<string> {
+  console.log('Using Gemini OCR for text extraction...');
+  
+  // Convert PDF buffer to base64
+  const uint8Array = new Uint8Array(pdfBuffer);
+  const base64String = btoa(String.fromCharCode(...uint8Array));
+  
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `Eres un experto en extracción de texto de documentos técnicos sobre tratamiento de aguas.
+Tu tarea es extraer TODO el texto del documento PDF proporcionado de forma precisa y completa.
+
+Instrucciones:
+1. Extrae todo el texto visible del documento
+2. Mantén la estructura del documento (títulos, párrafos, listas, tablas)
+3. Preserva los números, fórmulas y unidades técnicas exactamente como aparecen
+4. Si hay tablas, formatea los datos de forma legible
+5. Ignora elementos decorativos, logos e imágenes no textuales
+6. Si hay texto en múltiples idiomas, extrae todo
+7. Devuelve SOLO el texto extraído, sin comentarios ni explicaciones adicionales`
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Extrae todo el texto de este documento PDF técnico sobre tratamiento de aguas:'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:application/pdf;base64,${base64String}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 16000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Gemini API error:', response.status, errorText);
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const extractedText = data.choices?.[0]?.message?.content || '';
+    
+    console.log('Gemini extracted text length:', extractedText.length);
+    return extractedText;
+  } catch (error) {
+    console.error('Gemini OCR error:', error);
+    throw error;
+  }
 }
 
 serve(async (req) => {
@@ -86,6 +151,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { documentId } = await req.json();
@@ -124,24 +190,35 @@ serve(async (req) => {
 
     console.log('File downloaded, size:', fileData.size);
 
-    // Extract text from PDF
     const pdfBuffer = await fileData.arrayBuffer();
-    let extractedText = await extractTextFromPDF(pdfBuffer);
-    
-    // If basic extraction fails, try alternative method
-    if (extractedText.length < 100) {
-      console.log('Basic extraction yielded little text, using fallback');
-      // Fallback: just get any readable ASCII text
-      const uint8Array = new Uint8Array(pdfBuffer);
-      const rawText = new TextDecoder('utf-8', { fatal: false }).decode(uint8Array);
-      const readableChars = rawText.replace(/[^\x20-\x7E\xA0-\xFF\n\r\t]/g, ' ');
-      extractedText = readableChars.replace(/\s+/g, ' ').trim();
+    let extractedText = '';
+
+    // Try Gemini OCR first if API key is available
+    if (lovableApiKey) {
+      try {
+        extractedText = await extractTextWithGeminiOCR(pdfBuffer, lovableApiKey);
+      } catch (ocrError) {
+        console.log('Gemini OCR failed, falling back to basic extraction:', ocrError);
+      }
     }
 
-    console.log('Extracted text length:', extractedText.length);
+    // Fallback to basic extraction if Gemini fails or returns little text
+    if (extractedText.length < 100) {
+      console.log('Using basic PDF extraction as fallback');
+      extractedText = extractTextFromPDFBasic(pdfBuffer);
+      
+      // If still not enough, try getting any readable text
+      if (extractedText.length < 100) {
+        const uint8Array = new Uint8Array(pdfBuffer);
+        const rawText = new TextDecoder('utf-8', { fatal: false }).decode(uint8Array);
+        const readableChars = rawText.replace(/[^\x20-\x7E\xA0-\xFF\n\r\t]/g, ' ');
+        extractedText = readableChars.replace(/\s+/g, ' ').trim();
+      }
+    }
+
+    console.log('Total extracted text length:', extractedText.length);
 
     if (extractedText.length < 50) {
-      // Update status to error
       await supabase
         .from('knowledge_documents')
         .update({ status: 'error' })
@@ -165,7 +242,7 @@ serve(async (req) => {
       document_id: documentId,
       content,
       chunk_index: index,
-      tokens: Math.ceil(content.length / 4), // Rough token estimate
+      tokens: Math.ceil(content.length / 4),
     }));
 
     const { error: insertError } = await supabase
@@ -185,13 +262,14 @@ serve(async (req) => {
       })
       .eq('id', documentId);
 
-    console.log('Document processed successfully');
+    console.log('Document processed successfully with Gemini OCR');
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         chunks: chunks.length,
-        textLength: extractedText.length
+        textLength: extractedText.length,
+        method: lovableApiKey ? 'gemini-ocr' : 'basic'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
