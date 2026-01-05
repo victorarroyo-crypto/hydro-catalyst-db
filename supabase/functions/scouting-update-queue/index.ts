@@ -6,6 +6,8 @@ const corsHeaders = {
 
 const API_BASE = 'https://watertech-scouting-production.up.railway.app';
 
+type JsonValue = string | number | boolean | null | Record<string, unknown> | unknown[];
+
 function formatError(error: unknown): { message: string; details: unknown } {
   if (error instanceof Error) {
     return { message: error.message, details: { name: error.name, stack: error.stack } };
@@ -13,50 +15,86 @@ function formatError(error: unknown): { message: string; details: unknown } {
   return { message: String(error), details: null };
 }
 
+async function callExternalUpdate(params: {
+  id: string;
+  status: string;
+  headers: Record<string, string>;
+  method: 'PUT' | 'PATCH';
+}): Promise<{ ok: boolean; status: number; body: JsonValue; rawText: string }> {
+  const url = `${API_BASE}/api/scouting/queue/${params.id}`;
+
+  const res = await fetch(url, {
+    method: params.method,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...params.headers,
+    },
+    body: JSON.stringify({ status: params.status }),
+  });
+
+  const text = await res.text();
+  const body = text ? (() => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  })() : null;
+
+  return { ok: res.ok, status: res.status, body, rawText: text };
+}
+
 Deno.serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
     const { id, status } = await req.json();
-    console.log(`[scouting-update-queue] Received request: id=${id}, status=${status}`);
+    console.log(`[scouting-update-queue] Received: id=${id}, status=${status}`);
 
     if (!id || !status) {
-      console.error('[scouting-update-queue] Missing required params');
       return new Response(
         JSON.stringify({ success: false, error: 'Parámetros inválidos: id y status son obligatorios' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    const url = `${API_BASE}/api/scouting/queue/${id}`;
-    console.log(`[scouting-update-queue] Calling external API: PUT ${url}`);
+    // Some Railway endpoints require these headers for authorization/auditing.
+    // If the client provided them, forward them; otherwise set safe defaults.
+    const xUserId = req.headers.get('x-user-id') ?? 'system';
+    const xUserRole = req.headers.get('x-user-role') ?? 'system';
 
-    // Try PUT first (some APIs prefer PUT over PATCH for updates)
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
+    const forwardHeaders: Record<string, string> = {
+      'x-user-id': xUserId,
+      'x-user-role': xUserRole,
+    };
 
-    const text = await res.text();
-    console.log(`[scouting-update-queue] External API response: status=${res.status}, body=${text}`);
-    
-    const body = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
+    // Try both common update methods because the external backend has been returning 500.
+    // We'll attempt PUT first, then fallback to PATCH.
+    console.log(`[scouting-update-queue] External update: PUT /api/scouting/queue/${id} (x-user-id=${xUserId}, x-user-role=${xUserRole})`);
+    let attempt = await callExternalUpdate({ id, status, headers: forwardHeaders, method: 'PUT' });
 
-    if (!res.ok) {
-      console.error(`[scouting-update-queue] External API error: ${res.status}`);
+    if (!attempt.ok) {
+      console.log(`[scouting-update-queue] PUT failed: status=${attempt.status}, body=${attempt.rawText}`);
+      console.log(`[scouting-update-queue] External update: PATCH /api/scouting/queue/${id}`);
+      attempt = await callExternalUpdate({ id, status, headers: forwardHeaders, method: 'PATCH' });
+    }
+
+    console.log(`[scouting-update-queue] External response: ok=${attempt.ok}, status=${attempt.status}, body=${attempt.rawText}`);
+
+    if (!attempt.ok) {
       return new Response(
         JSON.stringify({
           success: false,
           error: 'Error al actualizar en backend de scouting',
-          details: { status: res.status, body },
+          details: { status: attempt.status, body: attempt.body },
         }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    console.log('[scouting-update-queue] Update successful');
-    return new Response(JSON.stringify({ success: true, result: body }), {
+    return new Response(JSON.stringify({ success: true, result: attempt.body }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
