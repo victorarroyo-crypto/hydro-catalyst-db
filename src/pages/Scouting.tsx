@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Sparkles
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -264,13 +265,14 @@ const fetchLLMModels = async (): Promise<LLMModelsResponse> => {
 };
 
 const updateQueueItem = async ({ id, status }: { id: string; status: string }) => {
-  const res = await fetch(`${API_BASE}/api/scouting/queue/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
+  const { data, error } = await supabase.functions.invoke('scouting-update-queue', {
+    body: { id, status },
   });
-  if (!res.ok) throw new Error('Error al actualizar');
-  return res.json();
+
+  if (error) throw new Error(error.message);
+  if (!data?.success) throw new Error(data?.error || 'Error al actualizar');
+
+  return data.result;
 };
 
 const runScouting = async (params: { 
