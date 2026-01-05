@@ -299,7 +299,7 @@ const Scouting = () => {
   const [trlMin, setTrlMin] = useState('none');
   const [instructions, setInstructions] = useState('');
   const [selectedReport, setSelectedReport] = useState<HistoryItem | null>(null);
-  const [selectedModel, setSelectedModel] = useState('groq/llama-3.1-8b-instant');
+  const [selectedModel, setSelectedModel] = useState('groq/llama-3.3-70b-versatile');
   const [cancelConfirmJob, setCancelConfirmJob] = useState<HistoryItem | null>(null);
 
   // Queries
