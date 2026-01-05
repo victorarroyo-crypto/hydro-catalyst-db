@@ -164,6 +164,9 @@ RESPONDE ÚNICAMENTE en formato JSON válido, sin texto adicional:
     const aiModel = modelSettings?.model || 'google/gemini-2.5-flash';
     console.log(`Using AI model: ${aiModel}`);
 
+    // Track timing for usage logs
+    const startTime = Date.now();
+
     // Call Lovable AI
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -180,9 +183,20 @@ RESPONDE ÚNICAMENTE en formato JSON válido, sin texto adicional:
       }),
     });
 
+    const responseTimeMs = Date.now() - startTime;
+
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error("AI API error:", aiResponse.status, errorText);
+      
+      // Log failed request
+      await supabase.from('ai_usage_logs').insert({
+        action_type: 'classification',
+        model: aiModel,
+        response_time_ms: responseTimeMs,
+        success: false,
+        error_message: `HTTP ${aiResponse.status}: ${errorText.substring(0, 200)}`,
+      });
       
       if (aiResponse.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
@@ -201,6 +215,23 @@ RESPONDE ÚNICAMENTE en formato JSON válido, sin texto adicional:
 
     const aiData = await aiResponse.json();
     const content = aiData.choices?.[0]?.message?.content;
+
+    // Extract token usage from response
+    const usage = aiData.usage || {};
+    const inputTokens = usage.prompt_tokens || 0;
+    const outputTokens = usage.completion_tokens || 0;
+    const totalTokens = usage.total_tokens || inputTokens + outputTokens;
+
+    // Log successful request
+    await supabase.from('ai_usage_logs').insert({
+      action_type: 'classification',
+      model: aiModel,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      total_tokens: totalTokens,
+      response_time_ms: responseTimeMs,
+      success: true,
+    });
 
     if (!content) {
       throw new Error("No response from AI");
@@ -255,6 +286,7 @@ RESPONDE ÚNICAMENTE en formato JSON válido, sin texto adicional:
       classified: successCount,
       remaining: Math.max(0, remaining),
       results: updateResults,
+      usage: { model: aiModel, tokens: totalTokens, response_time_ms: responseTimeMs },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

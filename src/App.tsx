@@ -22,6 +22,7 @@ import KnowledgeBase from "./pages/KnowledgeBase";
 import AIClassification from "./pages/AIClassification";
 import AISearch from "./pages/AISearch";
 import AIModels from "./pages/AIModels";
+import AIUsageDashboard from "./pages/AIUsageDashboard";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Cookies from "./pages/Cookies";
@@ -62,6 +63,7 @@ const App = () => (
               <Route path="/knowledge-base" element={<KnowledgeBase />} />
               <Route path="/ai-classification" element={<AIClassification />} />
               <Route path="/ai-search" element={<AISearch />} />
+              <Route path="/ai-usage" element={<AIUsageDashboard />} />
               <Route path="/ai-models" element={<AIModels />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/taxonomy-admin" element={<TaxonomyAdmin />} />
