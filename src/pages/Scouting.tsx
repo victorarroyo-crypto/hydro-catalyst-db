@@ -66,6 +66,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { TRLBadge } from '@/components/TRLBadge';
 import { ScoutingReportModal } from '@/components/ScoutingReportModal';
+import { ScoutingTechDetailModal } from '@/components/ScoutingTechDetailModal';
 
 const API_BASE = 'https://watertech-scouting-production.up.railway.app';
 const POLLING_INTERVAL = 10000; // 10 seconds
@@ -398,6 +399,7 @@ const Scouting = () => {
   const [isPolling, setIsPolling] = useState(false);
   const [lastPollTime, setLastPollTime] = useState<Date | null>(null);
   const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
+  const [selectedTech, setSelectedTech] = useState<QueueItem | null>(null);
   const previousRunningJobRef = useRef<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -1027,9 +1029,10 @@ const Scouting = () => {
                               return (
                                 <Card 
                                   key={item.id} 
-                                  className={`hover:shadow-md transition-all border ${
+                                  className={`hover:shadow-md transition-all border cursor-pointer ${
                                     isNew ? 'animate-fade-in ring-2 ring-primary/30 bg-primary/5' : ''
                                   }`}
+                                  onClick={() => setSelectedTech(item)}
                                 >
                                   <CardHeader className="pb-3">
                                     <div className="flex items-start justify-between gap-2">
@@ -1062,7 +1065,7 @@ const Scouting = () => {
                                   
                                   {/* Actions based on phase */}
                                   {section.id === 'pending' && (
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                                       <Button
                                         size="sm"
                                         variant="outline"
@@ -1086,7 +1089,7 @@ const Scouting = () => {
                                   )}
                                   
                                   {section.id === 'review' && (
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                                       <Button
                                         size="sm"
                                         variant="outline"
@@ -1111,30 +1114,34 @@ const Scouting = () => {
                                   )}
                                   
                                   {section.id === 'approved' && (
-                                    <Button
-                                      size="sm"
-                                      className="w-full bg-green-600 hover:bg-green-700"
-                                      onClick={() => {
-                                        // TODO: Transfer individual tech to main DB
-                                        toast.info('Transferencia individual en desarrollo');
-                                      }}
-                                    >
-                                      <Rocket className="w-3 h-3 mr-1" />
-                                      Añadir a BD Principal
-                                    </Button>
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                      <Button
+                                        size="sm"
+                                        className="w-full bg-green-600 hover:bg-green-700"
+                                        onClick={() => {
+                                          // TODO: Transfer individual tech to main DB
+                                          toast.info('Transferencia individual en desarrollo');
+                                        }}
+                                      >
+                                        <Rocket className="w-3 h-3 mr-1" />
+                                        Añadir a BD Principal
+                                      </Button>
+                                    </div>
                                   )}
                                   
                                   {section.id === 'rejected' && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="w-full"
-                                      onClick={() => updateMutation.mutate({ id: item.id, status: 'pending' })}
-                                      disabled={updateMutation.isPending}
-                                    >
-                                      <Rocket className="w-3 h-3 mr-1" />
-                                      Reconsiderar
-                                    </Button>
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'pending' })}
+                                        disabled={updateMutation.isPending}
+                                      >
+                                        <Rocket className="w-3 h-3 mr-1" />
+                                        Reconsiderar
+                                      </Button>
+                                    </div>
                                   )}
                                 </CardContent>
                               </Card>
@@ -1429,6 +1436,15 @@ const Scouting = () => {
       <ScoutingReportModal 
         report={selectedReport} 
         onClose={() => setSelectedReport(null)} 
+      />
+
+      {/* Technology Detail Modal */}
+      <ScoutingTechDetailModal
+        technology={selectedTech}
+        onClose={() => setSelectedTech(null)}
+        onStatusChange={() => {
+          queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+        }}
       />
 
       {/* Cancel Confirmation Dialog */}
