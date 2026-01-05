@@ -419,6 +419,11 @@ const Scouting = () => {
     queryFn: () => fetchQueue('review'),
   });
 
+  const { data: supervisionQueue, isLoading: supervisionLoading } = useQuery({
+    queryKey: ['scouting-queue', 'supervision'],
+    queryFn: () => fetchQueue('supervision'),
+  });
+
   const { data: approvedQueue, isLoading: approvedLoading } = useQuery({
     queryKey: ['scouting-queue', 'approved'],
     queryFn: () => fetchQueue('approved'),
@@ -680,6 +685,7 @@ const Scouting = () => {
 
   const pendingItems = pendingQueue?.items ?? [];
   const reviewItems = reviewQueue?.items ?? [];
+  const supervisionItems = supervisionQueue?.items ?? [];
   const approvedItems = approvedQueue?.items ?? [];
   const rejectedItems = rejectedQueue?.items ?? [];
   
@@ -692,17 +698,27 @@ const Scouting = () => {
       icon: Clock,
       color: 'text-amber-500',
       bgColor: 'bg-amber-500/10',
-      description: 'Tecnologías recién descubiertas esperando primera revisión'
+      description: 'Tecnologías recién descubiertas esperando primera revisión por analistas'
     },
     { 
       id: 'review', 
-      title: 'En Revisión', 
+      title: 'En Revisión (Analista)', 
       items: reviewItems, 
       loading: reviewLoading,
       icon: Eye,
       color: 'text-blue-500',
       bgColor: 'bg-blue-500/10',
-      description: 'Tecnologías siendo evaluadas por el equipo'
+      description: 'Tecnologías siendo evaluadas por analistas'
+    },
+    { 
+      id: 'supervision', 
+      title: 'Centro de Supervisión', 
+      items: supervisionItems, 
+      loading: supervisionLoading,
+      icon: AlertCircle,
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-500/10',
+      description: 'Pendientes de aprobación por Supervisor/Admin'
     },
     { 
       id: 'approved', 
@@ -712,7 +728,7 @@ const Scouting = () => {
       icon: CheckCircle2,
       color: 'text-green-500',
       bgColor: 'bg-green-500/10',
-      description: 'Revisión completa - listas para añadir a la base de datos principal'
+      description: 'Aprobadas por Supervisión - listas para añadir a la base de datos principal'
     },
     { 
       id: 'rejected', 
@@ -1077,86 +1093,10 @@ const Scouting = () => {
                                     Ver ficha completa
                                   </Button>
                                   
-                                  {/* Actions based on phase */}
-                                  {section.id === 'pending' && (
-                                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1"
-                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'review' })}
-                                        disabled={updateMutation.isPending}
-                                      >
-                                        <Eye className="w-3 h-3 mr-1" />
-                                        Revisar
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-red-600 border-red-600 hover:bg-red-50"
-                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'rejected' })}
-                                        disabled={updateMutation.isPending}
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </Button>
-                                    </div>
-                                  )}
-                                  
-                                  {section.id === 'review' && (
-                                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1 text-green-600 border-green-600 hover:bg-green-50"
-                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'approved' })}
-                                        disabled={updateMutation.isPending}
-                                      >
-                                        <Check className="w-3 h-3 mr-1" />
-                                        Aprobar
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1 text-red-600 border-red-600 hover:bg-red-50"
-                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'rejected' })}
-                                        disabled={updateMutation.isPending}
-                                      >
-                                        <X className="w-3 h-3 mr-1" />
-                                        Rechazar
-                                      </Button>
-                                    </div>
-                                  )}
-                                  
-                                  {section.id === 'approved' && (
-                                    <div onClick={(e) => e.stopPropagation()}>
-                                      <Button
-                                        size="sm"
-                                        className="w-full bg-green-600 hover:bg-green-700"
-                                        onClick={() => {
-                                          // TODO: Transfer individual tech to main DB
-                                          toast.info('Transferencia individual en desarrollo');
-                                        }}
-                                      >
-                                        <Rocket className="w-3 h-3 mr-1" />
-                                        Añadir a BD Principal
-                                      </Button>
-                                    </div>
-                                  )}
-                                  
-                                  {section.id === 'rejected' && (
-                                    <div onClick={(e) => e.stopPropagation()}>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="w-full"
-                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'pending' })}
-                                        disabled={updateMutation.isPending}
-                                      >
-                                        <Rocket className="w-3 h-3 mr-1" />
-                                        Reconsiderar
-                                      </Button>
-                                    </div>
-                                  )}
+                                  {/* Status indicator */}
+                                  <div className="text-xs text-muted-foreground text-center pt-1">
+                                    Haz clic para ver detalles y acciones
+                                  </div>
                                 </CardContent>
                               </Card>
                               );
