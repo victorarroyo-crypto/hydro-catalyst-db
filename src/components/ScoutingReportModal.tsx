@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -29,9 +31,14 @@ import {
   TrendingDown,
   Minus,
   Lightbulb,
-  Target
+  Target,
+  Check,
+  X,
+  Eye
 } from 'lucide-react';
-import { TRLBadge } from '@/components/TRLBadge';
+import { toast } from 'sonner';
+
+const API_BASE = 'https://watertech-scouting-production.up.railway.app';
 
 interface ScoutingLog {
   level: 'info' | 'error' | 'warn';
@@ -67,6 +74,16 @@ interface HistoryItem {
   created_at: string;
 }
 
+interface QueueItem {
+  id: string;
+  name: string;
+  provider: string;
+  country: string;
+  score: number;
+  trl: number;
+  status: string;
+}
+
 interface ParsedTechnology {
   name: string;
   provider: string;
@@ -74,6 +91,7 @@ interface ParsedTechnology {
   reason: string;
   trl?: number;
   country?: string;
+  queueId?: string; // ID from queue for actions
 }
 
 interface ParsedReport {
@@ -97,6 +115,24 @@ interface ScoutingReportModalProps {
   report: HistoryItem | null;
   onClose: () => void;
 }
+
+// Fetch queue items to match with parsed technologies
+const fetchQueue = async (status: string): Promise<{ items: QueueItem[] }> => {
+  const res = await fetch(`${API_BASE}/api/scouting/queue?status=${status}`);
+  if (!res.ok) throw new Error('Error al cargar cola');
+  return res.json();
+};
+
+const updateQueueItem = async ({ id, status }: { id: string; status: string }) => {
+  const res = await fetch(`${API_BASE}/api/scouting/queue/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) throw new Error('Error al actualizar');
+  return res.json();
+};
+
 
 const getLogIcon = (level: string) => {
   switch (level) {
@@ -212,14 +248,37 @@ const TechnologyTable = ({
   technologies, 
   title, 
   icon: Icon, 
-  color 
+  color,
+  queueItems,
+  onAction,
+  actionPending,
+  sectionType
 }: { 
   technologies: ParsedTechnology[]; 
   title: string; 
   icon: React.ElementType;
   color: string;
+  queueItems: QueueItem[];
+  onAction: (id: string, status: string) => void;
+  actionPending: string | null;
+  sectionType: 'added' | 'review' | 'rejected';
 }) => {
   if (technologies.length === 0) return null;
+
+  // Try to match technologies with queue items by name similarity
+  const findQueueItem = (tech: ParsedTechnology): QueueItem | undefined => {
+    const normalizedName = tech.name.toLowerCase().trim();
+    const normalizedProvider = tech.provider.toLowerCase().trim();
+    
+    return queueItems.find(item => {
+      const itemName = item.name.toLowerCase().trim();
+      const itemProvider = item.provider.toLowerCase().trim();
+      // Match by name or name+provider
+      return itemName.includes(normalizedName) || 
+             normalizedName.includes(itemName) ||
+             (itemName.includes(normalizedName.split(' ')[0]) && itemProvider.includes(normalizedProvider.split(' ')[0]));
+    });
+  };
 
   return (
     <Card className="overflow-hidden">
@@ -233,28 +292,99 @@ const TechnologyTable = ({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[35%]">Tecnología</TableHead>
-              <TableHead className="w-[25%]">Proveedor</TableHead>
-              <TableHead className="w-[10%] text-center">Score</TableHead>
-              <TableHead className="w-[30%]">Observación</TableHead>
+              <TableHead className="w-[30%]">Tecnología</TableHead>
+              <TableHead className="w-[20%]">Proveedor</TableHead>
+              <TableHead className="w-[8%] text-center">Score</TableHead>
+              <TableHead className="w-[25%]">Observación</TableHead>
+              <TableHead className="w-[17%] text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {technologies.map((tech, idx) => (
-              <TableRow key={idx}>
-                <TableCell className="font-medium">{tech.name}</TableCell>
-                <TableCell className="text-muted-foreground">{tech.provider}</TableCell>
-                <TableCell className="text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    {getScoreIcon(tech.score)}
-                    <Badge className={getScoreColor(tech.score)}>
-                      {tech.score}
-                    </Badge>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">{tech.reason}</TableCell>
-              </TableRow>
-            ))}
+            {technologies.map((tech, idx) => {
+              const queueItem = findQueueItem(tech);
+              const isPending = actionPending === queueItem?.id;
+              
+              return (
+                <TableRow key={idx}>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      {tech.name}
+                      {queueItem && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          En cola
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{tech.provider}</TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      {getScoreIcon(tech.score)}
+                      <Badge className={getScoreColor(tech.score)}>
+                        {tech.score}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{tech.reason}</TableCell>
+                  <TableCell>
+                    {queueItem ? (
+                      <div className="flex items-center justify-center gap-1">
+                        {sectionType === 'review' && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+                              onClick={() => onAction(queueItem.id, 'approved')}
+                              disabled={isPending}
+                            >
+                              {isPending ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => onAction(queueItem.id, 'rejected')}
+                              disabled={isPending}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          </>
+                        )}
+                        {sectionType === 'added' && (
+                          <Badge className="bg-green-100 text-green-700 border-green-200">
+                            <Check className="w-3 h-3 mr-1" />
+                            Añadida
+                          </Badge>
+                        )}
+                        {sectionType === 'rejected' && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => onAction(queueItem.id, 'pending')}
+                            disabled={isPending}
+                            title="Reconsiderar"
+                          >
+                            {isPending ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5" />
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/50">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </CardContent>
@@ -263,6 +393,58 @@ const TechnologyTable = ({
 };
 
 export const ScoutingReportModal = ({ report, onClose }: ScoutingReportModalProps) => {
+  const queryClient = useQueryClient();
+  const [actionPending, setActionPending] = useState<string | null>(null);
+
+  // Fetch all queue items to match with parsed technologies
+  const { data: pendingQueue } = useQuery({
+    queryKey: ['scouting-queue', 'pending'],
+    queryFn: () => fetchQueue('pending'),
+    enabled: !!report,
+  });
+
+  const { data: reviewQueue } = useQuery({
+    queryKey: ['scouting-queue', 'review'],
+    queryFn: () => fetchQueue('review'),
+    enabled: !!report,
+  });
+
+  // Combine all queue items for matching
+  const allQueueItems: QueueItem[] = useMemo(() => {
+    return [
+      ...(pendingQueue?.items ?? []),
+      ...(reviewQueue?.items ?? []),
+    ];
+  }, [pendingQueue, reviewQueue]);
+
+  // Mutation for updating queue items
+  const updateMutation = useMutation({
+    mutationFn: updateQueueItem,
+    onMutate: ({ id }) => {
+      setActionPending(id);
+    },
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
+      const statusLabels: Record<string, string> = {
+        approved: 'Tecnología aprobada',
+        rejected: 'Tecnología rechazada',
+        pending: 'Tecnología devuelta a pendientes',
+        review: 'Tecnología enviada a revisión'
+      };
+      toast.success(statusLabels[status] || 'Tecnología actualizada');
+      setActionPending(null);
+    },
+    onError: () => {
+      toast.error('Error al actualizar la tecnología');
+      setActionPending(null);
+    },
+  });
+
+  const handleAction = (id: string, status: string) => {
+    updateMutation.mutate({ id, status });
+  };
+
   const parsedReport = useMemo(() => {
     if (!report) return null;
     
@@ -442,6 +624,10 @@ export const ScoutingReportModal = ({ report, onClose }: ScoutingReportModalProp
                     title="Añadidas (Score 70+)"
                     icon={CheckCircle2}
                     color="bg-green-50"
+                    queueItems={allQueueItems}
+                    onAction={handleAction}
+                    actionPending={actionPending}
+                    sectionType="added"
                   />
                   
                   <TechnologyTable 
@@ -449,6 +635,10 @@ export const ScoutingReportModal = ({ report, onClose }: ScoutingReportModalProp
                     title="Para Revisión (Score 50-69)"
                     icon={AlertTriangle}
                     color="bg-yellow-50"
+                    queueItems={allQueueItems}
+                    onAction={handleAction}
+                    actionPending={actionPending}
+                    sectionType="review"
                   />
                   
                   <TechnologyTable 
@@ -456,6 +646,10 @@ export const ScoutingReportModal = ({ report, onClose }: ScoutingReportModalProp
                     title="Rechazadas (Score <50)"
                     icon={XCircle}
                     color="bg-red-50"
+                    queueItems={allQueueItems}
+                    onAction={handleAction}
+                    actionPending={actionPending}
+                    sectionType="rejected"
                   />
                 </div>
               )}
