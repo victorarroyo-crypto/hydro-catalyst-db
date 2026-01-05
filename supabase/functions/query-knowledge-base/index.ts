@@ -105,8 +105,18 @@ serve(async (req) => {
       `[Fuente ${index + 1}: ${chunk.knowledge_documents?.name || 'Documento'}]\n${chunk.content}`
     ).join('\n\n---\n\n');
 
+    // Fetch the AI model to use from settings
+    const { data: modelSettings } = await supabase
+      .from('ai_model_settings')
+      .select('model')
+      .eq('action_type', 'knowledge_base')
+      .single();
+    
+    const aiModel = modelSettings?.model || 'google/gemini-2.5-flash';
+    console.log(`Using AI model for knowledge base: ${aiModel}`);
+
     // Generate answer using Lovable AI
-    const systemPrompt = `Eres un experto en ingeniería de tratamiento de aguas (potable, residual, industrial) y tecnologías del sector del agua. 
+    const systemPrompt = `Eres un experto en ingeniería de tratamiento de aguas (potable, residual, industrial) y tecnologías del sector del agua.
 Tu tarea es responder preguntas técnicas basándote ÚNICAMENTE en el contexto proporcionado de la base de conocimiento.
 
 Reglas:
@@ -127,7 +137,7 @@ ${context}`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: aiModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: query }

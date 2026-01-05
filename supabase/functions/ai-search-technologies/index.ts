@@ -166,6 +166,16 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
+    // Fetch the AI model to use from settings
+    const { data: modelSettings } = await supabase
+      .from('ai_model_settings')
+      .select('model')
+      .eq('action_type', 'search')
+      .single();
+    
+    const aiModel = modelSettings?.model || 'google/gemini-2.5-flash';
+    console.log(`Using AI model for search: ${aiModel}`);
+
     // Build context about active filters
     const filterContext = filters ? Object.entries(filters)
       .filter(([_, v]) => v !== null && v !== undefined)
@@ -200,7 +210,7 @@ Si no encuentras coincidencias:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: aiModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Busca tecnologías que coincidan con: "${query}"` }
