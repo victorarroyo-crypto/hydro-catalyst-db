@@ -82,7 +82,6 @@ const getStatusLabel = (status: string): string => {
   switch (status) {
     case 'pending': return 'Pendiente';
     case 'review': return 'En revisión';
-    case 'supervision': return 'En supervisión';
     case 'approved': return 'Aprobada';
     case 'rejected': return 'Rechazada';
     default: return status;
@@ -93,7 +92,6 @@ const getStatusColor = (status: string): string => {
   switch (status) {
     case 'pending': return 'bg-amber-500/20 text-amber-700 border-amber-500/30';
     case 'review': return 'bg-blue-500/20 text-blue-700 border-blue-500/30';
-    case 'supervision': return 'bg-orange-500/20 text-orange-700 border-orange-500/30';
     case 'approved': return 'bg-green-500/20 text-green-700 border-green-500/30';
     case 'rejected': return 'bg-red-500/20 text-red-700 border-red-500/30';
     default: return 'bg-muted text-muted-foreground';
@@ -492,7 +490,7 @@ export const ScoutingTechDetailModal = ({
                   </>
                 )}
 
-                {/* Review: Send to supervision or transfer to DB */}
+                {/* Review: Approve or reject */}
                 {technology.status === 'review' && (
                   <>
                     <Button
@@ -516,54 +514,6 @@ export const ScoutingTechDetailModal = ({
                     </Button>
                     <Button
                       size="sm"
-                      className="bg-orange-600 hover:bg-orange-700"
-                      onClick={() => handleStatusChange('supervision')}
-                      disabled={updateMutation.isPending}
-                    >
-                      {updateMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 mr-1" />
-                      )}
-                      Enviar a Supervisión
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700"
-                      onClick={() => {
-                        toast.info('Transferencia a BD principal en desarrollo');
-                      }}
-                    >
-                      <Rocket className="w-4 h-4 mr-1" />
-                      Añadir a BD
-                    </Button>
-                  </>
-                )}
-
-                {/* Supervision: Approve or reject */}
-                {technology.status === 'supervision' && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleStatusChange('review')}
-                      disabled={updateMutation.isPending}
-                    >
-                      <ArrowLeft className="w-4 h-4 mr-1" />
-                      Devolver a Revisión
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-red-600 border-red-300 hover:bg-red-50"
-                      onClick={() => handleStatusChange('rejected')}
-                      disabled={updateMutation.isPending}
-                    >
-                      <X className="w-4 h-4 mr-1" />
-                      Rechazar
-                    </Button>
-                    <Button
-                      size="sm"
                       className="bg-green-600 hover:bg-green-700"
                       onClick={() => handleStatusChange('approved')}
                       disabled={updateMutation.isPending}
@@ -573,7 +523,7 @@ export const ScoutingTechDetailModal = ({
                       ) : (
                         <Check className="w-4 h-4 mr-1" />
                       )}
-                      Aprobar (Supervisor)
+                      Aprobar
                     </Button>
                   </>
                 )}
@@ -584,11 +534,11 @@ export const ScoutingTechDetailModal = ({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleStatusChange('supervision')}
+                      onClick={() => handleStatusChange('review')}
                       disabled={updateMutation.isPending}
                     >
                       <ArrowLeft className="w-4 h-4 mr-1" />
-                      Volver a Supervisión
+                      Volver a Revisión
                     </Button>
                     <Button
                       size="sm"
