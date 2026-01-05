@@ -38,18 +38,14 @@ const Index = () => {
           <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative container mx-auto px-6 py-8">
-          {/* Logo centered and large */}
-          <div className="flex justify-center mb-12">
+        <div className="relative container mx-auto px-6 pt-6 pb-8">
+          {/* Top navigation bar */}
+          <nav className="flex items-center justify-between mb-8">
             <img 
               src={vandarumLogo} 
               alt="Vandarum" 
-              className="h-32 md:h-40 w-auto"
+              className="h-12 md:h-16 w-auto"
             />
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex items-center justify-center mb-12">
             <Button 
               onClick={handleGetStarted}
               className="gradient-primary text-primary-foreground shadow-glow"
@@ -60,7 +56,7 @@ const Index = () => {
           </nav>
 
           {/* Hero Content */}
-          <div className="max-w-4xl mx-auto text-center py-20">
+          <div className="max-w-4xl mx-auto text-center py-12 md:py-16">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-secondary/10 rounded-full text-secondary mb-8 animate-fade-in">
               <Sparkles className="w-4 h-4" />
               <span className="text-sm font-medium">Impulsado por Inteligencia Artificial</span>
