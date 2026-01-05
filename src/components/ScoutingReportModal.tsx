@@ -1,0 +1,601 @@
+import { useMemo } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { 
+  FileText, 
+  CheckCircle2, 
+  XCircle, 
+  AlertTriangle, 
+  Loader2, 
+  Rocket, 
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Lightbulb,
+  Target
+} from 'lucide-react';
+import { TRLBadge } from '@/components/TRLBadge';
+
+interface ScoutingLog {
+  level: 'info' | 'error' | 'warn';
+  phase: string;
+  message: string;
+  timestamp: string;
+}
+
+interface ScoutingConfig {
+  pais: string | null;
+  tipo: string;
+  fuentes: string[];
+  trl_min: number | null;
+  keywords: string[];
+  subcategoria: string | null;
+  instrucciones_adicionales: string | null;
+}
+
+interface HistoryItem {
+  id: string;
+  started_at: string;
+  completed_at: string | null;
+  status: 'running' | 'completed' | 'failed';
+  trigger_type: string;
+  triggered_by: string;
+  config: ScoutingConfig;
+  llm_model: string;
+  results_summary: string | null;
+  tokens_used: number | null;
+  estimated_cost: number | null;
+  error_message: string | null;
+  logs: ScoutingLog[];
+  created_at: string;
+}
+
+interface ParsedTechnology {
+  name: string;
+  provider: string;
+  score: number;
+  reason: string;
+  trl?: number;
+  country?: string;
+}
+
+interface ParsedReport {
+  summary: {
+    evaluated: number;
+    added: number;
+    review: number;
+    rejected: number;
+  };
+  technologies: {
+    added: ParsedTechnology[];
+    review: ParsedTechnology[];
+    rejected: ParsedTechnology[];
+  };
+  conclusions: string[];
+  recommendations: string[];
+  rawText: string;
+}
+
+interface ScoutingReportModalProps {
+  report: HistoryItem | null;
+  onClose: () => void;
+}
+
+const getLogIcon = (level: string) => {
+  switch (level) {
+    case 'error':
+      return <XCircle className="w-4 h-4 text-red-500" />;
+    case 'warn':
+      return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+    default:
+      return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+  }
+};
+
+const parseReportText = (text: string): ParsedReport => {
+  const result: ParsedReport = {
+    summary: { evaluated: 0, added: 0, review: 0, rejected: 0 },
+    technologies: { added: [], review: [], rejected: [] },
+    conclusions: [],
+    recommendations: [],
+    rawText: text
+  };
+
+  if (!text) return result;
+
+  // Parse summary section
+  const evaluatedMatch = text.match(/Tecnologías evaluadas:\s*(\d+)/i);
+  const addedMatch = text.match(/Añadidas.*?:\s*(\d+)/i);
+  const reviewMatch = text.match(/Para revisión.*?:\s*(\d+)/i);
+  const rejectedMatch = text.match(/Rechazadas.*?:\s*(\d+)/i);
+
+  if (evaluatedMatch) result.summary.evaluated = parseInt(evaluatedMatch[1]);
+  if (addedMatch) result.summary.added = parseInt(addedMatch[1]);
+  if (reviewMatch) result.summary.review = parseInt(reviewMatch[1]);
+  if (rejectedMatch) result.summary.rejected = parseInt(rejectedMatch[1]);
+
+  // Parse technology tables - look for table-like structures
+  // Format: | Nombre | Proveedor | Score | Duda/Razón |
+  const tableRowRegex = /\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|/g;
+  let match;
+  
+  // Determine current section based on context
+  let currentSection: 'added' | 'review' | 'rejected' = 'review';
+  const lines = text.split('\n');
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Detect section headers
+    if (line.includes('AÑADIDAS') || line.includes('🟢')) {
+      currentSection = 'added';
+    } else if (line.includes('PARA REVISIÓN') || line.includes('🟡')) {
+      currentSection = 'review';
+    } else if (line.includes('RECHAZADAS') || line.includes('🔴')) {
+      currentSection = 'rejected';
+    }
+    
+    // Parse table rows
+    const rowMatch = line.match(/\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|/);
+    if (rowMatch) {
+      const name = rowMatch[1].trim();
+      const provider = rowMatch[2].trim();
+      const score = parseInt(rowMatch[3]);
+      const reason = rowMatch[4].trim();
+      
+      // Skip header rows
+      if (name.toLowerCase() === 'tecnología' || 
+          name.toLowerCase() === 'nombre' || 
+          name.includes('---') ||
+          provider.toLowerCase() === 'proveedor') {
+        continue;
+      }
+      
+      const tech: ParsedTechnology = { name, provider, score, reason };
+      result.technologies[currentSection].push(tech);
+    }
+  }
+
+  // Parse conclusions
+  const conclusionsMatch = text.match(/CONCLUSIONES:([\s\S]*?)(?=RECOMENDACIONES|$)/i);
+  if (conclusionsMatch) {
+    const conclusionLines = conclusionsMatch[1]
+      .split('\n')
+      .map(line => line.replace(/^[-*•]\s*/, '').trim())
+      .filter(line => line.length > 0 && !line.startsWith('|'));
+    result.conclusions = conclusionLines;
+  }
+
+  // Parse recommendations
+  const recommendationsMatch = text.match(/(?:RECOMENDACIONES|Recomendaciones para próximo scouting):([\s\S]*?)$/i);
+  if (recommendationsMatch) {
+    const recLines = recommendationsMatch[1]
+      .split('\n')
+      .map(line => line.replace(/^[-*•]\s*/, '').trim())
+      .filter(line => line.length > 0 && !line.startsWith('|'));
+    result.recommendations = recLines;
+  }
+
+  return result;
+};
+
+const getScoreColor = (score: number): string => {
+  if (score >= 70) return 'bg-green-500/20 text-green-700 border-green-500/30';
+  if (score >= 50) return 'bg-yellow-500/20 text-yellow-700 border-yellow-500/30';
+  return 'bg-red-500/20 text-red-700 border-red-500/30';
+};
+
+const getScoreIcon = (score: number) => {
+  if (score >= 70) return <TrendingUp className="w-4 h-4 text-green-600" />;
+  if (score >= 50) return <Minus className="w-4 h-4 text-yellow-600" />;
+  return <TrendingDown className="w-4 h-4 text-red-600" />;
+};
+
+const TechnologyTable = ({ 
+  technologies, 
+  title, 
+  icon: Icon, 
+  color 
+}: { 
+  technologies: ParsedTechnology[]; 
+  title: string; 
+  icon: React.ElementType;
+  color: string;
+}) => {
+  if (technologies.length === 0) return null;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className={`py-3 ${color}`}>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Icon className="w-4 h-4" />
+          {title} ({technologies.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[35%]">Tecnología</TableHead>
+              <TableHead className="w-[25%]">Proveedor</TableHead>
+              <TableHead className="w-[10%] text-center">Score</TableHead>
+              <TableHead className="w-[30%]">Observación</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {technologies.map((tech, idx) => (
+              <TableRow key={idx}>
+                <TableCell className="font-medium">{tech.name}</TableCell>
+                <TableCell className="text-muted-foreground">{tech.provider}</TableCell>
+                <TableCell className="text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    {getScoreIcon(tech.score)}
+                    <Badge className={getScoreColor(tech.score)}>
+                      {tech.score}
+                    </Badge>
+                  </div>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">{tech.reason}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
+export const ScoutingReportModal = ({ report, onClose }: ScoutingReportModalProps) => {
+  const parsedReport = useMemo(() => {
+    if (!report) return null;
+    
+    // Get raw output from results_summary or logs
+    let rawText = '';
+    
+    if (report.results_summary) {
+      if (typeof report.results_summary === 'string') {
+        rawText = report.results_summary;
+      } else if (typeof report.results_summary === 'object') {
+        const summary = report.results_summary as any;
+        rawText = summary.raw_output || summary.report || JSON.stringify(summary, null, 2);
+      }
+    }
+    
+    // Also check logs for report content
+    if (!rawText && report.logs) {
+      const reportLog = report.logs.find(log => 
+        log.phase === 'report' || 
+        (typeof log.message === 'string' && log.message.includes('INFORME'))
+      );
+      if (reportLog && typeof reportLog.message === 'string') {
+        rawText = reportLog.message;
+      }
+    }
+    
+    return parseReportText(rawText);
+  }, [report]);
+
+  const hasTechnologies = parsedReport && (
+    parsedReport.technologies.added.length > 0 ||
+    parsedReport.technologies.review.length > 0 ||
+    parsedReport.technologies.rejected.length > 0
+  );
+
+  return (
+    <Dialog open={!!report} onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Informe de Scouting
+          </DialogTitle>
+          <DialogDescription>
+            Resultados detallados del proceso de scouting tecnológico
+          </DialogDescription>
+        </DialogHeader>
+        
+        {report && (
+          <ScrollArea className="max-h-[calc(90vh-120px)]">
+            <div className="space-y-6 pr-4">
+              {/* Status Banner */}
+              <div className={`p-4 rounded-lg ${
+                report.status === 'failed' 
+                  ? 'bg-red-50 border border-red-200' 
+                  : report.status === 'completed'
+                  ? 'bg-green-50 border border-green-200'
+                  : 'bg-blue-50 border border-blue-200'
+              }`}>
+                <div className="flex items-center gap-3">
+                  {report.status === 'failed' ? (
+                    <XCircle className="w-6 h-6 text-red-500" />
+                  ) : report.status === 'completed' ? (
+                    <CheckCircle2 className="w-6 h-6 text-green-500" />
+                  ) : (
+                    <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                  )}
+                  <div className="flex-1">
+                    <h3 className="font-semibold">
+                      {report.status === 'failed' 
+                        ? 'Scouting Fallido' 
+                        : report.status === 'completed'
+                        ? 'Scouting Completado'
+                        : 'Scouting en Progreso'}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Iniciado: {new Date(report.started_at).toLocaleString('es-ES')}
+                      {report.completed_at && (
+                        <> • Finalizado: {new Date(report.completed_at).toLocaleString('es-ES')}</>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {report.error_message && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <h4 className="font-semibold text-red-700 flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Error
+                  </h4>
+                  <pre className="text-xs text-red-600 whitespace-pre-wrap font-mono bg-red-100/50 p-3 rounded overflow-x-auto">
+                    {report.error_message}
+                  </pre>
+                </div>
+              )}
+
+              {/* Summary Stats */}
+              {parsedReport && parsedReport.summary.evaluated > 0 && (
+                <div className="grid grid-cols-4 gap-3">
+                  <Card className="bg-muted/30">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-foreground">
+                        {parsedReport.summary.evaluated}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Evaluadas</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-green-50 border-green-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {parsedReport.summary.added}
+                      </div>
+                      <div className="text-xs text-green-600">Añadidas</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-yellow-50 border-yellow-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-yellow-600">
+                        {parsedReport.summary.review}
+                      </div>
+                      <div className="text-xs text-yellow-600">Para revisión</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-red-50 border-red-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-red-600">
+                        {parsedReport.summary.rejected}
+                      </div>
+                      <div className="text-xs text-red-600">Rechazadas</div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Configuration */}
+              <div>
+                <h4 className="font-semibold mb-3 flex items-center gap-2">
+                  <Rocket className="w-4 h-4" />
+                  Configuración
+                </h4>
+                <div className="grid grid-cols-2 gap-4 text-sm bg-muted/20 p-4 rounded-lg">
+                  <div>
+                    <span className="text-muted-foreground">Keywords:</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {report.config.keywords?.map((kw, i) => (
+                        <Badge key={i} variant="secondary">{kw}</Badge>
+                      )) || <span className="text-muted-foreground">-</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tipo:</span>
+                    <p className="font-medium">{report.config.tipo || 'Todos'}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">TRL mínimo:</span>
+                    <p className="font-medium">{report.config.trl_min ?? 'Sin mínimo'}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Modelo LLM:</span>
+                    <p className="font-medium">{report.llm_model}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Technology Tables */}
+              {hasTechnologies && (
+                <div className="space-y-4">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Target className="w-4 h-4" />
+                    Tecnologías Encontradas
+                  </h4>
+                  
+                  <TechnologyTable 
+                    technologies={parsedReport.technologies.added}
+                    title="Añadidas (Score 70+)"
+                    icon={CheckCircle2}
+                    color="bg-green-50"
+                  />
+                  
+                  <TechnologyTable 
+                    technologies={parsedReport.technologies.review}
+                    title="Para Revisión (Score 50-69)"
+                    icon={AlertTriangle}
+                    color="bg-yellow-50"
+                  />
+                  
+                  <TechnologyTable 
+                    technologies={parsedReport.technologies.rejected}
+                    title="Rechazadas (Score <50)"
+                    icon={XCircle}
+                    color="bg-red-50"
+                  />
+                </div>
+              )}
+
+              {/* Conclusions & Recommendations */}
+              {parsedReport && (parsedReport.conclusions.length > 0 || parsedReport.recommendations.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {parsedReport.conclusions.length > 0 && (
+                    <Card>
+                      <CardHeader className="py-3 bg-blue-50">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Lightbulb className="w-4 h-4 text-blue-600" />
+                          Conclusiones
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <ul className="space-y-2 text-sm">
+                          {parsedReport.conclusions.slice(0, 5).map((c, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="text-blue-500 mt-1">•</span>
+                              <span>{c}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {parsedReport.recommendations.length > 0 && (
+                    <Card>
+                      <CardHeader className="py-3 bg-purple-50">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Target className="w-4 h-4 text-purple-600" />
+                          Recomendaciones
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <ul className="space-y-2 text-sm">
+                          {parsedReport.recommendations.slice(0, 5).map((r, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="text-purple-500 mt-1">•</span>
+                              <span>{r}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+
+              {/* Usage Stats */}
+              {(report.tokens_used || report.estimated_cost) && (
+                <div>
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4" />
+                    Uso y Coste
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm bg-muted/20 p-4 rounded-lg">
+                    <div>
+                      <span className="text-muted-foreground">Tokens usados:</span>
+                      <p className="font-medium">{report.tokens_used?.toLocaleString() ?? 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Coste estimado:</span>
+                      <p className="font-medium">
+                        {report.estimated_cost !== null 
+                          ? `$${report.estimated_cost.toFixed(4)}` 
+                          : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Raw Output (Collapsible) */}
+              {parsedReport?.rawText && (
+                <details className="group">
+                  <summary className="cursor-pointer font-semibold flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                    <FileText className="w-4 h-4" />
+                    Ver informe original (texto)
+                  </summary>
+                  <pre className="mt-3 text-xs whitespace-pre-wrap font-mono bg-muted/30 p-4 rounded-lg overflow-x-auto max-h-[300px] overflow-y-auto">
+                    {parsedReport.rawText}
+                  </pre>
+                </details>
+              )}
+
+              {/* Logs */}
+              {report.logs && report.logs.length > 0 && (
+                <details className="group">
+                  <summary className="cursor-pointer font-semibold flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                    <FileText className="w-4 h-4" />
+                    Logs del Proceso ({report.logs.length})
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    {report.logs.map((log, index) => (
+                      <div 
+                        key={index} 
+                        className={`flex items-start gap-3 p-3 rounded-lg text-sm ${
+                          log.level === 'error' ? 'bg-red-50' : 
+                          log.level === 'warn' ? 'bg-yellow-50' : 'bg-muted/30'
+                        }`}
+                      >
+                        {getLogIcon(log.level)}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline" className="text-xs">
+                              {log.phase}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(log.timestamp).toLocaleTimeString('es-ES')}
+                            </span>
+                          </div>
+                          <p className={`${log.level === 'error' ? 'text-red-700' : ''}`}>
+                            {typeof log.message === 'string' 
+                              ? log.message 
+                              : JSON.stringify(log.message)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+
+              {/* No data message */}
+              {!hasTechnologies && !parsedReport?.rawText && (!report.logs || report.logs.length === 0) && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium">No hay resultados disponibles</p>
+                  <p className="text-sm">Este scouting no generó un informe con datos parseables</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default ScoutingReportModal;
