@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Radar, 
@@ -304,7 +304,7 @@ const Scouting = () => {
   const [trlMin, setTrlMin] = useState('none');
   const [instructions, setInstructions] = useState('');
   const [selectedReport, setSelectedReport] = useState<HistoryItem | null>(null);
-  const [selectedModel, setSelectedModel] = useState('groq/llama-3.3-70b-versatile');
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const [cancelConfirmJob, setCancelConfirmJob] = useState<HistoryItem | null>(null);
   const [activeTab, setActiveTab] = useState('queue');
   const [isPolling, setIsPolling] = useState(false);
@@ -477,6 +477,29 @@ const Scouting = () => {
   // Models are already grouped by provider in the API response
   const modelsByProvider = llmModelsData ?? {};
 
+  const availableModelValues = useMemo(() => {
+    const values: string[] = [];
+    for (const [providerKey, providerData] of Object.entries(modelsByProvider)) {
+      for (const model of providerData.models) values.push(`${providerKey}/${model.id}`);
+    }
+    return values;
+  }, [modelsByProvider]);
+
+  // Ensure selectedModel is valid once models are loaded (prevents "se queda en groq" aunque el usuario elija GPT)
+  useEffect(() => {
+    if (llmModelsLoading) return;
+    if (availableModelValues.length === 0) return;
+
+    if (selectedModel && availableModelValues.includes(selectedModel)) return;
+
+    const preferred =
+      availableModelValues.find((v) => v.startsWith('openai/')) ??
+      availableModelValues.find((v) => v.startsWith('gpt/')) ??
+      availableModelValues[0];
+
+    setSelectedModel(preferred);
+  }, [llmModelsLoading, availableModelValues, selectedModel]);
+
   // Mutations
   const updateMutation = useMutation({
     mutationFn: updateQueueItem,
@@ -533,6 +556,11 @@ const Scouting = () => {
     const keywordList = keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
     if (keywordList.length === 0) {
       toast.error('Introduce al menos una keyword');
+      return;
+    }
+
+    if (!selectedModel) {
+      toast.error('Selecciona un modelo LLM');
       return;
     }
     
