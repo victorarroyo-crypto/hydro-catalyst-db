@@ -270,11 +270,11 @@ const AISearch: React.FC = () => {
                 {/* Tipo */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Tipo de Tecnología</label>
-                  <Select
-                    value={filters.tipoId?.toString() || ''}
+                <Select
+                    value={filters.tipoId?.toString() || '__all__'}
                     onValueChange={(value) => setFilters(prev => ({
                       ...prev,
-                      tipoId: value ? parseInt(value) : null,
+                      tipoId: value && value !== '__all__' ? parseInt(value) : null,
                       subcategoriaId: null, // Reset subcategory when type changes
                     }))}
                   >
@@ -282,7 +282,7 @@ const AISearch: React.FC = () => {
                       <SelectValue placeholder="Todos los tipos" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos los tipos</SelectItem>
+                      <SelectItem value="__all__">Todos los tipos</SelectItem>
                       {tipos?.map((tipo) => (
                         <SelectItem key={tipo.id} value={tipo.id.toString()}>
                           {tipo.nombre}
@@ -295,11 +295,11 @@ const AISearch: React.FC = () => {
                 {/* Subcategoría */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Subcategoría</label>
-                  <Select
-                    value={filters.subcategoriaId?.toString() || ''}
+                <Select
+                    value={filters.subcategoriaId?.toString() || '__all__'}
                     onValueChange={(value) => setFilters(prev => ({
                       ...prev,
-                      subcategoriaId: value ? parseInt(value) : null,
+                      subcategoriaId: value && value !== '__all__' ? parseInt(value) : null,
                     }))}
                     disabled={!filters.tipoId}
                   >
@@ -307,7 +307,7 @@ const AISearch: React.FC = () => {
                       <SelectValue placeholder={filters.tipoId ? "Todas las subcategorías" : "Selecciona tipo primero"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todas las subcategorías</SelectItem>
+                      <SelectItem value="__all__">Todas las subcategorías</SelectItem>
                       {subcategorias?.filter(s => !filters.tipoId || s.tipo_id === filters.tipoId).map((sub) => (
                         <SelectItem key={sub.id} value={sub.id.toString()}>
                           {sub.nombre}
@@ -320,18 +320,18 @@ const AISearch: React.FC = () => {
                 {/* Sector */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Sector</label>
-                  <Select
-                    value={filters.sectorId || ''}
+                <Select
+                    value={filters.sectorId || '__all__'}
                     onValueChange={(value) => setFilters(prev => ({
                       ...prev,
-                      sectorId: value || null,
+                      sectorId: value && value !== '__all__' ? value : null,
                     }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Todos los sectores" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos los sectores</SelectItem>
+                      <SelectItem value="__all__">Todos los sectores</SelectItem>
                       {sectores?.map((sector) => (
                         <SelectItem key={sector.id} value={sector.id}>
                           {sector.nombre}
@@ -344,18 +344,18 @@ const AISearch: React.FC = () => {
                 {/* País */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">País de Origen</label>
-                  <Select
-                    value={filters.pais || ''}
+                <Select
+                    value={filters.pais || '__all__'}
                     onValueChange={(value) => setFilters(prev => ({
                       ...prev,
-                      pais: value || null,
+                      pais: value && value !== '__all__' ? value : null,
                     }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Todos los países" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos los países</SelectItem>
+                      <SelectItem value="__all__">Todos los países</SelectItem>
                       {paises?.map((pais) => (
                         <SelectItem key={pais} value={pais}>
                           {pais}
