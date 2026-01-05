@@ -367,17 +367,19 @@ const TechnologyTable = ({
     }
   };
 
-  const getActionLabel = (status: string) => {
+  const getActionLabel = (status: string): string => {
     switch (status) {
+      case 'review': return 'enviar a revisión';
       case 'approved': return 'aprobar';
       case 'rejected': return 'rechazar';
       case 'pending': return 'reconsiderar';
-      default: return status;
+      default: return 'actualizar';
     }
   };
 
-  const getActionTitle = (status: string) => {
+  const getActionTitle = (status: string): string => {
     switch (status) {
+      case 'review': return 'Enviar a revisión';
       case 'approved': return 'Aprobar tecnología';
       case 'rejected': return 'Rechazar tecnología';
       case 'pending': return 'Reconsiderar tecnología';
@@ -393,14 +395,17 @@ const TechnologyTable = ({
             <AlertDialogTitle>{confirmAction && getActionTitle(confirmAction.status)}</AlertDialogTitle>
             <AlertDialogDescription>
               ¿Estás seguro de que deseas {confirmAction && getActionLabel(confirmAction.status)} la tecnología <strong>"{confirmAction?.techName}"</strong>?
+              {confirmAction?.status === 'review' && (
+                <span className="block mt-2 text-blue-600">Esta tecnología irá a la cola de revisión para ser evaluada por un analista.</span>
+              )}
               {confirmAction?.status === 'approved' && (
-                <span className="block mt-2 text-green-600">Esta tecnología se añadirá a la base de datos.</span>
+                <span className="block mt-2 text-green-600">Esta tecnología pasará a pendiente de aprobación del supervisor.</span>
               )}
               {confirmAction?.status === 'rejected' && (
                 <span className="block mt-2 text-red-600">Esta tecnología será descartada del scouting.</span>
               )}
               {confirmAction?.status === 'pending' && (
-                <span className="block mt-2 text-blue-600">Esta tecnología volverá a la cola de revisión.</span>
+                <span className="block mt-2 text-blue-600">Esta tecnología volverá a la cola pendiente.</span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -500,10 +505,32 @@ const TechnologyTable = ({
                             </>
                           )}
                           {sectionType === 'added' && (
-                            <Badge className="bg-green-100 text-green-700 border-green-200">
-                              <Check className="w-3 h-3 mr-1" />
-                              Añadida
-                            </Badge>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                onClick={() => setConfirmAction({ id: queueItem.id, status: 'review', techName: tech.name })}
+                                disabled={isPending}
+                                title="Enviar a revisión"
+                              >
+                                {isPending ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5" />
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => setConfirmAction({ id: queueItem.id, status: 'rejected', techName: tech.name })}
+                                disabled={isPending}
+                                title="Rechazar"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
                           )}
                           {sectionType === 'rejected' && (
                             <Button
