@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { InviteUsersSection } from '@/components/settings/InviteUsersSection';
 import { AuditLogSection } from '@/components/settings/AuditLogSection';
 import { ExportDataSection } from '@/components/settings/ExportDataSection';
+import { AIModelSettings } from '@/components/settings/AIModelSettings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -877,6 +878,9 @@ const Settings: React.FC = () => {
                 )}
               </CardContent>
             </Card>
+
+            {/* AI Model Settings */}
+            <AIModelSettings />
 
             {/* Invite Users */}
             <InviteUsersSection />

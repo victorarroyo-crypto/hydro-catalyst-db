@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_model_settings: {
+        Row: {
+          action_type: string
+          id: string
+          model: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          action_type: string
+          id: string
+          model?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          action_type?: string
+          id?: string
+          model?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string

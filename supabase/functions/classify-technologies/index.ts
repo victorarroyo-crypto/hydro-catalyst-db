@@ -154,6 +154,16 @@ RESPONDE ÚNICAMENTE en formato JSON válido, sin texto adicional:
 
     console.log(`Classifying ${technologies.length} technologies...`);
 
+    // Fetch the AI model to use from settings
+    const { data: modelSettings } = await supabase
+      .from('ai_model_settings')
+      .select('model')
+      .eq('action_type', 'classification')
+      .single();
+    
+    const aiModel = modelSettings?.model || 'google/gemini-2.5-flash';
+    console.log(`Using AI model: ${aiModel}`);
+
     // Call Lovable AI
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -162,7 +172,7 @@ RESPONDE ÚNICAMENTE en formato JSON válido, sin texto adicional:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: aiModel,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Clasifica las siguientes tecnologías:\n\n${techDescriptions}` }
