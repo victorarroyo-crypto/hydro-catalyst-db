@@ -16,63 +16,48 @@ function formatError(error: unknown): { message: string; details: unknown } {
 }
 
 async function callExternalUpdate(params: {
-  id: string;
+  url: string;
   status: string;
   headers: Record<string, string>;
   method: 'PUT' | 'PATCH' | 'POST';
-}): Promise<{ ok: boolean; status: number; body: JsonValue; rawText: string }> {
-  const url = `${API_BASE}/api/scouting/queue/${params.id}`;
+  payloadShape?: 'status_only' | 'id_and_status';
+}): Promise<{ ok: boolean; status: number; body: JsonValue; rawText: string; allow: string | null }> {
+  const payload =
+    params.payloadShape === 'id_and_status'
+      ? { id: params.url.split('/').pop(), status: params.status }
+      : { status: params.status };
 
-  const res = await fetch(url, {
+  const res = await fetch(params.url, {
     method: params.method,
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
       ...params.headers,
     },
-    body: JSON.stringify({ status: params.status }),
+    body: JSON.stringify(payload),
   });
 
+  const allow = res.headers.get('allow');
   const text = await res.text();
-  const body = text ? (() => {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return text;
-    }
-  })() : null;
+  const body = text
+    ? (() => {
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      })()
+    : null;
 
-  return { ok: res.ok, status: res.status, body, rawText: text };
+  return { ok: res.ok, status: res.status, body, rawText: text, allow };
 }
 
-// Try a different endpoint pattern: /api/scouting/queue/{id}/status
-async function callExternalUpdateAction(params: {
-  id: string;
-  status: string;
-  headers: Record<string, string>;
-}): Promise<{ ok: boolean; status: number; body: JsonValue; rawText: string }> {
-  const url = `${API_BASE}/api/scouting/queue/${params.id}/status`;
+function queueUrl(id: string) {
+  return `${API_BASE}/api/scouting/queue/${id}`;
+}
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...params.headers,
-    },
-    body: JSON.stringify({ status: params.status }),
-  });
-
-  const text = await res.text();
-  const body = text ? (() => {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return text;
-    }
-  })() : null;
-
-  return { ok: res.ok, status: res.status, body, rawText: text };
+function queueStatusUrl(id: string) {
+  return `${API_BASE}/api/scouting/queue/${id}/status`;
 }
 
 Deno.serve(async (req) => {
@@ -97,23 +82,32 @@ Deno.serve(async (req) => {
       'X-User-Role': 'admin',
     };
 
-    // Try multiple HTTP methods since the external backend behavior is unclear.
-    // Order: POST (common for actions), PATCH (partial update), PUT (full update)
-    console.log(`[scouting-update-queue] External update: POST /api/scouting/queue/${id}/status (X-User-Id=admin, X-User-Role=admin)`);
-    
-    // First try a more RESTful action endpoint pattern
-    let attempt = await callExternalUpdateAction({ id, status, headers: forwardHeaders });
-    
-    if (!attempt.ok) {
-      console.log(`[scouting-update-queue] POST to action endpoint failed: status=${attempt.status}, body=${attempt.rawText}`);
-      console.log(`[scouting-update-queue] Trying PATCH /api/scouting/queue/${id}`);
-      attempt = await callExternalUpdate({ id, status, headers: forwardHeaders, method: 'PATCH' });
+    const attemptsList: Array<{ label: string; url: string; method: 'PUT' | 'PATCH' | 'POST'; payloadShape?: 'status_only' | 'id_and_status' }> = [
+      { label: `PATCH /api/scouting/queue/${id}`, url: queueUrl(id), method: 'PATCH', payloadShape: 'id_and_status' },
+      { label: `PUT /api/scouting/queue/${id}`, url: queueUrl(id), method: 'PUT', payloadShape: 'id_and_status' },
+      { label: `POST /api/scouting/queue/${id}`, url: queueUrl(id), method: 'POST', payloadShape: 'id_and_status' },
+      { label: `PUT /api/scouting/queue/${id}/status`, url: queueStatusUrl(id), method: 'PUT', payloadShape: 'status_only' },
+      { label: `POST /api/scouting/queue/${id}/status`, url: queueStatusUrl(id), method: 'POST', payloadShape: 'status_only' },
+    ];
+
+    let attempt: { ok: boolean; status: number; body: JsonValue; rawText: string; allow: string | null } | null = null;
+
+    for (const a of attemptsList) {
+      console.log(`[scouting-update-queue] Trying ${a.label}`);
+      attempt = await callExternalUpdate({ url: a.url, status, headers: forwardHeaders, method: a.method, payloadShape: a.payloadShape });
+
+      if (!attempt.ok) {
+        console.log(
+          `[scouting-update-queue] Failed ${a.label}: status=${attempt.status}, allow=${attempt.allow ?? 'n/a'}, body=${attempt.rawText}`,
+        );
+        continue;
+      }
+
+      break;
     }
 
-    if (!attempt.ok) {
-      console.log(`[scouting-update-queue] PATCH failed: status=${attempt.status}, body=${attempt.rawText}`);
-      console.log(`[scouting-update-queue] Trying POST /api/scouting/queue/${id}`);
-      attempt = await callExternalUpdate({ id, status, headers: forwardHeaders, method: 'POST' });
+    if (!attempt) {
+      throw new Error('No se pudo ejecutar ninguna llamada al backend externo');
     }
 
     console.log(`[scouting-update-queue] External response: ok=${attempt.ok}, status=${attempt.status}, body=${attempt.rawText}`);
