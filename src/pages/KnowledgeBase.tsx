@@ -9,8 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical } from "lucide-react";
+import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
@@ -45,6 +46,9 @@ export default function KnowledgeBase() {
   const [querying, setQuerying] = useState(false);
 
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
+
+  // Storage limit (100MB for knowledge-docs bucket)
+  const STORAGE_LIMIT_BYTES = 100 * 1024 * 1024;
 
   // Fetch documents
   const { data: documents, isLoading: loadingDocs } = useQuery({
@@ -235,6 +239,17 @@ export default function KnowledgeBase() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  // Calculate total storage used
+  const totalStorageUsed = documents?.reduce((acc, doc) => acc + (doc.file_size || 0), 0) || 0;
+  const storagePercentage = Math.min((totalStorageUsed / STORAGE_LIMIT_BYTES) * 100, 100);
+  const storageRemaining = STORAGE_LIMIT_BYTES - totalStorageUsed;
+
+  const getStorageColor = () => {
+    if (storagePercentage >= 90) return "bg-destructive";
+    if (storagePercentage >= 70) return "bg-yellow-500";
+    return "bg-primary";
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -248,6 +263,44 @@ export default function KnowledgeBase() {
           </p>
         </div>
       </div>
+
+      {/* Storage Usage Card */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-full bg-primary/10">
+              <HardDrive className="h-6 w-6 text-primary" />
+            </div>
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Almacenamiento</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-sm text-muted-foreground cursor-help">
+                        {formatFileSize(totalStorageUsed)} / {formatFileSize(STORAGE_LIMIT_BYTES)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Espacio libre: {formatFileSize(storageRemaining)}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <div className="relative h-3 w-full rounded-full bg-muted overflow-hidden">
+                <div 
+                  className={`absolute left-0 top-0 h-full transition-all duration-500 rounded-full ${getStorageColor()}`}
+                  style={{ width: `${storagePercentage}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Usado: {storagePercentage.toFixed(1)}%</span>
+                <span>Libre: {formatFileSize(storageRemaining)}</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="query" className="space-y-4">
         <TabsList>
