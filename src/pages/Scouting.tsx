@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Radar, 
@@ -17,7 +17,9 @@ import {
   CheckCircle2,
   XCircle,
   FileText,
-  ExternalLink
+  ExternalLink,
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,6 +66,8 @@ import { toast } from 'sonner';
 import { TRLBadge } from '@/components/TRLBadge';
 
 const API_BASE = 'https://watertech-scouting-production.up.railway.app';
+const POLLING_INTERVAL = 10000; // 10 seconds
+const NEW_ITEM_THRESHOLD = 30000; // 30 seconds for "Nueva" badge
 
 // Types based on actual API response
 interface ScoutingStats {
@@ -86,6 +90,7 @@ interface QueueItem {
   score: number;
   trl: number;
   status: string;
+  created_at?: string; // For detecting new items
 }
 
 interface QueueResponse {
@@ -301,6 +306,13 @@ const Scouting = () => {
   const [selectedReport, setSelectedReport] = useState<HistoryItem | null>(null);
   const [selectedModel, setSelectedModel] = useState('groq/llama-3.3-70b-versatile');
   const [cancelConfirmJob, setCancelConfirmJob] = useState<HistoryItem | null>(null);
+  const [activeTab, setActiveTab] = useState('queue');
+  const [isPolling, setIsPolling] = useState(false);
+  const [lastPollTime, setLastPollTime] = useState<Date | null>(null);
+  const [knownItemIds, setKnownItemIds] = useState<Set<string>>(new Set());
+  const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
+  const previousRunningJobRef = useRef<string | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Queries
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -308,7 +320,7 @@ const Scouting = () => {
     queryFn: fetchStats,
   });
 
-  const { data: pendingQueue, isLoading: pendingLoading } = useQuery({
+  const { data: pendingQueue, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
     queryKey: ['scouting-queue', 'pending'],
     queryFn: () => fetchQueue('pending'),
   });
@@ -328,15 +340,120 @@ const Scouting = () => {
     queryFn: () => fetchQueue('rejected'),
   });
 
-  const { data: historyData, isLoading: historyLoading } = useQuery({
+  const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } = useQuery({
     queryKey: ['scouting-history'],
     queryFn: fetchHistory,
+    refetchInterval: isPolling ? POLLING_INTERVAL : false,
   });
 
   const { data: llmModelsData, isLoading: llmModelsLoading } = useQuery({
     queryKey: ['llm-models'],
     queryFn: fetchLLMModels,
   });
+
+  // Detect running scouting job
+  const history = historyData?.items ?? [];
+  const runningJob = history.find(job => job.status === 'running');
+  const hasRunningJob = !!runningJob;
+
+  // Check if an item is new (added in the last 30 seconds)
+  const isNewItem = useCallback((itemId: string) => {
+    return newItemIds.has(itemId);
+  }, [newItemIds]);
+
+  // Poll for new queue items when scouting is running
+  const pollQueueItems = useCallback(async () => {
+    if (!hasRunningJob) return;
+    
+    setIsPolling(true);
+    setLastPollTime(new Date());
+    
+    try {
+      const response = await fetchQueue('pending');
+      const currentIds = new Set(response.items.map(item => item.id));
+      
+      // Find newly added items
+      const newItems = response.items.filter(item => !knownItemIds.has(item.id));
+      
+      if (newItems.length > 0) {
+        // Mark new items for animation
+        setNewItemIds(prev => {
+          const updated = new Set(prev);
+          newItems.forEach(item => updated.add(item.id));
+          return updated;
+        });
+        
+        // Clear "new" badge after threshold
+        setTimeout(() => {
+          setNewItemIds(prev => {
+            const updated = new Set(prev);
+            newItems.forEach(item => updated.delete(item.id));
+            return updated;
+          });
+        }, NEW_ITEM_THRESHOLD);
+      }
+      
+      // Update known items
+      setKnownItemIds(currentIds);
+      
+      // Invalidate query to update UI
+      queryClient.invalidateQueries({ queryKey: ['scouting-queue', 'pending'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
+    } catch (error) {
+      console.error('[Scouting] Polling error:', error);
+    } finally {
+      setIsPolling(false);
+    }
+  }, [hasRunningJob, knownItemIds, queryClient]);
+
+  // Effect to manage polling lifecycle
+  useEffect(() => {
+    if (hasRunningJob) {
+      // Start polling
+      if (!pollingIntervalRef.current) {
+        console.log('[Scouting] Starting polling for running job:', runningJob?.id);
+        pollQueueItems(); // Initial poll
+        pollingIntervalRef.current = setInterval(pollQueueItems, POLLING_INTERVAL);
+      }
+      previousRunningJobRef.current = runningJob?.id || null;
+    } else if (previousRunningJobRef.current && !hasRunningJob) {
+      // Job just completed - stop polling and show notification
+      console.log('[Scouting] Scouting job completed');
+      
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      
+      // Count pending items and show toast
+      const pendingCount = pendingQueue?.items?.length ?? 0;
+      toast.success(`Scouting completado - ${pendingCount} tecnología(s) encontrada(s)`, {
+        icon: <CheckCircle2 className="w-5 h-5 text-green-500" />,
+        duration: 5000,
+      });
+      
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
+      
+      previousRunningJobRef.current = null;
+    }
+    
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [hasRunningJob, runningJob?.id, pollQueueItems, pendingQueue?.items?.length, queryClient]);
+
+  // Initialize known items on first load
+  useEffect(() => {
+    if (pendingQueue?.items && knownItemIds.size === 0) {
+      setKnownItemIds(new Set(pendingQueue.items.map(item => item.id)));
+    }
+  }, [pendingQueue?.items, knownItemIds.size]);
 
   // Models are already grouped by provider in the API response
   const modelsByProvider = llmModelsData ?? {};
@@ -369,6 +486,9 @@ const Scouting = () => {
       setTipo('all');
       setTrlMin('none');
       setInstructions('');
+      // Switch to queue tab and open pending section to watch results
+      setActiveTab('queue');
+      setQueueFilter('pending');
     },
     onError: (error: Error) => {
       console.error('[Scouting] Mutation error:', error);
@@ -417,7 +537,6 @@ const Scouting = () => {
   const reviewItems = reviewQueue?.items ?? [];
   const approvedItems = approvedQueue?.items ?? [];
   const rejectedItems = rejectedQueue?.items ?? [];
-  const history = historyData?.items ?? [];
   
   const queueSections = [
     { 
@@ -542,15 +661,62 @@ const Scouting = () => {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="queue" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="queue">Cola de Revisión</TabsTrigger>
+          <TabsTrigger value="queue" className="relative">
+            Cola de Revisión
+            {hasRunningJob && (
+              <span className="ml-2 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="new">Nuevo Scouting</TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
         </TabsList>
 
         {/* Queue Tab */}
         <TabsContent value="queue" className="space-y-4">
+          {/* Scouting in Progress Banner */}
+          {hasRunningJob && (
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <Radar className="w-6 h-6 text-primary animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-primary flex items-center gap-2">
+                      🔍 Scouting en progreso...
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Las tecnologías aparecerán aquí conforme se descubran
+                      {runningJob?.config?.keywords && (
+                        <span className="ml-1">
+                          (buscando: {runningJob.config.keywords.slice(0, 3).join(', ')})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {isPolling && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Actualizando...</span>
+                    </div>
+                  )}
+                  {lastPollTime && !isPolling && (
+                    <span className="text-xs text-muted-foreground">
+                      Última actualización: {lastPollTime.toLocaleTimeString('es-ES')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="mb-4">
             <p className="text-muted-foreground">
               Las tecnologías pasan por un proceso de revisión antes de añadirse a la base de datos principal.
@@ -634,20 +800,35 @@ const Scouting = () => {
                           )}
                           
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {section.items.map((item) => (
-                              <Card key={item.id} className="hover:shadow-md transition-shadow border">
-                                <CardHeader className="pb-3">
-                                  <div className="flex items-start justify-between">
-                                    <CardTitle className="text-base">{item.name}</CardTitle>
-                                    <Badge className={getScoreColor(item.score)}>
-                                      {item.score}
-                                    </Badge>
-                                  </div>
-                                  <CardDescription className="flex items-center gap-1 text-xs">
-                                    <Building2 className="w-3 h-3" />
-                                    {item.provider}
-                                  </CardDescription>
-                                </CardHeader>
+                            {section.items.map((item) => {
+                              const isNew = section.id === 'pending' && isNewItem(item.id);
+                              return (
+                                <Card 
+                                  key={item.id} 
+                                  className={`hover:shadow-md transition-all border ${
+                                    isNew ? 'animate-fade-in ring-2 ring-primary/30 bg-primary/5' : ''
+                                  }`}
+                                >
+                                  <CardHeader className="pb-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <CardTitle className="text-base truncate">{item.name}</CardTitle>
+                                        {isNew && (
+                                          <Badge className="bg-primary text-primary-foreground text-xs shrink-0 animate-pulse">
+                                            <Sparkles className="w-3 h-3 mr-1" />
+                                            Nueva
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <Badge className={getScoreColor(item.score)}>
+                                        {item.score}
+                                      </Badge>
+                                    </div>
+                                    <CardDescription className="flex items-center gap-1 text-xs">
+                                      <Building2 className="w-3 h-3" />
+                                      {item.provider}
+                                    </CardDescription>
+                                  </CardHeader>
                                 <CardContent className="space-y-3">
                                   <div className="flex items-center justify-between">
                                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -735,7 +916,8 @@ const Scouting = () => {
                                   )}
                                 </CardContent>
                               </Card>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       ) : (
