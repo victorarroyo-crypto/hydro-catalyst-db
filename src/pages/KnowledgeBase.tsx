@@ -24,6 +24,7 @@ interface KnowledgeDocument {
   status: string;
   chunk_count: number;
   created_at: string;
+  description: string | null;
 }
 
 interface QueryResult {
@@ -46,6 +47,8 @@ export default function KnowledgeBase() {
   const [querying, setQuerying] = useState(false);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [editingDescId, setEditingDescId] = useState<string | null>(null);
+  const [editingDesc, setEditingDesc] = useState("");
 
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
 
@@ -160,6 +163,27 @@ export default function KnowledgeBase() {
     },
   });
 
+  // Update description mutation
+  const updateDescMutation = useMutation({
+    mutationFn: async ({ id, description }: { id: string; description: string | null }) => {
+      const { error } = await supabase
+        .from("knowledge_documents")
+        .update({ description })
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      toast.success("Descripción actualizada");
+      setEditingDescId(null);
+      setEditingDesc("");
+    },
+    onError: () => {
+      toast.error("Error al actualizar la descripción");
+    },
+  });
+
   const handleStartEdit = (doc: KnowledgeDocument) => {
     setEditingDocId(doc.id);
     setEditingName(doc.name);
@@ -176,6 +200,20 @@ export default function KnowledgeBase() {
       return;
     }
     renameMutation.mutate({ id, name: editingName.trim() });
+  };
+
+  const handleStartEditDesc = (doc: KnowledgeDocument) => {
+    setEditingDescId(doc.id);
+    setEditingDesc(doc.description || "");
+  };
+
+  const handleCancelEditDesc = () => {
+    setEditingDescId(null);
+    setEditingDesc("");
+  };
+
+  const handleSaveDesc = (id: string) => {
+    updateDescMutation.mutate({ id, description: editingDesc.trim() || null });
   };
 
   // Handle file upload with automatic splitting for large PDFs
@@ -580,6 +618,62 @@ export default function KnowledgeBase() {
                                 {new Date(doc.created_at).toLocaleDateString("es-ES")}
                               </span>
                             </div>
+                            {/* Description section */}
+                            {editingDescId === doc.id ? (
+                              <div className="flex items-center gap-2 mt-2">
+                                <Input
+                                  value={editingDesc}
+                                  onChange={(e) => setEditingDesc(e.target.value)}
+                                  placeholder="Añadir descripción..."
+                                  className="h-8 text-sm flex-1"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveDesc(doc.id);
+                                    if (e.key === "Escape") handleCancelEditDesc();
+                                  }}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleSaveDesc(doc.id)}
+                                  disabled={updateDescMutation.isPending}
+                                >
+                                  <Check className="h-4 w-4 text-green-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={handleCancelEditDesc}
+                                >
+                                  <X className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 mt-1">
+                                {doc.description ? (
+                                  <p className="text-sm text-muted-foreground italic truncate max-w-md">
+                                    {doc.description}
+                                  </p>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground/60">
+                                    Sin descripción
+                                  </span>
+                                )}
+                                {canManage && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5 shrink-0"
+                                    onClick={() => handleStartEditDesc(doc)}
+                                    title="Editar descripción"
+                                  >
+                                    <Pencil className="h-2.5 w-2.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
