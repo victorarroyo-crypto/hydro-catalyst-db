@@ -60,19 +60,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Some Railway endpoints require these headers for authorization/auditing.
-    // If the client provided them, forward them; otherwise set safe defaults.
-    const xUserId = req.headers.get('x-user-id') ?? 'system';
-    const xUserRole = req.headers.get('x-user-role') ?? 'system';
-
+    // The Railway backend requires admin credentials for queue updates.
+    // Use fixed admin credentials for this internal service-to-service call.
     const forwardHeaders: Record<string, string> = {
-      'x-user-id': xUserId,
-      'x-user-role': xUserRole,
+      'X-User-Id': 'admin',
+      'X-User-Role': 'admin',
     };
 
     // Try both common update methods because the external backend has been returning 500.
     // We'll attempt PUT first, then fallback to PATCH.
-    console.log(`[scouting-update-queue] External update: PUT /api/scouting/queue/${id} (x-user-id=${xUserId}, x-user-role=${xUserRole})`);
+    console.log(`[scouting-update-queue] External update: PUT /api/scouting/queue/${id} (X-User-Id=admin, X-User-Role=admin)`);
     let attempt = await callExternalUpdate({ id, status, headers: forwardHeaders, method: 'PUT' });
 
     if (!attempt.ok) {
