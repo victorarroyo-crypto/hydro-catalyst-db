@@ -187,21 +187,39 @@ const runScouting = async (params: {
   provider: string;
   model: string;
 }) => {
-  const res = await fetch(`${API_BASE}/api/scouting/run`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': 'admin',
-      'X-User-Role': 'admin',
-    },
-    body: JSON.stringify({
-      config: params.config,
-      provider: params.provider,
-      model: params.model,
-    }),
-  });
-  if (!res.ok) throw new Error('Error al iniciar scouting');
-  return res.json();
+  console.log('[Scouting] Iniciando petición a:', `${API_BASE}/api/scouting/run`);
+  console.log('[Scouting] Payload:', JSON.stringify(params, null, 2));
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/scouting/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': 'admin',
+        'X-User-Role': 'admin',
+      },
+      body: JSON.stringify({
+        config: params.config,
+        provider: params.provider,
+        model: params.model,
+      }),
+    });
+    
+    console.log('[Scouting] Response status:', res.status);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('[Scouting] Error response:', errorText);
+      throw new Error(errorText || `Error ${res.status}: Error al iniciar scouting`);
+    }
+    
+    const data = await res.json();
+    console.log('[Scouting] Success:', data);
+    return data;
+  } catch (error) {
+    console.error('[Scouting] Fetch error:', error);
+    throw error;
+  }
 };
 
 const cancelScouting = async (jobId: string) => {
@@ -338,17 +356,23 @@ const Scouting = () => {
 
   const scoutingMutation = useMutation({
     mutationFn: runScouting,
+    onMutate: () => {
+      console.log('[Scouting] Mutation started...');
+      toast.loading('Iniciando scouting...', { id: 'scouting-start' });
+    },
     onSuccess: (data) => {
+      console.log('[Scouting] Mutation success:', data);
       queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
       queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
-      toast.success(`Scouting iniciado (Job ID: ${data.job_id?.slice(0, 8)}...)`);
+      toast.success(`Scouting iniciado (Job ID: ${data.job_id?.slice(0, 8)}...)`, { id: 'scouting-start' });
       setKeywords('');
       setTipo('all');
       setTrlMin('none');
       setInstructions('');
     },
-    onError: () => {
-      toast.error('Error al iniciar el scouting');
+    onError: (error: Error) => {
+      console.error('[Scouting] Mutation error:', error);
+      toast.error(`Error: ${error.message || 'No se pudo iniciar el scouting'}`, { id: 'scouting-start' });
     },
   });
 
