@@ -85,11 +85,11 @@ serve(async (req) => {
       }
       
       if (filters.trlMin !== null && filters.trlMin !== undefined) {
-        dbQuery = dbQuery.gte('Grado de madurez (TRL)', filters.trlMin);
+        dbQuery = dbQuery.gte('"Grado de madurez (TRL)"', filters.trlMin);
       }
       
       if (filters.trlMax !== null && filters.trlMax !== undefined) {
-        dbQuery = dbQuery.lte('Grado de madurez (TRL)', filters.trlMax);
+        dbQuery = dbQuery.lte('"Grado de madurez (TRL)"', filters.trlMax);
       }
       
       if (filters.estado) {
