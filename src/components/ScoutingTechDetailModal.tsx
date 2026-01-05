@@ -428,9 +428,20 @@ export const ScoutingTechDetailModal = ({
 
           {/* Footer with Actions */}
           <DialogFooter className="border-t pt-4 flex-col gap-4">
-            {/* Workflow explanation */}
+            {/* Workflow explanation based on status */}
             <div className="w-full text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-              <strong>Flujo de trabajo:</strong> El analista sugiere cambios de estado → Supervisor/Admin aprueba
+              {technology.status === 'pending' && (
+                <><strong>Paso 1:</strong> Revisa la tecnología y decide si merece evaluación detallada.</>
+              )}
+              {technology.status === 'review' && (
+                <><strong>Paso 2 (Analista):</strong> Edita y completa la ficha. Si está lista, sugiere aprobación para revisión de Supervisor.</>
+              )}
+              {technology.status === 'approved' && (
+                <><strong>Paso 3 (Supervisor/Admin):</strong> Revisa la sugerencia del analista y decide si transferir a la BD principal.</>
+              )}
+              {technology.status === 'rejected' && (
+                <>Esta tecnología fue rechazada. Puedes reconsiderarla si lo deseas.</>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row w-full gap-2 sm:items-center sm:justify-between">
@@ -490,7 +501,7 @@ export const ScoutingTechDetailModal = ({
                   </>
                 )}
 
-                {/* Review: Approve or reject */}
+                {/* Review: Analyst suggests approval or rejects */}
                 {technology.status === 'review' && (
                   <>
                     <Button
@@ -514,21 +525,21 @@ export const ScoutingTechDetailModal = ({
                     </Button>
                     <Button
                       size="sm"
-                      className="bg-green-600 hover:bg-green-700"
+                      className="bg-orange-600 hover:bg-orange-700"
                       onClick={() => handleStatusChange('approved')}
                       disabled={updateMutation.isPending}
                     >
                       {updateMutation.isPending ? (
                         <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                       ) : (
-                        <Check className="w-4 h-4 mr-1" />
+                        <ChevronRight className="w-4 h-4 mr-1" />
                       )}
-                      Aprobar
+                      Sugerir Aprobación
                     </Button>
                   </>
                 )}
 
-                {/* Approved: Transfer to main DB */}
+                {/* Approved: Waiting for supervisor - can transfer to main DB or reject */}
                 {technology.status === 'approved' && (
                   <>
                     <Button
@@ -538,7 +549,17 @@ export const ScoutingTechDetailModal = ({
                       disabled={updateMutation.isPending}
                     >
                       <ArrowLeft className="w-4 h-4 mr-1" />
-                      Volver a Revisión
+                      Devolver a Revisión
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 border-red-300 hover:bg-red-50"
+                      onClick={() => handleStatusChange('rejected')}
+                      disabled={updateMutation.isPending}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Rechazar
                     </Button>
                     <Button
                       size="sm"
@@ -548,7 +569,7 @@ export const ScoutingTechDetailModal = ({
                       }}
                     >
                       <Rocket className="w-4 h-4 mr-1" />
-                      Añadir a BD Principal
+                      Aprobar y Añadir a BD
                     </Button>
                   </>
                 )}

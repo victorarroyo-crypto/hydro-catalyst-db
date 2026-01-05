@@ -696,23 +696,23 @@ const Scouting = () => {
     },
     { 
       id: 'review', 
-      title: 'En Revisión', 
+      title: 'En Revisión (Analista)', 
       items: reviewItems, 
       loading: reviewLoading,
       icon: Eye,
       color: 'text-blue-500',
       bgColor: 'bg-blue-500/10',
-      description: 'Tecnologías siendo evaluadas por el equipo'
+      description: 'Tecnologías siendo editadas y evaluadas por analistas'
     },
     { 
       id: 'approved', 
-      title: 'Aprobadas (Listas para BD)', 
+      title: 'Pendiente Aprobación Supervisor', 
       items: approvedItems, 
       loading: approvedLoading,
       icon: CheckCircle2,
-      color: 'text-green-500',
-      bgColor: 'bg-green-500/10',
-      description: 'Aprobadas - listas para añadir a la base de datos principal'
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-500/10',
+      description: 'Sugeridas por analistas - esperando aprobación de Supervisor/Admin para añadir a BD'
     },
     { 
       id: 'rejected', 
