@@ -56,19 +56,25 @@ const AISearch: React.FC = () => {
       setResults(data);
 
       if (data.matching_ids && data.matching_ids.length > 0) {
-        const { data: techData, error: techError } = await supabase
-          .from('technologies')
-          .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Proveedor / Empresa", "Grado de madurez (TRL)", "Descripción técnica breve"')
-          .in('id', data.matching_ids);
+        // Filter out invalid UUIDs (AI sometimes returns names instead of IDs)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const validIds = data.matching_ids.filter((id: string) => uuidRegex.test(id));
 
-        if (techError) throw techError;
+        if (validIds.length > 0) {
+          const { data: techData, error: techError } = await supabase
+            .from('technologies')
+            .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Proveedor / Empresa", "Grado de madurez (TRL)", "Descripción técnica breve"')
+            .in('id', validIds);
 
-        // Order by the AI's ranking
-        const orderedTechs = data.matching_ids
-          .map((id: string) => techData?.find((t) => t.id === id))
-          .filter(Boolean) as Technology[];
+          if (techError) throw techError;
 
-        setTechnologies(orderedTechs);
+          // Order by the AI's ranking
+          const orderedTechs = validIds
+            .map((id: string) => techData?.find((t) => t.id === id))
+            .filter(Boolean) as Technology[];
+
+          setTechnologies(orderedTechs);
+        }
       }
     } catch (error: any) {
       console.error('Search error:', error);
