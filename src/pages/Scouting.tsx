@@ -83,6 +83,34 @@ interface ScoutingStats {
   };
 }
 
+// API response structure (Spanish fields from Railway backend)
+interface QueueItemAPI {
+  id: string;
+  nombre: string;
+  proveedor: string;
+  pais: string;
+  relevance_score: number;
+  trl_estimado: number;
+  status: string;
+  created_at?: string;
+  // Other fields we may receive
+  web?: string;
+  email?: string;
+  descripcion?: string;
+  tipo_sugerido?: string;
+  subcategoria_sugerida?: string;
+  ventaja_competitiva?: string;
+  relevance_reason?: string;
+  source_url?: string;
+  review_notes?: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  converted_technology_id?: string;
+  scouting_job_id?: string;
+  updated_at?: string;
+}
+
+// Normalized structure for UI
 interface QueueItem {
   id: string;
   name: string;
@@ -91,13 +119,43 @@ interface QueueItem {
   score: number;
   trl: number;
   status: string;
-  created_at?: string; // For detecting new items
+  created_at?: string;
+  // Extended fields for detail view
+  description?: string;
+  web?: string;
+  suggestedType?: string;
+  suggestedSubcategory?: string;
+  competitiveAdvantage?: string;
+  relevanceReason?: string;
+}
+
+interface QueueResponseAPI {
+  items: QueueItemAPI[];
+  count: number;
 }
 
 interface QueueResponse {
   items: QueueItem[];
   count: number;
 }
+
+// Transform API response to normalized structure
+const normalizeQueueItem = (item: QueueItemAPI): QueueItem => ({
+  id: item.id,
+  name: item.nombre || 'Sin nombre',
+  provider: item.proveedor || 'Desconocido',
+  country: item.pais || 'N/A',
+  score: item.relevance_score ?? 0,
+  trl: item.trl_estimado ?? 0,
+  status: item.status,
+  created_at: item.created_at,
+  description: item.descripcion,
+  web: item.web,
+  suggestedType: item.tipo_sugerido,
+  suggestedSubcategory: item.subcategoria_sugerida,
+  competitiveAdvantage: item.ventaja_competitiva,
+  relevanceReason: item.relevance_reason,
+});
 
 interface ScoutingConfig {
   pais: string | null;
@@ -179,7 +237,12 @@ const fetchStats = async (): Promise<ScoutingStats> => {
 const fetchQueue = async (status: string): Promise<QueueResponse> => {
   const res = await fetch(`${API_BASE}/api/scouting/queue?status=${status}`);
   if (!res.ok) throw new Error('Error al cargar cola');
-  return res.json();
+  const data: QueueResponseAPI = await res.json();
+  // Normalize API response to expected structure
+  return {
+    items: data.items.map(normalizeQueueItem),
+    count: data.count,
+  };
 };
 
 const fetchHistory = async (): Promise<HistoryResponse> => {
