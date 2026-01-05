@@ -289,11 +289,21 @@ Si no encuentras coincidencias:
     // Parse the AI response
     let result;
     try {
-      // Extract JSON from the response (handle potential markdown code blocks)
+      // Extract JSON from the response - handle various formats
       let jsonStr = aiContent;
-      if (aiContent.includes('```')) {
-        jsonStr = aiContent.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      
+      // First, try to extract JSON from markdown code blocks
+      const codeBlockMatch = aiContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        jsonStr = codeBlockMatch[1].trim();
+      } else {
+        // Try to find JSON object directly (starts with { and ends with })
+        const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[0];
+        }
       }
+      
       result = JSON.parse(jsonStr);
     } catch (parseError) {
       console.error('Error parsing AI response:', parseError);
