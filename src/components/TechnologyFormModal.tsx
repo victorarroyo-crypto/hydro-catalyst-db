@@ -54,6 +54,11 @@ interface SelectedTipo {
   is_primary: boolean;
 }
 
+interface SelectedSubcategoria {
+  subcategoria_id: number;
+  is_primary: boolean;
+}
+
 interface FormData {
   "Nombre de la tecnología": string;
   "Proveedor / Empresa": string;
@@ -184,6 +189,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [editComment, setEditComment] = useState('');
   const [selectedTipos, setSelectedTipos] = useState<SelectedTipo[]>([]);
+  const [selectedSubcategorias, setSelectedSubcategorias] = useState<SelectedSubcategoria[]>([]);
   const isEditing = !!technology;
   
   // Check user role - analysts need approval, supervisors/admins can edit directly
@@ -240,6 +246,21 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     },
     enabled: !!technology?.id,
   });
+
+  // Fetch existing technology subcategorias relationship
+  const { data: existingSubcategorias } = useQuery({
+    queryKey: ['technology-subcategorias', technology?.id],
+    queryFn: async () => {
+      if (!technology?.id) return [];
+      const { data, error } = await supabase
+        .from('technology_subcategorias')
+        .select('subcategoria_id, is_primary')
+        .eq('technology_id', technology.id);
+      if (error) throw error;
+      return data as SelectedSubcategoria[];
+    },
+    enabled: !!technology?.id,
+  });
   
   const [formData, setFormData] = useState<FormData>({
     "Nombre de la tecnología": '',
@@ -268,10 +289,10 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     subsector_industrial: '',
   });
 
-  // Filter subcategories based on selected primary tipo
-  const primaryTipoId = selectedTipos.find(t => t.is_primary)?.tipo_id || formData.tipo_id;
+  // Filter subcategories based on all selected tipos (not just primary)
+  const selectedTipoIds = selectedTipos.map(t => t.tipo_id);
   const filteredSubcategorias = allSubcategorias?.filter(
-    (sub) => sub.tipo_id === primaryTipoId
+    (sub) => selectedTipoIds.includes(sub.tipo_id)
   ) || [];
 
   // Load existing tipos when editing
@@ -283,6 +304,16 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       setSelectedTipos([{ tipo_id: (technology as any).tipo_id, is_primary: true }]);
     }
   }, [existingTipos, technology]);
+
+  // Load existing subcategorias when editing
+  useEffect(() => {
+    if (existingSubcategorias && existingSubcategorias.length > 0) {
+      setSelectedSubcategorias(existingSubcategorias);
+    } else if ((technology as any)?.subcategoria_id) {
+      // Fallback to legacy subcategoria_id if no relationship exists
+      setSelectedSubcategorias([{ subcategoria_id: (technology as any).subcategoria_id, is_primary: true }]);
+    }
+  }, [existingSubcategorias, technology]);
 
   // Helper functions for managing multiple tipos
   const handleTipoToggle = (tipoId: number, checked: boolean) => {
@@ -329,6 +360,54 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     if (tipo) {
       handleChange('tipo_id', tipoId);
       handleChange('Tipo de tecnología', tipo.nombre);
+    }
+  };
+
+  // Helper functions for managing multiple subcategorias
+  const handleSubcategoriaToggle = (subcategoriaId: number, checked: boolean) => {
+    if (checked) {
+      const isFirst = selectedSubcategorias.length === 0;
+      setSelectedSubcategorias(prev => [...prev, { subcategoria_id: subcategoriaId, is_primary: isFirst }]);
+      
+      // Update legacy field with primary subcategoria name
+      if (isFirst) {
+        const sub = allSubcategorias?.find(s => s.id === subcategoriaId);
+        if (sub) {
+          handleChange('subcategoria_id', subcategoriaId);
+          handleChange('Subcategoría', sub.nombre);
+        }
+      }
+    } else {
+      const removedSub = selectedSubcategorias.find(s => s.subcategoria_id === subcategoriaId);
+      const newSubs = selectedSubcategorias.filter(s => s.subcategoria_id !== subcategoriaId);
+      
+      // If we removed the primary, set first remaining as primary
+      if (removedSub?.is_primary && newSubs.length > 0) {
+        newSubs[0].is_primary = true;
+        const sub = allSubcategorias?.find(s => s.id === newSubs[0].subcategoria_id);
+        if (sub) {
+          handleChange('subcategoria_id', newSubs[0].subcategoria_id);
+          handleChange('Subcategoría', sub.nombre);
+        }
+      } else if (newSubs.length === 0) {
+        handleChange('subcategoria_id', null);
+        handleChange('Subcategoría', '');
+      }
+      
+      setSelectedSubcategorias(newSubs);
+    }
+  };
+
+  const handleSetPrimarySubcategoria = (subcategoriaId: number) => {
+    setSelectedSubcategorias(prev => prev.map(s => ({
+      ...s,
+      is_primary: s.subcategoria_id === subcategoriaId
+    })));
+    
+    const sub = allSubcategorias?.find(s => s.id === subcategoriaId);
+    if (sub) {
+      handleChange('subcategoria_id', subcategoriaId);
+      handleChange('Subcategoría', sub.nombre);
     }
   };
 
@@ -390,6 +469,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       });
       setEditComment('');
       setSelectedTipos([]);
+      setSelectedSubcategorias([]);
     }
   }, [technology, open]);
 
@@ -534,6 +614,28 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
             if (tiposError) console.error('Error saving tipos:', tiposError);
           }
 
+          // Update technology_subcategorias relationship
+          // First delete existing
+          await supabase
+            .from('technology_subcategorias')
+            .delete()
+            .eq('technology_id', technology.id);
+
+          // Then insert new ones
+          if (selectedSubcategorias.length > 0) {
+            const subcategoriasToInsert = selectedSubcategorias.map(s => ({
+              technology_id: technology.id,
+              subcategoria_id: s.subcategoria_id,
+              is_primary: s.is_primary,
+            }));
+            
+            const { error: subcategoriasError } = await supabase
+              .from('technology_subcategorias')
+              .insert(subcategoriasToInsert);
+            
+            if (subcategoriasError) console.error('Error saving subcategorias:', subcategoriasError);
+          }
+
           // Sync to external Supabase
           try {
             await syncTechnologyUpdate(technology.id, dataToSave);
@@ -594,6 +696,21 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               .insert(tiposToInsert);
             
             if (tiposError) console.error('Error saving tipos:', tiposError);
+          }
+
+          // Insert technology_subcategorias relationships
+          if (selectedSubcategorias.length > 0) {
+            const subcategoriasToInsert = selectedSubcategorias.map(s => ({
+              technology_id: insertedData.id,
+              subcategoria_id: s.subcategoria_id,
+              is_primary: s.is_primary,
+            }));
+            
+            const { error: subcategoriasError } = await supabase
+              .from('technology_subcategorias')
+              .insert(subcategoriasToInsert);
+            
+            if (subcategoriasError) console.error('Error saving subcategorias:', subcategoriasError);
           }
 
           // Sync to external Supabase
@@ -764,30 +881,85 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               </div>
             </div>
 
-            <div>
-              <Label className="text-sm">Subcategoría</Label>
-              <Select
-                value={formData.subcategoria_id?.toString() || ''}
-                onValueChange={(value) => handleChange('subcategoria_id', value ? parseInt(value) : null)}
-                disabled={selectedTipos.length === 0}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder={selectedTipos.length > 0 ? "Seleccionar subcategoría..." : "Primero selecciona un tipo"} />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50 max-h-60">
-                  {filteredSubcategorias.map((sub) => (
-                    <SelectItem key={sub.id} value={sub.id.toString()}>
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{sub.codigo}</span>
-                        {sub.nombre}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-1">
-                Basado en el tipo principal seleccionado
+            <div className="md:col-span-2">
+              <Label className="text-sm">Subcategorías</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                {selectedTipos.length > 0 
+                  ? "Selecciona una o más subcategorías. Haz clic en ⭐ para marcar como principal."
+                  : "Primero selecciona al menos un tipo de tecnología"
+                }
               </p>
+              
+              {/* Selected subcategorias badges */}
+              {selectedSubcategorias.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {selectedSubcategorias.map(ss => {
+                    const sub = allSubcategorias?.find(s => s.id === ss.subcategoria_id);
+                    if (!sub) return null;
+                    return (
+                      <Badge 
+                        key={ss.subcategoria_id} 
+                        variant={ss.is_primary ? "default" : "secondary"}
+                        className="flex items-center gap-1 pr-1"
+                      >
+                        {ss.is_primary && <Star className="w-3 h-3 fill-current" />}
+                        <span className="font-mono text-xs mr-1">{sub.codigo}</span>
+                        {sub.nombre}
+                        {!ss.is_primary && (
+                          <button
+                            type="button"
+                            onClick={() => handleSetPrimarySubcategoria(ss.subcategoria_id)}
+                            className="ml-1 p-0.5 hover:bg-primary/20 rounded"
+                            title="Marcar como principal"
+                          >
+                            <Star className="w-3 h-3" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleSubcategoriaToggle(ss.subcategoria_id, false)}
+                          className="ml-1 p-0.5 hover:bg-destructive/20 rounded"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+              
+              {/* Checkbox list of subcategorias */}
+              <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                {selectedTipos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Primero selecciona un tipo de tecnología</p>
+                ) : filteredSubcategorias.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No hay subcategorías disponibles para los tipos seleccionados</p>
+                ) : (
+                  filteredSubcategorias.map((sub) => {
+                    const isSelected = selectedSubcategorias.some(ss => ss.subcategoria_id === sub.id);
+                    const tipoParent = tipos?.find(t => t.id === sub.tipo_id);
+                    return (
+                      <div key={sub.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`subcategoria-${sub.id}`}
+                          checked={isSelected}
+                          onCheckedChange={(checked) => handleSubcategoriaToggle(sub.id, !!checked)}
+                        />
+                        <label
+                          htmlFor={`subcategoria-${sub.id}`}
+                          className="text-sm flex items-center gap-2 cursor-pointer flex-1"
+                        >
+                          <span className="font-mono text-xs text-muted-foreground">{sub.codigo}</span>
+                          {sub.nombre}
+                          {tipoParent && (
+                            <span className="text-xs text-muted-foreground">({tipoParent.codigo})</span>
+                          )}
+                        </label>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             <div>
