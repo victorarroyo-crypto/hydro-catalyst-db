@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive, Eye, Download } from "lucide-react";
+import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive, Eye, Download, Pencil, Check, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
@@ -44,6 +44,8 @@ export default function KnowledgeBase() {
   const [query, setQuery] = useState("");
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [querying, setQuerying] = useState(false);
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
 
@@ -136,6 +138,45 @@ export default function KnowledgeBase() {
       toast.error("Error al eliminar el documento");
     },
   });
+
+  // Rename document mutation
+  const renameMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await supabase
+        .from("knowledge_documents")
+        .update({ name })
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      toast.success("Nombre actualizado");
+      setEditingDocId(null);
+      setEditingName("");
+    },
+    onError: () => {
+      toast.error("Error al renombrar el documento");
+    },
+  });
+
+  const handleStartEdit = (doc: KnowledgeDocument) => {
+    setEditingDocId(doc.id);
+    setEditingName(doc.name);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingDocId(null);
+    setEditingName("");
+  };
+
+  const handleSaveEdit = (id: string) => {
+    if (!editingName.trim()) {
+      toast.error("El nombre no puede estar vacío");
+      return;
+    }
+    renameMutation.mutate({ id, name: editingName.trim() });
+  };
 
   // Handle file upload with automatic splitting for large PDFs
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -482,9 +523,54 @@ export default function KnowledgeBase() {
                         className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <FileText className="h-8 w-8 text-primary" />
-                          <div>
-                            <p className="font-medium">{doc.name}</p>
+                          <FileText className="h-8 w-8 text-primary shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            {editingDocId === doc.id ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  value={editingName}
+                                  onChange={(e) => setEditingName(e.target.value)}
+                                  className="h-8 max-w-xs"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveEdit(doc.id);
+                                    if (e.key === "Escape") handleCancelEdit();
+                                  }}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleSaveEdit(doc.id)}
+                                  disabled={renameMutation.isPending}
+                                >
+                                  <Check className="h-4 w-4 text-green-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={handleCancelEdit}
+                                >
+                                  <X className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium truncate">{doc.name}</p>
+                                {canManage && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 shrink-0"
+                                    onClick={() => handleStartEdit(doc)}
+                                    title="Editar nombre"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <span>{formatFileSize(doc.file_size)}</span>
                               <span>•</span>
