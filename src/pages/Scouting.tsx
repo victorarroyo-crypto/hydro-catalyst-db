@@ -28,7 +28,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -120,6 +122,20 @@ interface HistoryResponse {
   count: number;
 }
 
+interface LLMModel {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  cost_per_1k_tokens: number;
+  max_tokens: number;
+  supports_vision: boolean;
+}
+
+interface LLMModelsResponse {
+  models: LLMModel[];
+}
+
 // API functions
 const fetchStats = async (): Promise<ScoutingStats> => {
   const res = await fetch(`${API_BASE}/api/scouting/stats`);
@@ -139,6 +155,12 @@ const fetchHistory = async (): Promise<HistoryResponse> => {
   return res.json();
 };
 
+const fetchLLMModels = async (): Promise<LLMModelsResponse> => {
+  const res = await fetch(`${API_BASE}/api/llm/models`);
+  if (!res.ok) throw new Error('Error al cargar modelos LLM');
+  return res.json();
+};
+
 const updateQueueItem = async ({ id, status }: { id: string; status: string }) => {
   const res = await fetch(`${API_BASE}/api/scouting/queue/${id}`, {
     method: 'PATCH',
@@ -149,7 +171,11 @@ const updateQueueItem = async ({ id, status }: { id: string; status: string }) =
   return res.json();
 };
 
-const runScouting = async (config: { keywords: string[]; tipo: string; trl_min: number | null; instructions?: string }) => {
+const runScouting = async (params: { 
+  config: { keywords: string[]; tipo: string; trl_min: number | null; instructions?: string };
+  provider: string;
+  model: string;
+}) => {
   const res = await fetch(`${API_BASE}/api/scouting/run`, {
     method: 'POST',
     headers: {
@@ -157,7 +183,11 @@ const runScouting = async (config: { keywords: string[]; tipo: string; trl_min: 
       'X-User-Id': 'admin',
       'X-User-Role': 'admin',
     },
-    body: JSON.stringify({ config }),
+    body: JSON.stringify({
+      config: params.config,
+      provider: params.provider,
+      model: params.model,
+    }),
   });
   if (!res.ok) throw new Error('Error al iniciar scouting');
   return res.json();
@@ -219,6 +249,7 @@ const Scouting = () => {
   const [trlMin, setTrlMin] = useState('none');
   const [instructions, setInstructions] = useState('');
   const [selectedReport, setSelectedReport] = useState<HistoryItem | null>(null);
+  const [selectedModel, setSelectedModel] = useState('groq/llama-3.1-70b-versatile');
 
   // Queries
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -235,6 +266,20 @@ const Scouting = () => {
     queryKey: ['scouting-history'],
     queryFn: fetchHistory,
   });
+
+  const { data: llmModelsData, isLoading: llmModelsLoading } = useQuery({
+    queryKey: ['llm-models'],
+    queryFn: fetchLLMModels,
+  });
+
+  // Group models by provider
+  const modelsByProvider = (llmModelsData?.models ?? []).reduce((acc, model) => {
+    if (!acc[model.provider]) {
+      acc[model.provider] = [];
+    }
+    acc[model.provider].push(model);
+    return acc;
+  }, {} as Record<string, LLMModel[]>);
 
   // Mutations
   const updateMutation = useMutation({
@@ -272,11 +317,19 @@ const Scouting = () => {
       return;
     }
     
+    // Parse provider/model from selectedModel
+    const [provider, ...modelParts] = selectedModel.split('/');
+    const model = modelParts.join('/');
+    
     scoutingMutation.mutate({
-      keywords: keywordList,
-      tipo: tipo === 'all' ? '' : tipo,
-      trl_min: trlMin === 'none' ? null : parseInt(trlMin),
-      instructions: instructions || undefined,
+      config: {
+        keywords: keywordList,
+        tipo: tipo === 'all' ? '' : tipo,
+        trl_min: trlMin === 'none' ? null : parseInt(trlMin),
+        instructions: instructions || undefined,
+      },
+      provider,
+      model,
     });
   };
 
@@ -525,11 +578,57 @@ const Scouting = () => {
                 />
               </div>
 
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Modelo LLM</label>
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger>
+                    {llmModelsLoading ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Cargando modelos...</span>
+                      </div>
+                    ) : (
+                      <SelectValue placeholder="Seleccionar modelo" />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {Object.entries(modelsByProvider).map(([provider, models]) => (
+                      <SelectGroup key={provider}>
+                        <SelectLabel className="font-semibold text-primary capitalize">
+                          {provider}
+                        </SelectLabel>
+                        {models.map((model) => (
+                          <SelectItem 
+                            key={model.id} 
+                            value={model.id}
+                            className="py-2"
+                          >
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-medium">{model.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {model.description} • {model.cost_per_1k_tokens === 0 ? (
+                                  <span className="text-green-600 font-medium">Gratis</span>
+                                ) : (
+                                  <span>${model.cost_per_1k_tokens}/1k tokens</span>
+                                )}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  El modelo seleccionado se usará para analizar y clasificar tecnologías
+                </p>
+              </div>
+
               <Button 
                 size="lg" 
                 className="w-full"
                 onClick={handleStartScouting}
-                disabled={scoutingMutation.isPending}
+                disabled={scoutingMutation.isPending || llmModelsLoading}
               >
                 {scoutingMutation.isPending ? (
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
