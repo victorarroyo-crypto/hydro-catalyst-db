@@ -301,10 +301,12 @@ const TechnologyTable = ({
 
   // Try to match technologies with queue items by name similarity
   const findQueueItem = (tech: ParsedTechnology): QueueItem | undefined => {
+    if (!tech.name || !tech.provider) return undefined;
     const normalizedName = tech.name.toLowerCase().trim();
     const normalizedProvider = tech.provider.toLowerCase().trim();
     
     return queueItems.find(item => {
+      if (!item.name || !item.provider) return false;
       const itemName = item.name.toLowerCase().trim();
       const itemProvider = item.provider.toLowerCase().trim();
       // Match by name or name+provider
