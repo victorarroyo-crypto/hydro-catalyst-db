@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.query-knowledge-base]
 verify_jwt = false
+
+[functions.scouting-update-queue]
+verify_jwt = false
