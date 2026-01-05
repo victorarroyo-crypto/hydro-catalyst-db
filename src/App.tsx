@@ -19,6 +19,9 @@ import CaseStudies from "./pages/CaseStudies";
 import Statistics from "./pages/Statistics";
 import TaxonomyAdmin from "./pages/TaxonomyAdmin";
 import KnowledgeBase from "./pages/KnowledgeBase";
+import AIClassification from "./pages/AIClassification";
+import AISearch from "./pages/AISearch";
+import AIModels from "./pages/AIModels";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Cookies from "./pages/Cookies";
@@ -57,6 +60,9 @@ const App = () => (
               <Route path="/case-studies" element={<CaseStudies />} />
               <Route path="/statistics" element={<Statistics />} />
               <Route path="/knowledge-base" element={<KnowledgeBase />} />
+              <Route path="/ai-classification" element={<AIClassification />} />
+              <Route path="/ai-search" element={<AISearch />} />
+              <Route path="/ai-models" element={<AIModels />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/taxonomy-admin" element={<TaxonomyAdmin />} />
             </Route>

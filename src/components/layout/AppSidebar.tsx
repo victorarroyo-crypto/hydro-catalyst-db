@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -12,6 +12,10 @@ import {
   TrendingUp,
   BookOpen,
   Library,
+  Sparkles,
+  Brain,
+  Cpu,
+  ChevronDown,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -22,10 +26,18 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarHeader,
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +55,12 @@ const internalNavItems = [
   { title: 'Base de Conocimiento', url: '/knowledge-base', icon: Library },
 ];
 
+const aiToolsItems = [
+  { title: 'Clasificación IA', url: '/ai-classification', icon: Brain },
+  { title: 'Búsqueda con IA', url: '/ai-search', icon: Sparkles },
+  { title: 'Modelos IA', url: '/ai-models', icon: Cpu },
+];
+
 const settingsItems = [
   { title: 'Configuración', url: '/settings', icon: Settings },
 ];
@@ -52,8 +70,12 @@ export function AppSidebar() {
   const { signOut, profile } = useAuth();
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
+  const [aiToolsOpen, setAiToolsOpen] = useState(
+    aiToolsItems.some((item) => location.pathname === item.url)
+  );
 
   const isActive = (path: string) => location.pathname === path;
+  const isAiToolActive = aiToolsItems.some((item) => location.pathname === item.url);
 
   return (
     <Sidebar className={cn('border-r-0', collapsed ? 'w-16' : 'w-64')} collapsible="icon">
@@ -132,6 +154,60 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+
+                {/* AI Tools Submenu */}
+                <Collapsible
+                  open={aiToolsOpen}
+                  onOpenChange={setAiToolsOpen}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        className={cn(
+                          'transition-all duration-200 w-full',
+                          isAiToolActive
+                            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                            : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                        )}
+                      >
+                        <Sparkles className="w-5 h-5" />
+                        {!collapsed && (
+                          <>
+                            <span className="flex-1 text-left">Herramientas IA</span>
+                            <ChevronDown className={cn(
+                              "w-4 h-4 transition-transform duration-200",
+                              aiToolsOpen && "rotate-180"
+                            )} />
+                          </>
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {aiToolsItems.map((item) => (
+                          <SidebarMenuSubItem key={item.title}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={isActive(item.url)}
+                              className={cn(
+                                'transition-all duration-200',
+                                isActive(item.url)
+                                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                  : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                              )}
+                            >
+                              <Link to={item.url} className="flex items-center gap-2">
+                                <item.icon className="w-4 h-4" />
+                                <span>{item.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
