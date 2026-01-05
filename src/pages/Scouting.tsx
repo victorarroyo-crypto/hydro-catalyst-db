@@ -852,7 +852,11 @@ const Scouting = () => {
                       <CheckCircle2 className="w-4 h-4" />
                       Resultados
                     </h4>
-                    <p className="text-sm">{selectedReport.results_summary}</p>
+                    <p className="text-sm">
+                      {typeof selectedReport.results_summary === 'string' 
+                        ? selectedReport.results_summary 
+                        : (selectedReport.results_summary as any)?.raw_output || JSON.stringify(selectedReport.results_summary)}
+                    </p>
                   </div>
                 )}
 
@@ -907,7 +911,9 @@ const Scouting = () => {
                               </span>
                             </div>
                             <p className={`${log.level === 'error' ? 'text-red-700' : ''}`}>
-                              {log.message}
+                              {typeof log.message === 'string' 
+                                ? log.message 
+                                : (log.message as any)?.raw_output || JSON.stringify(log.message)}
                             </p>
                           </div>
                         </div>
