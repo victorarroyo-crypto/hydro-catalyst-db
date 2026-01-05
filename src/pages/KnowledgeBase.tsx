@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive } from "lucide-react";
+import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive, Eye, Download } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
@@ -498,6 +498,53 @@ export default function KnowledgeBase() {
                         </div>
                         <div className="flex items-center gap-2">
                           {getStatusBadge(doc.status)}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={async () => {
+                              try {
+                                const { data, error } = await supabase.storage
+                                  .from("knowledge-docs")
+                                  .createSignedUrl(doc.file_path, 3600); // 1 hour expiry
+                                
+                                if (error) throw error;
+                                if (data?.signedUrl) {
+                                  window.open(data.signedUrl, "_blank");
+                                }
+                              } catch (error) {
+                                console.error("Error getting signed URL:", error);
+                                toast.error("Error al obtener el documento");
+                              }
+                            }}
+                            title="Ver documento"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={async () => {
+                              try {
+                                const { data, error } = await supabase.storage
+                                  .from("knowledge-docs")
+                                  .createSignedUrl(doc.file_path, 3600, { download: true });
+                                
+                                if (error) throw error;
+                                if (data?.signedUrl) {
+                                  const link = document.createElement("a");
+                                  link.href = data.signedUrl;
+                                  link.download = doc.name;
+                                  link.click();
+                                }
+                              } catch (error) {
+                                console.error("Error downloading:", error);
+                                toast.error("Error al descargar el documento");
+                              }
+                            }}
+                            title="Descargar documento"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
                           {userRole === "admin" && (
                             <Button
                               variant="ghost"
