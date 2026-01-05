@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useQuery } from '@tanstack/react-query';
-import { Sparkles, Search, Loader2, Info, Filter, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Sparkles, Search, Loader2, Info, Filter, ChevronDown, ChevronUp, Eye, Bookmark, BookmarkCheck, Trash2, History } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from '@/components/ui/slider';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import type { Technology } from '@/types/database';
 
 interface SearchResult {
@@ -43,8 +53,18 @@ interface SearchFilters {
   trlMax?: number | null;
 }
 
+interface SavedSearch {
+  id: string;
+  name: string;
+  query: string;
+  filters: SearchFilters;
+  created_at: string;
+}
+
 const AISearch: React.FC = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   
   // Initialize from URL params
@@ -53,8 +73,14 @@ const AISearch: React.FC = () => {
   const [results, setResults] = useState<SearchResult | null>(null);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [savedSearchesOpen, setSavedSearchesOpen] = useState(false);
   const [selectedTechnology, setSelectedTechnology] = useState<Technology | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  
+  // Save search modal
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [searchName, setSearchName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   
   // Filters state
   const [filters, setFilters] = useState<SearchFilters>({
@@ -117,6 +143,22 @@ const AISearch: React.FC = () => {
       const unique = [...new Set(data.map(d => d["País de origen"]).filter(Boolean))].sort();
       return unique as string[];
     },
+  });
+
+  // Fetch saved searches
+  const { data: savedSearches, isLoading: loadingSavedSearches } = useQuery({
+    queryKey: ['saved-ai-searches', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('saved_ai_searches')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as SavedSearch[];
+    },
+    enabled: !!user,
   });
 
   // Re-run search if URL params change (e.g., back navigation)
@@ -226,17 +268,195 @@ const AISearch: React.FC = () => {
     trlRange[0] > 1 || trlRange[1] < 9,
   ].filter(Boolean).length;
 
+  // Save search functions
+  const handleSaveSearch = async () => {
+    if (!user) {
+      toast({
+        title: 'Inicia sesión',
+        description: 'Debes iniciar sesión para guardar búsquedas',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!searchName.trim()) {
+      toast({
+        title: 'Nombre requerido',
+        description: 'Ingresa un nombre para la búsqueda guardada',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const currentFilters: SearchFilters = {
+        ...filters,
+        trlMin: trlRange[0] > 1 ? trlRange[0] : null,
+        trlMax: trlRange[1] < 9 ? trlRange[1] : null,
+      };
+
+      const { error } = await supabase.from('saved_ai_searches').insert({
+        user_id: user.id,
+        name: searchName.trim(),
+        query: query.trim(),
+        filters: currentFilters as any,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Búsqueda guardada',
+        description: 'La búsqueda se ha guardado correctamente',
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['saved-ai-searches'] });
+      setSaveModalOpen(false);
+      setSearchName('');
+    } catch (error: any) {
+      console.error('Error saving search:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo guardar la búsqueda',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleLoadSavedSearch = (savedSearch: SavedSearch) => {
+    setQuery(savedSearch.query);
+    
+    const loadedFilters = savedSearch.filters || {};
+    setFilters({
+      tipoId: loadedFilters.tipoId || null,
+      subcategoriaId: loadedFilters.subcategoriaId || null,
+      sectorId: loadedFilters.sectorId || null,
+      pais: loadedFilters.pais || null,
+      trlMin: loadedFilters.trlMin || null,
+      trlMax: loadedFilters.trlMax || null,
+    });
+    
+    setTrlRange([
+      loadedFilters.trlMin || 1,
+      loadedFilters.trlMax || 9,
+    ]);
+
+    setSavedSearchesOpen(false);
+    
+    toast({
+      title: 'Búsqueda cargada',
+      description: `Se ha cargado "${savedSearch.name}"`,
+    });
+  };
+
+  const handleDeleteSavedSearch = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    try {
+      const { error } = await supabase
+        .from('saved_ai_searches')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Búsqueda eliminada',
+        description: 'La búsqueda guardada se ha eliminado',
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['saved-ai-searches'] });
+    } catch (error: any) {
+      console.error('Error deleting saved search:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo eliminar la búsqueda',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-display font-bold text-foreground mb-2 flex items-center gap-2">
-          <Sparkles className="w-7 h-7 text-primary" />
-          Búsqueda con IA
-        </h1>
-        <p className="text-muted-foreground">
-          Encuentra tecnologías usando lenguaje natural. Aplica filtros para refinar el análisis.
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-display font-bold text-foreground mb-2 flex items-center gap-2">
+            <Sparkles className="w-7 h-7 text-primary" />
+            Búsqueda con IA
+          </h1>
+          <p className="text-muted-foreground">
+            Encuentra tecnologías usando lenguaje natural. Aplica filtros para refinar el análisis.
+          </p>
+        </div>
+        {user && (
+          <Button
+            variant="outline"
+            onClick={() => setSavedSearchesOpen(!savedSearchesOpen)}
+            className="gap-2"
+          >
+            <History className="w-4 h-4" />
+            Búsquedas guardadas
+            {savedSearches && savedSearches.length > 0 && (
+              <Badge variant="secondary" className="ml-1">
+                {savedSearches.length}
+              </Badge>
+            )}
+          </Button>
+        )}
       </div>
+
+      {/* Saved Searches Section */}
+      {user && savedSearchesOpen && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <BookmarkCheck className="w-5 h-5 text-primary" />
+              Búsquedas Guardadas
+            </CardTitle>
+            <CardDescription>
+              Carga una búsqueda guardada anteriormente
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingSavedSearches ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : savedSearches && savedSearches.length > 0 ? (
+              <div className="space-y-2">
+                {savedSearches.map((saved) => (
+                  <div
+                    key={saved.id}
+                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => handleLoadSavedSearch(saved)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{saved.name}</p>
+                      <p className="text-sm text-muted-foreground truncate">
+                        "{saved.query}"
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={(e) => handleDeleteSavedSearch(saved.id, e)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-4">
+                No tienes búsquedas guardadas
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters Section */}
       <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -456,6 +676,19 @@ const AISearch: React.FC = () => {
                 </>
               )}
             </Button>
+            {user && query.trim() && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchName(query.slice(0, 50));
+                  setSaveModalOpen(true);
+                }}
+                className="h-12 px-4"
+                title="Guardar búsqueda"
+              >
+                <Bookmark className="w-5 h-5" />
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -559,6 +792,62 @@ const AISearch: React.FC = () => {
         open={detailModalOpen}
         onOpenChange={setDetailModalOpen}
       />
+
+      {/* Save Search Modal */}
+      <Dialog open={saveModalOpen} onOpenChange={setSaveModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bookmark className="w-5 h-5 text-primary" />
+              Guardar búsqueda
+            </DialogTitle>
+            <DialogDescription>
+              Guarda esta búsqueda para usarla más tarde
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="search-name">Nombre de la búsqueda</Label>
+              <Input
+                id="search-name"
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                placeholder="Ej: Tecnologías de membranas"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Consulta</Label>
+              <p className="text-sm text-muted-foreground bg-muted p-2 rounded">
+                "{query}"
+              </p>
+            </div>
+            {activeFilterCount > 0 && (
+              <div className="space-y-2">
+                <Label>Filtros aplicados</Label>
+                <Badge variant="secondary">{activeFilterCount} filtro{activeFilterCount !== 1 ? 's' : ''}</Badge>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveSearch} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <BookmarkCheck className="w-4 h-4 mr-2" />
+                  Guardar
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
