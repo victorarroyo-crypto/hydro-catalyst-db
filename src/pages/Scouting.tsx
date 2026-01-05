@@ -125,16 +125,17 @@ interface HistoryResponse {
 interface LLMModel {
   id: string;
   name: string;
-  provider: string;
   description: string;
-  cost_per_1k_tokens: number;
-  max_tokens: number;
-  supports_vision: boolean;
+  cost_per_1m_tokens: number;
+  recommended: boolean;
 }
 
-interface LLMModelsResponse {
+interface LLMProviderData {
+  name: string;
   models: LLMModel[];
 }
+
+type LLMModelsResponse = Record<string, LLMProviderData>;
 
 // API functions
 const fetchStats = async (): Promise<ScoutingStats> => {
@@ -272,14 +273,8 @@ const Scouting = () => {
     queryFn: fetchLLMModels,
   });
 
-  // Group models by provider
-  const modelsByProvider = (llmModelsData?.models ?? []).reduce((acc, model) => {
-    if (!acc[model.provider]) {
-      acc[model.provider] = [];
-    }
-    acc[model.provider].push(model);
-    return acc;
-  }, {} as Record<string, LLMModel[]>);
+  // Models are already grouped by provider in the API response
+  const modelsByProvider = llmModelsData ?? {};
 
   // Mutations
   const updateMutation = useMutation({
@@ -592,24 +587,24 @@ const Scouting = () => {
                     )}
                   </SelectTrigger>
                   <SelectContent className="max-h-[300px]">
-                    {Object.entries(modelsByProvider).map(([provider, models]) => (
-                      <SelectGroup key={provider}>
+                    {Object.entries(modelsByProvider).map(([providerKey, providerData]) => (
+                      <SelectGroup key={providerKey}>
                         <SelectLabel className="font-semibold text-primary capitalize">
-                          {provider}
+                          {providerData.name}
                         </SelectLabel>
-                        {models.map((model) => (
+                        {providerData.models.map((model) => (
                           <SelectItem 
                             key={model.id} 
-                            value={model.id}
+                            value={`${providerKey}/${model.id}`}
                             className="py-2"
                           >
                             <div className="flex flex-col gap-0.5">
                               <span className="font-medium">{model.name}</span>
                               <span className="text-xs text-muted-foreground">
-                                {model.description} • {model.cost_per_1k_tokens === 0 ? (
+                                {model.description} • {model.cost_per_1m_tokens === 0 ? (
                                   <span className="text-green-600 font-medium">Gratis</span>
                                 ) : (
-                                  <span>${model.cost_per_1k_tokens}/1k tokens</span>
+                                  <span>${model.cost_per_1m_tokens}/1M tokens</span>
                                 )}
                               </span>
                             </div>
