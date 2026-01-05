@@ -47,8 +47,8 @@ export default function KnowledgeBase() {
 
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
 
-  // Storage limit (100MB for knowledge-docs bucket)
-  const STORAGE_LIMIT_BYTES = 100 * 1024 * 1024;
+  // Storage limit (1GB for knowledge-docs bucket)
+  const STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024;
 
   // Fetch documents
   const { data: documents, isLoading: loadingDocs } = useQuery({
