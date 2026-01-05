@@ -290,9 +290,24 @@ const Scouting = () => {
     queryFn: fetchStats,
   });
 
-  const { data: queueData, isLoading: queueLoading } = useQuery({
-    queryKey: ['scouting-queue', queueFilter],
-    queryFn: () => fetchQueue(queueFilter),
+  const { data: pendingQueue, isLoading: pendingLoading } = useQuery({
+    queryKey: ['scouting-queue', 'pending'],
+    queryFn: () => fetchQueue('pending'),
+  });
+
+  const { data: reviewQueue, isLoading: reviewLoading } = useQuery({
+    queryKey: ['scouting-queue', 'review'],
+    queryFn: () => fetchQueue('review'),
+  });
+
+  const { data: approvedQueue, isLoading: approvedLoading } = useQuery({
+    queryKey: ['scouting-queue', 'approved'],
+    queryFn: () => fetchQueue('approved'),
+  });
+
+  const { data: rejectedQueue, isLoading: rejectedLoading } = useQuery({
+    queryKey: ['scouting-queue', 'rejected'],
+    queryFn: () => fetchQueue('rejected'),
   });
 
   const { data: historyData, isLoading: historyLoading } = useQuery({
@@ -374,8 +389,54 @@ const Scouting = () => {
     });
   };
 
-  const queue = queueData?.items ?? [];
+  const pendingItems = pendingQueue?.items ?? [];
+  const reviewItems = reviewQueue?.items ?? [];
+  const approvedItems = approvedQueue?.items ?? [];
+  const rejectedItems = rejectedQueue?.items ?? [];
   const history = historyData?.items ?? [];
+  
+  const queueSections = [
+    { 
+      id: 'pending', 
+      title: 'Pendientes de Revisión', 
+      items: pendingItems, 
+      loading: pendingLoading,
+      icon: Clock,
+      color: 'text-amber-500',
+      bgColor: 'bg-amber-500/10',
+      description: 'Tecnologías recién descubiertas esperando primera revisión'
+    },
+    { 
+      id: 'review', 
+      title: 'En Revisión', 
+      items: reviewItems, 
+      loading: reviewLoading,
+      icon: Eye,
+      color: 'text-blue-500',
+      bgColor: 'bg-blue-500/10',
+      description: 'Tecnologías siendo evaluadas por el equipo'
+    },
+    { 
+      id: 'approved', 
+      title: 'Aprobadas (Listas para BD)', 
+      items: approvedItems, 
+      loading: approvedLoading,
+      icon: CheckCircle2,
+      color: 'text-green-500',
+      bgColor: 'bg-green-500/10',
+      description: 'Revisión completa - listas para añadir a la base de datos principal'
+    },
+    { 
+      id: 'rejected', 
+      title: 'Rechazadas', 
+      items: rejectedItems, 
+      loading: rejectedLoading,
+      icon: XCircle,
+      color: 'text-red-500',
+      bgColor: 'bg-red-500/10',
+      description: 'Tecnologías descartadas'
+    },
+  ];
 
   return (
     <div className="p-6 space-y-6">
@@ -466,88 +527,207 @@ const Scouting = () => {
 
         {/* Queue Tab */}
         <TabsContent value="queue" className="space-y-4">
-          <div className="flex items-center gap-4">
-            <Select value={queueFilter} onValueChange={setQueueFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pending">Pendientes</SelectItem>
-                <SelectItem value="review">Para revisar</SelectItem>
-                <SelectItem value="approved">Aprobadas</SelectItem>
-                <SelectItem value="rejected">Rechazadas</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="mb-4">
+            <p className="text-muted-foreground">
+              Las tecnologías pasan por un proceso de revisión antes de añadirse a la base de datos principal.
+              Solo las tecnologías con <span className="font-medium text-green-600">revisión completa</span> pueden transferirse.
+            </p>
           </div>
 
-          {queueLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : queue.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {queue.map((item) => (
-                <Card key={item.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-lg">{item.name}</CardTitle>
-                      <Badge className={getScoreColor(item.score)}>
-                        Score: {item.score}
-                      </Badge>
-                    </div>
-                    <CardDescription className="flex items-center gap-1">
-                      <Building2 className="w-3 h-3" />
-                      {item.provider}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+          <div className="space-y-4">
+            {queueSections.map((section) => {
+              const Icon = section.icon;
+              const isOpen = queueFilter === section.id;
+              
+              return (
+                <Card 
+                  key={section.id} 
+                  className={`transition-all ${isOpen ? 'ring-2 ring-primary/20' : ''}`}
+                >
+                  <CardHeader 
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors ${section.bgColor} rounded-t-lg`}
+                    onClick={() => setQueueFilter(isOpen ? '' : section.id)}
+                  >
                     <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <MapPin className="w-3 h-3" />
-                        {item.country}
-                      </span>
-                      <TRLBadge trl={item.trl} />
-                    </div>
-                    
-                    {(queueFilter === 'pending' || queueFilter === 'review') && (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700"
-                          onClick={() => updateMutation.mutate({ id: item.id, status: 'approved' })}
-                          disabled={updateMutation.isPending}
-                        >
-                          <Check className="w-4 h-4 mr-1" />
-                          Aprobar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 text-red-600 border-red-600 hover:bg-red-50 hover:text-red-700"
-                          onClick={() => updateMutation.mutate({ id: item.id, status: 'rejected' })}
-                          disabled={updateMutation.isPending}
-                        >
-                          <X className="w-4 h-4 mr-1" />
-                          Rechazar
-                        </Button>
+                      <div className="flex items-center gap-3">
+                        <Icon className={`w-5 h-5 ${section.color}`} />
+                        <div>
+                          <CardTitle className="text-base">{section.title}</CardTitle>
+                          <CardDescription className="text-xs mt-0.5">
+                            {section.description}
+                          </CardDescription>
+                        </div>
                       </div>
-                    )}
-                  </CardContent>
+                      <div className="flex items-center gap-3">
+                        <Badge variant="secondary" className="text-sm">
+                          {section.loading ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            section.items.length
+                          )}
+                        </Badge>
+                        <svg 
+                          className={`w-5 h-5 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          fill="none" 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  
+                  {isOpen && (
+                    <CardContent className="pt-4">
+                      {section.loading ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                        </div>
+                      ) : section.items.length > 0 ? (
+                        <div className="space-y-4">
+                          {/* Action bar for approved items */}
+                          {section.id === 'approved' && section.items.length > 0 && (
+                            <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                                <span className="text-sm font-medium text-green-700">
+                                  {section.items.length} tecnología(s) lista(s) para añadir a la BD principal
+                                </span>
+                              </div>
+                              <Button 
+                                size="sm" 
+                                className="bg-green-600 hover:bg-green-700"
+                                onClick={() => {
+                                  // TODO: Implement bulk transfer to main DB
+                                  toast.info('Funcionalidad de transferencia masiva en desarrollo');
+                                }}
+                              >
+                                <Rocket className="w-4 h-4 mr-1" />
+                                Transferir todas a BD
+                              </Button>
+                            </div>
+                          )}
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {section.items.map((item) => (
+                              <Card key={item.id} className="hover:shadow-md transition-shadow border">
+                                <CardHeader className="pb-3">
+                                  <div className="flex items-start justify-between">
+                                    <CardTitle className="text-base">{item.name}</CardTitle>
+                                    <Badge className={getScoreColor(item.score)}>
+                                      {item.score}
+                                    </Badge>
+                                  </div>
+                                  <CardDescription className="flex items-center gap-1 text-xs">
+                                    <Building2 className="w-3 h-3" />
+                                    {item.provider}
+                                  </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                      <MapPin className="w-3 h-3" />
+                                      {item.country}
+                                    </span>
+                                    <TRLBadge trl={item.trl} />
+                                  </div>
+                                  
+                                  {/* Actions based on phase */}
+                                  {section.id === 'pending' && (
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'review' })}
+                                        disabled={updateMutation.isPending}
+                                      >
+                                        <Eye className="w-3 h-3 mr-1" />
+                                        Revisar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-red-600 border-red-600 hover:bg-red-50"
+                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'rejected' })}
+                                        disabled={updateMutation.isPending}
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                  
+                                  {section.id === 'review' && (
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1 text-green-600 border-green-600 hover:bg-green-50"
+                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'approved' })}
+                                        disabled={updateMutation.isPending}
+                                      >
+                                        <Check className="w-3 h-3 mr-1" />
+                                        Aprobar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1 text-red-600 border-red-600 hover:bg-red-50"
+                                        onClick={() => updateMutation.mutate({ id: item.id, status: 'rejected' })}
+                                        disabled={updateMutation.isPending}
+                                      >
+                                        <X className="w-3 h-3 mr-1" />
+                                        Rechazar
+                                      </Button>
+                                    </div>
+                                  )}
+                                  
+                                  {section.id === 'approved' && (
+                                    <Button
+                                      size="sm"
+                                      className="w-full bg-green-600 hover:bg-green-700"
+                                      onClick={() => {
+                                        // TODO: Transfer individual tech to main DB
+                                        toast.info('Transferencia individual en desarrollo');
+                                      }}
+                                    >
+                                      <Rocket className="w-3 h-3 mr-1" />
+                                      Añadir a BD Principal
+                                    </Button>
+                                  )}
+                                  
+                                  {section.id === 'rejected' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="w-full"
+                                      onClick={() => updateMutation.mutate({ id: item.id, status: 'pending' })}
+                                      disabled={updateMutation.isPending}
+                                    >
+                                      <Rocket className="w-3 h-3 mr-1" />
+                                      Reconsiderar
+                                    </Button>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <Icon className={`w-10 h-10 ${section.color} opacity-30 mb-3`} />
+                          <p className="text-sm text-muted-foreground">
+                            No hay tecnologías en esta fase
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  )}
                 </Card>
-              ))}
-            </div>
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <AlertCircle className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                <h3 className="text-lg font-medium mb-2">No hay tecnologías</h3>
-                <p className="text-muted-foreground">
-                  No se encontraron tecnologías con el estado seleccionado.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+              );
+            })}
+          </div>
         </TabsContent>
 
         {/* New Scouting Tab */}
