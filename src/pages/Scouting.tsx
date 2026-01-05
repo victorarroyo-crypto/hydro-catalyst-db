@@ -309,7 +309,6 @@ const Scouting = () => {
   const [activeTab, setActiveTab] = useState('queue');
   const [isPolling, setIsPolling] = useState(false);
   const [lastPollTime, setLastPollTime] = useState<Date | null>(null);
-  const [knownItemIds, setKnownItemIds] = useState<Set<string>>(new Set());
   const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
   const previousRunningJobRef = useRef<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -361,69 +360,89 @@ const Scouting = () => {
     return newItemIds.has(itemId);
   }, [newItemIds]);
 
-  // Poll for new queue items when scouting is running
-  const pollQueueItems = useCallback(async () => {
-    if (!hasRunningJob) return;
-    
-    setIsPolling(true);
-    setLastPollTime(new Date());
-    
-    try {
-      const response = await fetchQueue('pending');
-      const currentIds = new Set(response.items.map(item => item.id));
-      
-      // Find newly added items
-      const newItems = response.items.filter(item => !knownItemIds.has(item.id));
-      
-      if (newItems.length > 0) {
-        // Mark new items for animation
-        setNewItemIds(prev => {
-          const updated = new Set(prev);
-          newItems.forEach(item => updated.add(item.id));
-          return updated;
-        });
-        
-        // Clear "new" badge after threshold
-        setTimeout(() => {
-          setNewItemIds(prev => {
-            const updated = new Set(prev);
-            newItems.forEach(item => updated.delete(item.id));
-            return updated;
-          });
-        }, NEW_ITEM_THRESHOLD);
-      }
-      
-      // Update known items
-      setKnownItemIds(currentIds);
-      
-      // Invalidate query to update UI
-      queryClient.invalidateQueries({ queryKey: ['scouting-queue', 'pending'] });
-      queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
-    } catch (error) {
-      console.error('[Scouting] Polling error:', error);
-    } finally {
-      setIsPolling(false);
-    }
-  }, [hasRunningJob, knownItemIds, queryClient]);
+  // Store refs to avoid stale closures
+  const knownItemIdsRef = useRef<Set<string>>(new Set());
+  const hasRunningJobRef = useRef(false);
+  
+  // Keep refs in sync
+  useEffect(() => {
+    hasRunningJobRef.current = hasRunningJob;
+  }, [hasRunningJob]);
 
   // Effect to manage polling lifecycle
   useEffect(() => {
-    if (hasRunningJob) {
-      // Start polling
-      if (!pollingIntervalRef.current) {
-        console.log('[Scouting] Starting polling for running job:', runningJob?.id);
-        pollQueueItems(); // Initial poll
-        pollingIntervalRef.current = setInterval(pollQueueItems, POLLING_INTERVAL);
-      }
-      previousRunningJobRef.current = runningJob?.id || null;
-    } else if (previousRunningJobRef.current && !hasRunningJob) {
-      // Job just completed - stop polling and show notification
-      console.log('[Scouting] Scouting job completed');
+    // Clear any existing interval first
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+
+    if (hasRunningJob && runningJob) {
+      console.log('[Scouting] Starting polling for running job:', runningJob.id);
       
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
+      const pollFn = async () => {
+        if (!hasRunningJobRef.current) {
+          console.log('[Scouting] No running job, skipping poll');
+          return;
+        }
+        
+        setIsPolling(true);
+        setLastPollTime(new Date());
+        
+        try {
+          // Fetch queue
+          const response = await fetchQueue('pending');
+          const currentIds = new Set(response.items.map(item => item.id));
+          
+          // Find newly added items
+          const newItems = response.items.filter(item => !knownItemIdsRef.current.has(item.id));
+          
+          if (newItems.length > 0) {
+            console.log('[Scouting] Found new items:', newItems.map(i => i.name));
+            
+            // Mark new items for animation
+            setNewItemIds(prev => {
+              const updated = new Set(prev);
+              newItems.forEach(item => updated.add(item.id));
+              return updated;
+            });
+            
+            // Clear "new" badge after threshold
+            setTimeout(() => {
+              setNewItemIds(prev => {
+                const updated = new Set(prev);
+                newItems.forEach(item => updated.delete(item.id));
+                return updated;
+              });
+            }, NEW_ITEM_THRESHOLD);
+            
+            // Invalidate query to update UI
+            queryClient.invalidateQueries({ queryKey: ['scouting-queue', 'pending'] });
+            queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
+          }
+          
+          // Update known items ref
+          knownItemIdsRef.current = currentIds;
+          
+          // Also check if the job is still running
+          await refetchHistory();
+        } catch (error) {
+          console.error('[Scouting] Polling error:', error);
+        } finally {
+          setIsPolling(false);
+        }
+      };
+      
+      // Initial poll
+      pollFn();
+      
+      // Set up interval
+      pollingIntervalRef.current = setInterval(pollFn, POLLING_INTERVAL);
+      previousRunningJobRef.current = runningJob.id;
+      
+    } else if (previousRunningJobRef.current && !hasRunningJob) {
+      // Job just completed - show notification
+      console.log('[Scouting] Scouting job completed');
       
       // Count pending items and show toast
       const pendingCount = pendingQueue?.items?.length ?? 0;
@@ -432,12 +451,12 @@ const Scouting = () => {
         duration: 5000,
       });
       
-      // Refresh data
+      // Refresh all data
       queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
       queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
       
       previousRunningJobRef.current = null;
+      setIsPolling(false);
     }
     
     return () => {
@@ -446,14 +465,14 @@ const Scouting = () => {
         pollingIntervalRef.current = null;
       }
     };
-  }, [hasRunningJob, runningJob?.id, pollQueueItems, pendingQueue?.items?.length, queryClient]);
+  }, [hasRunningJob, runningJob?.id, queryClient, pendingQueue?.items?.length, refetchHistory]);
 
   // Initialize known items on first load
   useEffect(() => {
-    if (pendingQueue?.items && knownItemIds.size === 0) {
-      setKnownItemIds(new Set(pendingQueue.items.map(item => item.id)));
+    if (pendingQueue?.items && knownItemIdsRef.current.size === 0) {
+      knownItemIdsRef.current = new Set(pendingQueue.items.map(item => item.id));
     }
-  }, [pendingQueue?.items, knownItemIds.size]);
+  }, [pendingQueue?.items]);
 
   // Models are already grouped by provider in the API response
   const modelsByProvider = llmModelsData ?? {};
