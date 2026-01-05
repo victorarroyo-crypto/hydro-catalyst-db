@@ -203,6 +203,9 @@ FORMATO DE RESPUESTA (SOLO JSON válido):
 Si no encuentras coincidencias:
 {"matching_ids": [], "explanation": "No se encontraron tecnologías que coincidan con la búsqueda"}`;
 
+    // Track timing for usage logs
+    const startTime = Date.now();
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -218,9 +221,20 @@ Si no encuentras coincidencias:
       }),
     });
 
+    const responseTimeMs = Date.now() - startTime;
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('AI gateway error:', response.status, errorText);
+
+      // Log failed request
+      await supabase.from('ai_usage_logs').insert({
+        action_type: 'search',
+        model: aiModel,
+        response_time_ms: responseTimeMs,
+        success: false,
+        error_message: `HTTP ${response.status}: ${errorText.substring(0, 200)}`,
+      });
 
       if (response.status === 429) {
         return new Response(
@@ -253,6 +267,23 @@ Si no encuentras coincidencias:
     const aiData = await response.json();
     const aiContent = aiData.choices?.[0]?.message?.content;
     
+    // Extract token usage from response
+    const usage = aiData.usage || {};
+    const inputTokens = usage.prompt_tokens || 0;
+    const outputTokens = usage.completion_tokens || 0;
+    const totalTokens = usage.total_tokens || inputTokens + outputTokens;
+
+    // Log successful request
+    await supabase.from('ai_usage_logs').insert({
+      action_type: 'search',
+      model: aiModel,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      total_tokens: totalTokens,
+      response_time_ms: responseTimeMs,
+      success: true,
+    });
+    
     console.log('AI response:', aiContent);
 
     // Parse the AI response
@@ -282,6 +313,7 @@ Si no encuentras coincidencias:
     // Add metadata about the search
     result.total_analyzed = techsForAI.length;
     result.total_matching_filters = totalCount;
+    result.usage = { model: aiModel, tokens: totalTokens, response_time_ms: responseTimeMs };
     if (wasLimited) {
       result.note = `Se analizaron ${techsForAI.length} de ${totalCount} tecnologías que cumplen los filtros.`;
     }

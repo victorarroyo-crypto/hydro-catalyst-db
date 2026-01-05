@@ -16,6 +16,7 @@ import {
   Brain,
   Cpu,
   ChevronDown,
+  BarChart3,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -58,6 +59,7 @@ const internalNavItems = [
 const aiToolsItems = [
   { title: 'Clasificación IA', url: '/ai-classification', icon: Brain },
   { title: 'Búsqueda con IA', url: '/ai-search', icon: Sparkles },
+  { title: 'Dashboard Uso', url: '/ai-usage', icon: BarChart3 },
   { title: 'Modelos IA', url: '/ai-models', icon: Cpu },
 ];
 

@@ -130,6 +130,9 @@ Reglas:
 Contexto de la base de conocimiento:
 ${context}`;
 
+    // Track timing for usage logs
+    const startTime = Date.now();
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -146,7 +149,21 @@ ${context}`;
       }),
     });
 
+    const responseTimeMs = Date.now() - startTime;
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI gateway error:', response.status, errorText);
+
+      // Log failed request
+      await supabase.from('ai_usage_logs').insert({
+        action_type: 'knowledge_base',
+        model: aiModel,
+        response_time_ms: responseTimeMs,
+        success: false,
+        error_message: `HTTP ${response.status}: ${errorText.substring(0, 200)}`,
+      });
+
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ success: false, error: 'Límite de consultas excedido. Intenta de nuevo más tarde.' }),
@@ -159,13 +176,28 @@ ${context}`;
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
       throw new Error('Error al consultar la IA');
     }
 
     const aiResponse = await response.json();
     const answer = aiResponse.choices?.[0]?.message?.content || 'No se pudo generar una respuesta.';
+
+    // Extract token usage from response
+    const usage = aiResponse.usage || {};
+    const inputTokens = usage.prompt_tokens || 0;
+    const outputTokens = usage.completion_tokens || 0;
+    const totalTokens = usage.total_tokens || inputTokens + outputTokens;
+
+    // Log successful request
+    await supabase.from('ai_usage_logs').insert({
+      action_type: 'knowledge_base',
+      model: aiModel,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      total_tokens: totalTokens,
+      response_time_ms: responseTimeMs,
+      success: true,
+    });
 
     // Format sources
     const sources = relevantChunks.map((chunk: any) => ({
@@ -178,7 +210,8 @@ ${context}`;
       JSON.stringify({ 
         success: true, 
         answer,
-        sources
+        sources,
+        usage: { model: aiModel, tokens: totalTokens, response_time_ms: responseTimeMs }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
