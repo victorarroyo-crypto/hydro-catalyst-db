@@ -109,6 +109,8 @@ interface ParsedReport {
   conclusions: string[];
   recommendations: string[];
   rawText: string;
+  technicalErrors: string[]; // Detected technical issues
+  hadTechnicalIssues: boolean;
 }
 
 interface ScoutingReportModalProps {
@@ -151,10 +153,35 @@ const parseReportText = (text: string): ParsedReport => {
     technologies: { added: [], review: [], rejected: [] },
     conclusions: [],
     recommendations: [],
-    rawText: text
+    rawText: text,
+    technicalErrors: [],
+    hadTechnicalIssues: false
   };
 
   if (!text) return result;
+
+  // Detect technical errors in the report
+  const errorPatterns = [
+    /error técnico/i,
+    /check_duplicate/i,
+    /herramienta.*(?:falló|error|problema)/i,
+    /no se pudo completar/i,
+    /problemas técnicos/i,
+    /tool.*(?:failed|error)/i,
+  ];
+  
+  for (const pattern of errorPatterns) {
+    if (pattern.test(text)) {
+      result.hadTechnicalIssues = true;
+      break;
+    }
+  }
+
+  // Extract specific error messages
+  const errorMessageMatch = text.match(/(?:error técnico|Debido a un error)[^.]*\./gi);
+  if (errorMessageMatch) {
+    result.technicalErrors = errorMessageMatch.map(m => m.trim());
+  }
 
   // Parse summary section
   const evaluatedMatch = text.match(/Tecnologías evaluadas:\s*(\d+)/i);
@@ -167,12 +194,17 @@ const parseReportText = (text: string): ParsedReport => {
   if (reviewMatch) result.summary.review = parseInt(reviewMatch[1]);
   if (rejectedMatch) result.summary.rejected = parseInt(rejectedMatch[1]);
 
+  // Check for "no technologies processed" scenario
+  const totalProcessed = result.summary.added + result.summary.review + result.summary.rejected;
+  if (result.summary.evaluated > 0 && totalProcessed === 0) {
+    result.hadTechnicalIssues = true;
+    if (result.technicalErrors.length === 0) {
+      result.technicalErrors.push('Se evaluaron tecnologías pero ninguna fue procesada correctamente.');
+    }
+  }
+
   // Parse technology tables - look for table-like structures
   // Format: | Nombre | Proveedor | Score | Duda/Razón |
-  const tableRowRegex = /\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|/g;
-  let match;
-  
-  // Determine current section based on context
   let currentSection: 'added' | 'review' | 'rejected' = 'review';
   const lines = text.split('\n');
   
@@ -180,11 +212,11 @@ const parseReportText = (text: string): ParsedReport => {
     const line = lines[i];
     
     // Detect section headers
-    if (line.includes('AÑADIDAS') || line.includes('🟢')) {
+    if (line.includes('AÑADIDAS') || line.includes('✅')) {
       currentSection = 'added';
     } else if (line.includes('PARA REVISIÓN') || line.includes('🟡')) {
       currentSection = 'review';
-    } else if (line.includes('RECHAZADAS') || line.includes('🔴')) {
+    } else if (line.includes('RECHAZADAS') || line.includes('❌')) {
       currentSection = 'rejected';
     }
     
@@ -196,11 +228,13 @@ const parseReportText = (text: string): ParsedReport => {
       const score = parseInt(rowMatch[3]);
       const reason = rowMatch[4].trim();
       
-      // Skip header rows
+      // Skip header rows and N/A rows
       if (name.toLowerCase() === 'tecnología' || 
           name.toLowerCase() === 'nombre' || 
           name.includes('---') ||
-          provider.toLowerCase() === 'proveedor') {
+          name.toLowerCase() === 'n/a' ||
+          provider.toLowerCase() === 'proveedor' ||
+          provider.toLowerCase() === 'n/a') {
         continue;
       }
       
@@ -210,17 +244,17 @@ const parseReportText = (text: string): ParsedReport => {
   }
 
   // Parse conclusions
-  const conclusionsMatch = text.match(/CONCLUSIONES:([\s\S]*?)(?=RECOMENDACIONES|$)/i);
+  const conclusionsMatch = text.match(/CONCLUSIONES:([\s\S]*?)(?=RECOMENDACIONES|Debido a|$)/i);
   if (conclusionsMatch) {
     const conclusionLines = conclusionsMatch[1]
       .split('\n')
       .map(line => line.replace(/^[-*•]\s*/, '').trim())
-      .filter(line => line.length > 0 && !line.startsWith('|'));
+      .filter(line => line.length > 0 && !line.startsWith('|') && !line.toLowerCase().includes('n/a'));
     result.conclusions = conclusionLines;
   }
 
   // Parse recommendations
-  const recommendationsMatch = text.match(/(?:RECOMENDACIONES|Recomendaciones para próximo scouting):([\s\S]*?)$/i);
+  const recommendationsMatch = text.match(/(?:RECOMENDACIONES|Recomendaciones para próximo scouting):([\s\S]*?)(?=Debido a|$)/i);
   if (recommendationsMatch) {
     const recLines = recommendationsMatch[1]
       .split('\n')
@@ -540,6 +574,32 @@ export const ScoutingReportModal = ({ report, onClose }: ScoutingReportModalProp
                   <pre className="text-xs text-red-600 whitespace-pre-wrap font-mono bg-red-100/50 p-3 rounded overflow-x-auto">
                     {report.error_message}
                   </pre>
+                </div>
+              )}
+
+              {/* Technical Issues Warning */}
+              {parsedReport?.hadTechnicalIssues && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <h4 className="font-semibold text-amber-700 flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Problemas Técnicos Detectados
+                  </h4>
+                  <p className="text-sm text-amber-700 mb-2">
+                    Este scouting tuvo problemas técnicos que impidieron procesar algunas o todas las tecnologías.
+                  </p>
+                  {parsedReport.technicalErrors.length > 0 && (
+                    <ul className="text-sm text-amber-600 space-y-1">
+                      {parsedReport.technicalErrors.map((error, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="text-amber-500 mt-1">•</span>
+                          <span>{error}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="text-xs text-amber-600 mt-3 italic">
+                    Recomendación: Verifica el estado del backend de Railway y vuelve a ejecutar el scouting.
+                  </p>
                 </div>
               )}
 
