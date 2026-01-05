@@ -68,7 +68,6 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { ScoutingReportModal } from '@/components/ScoutingReportModal';
 import { ScoutingTechDetailModal } from '@/components/ScoutingTechDetailModal';
 
-const API_BASE = 'https://watertech-scouting-production.up.railway.app';
 const POLLING_INTERVAL = 10000; // 10 seconds
 const NEW_ITEM_THRESHOLD = 30000; // 30 seconds for "Nueva" badge
 
@@ -229,40 +228,40 @@ interface LLMProviderData {
 
 type LLMModelsResponse = Record<string, LLMProviderData>;
 
-// API functions
+// Proxy helper - all calls go through edge function to avoid CORS
+async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('scouting-proxy', {
+    body: { endpoint, method, body },
+  });
+  
+  if (error) throw new Error(error.message);
+  if (!data?.success) throw new Error(data?.error || 'Error en proxy');
+  return data.data as T;
+}
+
+// API functions via proxy
 const fetchStats = async (): Promise<ScoutingStats> => {
-  const res = await fetch(`${API_BASE}/api/scouting/stats`);
-  if (!res.ok) throw new Error('Error al cargar estadísticas');
-  return res.json();
+  return proxyFetch<ScoutingStats>('/api/scouting/stats');
 };
 
 const fetchQueue = async (status: string): Promise<QueueResponse> => {
-  const res = await fetch(`${API_BASE}/api/scouting/queue?status=${status}`);
-  if (!res.ok) throw new Error('Error al cargar cola');
-  const data: QueueResponseAPI = await res.json();
-  // Normalize API response to expected structure
+  const apiData = await proxyFetch<QueueResponseAPI>(`/api/scouting/queue?status=${status}`);
   return {
-    items: data.items.map(normalizeQueueItem),
-    count: data.count,
+    items: apiData.items.map(normalizeQueueItem),
+    count: apiData.count,
   };
 };
 
 const fetchHistory = async (): Promise<HistoryResponse> => {
-  const res = await fetch(`${API_BASE}/api/scouting/history`);
-  if (!res.ok) throw new Error('Error al cargar historial');
-  return res.json();
+  return proxyFetch<HistoryResponse>('/api/scouting/history');
 };
 
 const fetchJobStatus = async (jobId: string): Promise<JobStatus> => {
-  const res = await fetch(`${API_BASE}/api/scouting/status/${jobId}`);
-  if (!res.ok) throw new Error('Error al cargar estado del job');
-  return res.json();
+  return proxyFetch<JobStatus>(`/api/scouting/status/${jobId}`);
 };
 
 const fetchLLMModels = async (): Promise<LLMModelsResponse> => {
-  const res = await fetch(`${API_BASE}/api/llm/models`);
-  if (!res.ok) throw new Error('Error al cargar modelos LLM');
-  return res.json();
+  return proxyFetch<LLMModelsResponse>('/api/llm/models');
 };
 
 const updateQueueItem = async ({ id, status }: { id: string; status: string }) => {
@@ -281,52 +280,21 @@ const runScouting = async (params: {
   provider: string;
   model: string;
 }) => {
-  console.log('[Scouting] Iniciando petición a:', `${API_BASE}/api/scouting/run`);
+  console.log('[Scouting] Iniciando via proxy:', '/api/scouting/run');
   console.log('[Scouting] Payload:', JSON.stringify(params, null, 2));
   
-  try {
-    const res = await fetch(`${API_BASE}/api/scouting/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': 'admin',
-        'X-User-Role': 'admin',
-      },
-      body: JSON.stringify({
-        config: params.config,
-        provider: params.provider,
-        model: params.model,
-      }),
-    });
-    
-    console.log('[Scouting] Response status:', res.status);
-    
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error('[Scouting] Error response:', errorText);
-      throw new Error(errorText || `Error ${res.status}: Error al iniciar scouting`);
-    }
-    
-    const data = await res.json();
-    console.log('[Scouting] Success:', data);
-    return data;
-  } catch (error) {
-    console.error('[Scouting] Fetch error:', error);
-    throw error;
-  }
+  const result = await proxyFetch<{ job_id: string }>('/api/scouting/run', 'POST', {
+    config: params.config,
+    provider: params.provider,
+    model: params.model,
+  });
+  
+  console.log('[Scouting] Success:', result);
+  return result;
 };
 
 const cancelScouting = async (jobId: string) => {
-  const res = await fetch(`${API_BASE}/api/scouting/history/${jobId}/cancel`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': 'admin',
-      'X-User-Role': 'admin',
-    },
-  });
-  if (!res.ok) throw new Error('Error al cancelar scouting');
-  return res.json();
+  return proxyFetch<{ success: boolean }>(`/api/scouting/history/${jobId}/cancel`, 'PATCH');
 };
 
 // Check if a job is potentially stuck (running for more than 10 minutes)
