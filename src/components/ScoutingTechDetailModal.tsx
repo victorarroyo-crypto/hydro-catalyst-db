@@ -82,6 +82,7 @@ const getStatusLabel = (status: string): string => {
   switch (status) {
     case 'pending': return 'Pendiente';
     case 'review': return 'En revisión';
+    case 'supervision': return 'En supervisión';
     case 'approved': return 'Aprobada';
     case 'rejected': return 'Rechazada';
     default: return status;
@@ -92,6 +93,7 @@ const getStatusColor = (status: string): string => {
   switch (status) {
     case 'pending': return 'bg-amber-500/20 text-amber-700 border-amber-500/30';
     case 'review': return 'bg-blue-500/20 text-blue-700 border-blue-500/30';
+    case 'supervision': return 'bg-orange-500/20 text-orange-700 border-orange-500/30';
     case 'approved': return 'bg-green-500/20 text-green-700 border-green-500/30';
     case 'rejected': return 'bg-red-500/20 text-red-700 border-red-500/30';
     default: return 'bg-muted text-muted-foreground';
@@ -427,111 +429,193 @@ export const ScoutingTechDetailModal = ({
           </ScrollArea>
 
           {/* Footer with Actions */}
-          <DialogFooter className="border-t pt-4 flex-col sm:flex-row gap-2">
-            {/* Edit toggle */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (isEditing) {
-                  // TODO: Save edits to backend
-                  toast.info('Guardado de ediciones en desarrollo');
-                }
-                setIsEditing(!isEditing);
-              }}
-              className="mr-auto"
-            >
-              {isEditing ? (
-                <>
-                  <Save className="w-4 h-4 mr-1" />
-                  Guardar cambios
-                </>
-              ) : (
-                <>
-                  <Edit className="w-4 h-4 mr-1" />
-                  Editar
-                </>
-              )}
-            </Button>
+          <DialogFooter className="border-t pt-4 flex-col gap-4">
+            {/* Workflow explanation */}
+            <div className="w-full text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+              <strong>Flujo de trabajo:</strong> El analista sugiere cambios de estado → Supervisor/Admin aprueba
+            </div>
 
-            {/* Phase navigation */}
-            <div className="flex items-center gap-2">
-              {/* Go back */}
-              {prevPhase && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleStatusChange(prevPhase)}
-                  disabled={updateMutation.isPending}
-                >
-                  <ArrowLeft className="w-4 h-4 mr-1" />
-                  {getStatusLabel(prevPhase)}
-                </Button>
-              )}
-
-              {/* Reject option */}
-              {technology.status !== 'rejected' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-red-600 border-red-300 hover:bg-red-50"
-                  onClick={() => handleStatusChange('rejected')}
-                  disabled={updateMutation.isPending}
-                >
-                  <X className="w-4 h-4 mr-1" />
-                  Rechazar
-                </Button>
-              )}
-
-              {/* Advance to next phase */}
-              {nextPhase && (
-                <Button
-                  size="sm"
-                  className={
-                    nextPhase === 'approved' 
-                      ? 'bg-green-600 hover:bg-green-700' 
-                      : nextPhase === 'review'
-                      ? 'bg-blue-600 hover:bg-blue-700'
-                      : ''
+            <div className="flex flex-col sm:flex-row w-full gap-2 sm:items-center sm:justify-between">
+              {/* Edit toggle */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (isEditing) {
+                    // TODO: Save edits to backend
+                    toast.info('Guardado de ediciones en desarrollo');
                   }
-                  onClick={() => handleStatusChange(nextPhase)}
-                  disabled={updateMutation.isPending}
-                >
-                  {updateMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                  ) : (
-                    <ArrowRight className="w-4 h-4 mr-1" />
-                  )}
-                  {getStatusLabel(nextPhase)}
-                </Button>
-              )}
+                  setIsEditing(!isEditing);
+                }}
+              >
+                {isEditing ? (
+                  <>
+                    <Save className="w-4 h-4 mr-1" />
+                    Guardar cambios
+                  </>
+                ) : (
+                  <>
+                    <Edit className="w-4 h-4 mr-1" />
+                    Editar ficha
+                  </>
+                )}
+              </Button>
 
-              {/* Transfer to main DB (for approved) */}
-              {technology.status === 'approved' && (
-                <Button
-                  size="sm"
-                  className="bg-green-600 hover:bg-green-700"
-                  onClick={() => {
-                    toast.info('Transferencia a BD principal en desarrollo');
-                  }}
-                >
-                  <Rocket className="w-4 h-4 mr-1" />
-                  Añadir a BD Principal
-                </Button>
-              )}
+              {/* Phase navigation */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Pending: Move to review */}
+                {technology.status === 'pending' && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 border-red-300 hover:bg-red-50"
+                      onClick={() => handleStatusChange('rejected')}
+                      disabled={updateMutation.isPending}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Rechazar
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => handleStatusChange('review')}
+                      disabled={updateMutation.isPending}
+                    >
+                      {updateMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Eye className="w-4 h-4 mr-1" />
+                      )}
+                      Pasar a Revisión
+                    </Button>
+                  </>
+                )}
 
-              {/* Reconsider (for rejected) */}
-              {technology.status === 'rejected' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleStatusChange('pending')}
-                  disabled={updateMutation.isPending}
-                >
-                  <Eye className="w-4 h-4 mr-1" />
-                  Reconsiderar
-                </Button>
-              )}
+                {/* Review: Send to supervision or transfer to DB */}
+                {technology.status === 'review' && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleStatusChange('pending')}
+                      disabled={updateMutation.isPending}
+                    >
+                      <ArrowLeft className="w-4 h-4 mr-1" />
+                      Volver a Pendiente
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 border-red-300 hover:bg-red-50"
+                      onClick={() => handleStatusChange('rejected')}
+                      disabled={updateMutation.isPending}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Rechazar
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-orange-600 hover:bg-orange-700"
+                      onClick={() => handleStatusChange('supervision')}
+                      disabled={updateMutation.isPending}
+                    >
+                      {updateMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 mr-1" />
+                      )}
+                      Enviar a Supervisión
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={() => {
+                        toast.info('Transferencia a BD principal en desarrollo');
+                      }}
+                    >
+                      <Rocket className="w-4 h-4 mr-1" />
+                      Añadir a BD
+                    </Button>
+                  </>
+                )}
+
+                {/* Supervision: Approve or reject */}
+                {technology.status === 'supervision' && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleStatusChange('review')}
+                      disabled={updateMutation.isPending}
+                    >
+                      <ArrowLeft className="w-4 h-4 mr-1" />
+                      Devolver a Revisión
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 border-red-300 hover:bg-red-50"
+                      onClick={() => handleStatusChange('rejected')}
+                      disabled={updateMutation.isPending}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Rechazar
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={() => handleStatusChange('approved')}
+                      disabled={updateMutation.isPending}
+                    >
+                      {updateMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4 mr-1" />
+                      )}
+                      Aprobar (Supervisor)
+                    </Button>
+                  </>
+                )}
+
+                {/* Approved: Transfer to main DB */}
+                {technology.status === 'approved' && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleStatusChange('supervision')}
+                      disabled={updateMutation.isPending}
+                    >
+                      <ArrowLeft className="w-4 h-4 mr-1" />
+                      Volver a Supervisión
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={() => {
+                        toast.info('Transferencia a BD principal en desarrollo');
+                      }}
+                    >
+                      <Rocket className="w-4 h-4 mr-1" />
+                      Añadir a BD Principal
+                    </Button>
+                  </>
+                )}
+
+                {/* Rejected: Reconsider */}
+                {technology.status === 'rejected' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleStatusChange('pending')}
+                    disabled={updateMutation.isPending}
+                  >
+                    <Eye className="w-4 h-4 mr-1" />
+                    Reconsiderar
+                  </Button>
+                )}
+              </div>
             </div>
           </DialogFooter>
         </DialogContent>
