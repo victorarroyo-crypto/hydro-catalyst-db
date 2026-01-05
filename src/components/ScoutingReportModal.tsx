@@ -7,6 +7,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -297,6 +307,12 @@ const TechnologyTable = ({
   actionPending: string | null;
   sectionType: 'added' | 'review' | 'rejected';
 }) => {
+  const [confirmAction, setConfirmAction] = useState<{
+    id: string;
+    status: string;
+    techName: string;
+  } | null>(null);
+
   if (technologies.length === 0) return null;
 
   // Try to match technologies with queue items by name similarity
@@ -316,115 +332,180 @@ const TechnologyTable = ({
     });
   };
 
+  const handleConfirmAction = () => {
+    if (confirmAction) {
+      onAction(confirmAction.id, confirmAction.status);
+      setConfirmAction(null);
+    }
+  };
+
+  const getActionLabel = (status: string) => {
+    switch (status) {
+      case 'approved': return 'aprobar';
+      case 'rejected': return 'rechazar';
+      case 'pending': return 'reconsiderar';
+      default: return status;
+    }
+  };
+
+  const getActionTitle = (status: string) => {
+    switch (status) {
+      case 'approved': return 'Aprobar tecnología';
+      case 'rejected': return 'Rechazar tecnología';
+      case 'pending': return 'Reconsiderar tecnología';
+      default: return 'Confirmar acción';
+    }
+  };
+
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className={`py-3 ${color}`}>
-        <CardTitle className="text-base flex items-center gap-2">
-          <Icon className="w-4 h-4" />
-          {title} ({technologies.length})
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[30%]">Tecnología</TableHead>
-              <TableHead className="w-[20%]">Proveedor</TableHead>
-              <TableHead className="w-[8%] text-center">Score</TableHead>
-              <TableHead className="w-[25%]">Observación</TableHead>
-              <TableHead className="w-[17%] text-center">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {technologies.map((tech, idx) => {
-              const queueItem = findQueueItem(tech);
-              const isPending = actionPending === queueItem?.id;
-              
-              return (
-                <TableRow key={idx}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      {tech.name}
-                      {queueItem && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                          En cola
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{tech.provider}</TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {getScoreIcon(tech.score)}
-                      <Badge className={getScoreColor(tech.score)}>
-                        {tech.score}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{tech.reason}</TableCell>
-                  <TableCell>
-                    {queueItem ? (
+    <>
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmAction && getActionTitle(confirmAction.status)}</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas {confirmAction && getActionLabel(confirmAction.status)} la tecnología <strong>"{confirmAction?.techName}"</strong>?
+              {confirmAction?.status === 'approved' && (
+                <span className="block mt-2 text-green-600">Esta tecnología se añadirá a la base de datos.</span>
+              )}
+              {confirmAction?.status === 'rejected' && (
+                <span className="block mt-2 text-red-600">Esta tecnología será descartada del scouting.</span>
+              )}
+              {confirmAction?.status === 'pending' && (
+                <span className="block mt-2 text-blue-600">Esta tecnología volverá a la cola de revisión.</span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmAction}
+              className={
+                confirmAction?.status === 'approved' ? 'bg-green-600 hover:bg-green-700' :
+                confirmAction?.status === 'rejected' ? 'bg-red-600 hover:bg-red-700' :
+                'bg-blue-600 hover:bg-blue-700'
+              }
+            >
+              {confirmAction?.status === 'approved' && <Check className="w-4 h-4 mr-2" />}
+              {confirmAction?.status === 'rejected' && <X className="w-4 h-4 mr-2" />}
+              {confirmAction?.status === 'pending' && <Eye className="w-4 h-4 mr-2" />}
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Card className="overflow-hidden">
+        <CardHeader className={`py-3 ${color}`}>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Icon className="w-4 h-4" />
+            {title} ({technologies.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[30%]">Tecnología</TableHead>
+                <TableHead className="w-[20%]">Proveedor</TableHead>
+                <TableHead className="w-[8%] text-center">Score</TableHead>
+                <TableHead className="w-[25%]">Observación</TableHead>
+                <TableHead className="w-[17%] text-center">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {technologies.map((tech, idx) => {
+                const queueItem = findQueueItem(tech);
+                const isPending = actionPending === queueItem?.id;
+                
+                return (
+                  <TableRow key={idx}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {tech.name}
+                        {queueItem && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            En cola
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{tech.provider}</TableCell>
+                    <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-1">
-                        {sectionType === 'review' && (
-                          <>
+                        {getScoreIcon(tech.score)}
+                        <Badge className={getScoreColor(tech.score)}>
+                          {tech.score}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{tech.reason}</TableCell>
+                    <TableCell>
+                      {queueItem ? (
+                        <div className="flex items-center justify-center gap-1">
+                          {sectionType === 'review' && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                onClick={() => setConfirmAction({ id: queueItem.id, status: 'approved', techName: tech.name })}
+                                disabled={isPending}
+                                title="Aprobar"
+                              >
+                                {isPending ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5" />
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => setConfirmAction({ id: queueItem.id, status: 'rejected', techName: tech.name })}
+                                disabled={isPending}
+                                title="Rechazar"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
+                          )}
+                          {sectionType === 'added' && (
+                            <Badge className="bg-green-100 text-green-700 border-green-200">
+                              <Check className="w-3 h-3 mr-1" />
+                              Añadida
+                            </Badge>
+                          )}
+                          {sectionType === 'rejected' && (
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
-                              onClick={() => onAction(queueItem.id, 'approved')}
+                              className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              onClick={() => setConfirmAction({ id: queueItem.id, status: 'pending', techName: tech.name })}
                               disabled={isPending}
+                              title="Reconsiderar"
                             >
                               {isPending ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               ) : (
-                                <Check className="w-3.5 h-3.5" />
+                                <Eye className="w-3.5 h-3.5" />
                               )}
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => onAction(queueItem.id, 'rejected')}
-                              disabled={isPending}
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </Button>
-                          </>
-                        )}
-                        {sectionType === 'added' && (
-                          <Badge className="bg-green-100 text-green-700 border-green-200">
-                            <Check className="w-3 h-3 mr-1" />
-                            Añadida
-                          </Badge>
-                        )}
-                        {sectionType === 'rejected' && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                            onClick={() => onAction(queueItem.id, 'pending')}
-                            disabled={isPending}
-                            title="Reconsiderar"
-                          >
-                            {isPending ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Eye className="w-3.5 h-3.5" />
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </>
   );
 };
 
