@@ -603,201 +603,205 @@ export default function KnowledgeBase() {
                     {documents.map((doc) => (
                       <div
                         key={doc.id}
-                        className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                        className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
                       >
-                        <div className="flex items-center gap-3">
-                          <FileText className="h-8 w-8 text-primary shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            {editingDocId === doc.id ? (
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  value={editingName}
-                                  onChange={(e) => setEditingName(e.target.value)}
-                                  className="h-8 max-w-xs"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleSaveEdit(doc.id);
-                                    if (e.key === "Escape") handleCancelEdit();
-                                  }}
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => handleSaveEdit(doc.id)}
-                                  disabled={renameMutation.isPending}
-                                >
-                                  <Check className="h-4 w-4 text-green-600" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={handleCancelEdit}
-                                >
-                                  <X className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium truncate">{doc.name}</p>
-                                {canManage && (
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <FileText className="h-8 w-8 text-primary shrink-0 mt-1" />
+                            <div className="min-w-0 flex-1 space-y-2">
+                              {/* Document name */}
+                              {editingDocId === doc.id ? (
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    value={editingName}
+                                    onChange={(e) => setEditingName(e.target.value)}
+                                    className="h-8 max-w-sm"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleSaveEdit(doc.id);
+                                      if (e.key === "Escape") handleCancelEdit();
+                                    }}
+                                  />
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-6 w-6 shrink-0"
-                                    onClick={() => handleStartEdit(doc)}
-                                    title="Editar nombre"
+                                    className="h-8 w-8"
+                                    onClick={() => handleSaveEdit(doc.id)}
+                                    disabled={renameMutation.isPending}
                                   >
-                                    <Pencil className="h-3 w-3" />
+                                    <Check className="h-4 w-4 text-green-600" />
                                   </Button>
-                                )}
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>{formatFileSize(doc.file_size)}</span>
-                              <span>•</span>
-                              <span>{doc.chunk_count} fragmentos</span>
-                              <span>•</span>
-                              <span>
-                                {new Date(doc.created_at).toLocaleDateString("es-ES")}
-                              </span>
-                            </div>
-                            {/* Description section */}
-                            {editingDescId === doc.id ? (
-                              <div className="flex items-center gap-2 mt-2">
-                                <Input
-                                  value={editingDesc}
-                                  onChange={(e) => setEditingDesc(e.target.value)}
-                                  placeholder="Añadir descripción..."
-                                  className="h-8 text-sm flex-1"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleSaveDesc(doc.id);
-                                    if (e.key === "Escape") handleCancelEditDesc();
-                                  }}
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => handleSaveDesc(doc.id)}
-                                  disabled={updateDescMutation.isPending}
-                                >
-                                  <Check className="h-4 w-4 text-green-600" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={handleCancelEditDesc}
-                                >
-                                  <X className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1 mt-1">
-                                {doc.description ? (
-                                  <p className="text-sm text-muted-foreground italic truncate max-w-md">
-                                    {doc.description.split('\n')[0]}
-                                  </p>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground/60">
-                                    Sin descripción
-                                  </span>
-                                )}
-                                {canManage && (
-                                  <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={handleCancelEdit}
+                                  >
+                                    <X className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-medium">{doc.name}</p>
+                                  {canManage && (
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="h-5 w-5 shrink-0"
-                                      onClick={() => handleStartEditDesc(doc)}
-                                      title="Editar descripción"
+                                      className="h-6 w-6 shrink-0"
+                                      onClick={() => handleStartEdit(doc)}
+                                      title="Editar nombre"
                                     >
-                                      <Pencil className="h-2.5 w-2.5" />
+                                      <Pencil className="h-3 w-3" />
                                     </Button>
-                                    {doc.status === 'processed' && (
+                                  )}
+                                  {getStatusBadge(doc.status)}
+                                </div>
+                              )}
+                              
+                              {/* Metadata */}
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                                <span>{formatFileSize(doc.file_size)}</span>
+                                <span>•</span>
+                                <span>{doc.chunk_count} fragmentos</span>
+                                <span>•</span>
+                                <span>{new Date(doc.created_at).toLocaleDateString("es-ES")}</span>
+                              </div>
+                              
+                              {/* Description section */}
+                              {editingDescId === doc.id ? (
+                                <div className="flex items-start gap-2">
+                                  <Textarea
+                                    value={editingDesc}
+                                    onChange={(e) => setEditingDesc(e.target.value)}
+                                    placeholder="Añadir descripción..."
+                                    className="text-sm flex-1 min-h-[80px]"
+                                    autoFocus
+                                  />
+                                  <div className="flex flex-col gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => handleSaveDesc(doc.id)}
+                                      disabled={updateDescMutation.isPending}
+                                    >
+                                      <Check className="h-4 w-4 text-green-600" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={handleCancelEditDesc}
+                                    >
+                                      <X className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  {doc.description ? (
+                                    <div className="text-sm text-muted-foreground bg-muted/30 rounded-md p-2 whitespace-pre-wrap">
+                                      {doc.description}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground/60 italic">
+                                      Sin descripción
+                                    </p>
+                                  )}
+                                  {canManage && (
+                                    <div className="flex items-center gap-1">
                                       <Button
                                         variant="ghost"
-                                        size="icon"
-                                        className="h-5 w-5 shrink-0"
-                                        onClick={() => handleGenerateDescription(doc.id)}
-                                        disabled={generatingDescId === doc.id}
-                                        title="Generar descripción con IA"
+                                        size="sm"
+                                        className="h-6 text-xs gap-1"
+                                        onClick={() => handleStartEditDesc(doc)}
                                       >
-                                        {generatingDescId === doc.id ? (
-                                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                        ) : (
-                                          <Sparkles className="h-2.5 w-2.5 text-primary" />
-                                        )}
+                                        <Pencil className="h-3 w-3" />
+                                        Editar
                                       </Button>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            )}
+                                      {doc.status === "processed" && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 text-xs gap-1"
+                                          onClick={() => handleGenerateDescription(doc.id)}
+                                          disabled={generatingDescId === doc.id}
+                                        >
+                                          {generatingDescId === doc.id ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Sparkles className="h-3 w-3 text-primary" />
+                                          )}
+                                          Generar con IA
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {getStatusBadge(doc.status)}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={async () => {
-                              try {
-                                const { data, error } = await supabase.storage
-                                  .from("knowledge-docs")
-                                  .createSignedUrl(doc.file_path, 3600); // 1 hour expiry
-                                
-                                if (error) throw error;
-                                if (data?.signedUrl) {
-                                  window.open(data.signedUrl, "_blank");
-                                }
-                              } catch (error) {
-                                console.error("Error getting signed URL:", error);
-                                toast.error("Error al obtener el documento");
-                              }
-                            }}
-                            title="Ver documento"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={async () => {
-                              try {
-                                const { data, error } = await supabase.storage
-                                  .from("knowledge-docs")
-                                  .createSignedUrl(doc.file_path, 3600, { download: true });
-                                
-                                if (error) throw error;
-                                if (data?.signedUrl) {
-                                  const link = document.createElement("a");
-                                  link.href = data.signedUrl;
-                                  link.download = doc.name;
-                                  link.click();
-                                }
-                              } catch (error) {
-                                console.error("Error downloading:", error);
-                                toast.error("Error al descargar el documento");
-                              }
-                            }}
-                            title="Descargar documento"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          {userRole === "admin" && (
+                          
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-1 shrink-0">
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => deleteMutation.mutate(doc)}
-                              disabled={deleteMutation.isPending}
+                              onClick={async () => {
+                                try {
+                                  const { data, error } = await supabase.storage
+                                    .from("knowledge-docs")
+                                    .createSignedUrl(doc.file_path, 3600);
+                                  
+                                  if (error) throw error;
+                                  if (data?.signedUrl) {
+                                    window.open(data.signedUrl, "_blank");
+                                  }
+                                } catch (error) {
+                                  console.error("Error getting signed URL:", error);
+                                  toast.error("Error al obtener el documento");
+                                }
+                              }}
+                              title="Ver documento"
                             >
-                              <Trash2 className="h-4 w-4 text-destructive" />
+                              <Eye className="h-4 w-4" />
                             </Button>
-                          )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={async () => {
+                                try {
+                                  const { data, error } = await supabase.storage
+                                    .from("knowledge-docs")
+                                    .createSignedUrl(doc.file_path, 3600, { download: true });
+                                  
+                                  if (error) throw error;
+                                  if (data?.signedUrl) {
+                                    const link = document.createElement("a");
+                                    link.href = data.signedUrl;
+                                    link.download = doc.name;
+                                    link.click();
+                                  }
+                                } catch (error) {
+                                  console.error("Error downloading:", error);
+                                  toast.error("Error al descargar el documento");
+                                }
+                              }}
+                              title="Descargar documento"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            {userRole === "admin" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deleteMutation.mutate(doc)}
+                                disabled={deleteMutation.isPending}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
