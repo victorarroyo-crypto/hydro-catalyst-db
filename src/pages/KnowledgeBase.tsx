@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive, Eye, Download, Pencil, Check, X } from "lucide-react";
+import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
@@ -49,6 +49,7 @@ export default function KnowledgeBase() {
   const [editingName, setEditingName] = useState("");
   const [editingDescId, setEditingDescId] = useState<string | null>(null);
   const [editingDesc, setEditingDesc] = useState("");
+  const [generatingDescId, setGeneratingDescId] = useState<string | null>(null);
 
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
 
@@ -214,6 +215,30 @@ export default function KnowledgeBase() {
 
   const handleSaveDesc = (id: string) => {
     updateDescMutation.mutate({ id, description: editingDesc.trim() || null });
+  };
+
+  // Generate description with AI
+  const handleGenerateDescription = async (docId: string) => {
+    setGeneratingDescId(docId);
+    try {
+      const { data, error } = await supabase.functions.invoke("process-knowledge-document", {
+        body: { documentId: docId, regenerateDescription: true },
+      });
+      
+      if (error) throw error;
+      
+      if (data.success) {
+        toast.success("Descripción generada con IA");
+        queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      } else {
+        toast.error(data.error || "Error al generar descripción");
+      }
+    } catch (error) {
+      console.error("Error generating description:", error);
+      toast.error("Error al generar la descripción");
+    } finally {
+      setGeneratingDescId(null);
+    }
   };
 
   // Handle file upload with automatic splitting for large PDFs
@@ -542,11 +567,31 @@ export default function KnowledgeBase() {
             )}
 
             <Card>
-              <CardHeader>
-                <CardTitle>Documentos Cargados</CardTitle>
-                <CardDescription>
-                  Documentos procesados y disponibles para consultas
-                </CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Documentos Cargados</CardTitle>
+                  <CardDescription>
+                    Documentos procesados y disponibles para consultas
+                  </CardDescription>
+                </div>
+                {canManage && documents && documents.some(d => !d.description && d.status === 'processed') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const docsWithoutDesc = documents.filter(d => !d.description && d.status === 'processed');
+                      toast.info(`Generando descripciones para ${docsWithoutDesc.length} documentos...`);
+                      for (const doc of docsWithoutDesc) {
+                        await handleGenerateDescription(doc.id);
+                      }
+                      toast.success("Descripciones generadas");
+                    }}
+                    className="gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Generar todas las descripciones
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 {loadingDocs ? (
@@ -654,7 +699,7 @@ export default function KnowledgeBase() {
                               <div className="flex items-center gap-1 mt-1">
                                 {doc.description ? (
                                   <p className="text-sm text-muted-foreground italic truncate max-w-md">
-                                    {doc.description}
+                                    {doc.description.split('\n')[0]}
                                   </p>
                                 ) : (
                                   <span className="text-xs text-muted-foreground/60">
@@ -662,15 +707,33 @@ export default function KnowledgeBase() {
                                   </span>
                                 )}
                                 {canManage && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-5 w-5 shrink-0"
-                                    onClick={() => handleStartEditDesc(doc)}
-                                    title="Editar descripción"
-                                  >
-                                    <Pencil className="h-2.5 w-2.5" />
-                                  </Button>
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5 shrink-0"
+                                      onClick={() => handleStartEditDesc(doc)}
+                                      title="Editar descripción"
+                                    >
+                                      <Pencil className="h-2.5 w-2.5" />
+                                    </Button>
+                                    {doc.status === 'processed' && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0"
+                                        onClick={() => handleGenerateDescription(doc.id)}
+                                        disabled={generatingDescId === doc.id}
+                                        title="Generar descripción con IA"
+                                      >
+                                        {generatingDescId === doc.id ? (
+                                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                        ) : (
+                                          <Sparkles className="h-2.5 w-2.5 text-primary" />
+                                        )}
+                                      </Button>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             )}

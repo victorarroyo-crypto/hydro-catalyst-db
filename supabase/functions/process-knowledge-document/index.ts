@@ -161,6 +161,69 @@ Instrucciones:
   }
 }
 
+// Generate description and extract authors using AI
+async function generateDescription(text: string, lovableApiKey: string): Promise<{ description: string; authors: string }> {
+  console.log('Generating description with AI...');
+  
+  // Take first 5000 chars for analysis
+  const sampleText = text.substring(0, 5000);
+  
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `Eres un experto en análisis de documentos técnicos sobre tratamiento de aguas.
+Analiza el texto proporcionado y extrae:
+1. Una descripción breve del documento (2-3 oraciones máximo, en español)
+2. Los autores del documento si están disponibles
+
+Responde SOLO en formato JSON así:
+{
+  "description": "Descripción breve del contenido...",
+  "authors": "Autor1, Autor2" o "No especificado"
+}`
+          },
+          {
+            role: 'user',
+            content: `Analiza este fragmento del documento y extrae descripción y autores:\n\n${sampleText}`
+          }
+        ],
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    
+    // Parse JSON response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        description: parsed.description || 'Documento técnico sobre tratamiento de aguas',
+        authors: parsed.authors || 'No especificado'
+      };
+    }
+    
+    return { description: 'Documento técnico sobre tratamiento de aguas', authors: 'No especificado' };
+  } catch (error) {
+    console.error('Error generating description:', error);
+    return { description: 'Documento técnico', authors: 'No especificado' };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -177,7 +240,7 @@ serve(async (req) => {
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { documentId } = await req.json();
+    const { documentId, regenerateDescription } = await req.json();
     
     if (!documentId) {
       throw new Error('Document ID is required');
@@ -194,6 +257,40 @@ serve(async (req) => {
 
     if (docError || !document) {
       throw new Error('Document not found: ' + docError?.message);
+    }
+
+    // If only regenerating description for existing document
+    if (regenerateDescription && document.status === 'processed') {
+      console.log('Regenerating description for existing document');
+      
+      // Get existing chunks to use for description generation
+      const { data: chunks } = await supabase
+        .from('knowledge_chunks')
+        .select('content')
+        .eq('document_id', documentId)
+        .order('chunk_index')
+        .limit(5);
+      
+      if (chunks && chunks.length > 0 && lovableApiKey) {
+        const textSample = chunks.map(c => c.content).join(' ');
+        const { description, authors } = await generateDescription(textSample, lovableApiKey);
+        
+        const fullDescription = authors !== 'No especificado' 
+          ? `${description}\n\nAutores: ${authors}`
+          : description;
+        
+        await supabase
+          .from('knowledge_documents')
+          .update({ description: fullDescription })
+          .eq('id', documentId);
+        
+        return new Response(
+          JSON.stringify({ success: true, description: fullDescription }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      throw new Error('No chunks found or API key not available');
     }
 
     // Update status to processing
@@ -250,6 +347,15 @@ serve(async (req) => {
       throw new Error('Could not extract sufficient text from PDF. The document may be image-based or encrypted.');
     }
 
+    // Generate description with AI
+    let documentDescription = '';
+    if (lovableApiKey) {
+      const { description, authors } = await generateDescription(extractedText, lovableApiKey);
+      documentDescription = authors !== 'No especificado' 
+        ? `${description}\n\nAutores: ${authors}`
+        : description;
+    }
+
     // Chunk the text
     const chunks = chunkText(extractedText);
     console.log('Created chunks:', chunks.length);
@@ -276,12 +382,13 @@ serve(async (req) => {
       throw new Error('Failed to insert chunks: ' + insertError.message);
     }
 
-    // Update document status
+    // Update document status and description
     await supabase
       .from('knowledge_documents')
       .update({ 
         status: 'processed',
-        chunk_count: chunks.length
+        chunk_count: chunks.length,
+        description: documentDescription || null
       })
       .eq('id', documentId);
 
@@ -292,7 +399,8 @@ serve(async (req) => {
         success: true, 
         chunks: chunks.length,
         textLength: extractedText.length,
-        method: lovableApiKey ? 'gemini-ocr' : 'basic'
+        method: lovableApiKey ? 'gemini-ocr' : 'basic',
+        description: documentDescription
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
