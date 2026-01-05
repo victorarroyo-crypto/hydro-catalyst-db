@@ -23,13 +23,15 @@ async function callExternalUpdate(params: {
   method: 'PUT' | 'PATCH' | 'POST';
   payloadShape?: 'status_only' | 'id_and_status';
   statusKey?: 'status' | 'estado';
+  payloadOverride?: Record<string, unknown>;
 }): Promise<{ ok: boolean; status: number; body: JsonValue; rawText: string; allow: string | null }> {
   const statusKey = params.statusKey ?? 'status';
 
   const payload =
-    params.payloadShape === 'id_and_status'
+    params.payloadOverride ??
+    (params.payloadShape === 'id_and_status'
       ? { id: params.id, [statusKey]: params.status }
-      : { [statusKey]: params.status };
+      : { [statusKey]: params.status });
 
   const res = await fetch(params.url, {
     method: params.method,
@@ -64,6 +66,32 @@ function queueStatusUrl(id: string) {
   return `${API_BASE}/api/scouting/queue/${id}/status`;
 }
 
+async function callExternalGet(params: {
+  url: string;
+  headers: Record<string, string>;
+}): Promise<{ ok: boolean; status: number; body: JsonValue; rawText: string }> {
+  const res = await fetch(params.url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...params.headers,
+    },
+  });
+
+  const text = await res.text();
+  const body = text
+    ? (() => {
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      })()
+    : null;
+
+  return { ok: res.ok, status: res.status, body, rawText: text };
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -86,26 +114,52 @@ Deno.serve(async (req) => {
       'X-User-Role': 'admin',
     };
 
+    // Intentamos leer el item actual para poder enviar un PATCH con payload completo
+    // (algunos backends fallan con 500 si solo reciben {status}).
+    let existingItem: Record<string, unknown> | null = null;
+    const getRes = await callExternalGet({ url: queueUrl(id), headers: forwardHeaders });
+    if (getRes.ok && getRes.body && typeof getRes.body === 'object' && !Array.isArray(getRes.body)) {
+      existingItem = getRes.body as Record<string, unknown>;
+      console.log(`[scouting-update-queue] Loaded existing queue item for patch payload keys=${Object.keys(existingItem).slice(0, 20).join(',')}`);
+    } else {
+      console.log(`[scouting-update-queue] Could not load existing item: status=${getRes.status}, body=${getRes.rawText}`);
+    }
+
+    const PATCH: 'PATCH' = 'PATCH';
+    const PUT: 'PUT' = 'PUT';
+    const POST: 'POST' = 'POST';
+
     const attemptsList: Array<{
       label: string;
       url: string;
       method: 'PUT' | 'PATCH' | 'POST';
       payloadShape?: 'status_only' | 'id_and_status';
       statusKey?: 'status' | 'estado';
+      payloadOverride?: Record<string, unknown>;
     }> = [
       // /queue/{id} parece aceptar PATCH (Allow=PATCH). Probamos varios payloads.
-      { label: `PATCH /api/scouting/queue/${id} (status)`, url: queueUrl(id), method: 'PATCH', payloadShape: 'status_only', statusKey: 'status' },
-      { label: `PATCH /api/scouting/queue/${id} (estado)`, url: queueUrl(id), method: 'PATCH', payloadShape: 'status_only', statusKey: 'estado' },
-      { label: `PATCH /api/scouting/queue/${id} (id+status)`, url: queueUrl(id), method: 'PATCH', payloadShape: 'id_and_status', statusKey: 'status' },
+      ...(existingItem
+        ? [
+            {
+              label: `PATCH /api/scouting/queue/${id} (full payload + status)`,
+              url: queueUrl(id),
+              method: PATCH,
+              payloadOverride: { ...existingItem, status },
+            },
+          ]
+        : []),
+      { label: `PATCH /api/scouting/queue/${id} (status)`, url: queueUrl(id), method: PATCH, payloadShape: 'status_only', statusKey: 'status' },
+      { label: `PATCH /api/scouting/queue/${id} (estado)`, url: queueUrl(id), method: PATCH, payloadShape: 'status_only', statusKey: 'estado' },
+      { label: `PATCH /api/scouting/queue/${id} (id+status)`, url: queueUrl(id), method: PATCH, payloadShape: 'id_and_status', statusKey: 'status' },
 
       // /queue/{id}/status parece permitir PUT (Allow=PUT)
-      { label: `PUT /api/scouting/queue/${id}/status (status)`, url: queueStatusUrl(id), method: 'PUT', payloadShape: 'status_only', statusKey: 'status' },
-      { label: `PUT /api/scouting/queue/${id}/status (estado)`, url: queueStatusUrl(id), method: 'PUT', payloadShape: 'status_only', statusKey: 'estado' },
-      { label: `PUT /api/scouting/queue/${id}/status (id+status)`, url: queueStatusUrl(id), method: 'PUT', payloadShape: 'id_and_status', statusKey: 'status' },
+      { label: `PUT /api/scouting/queue/${id}/status (status)`, url: queueStatusUrl(id), method: PUT, payloadShape: 'status_only', statusKey: 'status' },
+      { label: `PUT /api/scouting/queue/${id}/status (estado)`, url: queueStatusUrl(id), method: PUT, payloadShape: 'status_only', statusKey: 'estado' },
+      { label: `PUT /api/scouting/queue/${id}/status (id+status)`, url: queueStatusUrl(id), method: PUT, payloadShape: 'id_and_status', statusKey: 'status' },
 
       // Mantener algunos fallbacks
-      { label: `POST /api/scouting/queue/${id}`, url: queueUrl(id), method: 'POST', payloadShape: 'status_only', statusKey: 'status' },
-      { label: `POST /api/scouting/queue/${id}/status`, url: queueStatusUrl(id), method: 'POST', payloadShape: 'status_only', statusKey: 'status' },
+      { label: `POST /api/scouting/queue/${id}`, url: queueUrl(id), method: POST, payloadShape: 'status_only', statusKey: 'status' },
+      { label: `POST /api/scouting/queue/${id}/status`, url: queueStatusUrl(id), method: POST, payloadShape: 'status_only', statusKey: 'status' },
     ];
 
     let attempt: { ok: boolean; status: number; body: JsonValue; rawText: string; allow: string | null } | null = null;
