@@ -19,12 +19,42 @@ async function callExternalUpdate(params: {
   id: string;
   status: string;
   headers: Record<string, string>;
-  method: 'PUT' | 'PATCH';
+  method: 'PUT' | 'PATCH' | 'POST';
 }): Promise<{ ok: boolean; status: number; body: JsonValue; rawText: string }> {
   const url = `${API_BASE}/api/scouting/queue/${params.id}`;
 
   const res = await fetch(url, {
     method: params.method,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...params.headers,
+    },
+    body: JSON.stringify({ status: params.status }),
+  });
+
+  const text = await res.text();
+  const body = text ? (() => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  })() : null;
+
+  return { ok: res.ok, status: res.status, body, rawText: text };
+}
+
+// Try a different endpoint pattern: /api/scouting/queue/{id}/status
+async function callExternalUpdateAction(params: {
+  id: string;
+  status: string;
+  headers: Record<string, string>;
+}): Promise<{ ok: boolean; status: number; body: JsonValue; rawText: string }> {
+  const url = `${API_BASE}/api/scouting/queue/${params.id}/status`;
+
+  const res = await fetch(url, {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -67,15 +97,23 @@ Deno.serve(async (req) => {
       'X-User-Role': 'admin',
     };
 
-    // Try both common update methods because the external backend has been returning 500.
-    // We'll attempt PUT first, then fallback to PATCH.
-    console.log(`[scouting-update-queue] External update: PUT /api/scouting/queue/${id} (X-User-Id=admin, X-User-Role=admin)`);
-    let attempt = await callExternalUpdate({ id, status, headers: forwardHeaders, method: 'PUT' });
+    // Try multiple HTTP methods since the external backend behavior is unclear.
+    // Order: POST (common for actions), PATCH (partial update), PUT (full update)
+    console.log(`[scouting-update-queue] External update: POST /api/scouting/queue/${id}/status (X-User-Id=admin, X-User-Role=admin)`);
+    
+    // First try a more RESTful action endpoint pattern
+    let attempt = await callExternalUpdateAction({ id, status, headers: forwardHeaders });
+    
+    if (!attempt.ok) {
+      console.log(`[scouting-update-queue] POST to action endpoint failed: status=${attempt.status}, body=${attempt.rawText}`);
+      console.log(`[scouting-update-queue] Trying PATCH /api/scouting/queue/${id}`);
+      attempt = await callExternalUpdate({ id, status, headers: forwardHeaders, method: 'PATCH' });
+    }
 
     if (!attempt.ok) {
-      console.log(`[scouting-update-queue] PUT failed: status=${attempt.status}, body=${attempt.rawText}`);
-      console.log(`[scouting-update-queue] External update: PATCH /api/scouting/queue/${id}`);
-      attempt = await callExternalUpdate({ id, status, headers: forwardHeaders, method: 'PATCH' });
+      console.log(`[scouting-update-queue] PATCH failed: status=${attempt.status}, body=${attempt.rawText}`);
+      console.log(`[scouting-update-queue] Trying POST /api/scouting/queue/${id}`);
+      attempt = await callExternalUpdate({ id, status, headers: forwardHeaders, method: 'POST' });
     }
 
     console.log(`[scouting-update-queue] External response: ok=${attempt.ok}, status=${attempt.status}, body=${attempt.rawText}`);
