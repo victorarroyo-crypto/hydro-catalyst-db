@@ -419,11 +419,6 @@ const Scouting = () => {
     queryFn: () => fetchQueue('review'),
   });
 
-  const { data: supervisionQueue, isLoading: supervisionLoading } = useQuery({
-    queryKey: ['scouting-queue', 'supervision'],
-    queryFn: () => fetchQueue('supervision'),
-  });
-
   const { data: approvedQueue, isLoading: approvedLoading } = useQuery({
     queryKey: ['scouting-queue', 'approved'],
     queryFn: () => fetchQueue('approved'),
@@ -685,7 +680,6 @@ const Scouting = () => {
 
   const pendingItems = pendingQueue?.items ?? [];
   const reviewItems = reviewQueue?.items ?? [];
-  const supervisionItems = supervisionQueue?.items ?? [];
   const approvedItems = approvedQueue?.items ?? [];
   const rejectedItems = rejectedQueue?.items ?? [];
   
@@ -698,27 +692,17 @@ const Scouting = () => {
       icon: Clock,
       color: 'text-amber-500',
       bgColor: 'bg-amber-500/10',
-      description: 'Tecnologías recién descubiertas esperando primera revisión por analistas'
+      description: 'Tecnologías recién descubiertas esperando primera revisión'
     },
     { 
       id: 'review', 
-      title: 'En Revisión (Analista)', 
+      title: 'En Revisión', 
       items: reviewItems, 
       loading: reviewLoading,
       icon: Eye,
       color: 'text-blue-500',
       bgColor: 'bg-blue-500/10',
-      description: 'Tecnologías siendo evaluadas por analistas'
-    },
-    { 
-      id: 'supervision', 
-      title: 'Centro de Supervisión', 
-      items: supervisionItems, 
-      loading: supervisionLoading,
-      icon: AlertCircle,
-      color: 'text-orange-500',
-      bgColor: 'bg-orange-500/10',
-      description: 'Pendientes de aprobación por Supervisor/Admin'
+      description: 'Tecnologías siendo evaluadas por el equipo'
     },
     { 
       id: 'approved', 
@@ -728,7 +712,7 @@ const Scouting = () => {
       icon: CheckCircle2,
       color: 'text-green-500',
       bgColor: 'bg-green-500/10',
-      description: 'Aprobadas por Supervisión - listas para añadir a la base de datos principal'
+      description: 'Aprobadas - listas para añadir a la base de datos principal'
     },
     { 
       id: 'rejected', 
