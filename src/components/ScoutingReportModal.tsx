@@ -84,6 +84,18 @@ interface HistoryItem {
   created_at: string;
 }
 
+// API response structure (Spanish fields from Railway backend)
+interface QueueItemAPI {
+  id: string;
+  nombre: string;
+  proveedor: string;
+  pais: string;
+  relevance_score: number;
+  trl_estimado: number;
+  status: string;
+}
+
+// Normalized structure for UI
 interface QueueItem {
   id: string;
   name: string;
@@ -128,11 +140,25 @@ interface ScoutingReportModalProps {
   onClose: () => void;
 }
 
+// Transform API response to normalized structure
+const normalizeQueueItem = (item: QueueItemAPI): QueueItem => ({
+  id: item.id,
+  name: item.nombre || 'Sin nombre',
+  provider: item.proveedor || 'Desconocido',
+  country: item.pais || 'N/A',
+  score: item.relevance_score ?? 0,
+  trl: item.trl_estimado ?? 0,
+  status: item.status,
+});
+
 // Fetch queue items to match with parsed technologies
 const fetchQueue = async (status: string): Promise<{ items: QueueItem[] }> => {
   const res = await fetch(`${API_BASE}/api/scouting/queue?status=${status}`);
   if (!res.ok) throw new Error('Error al cargar cola');
-  return res.json();
+  const data: { items: QueueItemAPI[]; count: number } = await res.json();
+  return {
+    items: data.items.map(normalizeQueueItem),
+  };
 };
 
 const updateQueueItem = async ({ id, status }: { id: string; status: string }) => {
