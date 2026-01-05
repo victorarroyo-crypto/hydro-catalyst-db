@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.scouting-update-queue]
 verify_jwt = false
+
+[functions.scouting-proxy]
+verify_jwt = false
