@@ -69,13 +69,36 @@ function extractTextFromPDFBasic(pdfBuffer: ArrayBuffer): string {
   return textContent.join(' ').replace(/\s+/g, ' ').trim();
 }
 
+// Convert ArrayBuffer to base64 in chunks (handles large files)
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const uint8Array = new Uint8Array(buffer);
+  const chunkSize = 8192; // Process 8KB at a time
+  let binary = '';
+  
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const chunk = uint8Array.slice(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  
+  return btoa(binary);
+}
+
 // Use Gemini for OCR extraction from PDF
 async function extractTextWithGeminiOCR(pdfBuffer: ArrayBuffer, lovableApiKey: string): Promise<string> {
+  // Check file size - Gemini has limits on input size
+  const fileSizeMB = pdfBuffer.byteLength / (1024 * 1024);
+  console.log(`PDF size: ${fileSizeMB.toFixed(2)} MB`);
+  
+  // If file is too large (>10MB), skip Gemini OCR
+  if (fileSizeMB > 10) {
+    console.log('File too large for Gemini OCR, using basic extraction');
+    throw new Error('File too large for OCR');
+  }
+  
   console.log('Using Gemini OCR for text extraction...');
   
-  // Convert PDF buffer to base64
-  const uint8Array = new Uint8Array(pdfBuffer);
-  const base64String = btoa(String.fromCharCode(...uint8Array));
+  // Convert PDF buffer to base64 in chunks
+  const base64String = arrayBufferToBase64(pdfBuffer);
   
   try {
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
