@@ -1,36 +1,132 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Sparkles, Search, Loader2, Info, ExternalLink } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Sparkles, Search, Loader2, Info, Filter, ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TRLBadge } from '@/components/TRLBadge';
-import { Link } from 'react-router-dom';
+import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Slider } from '@/components/ui/slider';
+import type { Technology } from '@/types/database';
 
 interface SearchResult {
   matching_ids: string[];
   explanation: string;
   total_analyzed?: number;
+  total_matching_filters?: number;
   note?: string;
+  usage?: {
+    model: string;
+    tokens: number;
+    response_time_ms: number;
+  };
 }
 
-interface Technology {
-  id: string;
-  "Nombre de la tecnología": string;
-  "Tipo de tecnología": string;
-  "Proveedor / Empresa": string | null;
-  "Grado de madurez (TRL)": number | null;
-  "Descripción técnica breve": string | null;
+interface SearchFilters {
+  tipoId?: number | null;
+  subcategoriaId?: number | null;
+  sectorId?: string | null;
+  pais?: string | null;
+  trlMin?: number | null;
+  trlMax?: number | null;
 }
 
 const AISearch: React.FC = () => {
   const { toast } = useToast();
-  const [query, setQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Initialize from URL params
+  const [query, setQuery] = useState(searchParams.get('q') || '');
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<SearchResult | null>(null);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedTechnology, setSelectedTechnology] = useState<Technology | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  
+  // Filters state
+  const [filters, setFilters] = useState<SearchFilters>({
+    tipoId: null,
+    subcategoriaId: null,
+    sectorId: null,
+    pais: null,
+    trlMin: null,
+    trlMax: null,
+  });
+  const [trlRange, setTrlRange] = useState<[number, number]>([1, 9]);
+
+  // Fetch taxonomy data for filters
+  const { data: tipos } = useQuery({
+    queryKey: ['taxonomy-tipos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_tipos')
+        .select('id, codigo, nombre')
+        .order('nombre');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: subcategorias } = useQuery({
+    queryKey: ['taxonomy-subcategorias', filters.tipoId],
+    queryFn: async () => {
+      let query = supabase.from('taxonomy_subcategorias').select('id, codigo, nombre, tipo_id').order('nombre');
+      if (filters.tipoId) {
+        query = query.eq('tipo_id', filters.tipoId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+    enabled: true,
+  });
+
+  const { data: sectores } = useQuery({
+    queryKey: ['taxonomy-sectores'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('taxonomy_sectores')
+        .select('id, nombre')
+        .order('nombre');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: paises } = useQuery({
+    queryKey: ['unique-countries'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('technologies')
+        .select('"País de origen"')
+        .not('"País de origen"', 'is', null);
+      if (error) throw error;
+      const unique = [...new Set(data.map(d => d["País de origen"]).filter(Boolean))].sort();
+      return unique as string[];
+    },
+  });
+
+  // Re-run search if URL params change (e.g., back navigation)
+  useEffect(() => {
+    const urlQuery = searchParams.get('q');
+    if (urlQuery && urlQuery !== query && !isSearching) {
+      setQuery(urlQuery);
+      // Could auto-search here if desired
+    }
+  }, [searchParams]);
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -42,13 +138,30 @@ const AISearch: React.FC = () => {
       return;
     }
 
+    // Update URL with search query
+    setSearchParams({ q: query.trim() });
+
     setIsSearching(true);
     setResults(null);
     setTechnologies([]);
 
     try {
+      // Build filters object for the API
+      const apiFilters: Record<string, any> = {};
+      if (filters.tipoId) apiFilters.tipoId = filters.tipoId;
+      if (filters.subcategoriaId) apiFilters.subcategoriaId = filters.subcategoriaId;
+      if (filters.sectorId) apiFilters.sectorId = filters.sectorId;
+      if (filters.pais) apiFilters.pais = filters.pais;
+      if (trlRange[0] > 1) apiFilters.trlMin = trlRange[0];
+      if (trlRange[1] < 9) apiFilters.trlMax = trlRange[1];
+
+      const hasFilters = Object.keys(apiFilters).length > 0;
+
       const { data, error } = await supabase.functions.invoke('ai-search-technologies', {
-        body: { query: query.trim() },
+        body: { 
+          query: query.trim(),
+          filters: hasFilters ? apiFilters : undefined,
+        },
       });
 
       if (error) throw error;
@@ -63,7 +176,7 @@ const AISearch: React.FC = () => {
         if (validIds.length > 0) {
           const { data: techData, error: techError } = await supabase
             .from('technologies')
-            .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Proveedor / Empresa", "Grado de madurez (TRL)", "Descripción técnica breve"')
+            .select('*')
             .in('id', validIds);
 
           if (techError) throw techError;
@@ -88,6 +201,31 @@ const AISearch: React.FC = () => {
     }
   };
 
+  const handleViewTechnology = (tech: Technology) => {
+    setSelectedTechnology(tech);
+    setDetailModalOpen(true);
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      tipoId: null,
+      subcategoriaId: null,
+      sectorId: null,
+      pais: null,
+      trlMin: null,
+      trlMax: null,
+    });
+    setTrlRange([1, 9]);
+  };
+
+  const activeFilterCount = [
+    filters.tipoId,
+    filters.subcategoriaId,
+    filters.sectorId,
+    filters.pais,
+    trlRange[0] > 1 || trlRange[1] < 9,
+  ].filter(Boolean).length;
+
   return (
     <div className="animate-fade-in space-y-6">
       <div className="mb-6">
@@ -96,10 +234,168 @@ const AISearch: React.FC = () => {
           Búsqueda con IA
         </h1>
         <p className="text-muted-foreground">
-          Encuentra tecnologías usando lenguaje natural
+          Encuentra tecnologías usando lenguaje natural. Aplica filtros para refinar el análisis.
         </p>
       </div>
 
+      {/* Filters Section */}
+      <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <Card>
+          <CollapsibleTrigger asChild>
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Filter className="w-5 h-5" />
+                  Filtros Previos
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary" className="ml-2">
+                      {activeFilterCount} activo{activeFilterCount !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </CardTitle>
+                {filtersOpen ? (
+                  <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                )}
+              </div>
+              <CardDescription>
+                Reduce el conjunto de tecnologías antes del análisis con IA
+              </CardDescription>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="pt-0 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Tipo */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Tipo de Tecnología</label>
+                  <Select
+                    value={filters.tipoId?.toString() || ''}
+                    onValueChange={(value) => setFilters(prev => ({
+                      ...prev,
+                      tipoId: value ? parseInt(value) : null,
+                      subcategoriaId: null, // Reset subcategory when type changes
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos los tipos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todos los tipos</SelectItem>
+                      {tipos?.map((tipo) => (
+                        <SelectItem key={tipo.id} value={tipo.id.toString()}>
+                          {tipo.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Subcategoría */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Subcategoría</label>
+                  <Select
+                    value={filters.subcategoriaId?.toString() || ''}
+                    onValueChange={(value) => setFilters(prev => ({
+                      ...prev,
+                      subcategoriaId: value ? parseInt(value) : null,
+                    }))}
+                    disabled={!filters.tipoId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={filters.tipoId ? "Todas las subcategorías" : "Selecciona tipo primero"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todas las subcategorías</SelectItem>
+                      {subcategorias?.filter(s => !filters.tipoId || s.tipo_id === filters.tipoId).map((sub) => (
+                        <SelectItem key={sub.id} value={sub.id.toString()}>
+                          {sub.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Sector */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Sector</label>
+                  <Select
+                    value={filters.sectorId || ''}
+                    onValueChange={(value) => setFilters(prev => ({
+                      ...prev,
+                      sectorId: value || null,
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos los sectores" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todos los sectores</SelectItem>
+                      {sectores?.map((sector) => (
+                        <SelectItem key={sector.id} value={sector.id}>
+                          {sector.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* País */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">País de Origen</label>
+                  <Select
+                    value={filters.pais || ''}
+                    onValueChange={(value) => setFilters(prev => ({
+                      ...prev,
+                      pais: value || null,
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos los países" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todos los países</SelectItem>
+                      {paises?.map((pais) => (
+                        <SelectItem key={pais} value={pais}>
+                          {pais}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* TRL Range */}
+              <div className="space-y-3">
+                <label className="text-sm font-medium">
+                  Nivel de Madurez (TRL): {trlRange[0]} - {trlRange[1]}
+                </label>
+                <Slider
+                  value={trlRange}
+                  onValueChange={(value) => setTrlRange(value as [number, number])}
+                  min={1}
+                  max={9}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>TRL 1 (Básico)</span>
+                  <span>TRL 9 (Comercial)</span>
+                </div>
+              </div>
+
+              {activeFilterCount > 0 && (
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  Limpiar filtros
+                </Button>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
+      {/* Search Examples */}
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -129,6 +425,7 @@ const AISearch: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Search Input */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex gap-3">
@@ -163,6 +460,7 @@ const AISearch: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Results */}
       {results && (
         <div className="space-y-4">
           <Card>
@@ -170,15 +468,27 @@ const AISearch: React.FC = () => {
               <CardTitle className="text-lg">Explicación de la IA</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">{results.explanation}</p>
+              <p className="text-muted-foreground whitespace-pre-wrap">{results.explanation}</p>
               {results.note && (
                 <p className="text-sm text-muted-foreground/70 mt-2 italic">{results.note}</p>
               )}
-              {results.total_analyzed && (
-                <Badge variant="secondary" className="mt-2">
-                  {results.total_analyzed} tecnologías analizadas
-                </Badge>
-              )}
+              <div className="flex flex-wrap gap-2 mt-3">
+                {results.total_analyzed && (
+                  <Badge variant="secondary">
+                    {results.total_analyzed} analizadas
+                  </Badge>
+                )}
+                {results.total_matching_filters && (
+                  <Badge variant="outline">
+                    {results.total_matching_filters} con filtros
+                  </Badge>
+                )}
+                {results.usage && (
+                  <Badge variant="outline" className="text-xs">
+                    {results.usage.model.replace('google/', '').replace('openai/', '')} • {Math.round(results.usage.response_time_ms / 1000)}s
+                  </Badge>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -188,7 +498,11 @@ const AISearch: React.FC = () => {
                 {technologies.length} resultado{technologies.length !== 1 ? 's' : ''} encontrado{technologies.length !== 1 ? 's' : ''}
               </h3>
               {technologies.map((tech, index) => (
-                <Card key={tech.id} className="hover:border-primary/30 transition-colors">
+                <Card 
+                  key={tech.id} 
+                  className="hover:border-primary/30 transition-colors cursor-pointer"
+                  onClick={() => handleViewTechnology(tech)}
+                >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
@@ -218,11 +532,12 @@ const AISearch: React.FC = () => {
                           </p>
                         )}
                       </div>
-                      <Link to={`/technologies?id=${tech.id}`}>
-                        <Button variant="ghost" size="icon">
-                          <ExternalLink className="w-4 h-4" />
-                        </Button>
-                      </Link>
+                      <Button variant="ghost" size="icon" onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewTechnology(tech);
+                      }}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -237,6 +552,13 @@ const AISearch: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Technology Detail Modal */}
+      <TechnologyDetailModal
+        technology={selectedTechnology}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+      />
     </div>
   );
 };
