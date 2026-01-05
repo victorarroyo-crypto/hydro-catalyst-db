@@ -8,10 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle } from "lucide-react";
+import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
+import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
 
 interface KnowledgeDocument {
   id: string;
@@ -37,6 +39,7 @@ export default function KnowledgeBase() {
   const userRole = profile?.role;
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [query, setQuery] = useState("");
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [querying, setQuerying] = useState(false);
@@ -130,7 +133,7 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Handle file upload
+  // Handle file upload with automatic splitting for large PDFs
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -140,16 +143,44 @@ export default function KnowledgeBase() {
       return;
     }
 
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("El archivo no puede superar 50MB");
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error("El archivo no puede superar 100MB");
       return;
     }
 
     setUploading(true);
+    setUploadProgress(null);
+    
     try {
-      await uploadMutation.mutateAsync(file);
+      // Split PDF if needed
+      toast.info("Analizando documento...");
+      const { parts, totalPages, wasSplit } = await splitPdfIfNeeded(file);
+      
+      if (wasSplit) {
+        toast.info(`Documento dividido en ${parts.length} partes (${totalPages} páginas total)`);
+      }
+      
+      setUploadProgress({ current: 0, total: parts.length });
+      
+      // Upload each part
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        setUploadProgress({ current: i + 1, total: parts.length });
+        
+        // Create a File object from the blob
+        const partFile = new File([part.blob], part.name, { type: "application/pdf" });
+        await uploadMutation.mutateAsync(partFile);
+      }
+      
+      if (wasSplit) {
+        toast.success(`${parts.length} partes subidas correctamente`);
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("Error al procesar el documento");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
       e.target.value = "";
     }
   };
@@ -338,10 +369,10 @@ export default function KnowledgeBase() {
                     Subir Documento
                   </CardTitle>
                   <CardDescription>
-                    Sube documentos PDF técnicos para enriquecer la base de conocimiento
+                    PDFs grandes se dividen automáticamente en partes más pequeñas
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                   <div className="flex items-center gap-4">
                     <Input
                       type="file"
@@ -350,15 +381,29 @@ export default function KnowledgeBase() {
                       disabled={uploading}
                       className="max-w-md"
                     />
-                    {uploading && (
+                    {uploading && !uploadProgress && (
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Subiendo y procesando...
+                        Analizando documento...
                       </div>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Formatos: PDF. Tamaño máximo: 50MB.
+                  
+                  {uploadProgress && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <SplitSquareVertical className="h-4 w-4" />
+                        <span>Subiendo parte {uploadProgress.current} de {uploadProgress.total}</span>
+                      </div>
+                      <Progress 
+                        value={(uploadProgress.current / uploadProgress.total) * 100} 
+                        className="h-2"
+                      />
+                    </div>
+                  )}
+                  
+                  <p className="text-sm text-muted-foreground">
+                    Formatos: PDF. Tamaño máximo: 100MB. PDFs &gt;8MB se dividen automáticamente.
                   </p>
                 </CardContent>
               </Card>
