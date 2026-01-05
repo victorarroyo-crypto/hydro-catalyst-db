@@ -200,6 +200,7 @@ export type Database = {
         Row: {
           chunk_count: number | null
           created_at: string
+          description: string | null
           file_path: string
           file_size: number | null
           id: string
@@ -212,6 +213,7 @@ export type Database = {
         Insert: {
           chunk_count?: number | null
           created_at?: string
+          description?: string | null
           file_path: string
           file_size?: number | null
           id?: string
@@ -224,6 +226,7 @@ export type Database = {
         Update: {
           chunk_count?: number | null
           created_at?: string
+          description?: string | null
           file_path?: string
           file_size?: number | null
           id?: string
