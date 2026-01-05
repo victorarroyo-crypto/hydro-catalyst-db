@@ -49,6 +49,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { TRLBadge } from '@/components/TRLBadge';
@@ -194,6 +204,27 @@ const runScouting = async (params: {
   return res.json();
 };
 
+const cancelScouting = async (jobId: string) => {
+  const res = await fetch(`${API_BASE}/api/scouting/history/${jobId}/cancel`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': 'admin',
+      'X-User-Role': 'admin',
+    },
+  });
+  if (!res.ok) throw new Error('Error al cancelar scouting');
+  return res.json();
+};
+
+// Check if a job is potentially stuck (running for more than 10 minutes)
+const isJobPotentiallyStuck = (startedAt: string): boolean => {
+  const startTime = new Date(startedAt).getTime();
+  const now = Date.now();
+  const tenMinutes = 10 * 60 * 1000;
+  return (now - startTime) > tenMinutes;
+};
+
 // Score badge color helper
 const getScoreColor = (score: number): string => {
   if (score >= 80) return 'bg-green-500/20 text-green-600 border-green-500/30';
@@ -251,6 +282,7 @@ const Scouting = () => {
   const [instructions, setInstructions] = useState('');
   const [selectedReport, setSelectedReport] = useState<HistoryItem | null>(null);
   const [selectedModel, setSelectedModel] = useState('groq/llama-3.1-8b-instant');
+  const [cancelConfirmJob, setCancelConfirmJob] = useState<HistoryItem | null>(null);
 
   // Queries
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -302,6 +334,20 @@ const Scouting = () => {
     },
     onError: () => {
       toast.error('Error al iniciar el scouting');
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: cancelScouting,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
+      toast.success('Scouting cancelado');
+      setCancelConfirmJob(null);
+    },
+    onError: () => {
+      toast.error('Error al cancelar el scouting');
+      setCancelConfirmJob(null);
     },
   });
 
@@ -705,7 +751,34 @@ const Scouting = () => {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>{getStatusBadge(item.status)}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {getStatusBadge(item.status)}
+                            {item.status === 'running' && (
+                              <>
+                                {isJobPotentiallyStuck(item.started_at) && (
+                                  <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">
+                                    <AlertTriangle className="w-3 h-3 mr-1" />
+                                    Posiblemente atascado
+                                  </Badge>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => setCancelConfirmJob(item)}
+                                  disabled={cancelMutation.isPending}
+                                >
+                                  {cancelMutation.isPending ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <X className="w-3 h-3" />
+                                  )}
+                                  Cancelar
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <span className="text-xs text-muted-foreground">
                             {item.llm_model || 'N/A'}
@@ -934,6 +1007,45 @@ const Scouting = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={!!cancelConfirmJob} onOpenChange={() => setCancelConfirmJob(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cancelar este scouting en ejecución?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {cancelConfirmJob && (
+                <>
+                  El scouting con keywords{' '}
+                  <span className="font-medium">
+                    {cancelConfirmJob.config.keywords?.join(', ') || 'N/A'}
+                  </span>{' '}
+                  será cancelado. Esta acción no se puede deshacer.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelMutation.isPending}>
+              No, mantener
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => cancelConfirmJob && cancelMutation.mutate(cancelConfirmJob.id)}
+              disabled={cancelMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {cancelMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Cancelando...
+                </>
+              ) : (
+                'Sí, cancelar scouting'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
