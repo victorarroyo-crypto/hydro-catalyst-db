@@ -127,7 +127,6 @@ Deno.serve(async (req) => {
 
     const PATCH: 'PATCH' = 'PATCH';
     const PUT: 'PUT' = 'PUT';
-    const POST: 'POST' = 'POST';
 
     const attemptsList: Array<{
       label: string;
@@ -137,29 +136,13 @@ Deno.serve(async (req) => {
       statusKey?: 'status' | 'estado';
       payloadOverride?: Record<string, unknown>;
     }> = [
-      // /queue/{id} parece aceptar PATCH (Allow=PATCH). Probamos varios payloads.
-      ...(existingItem
-        ? [
-            {
-              label: `PATCH /api/scouting/queue/${id} (full payload + status)`,
-              url: queueUrl(id),
-              method: PATCH,
-              payloadOverride: { ...existingItem, status },
-            },
-          ]
-        : []),
+      // Según Allow headers del backend externo:
+      // - /queue/{id} => PATCH
+      // - /queue/{id}/status => PUT
       { label: `PATCH /api/scouting/queue/${id} (status)`, url: queueUrl(id), method: PATCH, payloadShape: 'status_only', statusKey: 'status' },
-      { label: `PATCH /api/scouting/queue/${id} (estado)`, url: queueUrl(id), method: PATCH, payloadShape: 'status_only', statusKey: 'estado' },
       { label: `PATCH /api/scouting/queue/${id} (id+status)`, url: queueUrl(id), method: PATCH, payloadShape: 'id_and_status', statusKey: 'status' },
-
-      // /queue/{id}/status parece permitir PUT (Allow=PUT)
       { label: `PUT /api/scouting/queue/${id}/status (status)`, url: queueStatusUrl(id), method: PUT, payloadShape: 'status_only', statusKey: 'status' },
-      { label: `PUT /api/scouting/queue/${id}/status (estado)`, url: queueStatusUrl(id), method: PUT, payloadShape: 'status_only', statusKey: 'estado' },
       { label: `PUT /api/scouting/queue/${id}/status (id+status)`, url: queueStatusUrl(id), method: PUT, payloadShape: 'id_and_status', statusKey: 'status' },
-
-      // Mantener algunos fallbacks
-      { label: `POST /api/scouting/queue/${id}`, url: queueUrl(id), method: POST, payloadShape: 'status_only', statusKey: 'status' },
-      { label: `POST /api/scouting/queue/${id}/status`, url: queueStatusUrl(id), method: POST, payloadShape: 'status_only', statusKey: 'status' },
     ];
 
     let attempt: { ok: boolean; status: number; body: JsonValue; rawText: string; allow: string | null } | null = null;
@@ -174,6 +157,7 @@ Deno.serve(async (req) => {
         method: a.method,
         payloadShape: a.payloadShape,
         statusKey: a.statusKey,
+        payloadOverride: a.payloadOverride,
       });
 
       if (!attempt.ok) {
@@ -193,13 +177,15 @@ Deno.serve(async (req) => {
     console.log(`[scouting-update-queue] External response: ok=${attempt.ok}, status=${attempt.status}, body=${attempt.rawText}`);
 
     if (!attempt.ok) {
+      // Devolver 200 para evitar que el cliente trate esto como fallo de red;
+      // el frontend usa data.success para gestionar el error.
       return new Response(
         JSON.stringify({
           success: false,
           error: 'Error al actualizar en backend de scouting',
           details: { status: attempt.status, body: attempt.body },
         }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
