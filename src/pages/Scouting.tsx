@@ -1063,6 +1063,20 @@ const Scouting = () => {
                                     <TRLBadge trl={item.trl} />
                                   </div>
                                   
+                                  {/* Ver ficha button */}
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="w-full"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedTech(item);
+                                    }}
+                                  >
+                                    <FileText className="w-3 h-3 mr-1" />
+                                    Ver ficha completa
+                                  </Button>
+                                  
                                   {/* Actions based on phase */}
                                   {section.id === 'pending' && (
                                     <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
