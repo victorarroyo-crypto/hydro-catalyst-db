@@ -2,14 +2,10 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Radar, 
-  Clock, 
-  CalendarDays, 
-  DollarSign, 
   AlertCircle,
   Building2,
   MapPin,
   Rocket,
-  Check,
   X,
   Loader2,
   Eye,
@@ -18,7 +14,6 @@ import {
   XCircle,
   FileText,
   RefreshCw,
-  Sparkles,
   Ban,
   Send
 } from 'lucide-react';
@@ -72,9 +67,41 @@ import {
 } from '@/hooks/useScoutingData';
 import { QueueItemUI, RejectedTechnology } from '@/types/scouting';
 
-const POLLING_INTERVAL = 10000; // 10 seconds
-const STUCK_JOB_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes without progress = potentially stuck
-const STUCK_JOB_HARD_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without progress = likely stuck
+const POLLING_INTERVAL = 5000; // 5 seconds (faster polling for live updates)
+const HEARTBEAT_WARNING_MS = 2 * 60 * 1000; // 2 minutes without heartbeat = warning
+const HEARTBEAT_CRITICAL_MS = 4 * 60 * 1000; // 4 minutes without heartbeat = likely stuck
+
+// Phase labels and progress mapping
+const PHASE_CONFIG: Record<string, { label: string; progress: number }> = {
+  init: { label: 'Inicializando...', progress: 10 },
+  analyzing: { label: '📊 Analizando base de datos...', progress: 20 },
+  researching: { label: '📚 Buscando en papers académicos...', progress: 40 },
+  validating: { label: '✅ Validando proveedores...', progress: 60 },
+  extracting: { label: '📝 Extrayendo información...', progress: 80 },
+  evaluating: { label: '⚖️ Evaluando tecnologías...', progress: 90 },
+  completing: { label: '🏁 Finalizando...', progress: 95 },
+};
+
+// Get phase display info
+const getPhaseInfo = (phase: string | null | undefined) => {
+  if (!phase) return { label: 'Procesando...', progress: 5 };
+  return PHASE_CONFIG[phase] || { label: phase, progress: 50 };
+};
+
+// Check heartbeat status
+const getHeartbeatStatus = (lastHeartbeat: string | null | undefined): 'ok' | 'warning' | 'critical' => {
+  if (!lastHeartbeat) return 'ok'; // No heartbeat data yet, assume ok
+  const elapsed = Date.now() - new Date(lastHeartbeat).getTime();
+  if (elapsed > HEARTBEAT_CRITICAL_MS) return 'critical';
+  if (elapsed > HEARTBEAT_WARNING_MS) return 'warning';
+  return 'ok';
+};
+
+// Get elapsed time since heartbeat in minutes
+const getHeartbeatElapsedMinutes = (lastHeartbeat: string | null | undefined): number => {
+  if (!lastHeartbeat) return 0;
+  return Math.floor((Date.now() - new Date(lastHeartbeat).getTime()) / 60000);
+};
 
 // Scouting config and history types (from Railway backend)
 interface ScoutingConfig {
@@ -109,6 +136,9 @@ interface HistoryItem {
   error_message: string | null;
   logs: ScoutingLog[];
   created_at: string;
+  // New fields from backend heartbeat
+  current_phase?: string | null;
+  last_heartbeat?: string | null;
 }
 
 interface HistoryResponse {
@@ -210,22 +240,6 @@ const cancelScouting = async (jobId: string) => {
   }
   
   throw new Error('No se pudo cancelar el scouting - endpoint no disponible');
-};
-
-// Check if a job is potentially stuck (soft threshold)
-const isJobPotentiallyStuck = (startedAt: string, logsCount: number, tokensUsed: number | null): boolean => {
-  const startTime = new Date(startedAt).getTime();
-  const elapsed = Date.now() - startTime;
-  // Soft stuck: running > 5 min AND no logs or tokens
-  return elapsed > STUCK_JOB_THRESHOLD_MS && logsCount === 0 && !tokensUsed;
-};
-
-// Check if a job is likely stuck (hard threshold)
-const isJobLikelyStuck = (startedAt: string, logsCount: number, tokensUsed: number | null): boolean => {
-  const startTime = new Date(startedAt).getTime();
-  const elapsed = Date.now() - startTime;
-  // Hard stuck: running > 10 min AND no logs or tokens
-  return elapsed > STUCK_JOB_HARD_THRESHOLD_MS && logsCount === 0 && !tokensUsed;
 };
 
 // Get elapsed time in minutes
@@ -355,11 +369,11 @@ const Scouting = () => {
     refetchInterval: hasRunningJob ? 3000 : false,
   });
 
-  // Determine if the running job is stuck (computed after jobStatus is available)
-  const jobLogsCount = runningJob?.logs?.length ?? jobStatus?.logs?.length ?? 0;
-  const jobTokensUsed = runningJob?.tokens_used ?? null;
-  const isStuckSoft = runningJob && isJobPotentiallyStuck(runningJob.started_at, jobLogsCount, jobTokensUsed);
-  const isStuckHard = runningJob && isJobLikelyStuck(runningJob.started_at, jobLogsCount, jobTokensUsed);
+  // Determine heartbeat status for running job
+  const heartbeatStatus = runningJob ? getHeartbeatStatus(runningJob.last_heartbeat) : 'ok';
+  const heartbeatElapsedMinutes = runningJob ? getHeartbeatElapsedMinutes(runningJob.last_heartbeat) : 0;
+  const currentPhase = runningJob?.current_phase ?? jobStatus?.current_phase;
+  const phaseInfo = getPhaseInfo(currentPhase);
   const elapsedMinutes = runningJob ? getElapsedMinutes(runningJob.started_at) : 0;
 
   // Models by provider
@@ -914,47 +928,75 @@ const Scouting = () => {
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
-            {jobStatus?.progress && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-background/60 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-primary">
-                    {jobStatus.progress.pages_analyzed ?? 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Páginas analizadas</div>
+          <CardContent className="space-y-4">
+            {/* Phase Progress Bar */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{phaseInfo.label}</span>
+                <span className="text-muted-foreground">{phaseInfo.progress}%</span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary transition-all duration-500 ease-out"
+                  style={{ width: `${phaseInfo.progress}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-primary">
+                  {jobStatus?.progress?.pages_analyzed ?? 0}
                 </div>
-                <div className="bg-background/60 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {jobStatus.progress.technologies_found ?? 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Tecnologías encontradas</div>
+                <div className="text-xs text-muted-foreground">Páginas analizadas</div>
+              </div>
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {jobStatus?.progress?.technologies_found ?? 0}
                 </div>
-                <div className="bg-background/60 rounded-lg p-3 text-center col-span-2">
-                  <div className="text-sm font-medium text-foreground">
-                    {jobStatus.progress.current_step || jobStatus.current_phase || 'Procesando...'}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Fase actual</div>
+                <div className="text-xs text-muted-foreground">Tecnologías encontradas</div>
+              </div>
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <div className="text-lg font-medium text-foreground">
+                  {elapsedMinutes} min
+                </div>
+                <div className="text-xs text-muted-foreground">Tiempo transcurrido</div>
+              </div>
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <div className={`text-lg font-medium ${
+                  heartbeatStatus === 'ok' ? 'text-green-600' : 
+                  heartbeatStatus === 'warning' ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {heartbeatStatus === 'ok' ? '✓ Activo' : 
+                   heartbeatStatus === 'warning' ? '⚠️ Lento' : '❌ Sin señal'}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {runningJob?.last_heartbeat 
+                    ? `Hace ${heartbeatElapsedMinutes} min`
+                    : 'Sin heartbeat'
+                  }
                 </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Stuck Job Warning Banner */}
-      {hasRunningJob && runningJob && (isStuckSoft || isStuckHard) && (
-        <Card className={`border-2 animate-fade-in mb-6 ${isStuckHard ? 'border-destructive/50 bg-destructive/5' : 'border-yellow-500/50 bg-yellow-500/5'}`}>
+      {/* Heartbeat Warning Banner */}
+      {hasRunningJob && runningJob && (heartbeatStatus === 'warning' || heartbeatStatus === 'critical') && (
+        <Card className={`border-2 animate-fade-in mb-6 ${heartbeatStatus === 'critical' ? 'border-destructive/50 bg-destructive/5' : 'border-yellow-500/50 bg-yellow-500/5'}`}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <AlertTriangle className={`w-6 h-6 ${isStuckHard ? 'text-destructive' : 'text-yellow-600'}`} />
+                <AlertTriangle className={`w-6 h-6 ${heartbeatStatus === 'critical' ? 'text-destructive' : 'text-yellow-600'}`} />
                 <div>
-                  <CardTitle className={`text-base flex items-center gap-2 ${isStuckHard ? 'text-destructive' : 'text-yellow-700'}`}>
-                    {isStuckHard ? '⚠️ Job probablemente atascado' : '⏳ Job posiblemente atascado'}
+                  <CardTitle className={`text-base flex items-center gap-2 ${heartbeatStatus === 'critical' ? 'text-destructive' : 'text-yellow-700'}`}>
+                    {heartbeatStatus === 'critical' ? '⚠️ Job probablemente atascado' : '⏳ Posible retraso'}
                   </CardTitle>
                   <CardDescription>
-                    Ejecutando desde hace <strong>{elapsedMinutes} minutos</strong> sin generar logs ni consumir tokens.
-                    {isStuckHard && ' El proceso del backend puede haber fallado silenciosamente.'}
+                    Sin señal de heartbeat desde hace <strong>{heartbeatElapsedMinutes} minutos</strong>.
+                    {heartbeatStatus === 'critical' && ' El proceso del backend puede haber fallado silenciosamente.'}
                   </CardDescription>
                 </div>
               </div>
@@ -964,9 +1006,9 @@ const Scouting = () => {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>Job ID: <code className="font-mono bg-muted px-1 rounded">{runningJob.id.slice(0, 8)}...</code></span>
               <span>•</span>
-              <span>Logs: {jobLogsCount}</span>
+              <span>Fase: {phaseInfo.label}</span>
               <span>•</span>
-              <span>Tokens: {jobTokensUsed ?? 0}</span>
+              <span>Tiempo total: {elapsedMinutes} min</span>
               {forceCancelAttempts > 0 && (
                 <>
                   <span>•</span>
@@ -987,11 +1029,11 @@ const Scouting = () => {
                 Actualizar estado
               </Button>
               <Button
-                variant={isStuckHard ? 'destructive' : 'outline'}
+                variant={heartbeatStatus === 'critical' ? 'destructive' : 'outline'}
                 size="sm"
                 disabled={isForceCancelling}
                 onClick={() => handleForceCancel(runningJob.id)}
-                className={!isStuckHard ? 'text-yellow-700 border-yellow-500 hover:bg-yellow-50' : ''}
+                className={heartbeatStatus !== 'critical' ? 'text-yellow-700 border-yellow-500 hover:bg-yellow-50' : ''}
               >
                 {isForceCancelling ? (
                   <Loader2 className="w-4 h-4 mr-1 animate-spin" />
@@ -1329,10 +1371,19 @@ const Scouting = () => {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {getStatusBadge(item.status)}
-                            {item.status === 'running' && isJobPotentiallyStuck(item.started_at, item.logs?.length ?? 0, item.tokens_used) && (
-                              <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">
+                            {item.status === 'running' && item.last_heartbeat && getHeartbeatStatus(item.last_heartbeat) !== 'ok' && (
+                              <Badge className={`${
+                                getHeartbeatStatus(item.last_heartbeat) === 'critical' 
+                                  ? 'bg-red-500/20 text-red-600 border-red-500/30' 
+                                  : 'bg-yellow-500/20 text-yellow-600 border-yellow-500/30'
+                              }`}>
                                 <AlertTriangle className="w-3 h-3 mr-1" />
-                                Atascado?
+                                {getHeartbeatStatus(item.last_heartbeat) === 'critical' ? 'Atascado' : 'Lento'}
+                              </Badge>
+                            )}
+                            {item.status === 'running' && item.current_phase && (
+                              <Badge variant="outline" className="text-xs">
+                                {getPhaseInfo(item.current_phase).label}
                               </Badge>
                             )}
                           </div>
@@ -1373,7 +1424,7 @@ const Scouting = () => {
                 </Table>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <CalendarDays className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                  <Radar className="w-12 h-12 text-muted-foreground/50 mb-4" />
                   <h3 className="text-lg font-medium mb-2">Sin historial</h3>
                   <p className="text-muted-foreground">
                     No hay scoutings registrados todavía.
