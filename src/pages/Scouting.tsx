@@ -825,6 +825,130 @@ const Scouting = () => {
         </Card>
       </div>
 
+      {/* Live Progress Panel - Always visible when Scouting is Running */}
+      {hasRunningJob && (
+        <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 animate-fade-in mb-6">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Radar className="w-7 h-7 text-primary" />
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                  </span>
+                </div>
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    🔍 Scouting en Progreso
+                    <Badge variant="outline" className="ml-2 bg-primary/10 text-primary border-primary/30">
+                      En vivo
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    {runningJob?.config?.keywords && (
+                      <span>Buscando: <strong>{runningJob.config.keywords.join(', ')}</strong></span>
+                    )}
+                    {runningJob?.llm_model && (
+                      <span className="ml-2 text-xs opacity-75">• {runningJob.llm_model}</span>
+                    )}
+                  </CardDescription>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {jobStatusLoading && (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                  onClick={() => setCancelConfirmJob(runningJob)}
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Progress Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-primary">
+                  {jobStatus?.progress?.pages_analyzed ?? 0}
+                </div>
+                <div className="text-xs text-muted-foreground">Páginas analizadas</div>
+              </div>
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {jobStatus?.progress?.technologies_found ?? 0}
+                </div>
+                <div className="text-xs text-muted-foreground">Tecnologías encontradas</div>
+              </div>
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <div className="text-sm font-medium text-foreground capitalize">
+                  {jobStatus?.current_phase ?? jobStatus?.progress?.current_step ?? 'Iniciando...'}
+                </div>
+                <div className="text-xs text-muted-foreground">Fase actual</div>
+              </div>
+            </div>
+
+            {/* Live Logs */}
+            {jobStatus?.logs && jobStatus.logs.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <FileText className="w-4 h-4" />
+                  Últimos logs
+                </div>
+                <ScrollArea className="h-32 rounded-md border bg-background/80 p-3">
+                  <div className="space-y-1.5">
+                    {jobStatus.logs.slice(-8).reverse().map((log, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`flex items-start gap-2 text-xs font-mono ${
+                          idx === 0 ? 'opacity-100' : 'opacity-70'
+                        }`}
+                      >
+                        {getLogIcon(log.level)}
+                        <span className="text-muted-foreground whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleTimeString('es-ES')}
+                        </span>
+                        <span className="text-foreground">{log.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            ) : (
+              <div className="bg-background/60 rounded-lg p-4 text-center text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                <p className="text-sm">Esperando logs del backend...</p>
+                <p className="text-xs mt-1">El proceso de scouting puede tardar varios minutos</p>
+              </div>
+            )}
+
+            {/* Polling indicator */}
+            <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+              <span>
+                Iniciado: {new Date(runningJob.started_at).toLocaleTimeString('es-ES')}
+              </span>
+              <div className="flex items-center gap-2">
+                {isPolling && (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    <span>Actualizando cola...</span>
+                  </>
+                )}
+                {lastPollTime && !isPolling && (
+                  <span>Última act. cola: {lastPollTime.toLocaleTimeString('es-ES')}</span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
@@ -843,123 +967,6 @@ const Scouting = () => {
 
         {/* Queue Tab */}
         <TabsContent value="queue" className="space-y-4">
-          {/* Live Progress Panel when Scouting is Running */}
-          {hasRunningJob && (
-            <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 animate-fade-in">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <Radar className="w-7 h-7 text-primary" />
-                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                      </span>
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        🔍 Scouting en Progreso
-                        <Badge variant="outline" className="ml-2 bg-primary/10 text-primary border-primary/30">
-                          En vivo
-                        </Badge>
-                      </CardTitle>
-                      <CardDescription>
-                        {runningJob?.config?.keywords && (
-                          <span>Buscando: <strong>{runningJob.config.keywords.join(', ')}</strong></span>
-                        )}
-                        {runningJob?.llm_model && (
-                          <span className="ml-2 text-xs opacity-75">• {runningJob.llm_model}</span>
-                        )}
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {jobStatusLoading && (
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                      onClick={() => setCancelConfirmJob(runningJob)}
-                    >
-                      <X className="w-4 h-4 mr-1" />
-                      Cancelar
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Progress Stats */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-background/60 rounded-lg p-3 text-center">
-                    <div className="text-2xl font-bold text-primary">
-                      {jobStatus?.progress?.pages_analyzed ?? 0}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Páginas analizadas</div>
-                  </div>
-                  <div className="bg-background/60 rounded-lg p-3 text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {jobStatus?.progress?.technologies_found ?? 0}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Tecnologías encontradas</div>
-                  </div>
-                  <div className="bg-background/60 rounded-lg p-3 text-center">
-                    <div className="text-sm font-medium text-foreground capitalize">
-                      {jobStatus?.current_phase ?? jobStatus?.progress?.current_step ?? 'Iniciando...'}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Fase actual</div>
-                  </div>
-                </div>
-
-                {/* Live Logs */}
-                {jobStatus?.logs && jobStatus.logs.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <FileText className="w-4 h-4" />
-                      Últimos logs
-                    </div>
-                    <ScrollArea className="h-32 rounded-md border bg-background/80 p-3">
-                      <div className="space-y-1.5">
-                        {jobStatus.logs.slice(-8).reverse().map((log, idx) => (
-                          <div 
-                            key={idx} 
-                            className={`flex items-start gap-2 text-xs font-mono ${
-                              idx === 0 ? 'opacity-100' : 'opacity-70'
-                            }`}
-                          >
-                            {getLogIcon(log.level)}
-                            <span className="text-muted-foreground whitespace-nowrap">
-                              {new Date(log.timestamp).toLocaleTimeString('es-ES')}
-                            </span>
-                            <span className="text-foreground">{log.message}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </div>
-                )}
-
-                {/* Polling indicator */}
-                <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                  <span>
-                    Iniciado: {new Date(runningJob.started_at).toLocaleTimeString('es-ES')}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {isPolling && (
-                      <>
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                        <span>Actualizando cola...</span>
-                      </>
-                    )}
-                    {lastPollTime && !isPolling && (
-                      <span>Última act. cola: {lastPollTime.toLocaleTimeString('es-ES')}</span>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           <div className="mb-4">
             <p className="text-muted-foreground">
