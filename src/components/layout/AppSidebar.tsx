@@ -75,8 +75,11 @@ const aiToolsItems = [
 
 const settingsItems = [
   { title: 'Configuración', url: '/settings', icon: Settings },
-  { title: 'Auditoría BD', url: '/database-audit', icon: Database, adminOnly: true },
-  { title: 'Sincronizar BDs', url: '/admin/db-audit', icon: Database, adminOnly: true },
+];
+
+const auditSubItems = [
+  { title: '1. Auditoría de Schema', url: '/database-audit' },
+  { title: '2. Sincronizar BDs', url: '/admin/db-audit' },
 ];
 
 export function AppSidebar() {
@@ -90,10 +93,14 @@ export function AppSidebar() {
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(
     location.pathname === '/knowledge-base'
   );
+  const [auditOpen, setAuditOpen] = useState(
+    auditSubItems.some((item) => location.pathname === item.url)
+  );
 
   const isActive = (path: string) => location.pathname === path;
   const isKnowledgeBaseActive = location.pathname === '/knowledge-base';
   const isAiToolActive = aiToolsItems.some((item) => location.pathname === item.url);
+  const isAuditActive = auditSubItems.some((item) => location.pathname === item.url);
 
   return (
     <Sidebar className={cn('border-r-0', collapsed ? 'w-16' : 'w-64')} collapsible="icon">
@@ -291,27 +298,76 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {settingsItems
-                .filter((item) => !(item as any).adminOnly || profile?.role === 'admin')
-                .map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive(item.url)}
-                      className={cn(
-                        'transition-all duration-200',
-                        isActive(item.url)
-                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                      )}
-                    >
-                      <Link to={item.url} className="flex items-center gap-3">
-                        <item.icon className="w-5 h-5" />
-                        {!collapsed && <span>{item.title}</span>}
-                      </Link>
-                    </SidebarMenuButton>
+              {settingsItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    className={cn(
+                      'transition-all duration-200',
+                      isActive(item.url)
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                        : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                    )}
+                  >
+                    <Link to={item.url} className="flex items-center gap-3">
+                      <item.icon className="w-5 h-5" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              
+              {/* Auditoría BD dropdown - solo para admins */}
+              {profile?.role === 'admin' && (
+                <Collapsible open={auditOpen} onOpenChange={setAuditOpen}>
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        className={cn(
+                          'transition-all duration-200 w-full',
+                          isAuditActive
+                            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                            : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                        )}
+                      >
+                        <Database className="w-5 h-5" />
+                        {!collapsed && (
+                          <>
+                            <span className="flex-1 text-left">Auditoría BD</span>
+                            <ChevronDown
+                              className={cn(
+                                'w-4 h-4 transition-transform duration-200',
+                                auditOpen && 'rotate-180'
+                              )}
+                            />
+                          </>
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {auditSubItems.map((subItem) => (
+                          <SidebarMenuSubItem key={subItem.url}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={isActive(subItem.url)}
+                              className={cn(
+                                'transition-all duration-200',
+                                isActive(subItem.url)
+                                  ? 'bg-sidebar-accent/50 text-sidebar-accent-foreground'
+                                  : 'text-sidebar-foreground/60 hover:text-sidebar-foreground'
+                              )}
+                            >
+                              <Link to={subItem.url}>{subItem.title}</Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
                   </SidebarMenuItem>
-                ))}
+                </Collapsible>
+              )}
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={signOut}
