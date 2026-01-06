@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -319,8 +319,8 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <DialogTitle className="text-xl">Editar Ficha de Tecnología</DialogTitle>
@@ -334,8 +334,8 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
-          <form className="space-y-6 py-4">
+        <div className="flex-1 overflow-y-auto pr-4 -mr-4">
+          <form className="space-y-6 py-4" onSubmit={(e) => e.preventDefault()}>
             {/* Información General */}
             <FormSection title="Información General">
               <div>
@@ -576,9 +576,9 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
               </div>
             </FormSection>
           </form>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="border-t pt-4 flex-col gap-4">
+        <DialogFooter className="border-t pt-4 flex-col gap-4 flex-shrink-0">
           <div className="flex flex-col sm:flex-row w-full gap-2 sm:items-center sm:justify-between">
             {/* Save button */}
             <Button
