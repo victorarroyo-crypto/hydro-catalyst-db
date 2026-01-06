@@ -18,21 +18,10 @@ function formatError(error: unknown): { message: string; details: unknown } {
 async function callExternalUpdate(params: {
   id: string;
   url: string;
-  status: string;
   headers: Record<string, string>;
   method: 'PUT' | 'PATCH' | 'POST';
-  payloadShape?: 'status_only' | 'id_and_status';
-  statusKey?: 'status' | 'estado';
-  payloadOverride?: Record<string, unknown>;
+  payload: Record<string, unknown>;
 }): Promise<{ ok: boolean; status: number; body: JsonValue; rawText: string; allow: string | null }> {
-  const statusKey = params.statusKey ?? 'status';
-
-  const payload =
-    params.payloadOverride ??
-    (params.payloadShape === 'id_and_status'
-      ? { id: params.id, [statusKey]: params.status }
-      : { [statusKey]: params.status });
-
   const res = await fetch(params.url, {
     method: params.method,
     headers: {
@@ -40,7 +29,7 @@ async function callExternalUpdate(params: {
       Accept: 'application/json',
       ...params.headers,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(params.payload),
   });
 
   const allow = res.headers.get('allow');
@@ -97,34 +86,67 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { id, status } = await req.json();
-    console.log(`[scouting-update-queue] Received: id=${id}, status=${status}`);
+    const body = await req.json();
+    const { id, status, formData } = body;
+    console.log(`[scouting-update-queue] Received: id=${id}, status=${status}, hasFormData=${!!formData}`);
 
-    if (!id || !status) {
+    if (!id) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Parámetros inválidos: id y status son obligatorios' }),
+        JSON.stringify({ success: false, error: 'Parámetro id es obligatorio' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // At least one of status or formData must be provided
+    if (!status && !formData) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Debe proporcionar status o formData' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
     // The Railway backend requires admin credentials for queue updates.
-    // Use fixed admin credentials for this internal service-to-service call.
     const forwardHeaders: Record<string, string> = {
       'X-User-Id': 'admin',
       'X-User-Role': 'admin',
     };
 
-    // Intentamos leer el item actual para poder enviar un PATCH con payload completo
-    // (algunos backends fallan con 500 si solo reciben {status}).
-    let existingItem: Record<string, unknown> | null = null;
-    const getRes = await callExternalGet({ url: queueUrl(id), headers: forwardHeaders });
-    if (getRes.ok && getRes.body && typeof getRes.body === 'object' && !Array.isArray(getRes.body)) {
-      existingItem = getRes.body as Record<string, unknown>;
-      console.log(`[scouting-update-queue] Loaded existing queue item for patch payload keys=${Object.keys(existingItem).slice(0, 20).join(',')}`);
-    } else {
-      console.log(`[scouting-update-queue] Could not load existing item: status=${getRes.status}, body=${getRes.rawText}`);
+    // If we have formData (updating technology details), we PATCH the queue item
+    if (formData) {
+      console.log(`[scouting-update-queue] Updating formData for queue item ${id}`);
+      
+      const updatePayload: Record<string, unknown> = { ...formData };
+      if (status) {
+        updatePayload.status = status;
+      }
+      
+      const patchRes = await callExternalUpdate({
+        id,
+        url: queueUrl(id),
+        headers: forwardHeaders,
+        method: 'PATCH',
+        payload: updatePayload,
+      });
+
+      console.log(`[scouting-update-queue] PATCH formData response: ok=${patchRes.ok}, status=${patchRes.status}`);
+
+      if (!patchRes.ok) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Error al actualizar datos en backend de scouting',
+            details: { status: patchRes.status, body: patchRes.body },
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      return new Response(JSON.stringify({ success: true, result: patchRes.body }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
+    // Status-only update (original logic)
     const PATCH: 'PATCH' = 'PATCH';
     const PUT: 'PUT' = 'PUT';
 
@@ -132,17 +154,12 @@ Deno.serve(async (req) => {
       label: string;
       url: string;
       method: 'PUT' | 'PATCH' | 'POST';
-      payloadShape?: 'status_only' | 'id_and_status';
-      statusKey?: 'status' | 'estado';
-      payloadOverride?: Record<string, unknown>;
+      payload: Record<string, unknown>;
     }> = [
-      // Según Allow headers del backend externo:
-      // - /queue/{id} => PATCH
-      // - /queue/{id}/status => PUT
-      { label: `PATCH /api/scouting/queue/${id} (status)`, url: queueUrl(id), method: PATCH, payloadShape: 'status_only', statusKey: 'status' },
-      { label: `PATCH /api/scouting/queue/${id} (id+status)`, url: queueUrl(id), method: PATCH, payloadShape: 'id_and_status', statusKey: 'status' },
-      { label: `PUT /api/scouting/queue/${id}/status (status)`, url: queueStatusUrl(id), method: PUT, payloadShape: 'status_only', statusKey: 'status' },
-      { label: `PUT /api/scouting/queue/${id}/status (id+status)`, url: queueStatusUrl(id), method: PUT, payloadShape: 'id_and_status', statusKey: 'status' },
+      { label: `PATCH /api/scouting/queue/${id} (status)`, url: queueUrl(id), method: PATCH, payload: { status } },
+      { label: `PATCH /api/scouting/queue/${id} (id+status)`, url: queueUrl(id), method: PATCH, payload: { id, status } },
+      { label: `PUT /api/scouting/queue/${id}/status (status)`, url: queueStatusUrl(id), method: PUT, payload: { status } },
+      { label: `PUT /api/scouting/queue/${id}/status (id+status)`, url: queueStatusUrl(id), method: PUT, payload: { id, status } },
     ];
 
     let attempt: { ok: boolean; status: number; body: JsonValue; rawText: string; allow: string | null } | null = null;
@@ -152,12 +169,9 @@ Deno.serve(async (req) => {
       attempt = await callExternalUpdate({
         id,
         url: a.url,
-        status,
         headers: forwardHeaders,
         method: a.method,
-        payloadShape: a.payloadShape,
-        statusKey: a.statusKey,
-        payloadOverride: a.payloadOverride,
+        payload: a.payload,
       });
 
       if (!attempt.ok) {
@@ -177,8 +191,6 @@ Deno.serve(async (req) => {
     console.log(`[scouting-update-queue] External response: ok=${attempt.ok}, status=${attempt.status}, body=${attempt.rawText}`);
 
     if (!attempt.ok) {
-      // Devolver 200 para evitar que el cliente trate esto como fallo de red;
-      // el frontend usa data.success para gestionar el error.
       return new Response(
         JSON.stringify({
           success: false,
