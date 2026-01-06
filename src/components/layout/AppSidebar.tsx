@@ -76,6 +76,7 @@ const aiToolsItems = [
 const settingsItems = [
   { title: 'Configuración', url: '/settings', icon: Settings },
   { title: 'Auditoría BD', url: '/database-audit', icon: Database, adminOnly: true },
+  { title: 'Sincronizar BDs', url: '/admin/db-audit', icon: Database, adminOnly: true },
 ];
 
 export function AppSidebar() {
