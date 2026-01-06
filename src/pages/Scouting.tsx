@@ -882,6 +882,49 @@ const Scouting = () => {
         </Card>
       </div>
 
+      {/* Sync Warning - Railway shows running but no heartbeat for too long */}
+      {hasRunningJob && runningJob && heartbeatStatus === 'critical' && elapsedMinutes > 6 && (
+        <Card className="border-amber-500/50 bg-amber-500/5 mb-4">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-800">
+                  Posible desincronización detectada
+                </p>
+                <p className="text-xs text-amber-700 mt-1">
+                  El backend de Railway reporta el job como "running" pero no ha enviado heartbeats en {heartbeatElapsedMinutes} minutos.
+                  Esto puede significar que el job terminó pero Railway no actualizó su estado.
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open('/scouting-monitor', '_blank')}
+                    className="text-amber-700 border-amber-500 hover:bg-amber-50"
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    Ver Monitor (estado real)
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setAssumedRunningJobId(null);
+                      queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
+                      toast.info('Limpiando estado local del job...');
+                    }}
+                    className="text-amber-700"
+                  >
+                    Descartar este job
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Live Progress Panel */}
       {hasRunningJob && (
         <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 animate-fade-in mb-6">
@@ -1034,12 +1077,35 @@ const Scouting = () => {
                 )}
                 {isForceCancelling ? 'Cancelando...' : 'Forzar cancelación'}
               </Button>
+              {(heartbeatStatus === 'critical' || forceCancelAttempts >= 2) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setAssumedRunningJobId(null);
+                    queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
+                    queryClient.invalidateQueries({ queryKey: ['scouting-job-status'] });
+                    toast.success('Estado local limpiado. Si el job sigue en Railway, aparecerá de nuevo.');
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Descartar job fantasma
+                </Button>
+              )}
             </div>
             {forceCancelAttempts >= 3 && (
               <p className="text-xs text-muted-foreground">
                 💡 Si la cancelación no funciona, es posible que el backend externo no soporte esta operación.
                 El job puede terminar por sí solo o requerir intervención manual en Railway.
               </p>
+            )}
+            {heartbeatStatus === 'critical' && elapsedMinutes > 5 && (
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  🔍 <strong>Tip:</strong> Revisa el <a href="/scouting-monitor" className="text-primary underline hover:no-underline">Monitor de Scouting</a> para ver el estado real de las sesiones recibidas por webhook.
+                  Si el monitor muestra la sesión como "completada" pero aquí aparece como "running", el backend de Railway puede estar desincronizado.
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>
