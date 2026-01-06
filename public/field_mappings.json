@@ -1,0 +1,151 @@
+{
+  "version": "1.0",
+  "description": "Diccionario de datos compartido para mapeo entre aliases snake_case y nombres reales de columnas en la base de datos. Puede ser consumido por TypeScript (Lovable), Python (Railway/CrewAI) u otros sistemas.",
+  "last_updated": "2025-01-06",
+  "tables": {
+    "technologies": {
+      "description": "Tabla principal de tecnologías validadas",
+      "fields": {
+        "id": "id",
+        "nombre_tecnologia": "Nombre de la tecnología",
+        "tipo_tecnologia": "Tipo de tecnología",
+        "subcategoria": "Subcategoría",
+        "sector_subsector": "Sector y subsector",
+        "proveedor_empresa": "Proveedor / Empresa",
+        "pais_origen": "País de origen",
+        "paises_operacion": "Paises donde actua",
+        "web_empresa": "Web de la empresa",
+        "email_contacto": "Email de contacto",
+        "descripcion_tecnica": "Descripción técnica breve",
+        "aplicacion_principal": "Aplicación principal",
+        "ventaja_competitiva": "Ventaja competitiva clave",
+        "innovacion": "Porque es innovadora",
+        "grado_madurez_trl": "Grado de madurez (TRL)",
+        "casos_referencia": "Casos de referencia",
+        "comentarios_analista": "Comentarios del analista",
+        "fecha_scouting": "Fecha de scouting",
+        "estado_seguimiento": "Estado del seguimiento",
+        "tipo_id": "tipo_id",
+        "subcategoria_id": "subcategoria_id",
+        "sector_id": "sector_id",
+        "subsector_industrial": "subsector_industrial",
+        "status": "status",
+        "quality_score": "quality_score",
+        "review_status": "review_status",
+        "review_requested_at": "review_requested_at",
+        "review_requested_by": "review_requested_by",
+        "reviewer_id": "reviewer_id",
+        "reviewed_at": "reviewed_at",
+        "updated_by": "updated_by",
+        "created_at": "created_at",
+        "updated_at": "updated_at"
+      }
+    },
+    "scouting_queue": {
+      "description": "Cola de tecnologías pendientes de revisión (desde Railway/agentes)",
+      "fields": {
+        "id": "id",
+        "nombre_tecnologia": "Nombre de la tecnología",
+        "tipo_tecnologia": "Tipo de tecnología",
+        "subcategoria": "Subcategoría",
+        "sector_subsector": "Sector y subsector",
+        "proveedor_empresa": "Proveedor / Empresa",
+        "pais_origen": "País de origen",
+        "paises_operacion": "Paises donde actua",
+        "web_empresa": "Web de la empresa",
+        "email_contacto": "Email de contacto",
+        "descripcion_tecnica": "Descripción técnica breve",
+        "aplicacion_principal": "Aplicación principal",
+        "ventaja_competitiva": "Ventaja competitiva clave",
+        "innovacion": "Porque es innovadora",
+        "grado_madurez_trl": "Grado de madurez (TRL)",
+        "casos_referencia": "Casos de referencia",
+        "comentarios_analista": "Comentarios del analista",
+        "fecha_scouting": "Fecha de scouting",
+        "estado_seguimiento": "Estado del seguimiento",
+        "tipo_id": "tipo_id",
+        "subcategoria_id": "subcategoria_id",
+        "sector_id": "sector_id",
+        "subsector_industrial": "subsector_industrial",
+        "source": "source",
+        "source_url": "source_url",
+        "priority": "priority",
+        "notes": "notes",
+        "queue_status": "queue_status",
+        "rejection_reason": "rejection_reason",
+        "created_by": "created_by",
+        "reviewed_by": "reviewed_by",
+        "reviewed_at": "reviewed_at",
+        "created_at": "created_at",
+        "updated_at": "updated_at"
+      }
+    },
+    "rejected_technologies": {
+      "description": "Tecnologías rechazadas durante el proceso de revisión",
+      "fields": {
+        "id": "id",
+        "original_scouting_id": "original_scouting_id",
+        "nombre_tecnologia": "Nombre de la tecnología",
+        "tipo_tecnologia": "Tipo de tecnología",
+        "subcategoria": "Subcategoría",
+        "sector_subsector": "Sector y subsector",
+        "proveedor_empresa": "Proveedor / Empresa",
+        "pais_origen": "País de origen",
+        "paises_operacion": "Paises donde actua",
+        "web_empresa": "Web de la empresa",
+        "email_contacto": "Email de contacto",
+        "descripcion_tecnica": "Descripción técnica breve",
+        "aplicacion_principal": "Aplicación principal",
+        "ventaja_competitiva": "Ventaja competitiva clave",
+        "innovacion": "Porque es innovadora",
+        "grado_madurez_trl": "Grado de madurez (TRL)",
+        "casos_referencia": "Casos de referencia",
+        "comentarios_analista": "Comentarios del analista",
+        "fecha_scouting": "Fecha de scouting",
+        "estado_seguimiento": "Estado del seguimiento",
+        "tipo_id": "tipo_id",
+        "subcategoria_id": "subcategoria_id",
+        "sector_id": "sector_id",
+        "subsector_industrial": "subsector_industrial",
+        "rejection_reason": "rejection_reason",
+        "rejection_category": "rejection_category",
+        "original_data": "original_data",
+        "rejected_at": "rejected_at",
+        "rejected_by": "rejected_by",
+        "created_at": "created_at"
+      }
+    },
+    "taxonomy_tipos": {
+      "description": "Catálogo de tipos de tecnología",
+      "fields": {
+        "id": "id",
+        "codigo": "codigo",
+        "nombre": "nombre",
+        "descripcion": "descripcion"
+      }
+    },
+    "taxonomy_subcategorias": {
+      "description": "Catálogo de subcategorías (relacionadas con tipos)",
+      "fields": {
+        "id": "id",
+        "tipo_id": "tipo_id",
+        "codigo": "codigo",
+        "nombre": "nombre"
+      }
+    },
+    "taxonomy_sectores": {
+      "description": "Catálogo de sectores industriales",
+      "fields": {
+        "id": "id",
+        "nombre": "nombre",
+        "descripcion": "descripcion"
+      }
+    }
+  },
+  "notes": {
+    "paises_operacion": "NOTA: El campo real es 'Paises donde actua' (sin tilde en 'Países'). Este es un typo histórico que se mantiene por compatibilidad.",
+    "naming_convention": "Los campos de negocio en español usan espacios y caracteres especiales. Los campos técnicos/sistema usan snake_case en inglés.",
+    "usage_python": "import requests; mappings = requests.get('https://[tu-app].lovable.app/field_mappings.json').json(); col = mappings['tables']['technologies']['fields']['nombre_tecnologia']",
+    "usage_typescript": "import { getField } from '@/constants/databaseFields'; const col = getField('technologies', 'nombre_tecnologia');"
+  }
+}
