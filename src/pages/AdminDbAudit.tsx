@@ -24,6 +24,21 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  Table as DocxTable,
+  TableRow as DocxTableRow,
+  TableCell as DocxTableCell,
+  WidthType,
+  BorderStyle,
+  AlignmentType,
+  HeadingLevel,
+  ShadingType,
+} from "docx";
+import { saveAs } from "file-saver";
 
 interface ComparisonResult {
   table: string;
@@ -196,6 +211,217 @@ export default function AdminDbAudit() {
     });
   };
 
+  // Export to Word document
+  const handleExportWord = async () => {
+    if (!auditData?.results) return;
+
+    const createDocxTableRow = (cells: string[], isHeader = false) => {
+      return new DocxTableRow({
+        children: cells.map(cell => 
+          new DocxTableCell({
+            shading: isHeader ? { type: ShadingType.SOLID, color: "E8E8E8" } : undefined,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: cell,
+                    bold: isHeader,
+                    size: 20,
+                  }),
+                ],
+              }),
+            ],
+          })
+        ),
+      });
+    };
+
+    const getStatusText = (status: string) => {
+      switch (status) {
+        case 'synced': return '✓ Sincronizado';
+        case 'out_of_sync': return '⚠ Desincronizado';
+        case 'error': return '✗ Error';
+        default: return status;
+      }
+    };
+
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            // Title
+            new Paragraph({
+              text: "AUDITORÍA DE BASES DE DATOS",
+              heading: HeadingLevel.HEADING_1,
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200 },
+            }),
+
+            // Subtitle
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Comparación BD Interna (Master) vs BD Externa (Railway)",
+                  size: 24,
+                  color: "666666",
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 400 },
+            }),
+
+            // Summary Section
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "📊 Resumen",
+                  bold: true,
+                  size: 28,
+                  color: "2563EB",
+                }),
+              ],
+              spacing: { before: 200, after: 150 },
+            }),
+
+            new DocxTable({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+              },
+              rows: [
+                createDocxTableRow(["Métrica", "Valor"], true),
+                createDocxTableRow(["Tablas Analizadas", String(auditData.summary?.totalTables || 0)]),
+                createDocxTableRow(["Sincronizadas", String(auditData.summary?.syncedTables || 0)]),
+                createDocxTableRow(["Desincronizadas", String(auditData.summary?.outOfSyncTables || 0)]),
+                createDocxTableRow(["Con Errores", String(auditData.summary?.errorTables || 0)]),
+                createDocxTableRow(["Fecha de Auditoría", auditData.summary?.timestamp ? new Date(auditData.summary.timestamp).toLocaleString("es-ES") : "N/A"]),
+              ],
+            }),
+
+            // Table Comparison Section
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "📋 Comparación de Tablas",
+                  bold: true,
+                  size: 28,
+                  color: "2563EB",
+                }),
+              ],
+              spacing: { before: 400, after: 150 },
+            }),
+
+            new DocxTable({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+              },
+              rows: [
+                createDocxTableRow(["Tabla", "BD Interna", "BD Externa", "Diferencia", "Estado"], true),
+                ...auditData.results.map(r => 
+                  createDocxTableRow([
+                    r.table,
+                    String(r.localCount),
+                    String(r.externalCount),
+                    r.difference > 0 ? `+${r.difference}` : String(r.difference),
+                    getStatusText(r.status),
+                  ])
+                ),
+              ],
+            }),
+
+            // Details for out of sync tables
+            ...auditData.results
+              .filter(r => r.status === 'out_of_sync')
+              .flatMap(r => [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `⚠ Detalles: ${r.table}`,
+                      bold: true,
+                      size: 24,
+                      color: "D97706",
+                    }),
+                  ],
+                  spacing: { before: 300, after: 100 },
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `Faltan en BD Externa (${r.missingInExternal?.length || 0}): `,
+                      bold: true,
+                      size: 20,
+                    }),
+                    new TextRun({
+                      text: r.missingInExternal?.slice(0, 10).join(", ") || "Ninguno",
+                      size: 20,
+                    }),
+                    new TextRun({
+                      text: (r.missingInExternal?.length || 0) > 10 ? ` ... y ${(r.missingInExternal?.length || 0) - 10} más` : "",
+                      size: 20,
+                      italics: true,
+                    }),
+                  ],
+                  spacing: { after: 50 },
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `Solo en BD Externa (${r.missingInLocal?.length || 0}): `,
+                      bold: true,
+                      size: 20,
+                    }),
+                    new TextRun({
+                      text: r.missingInLocal?.slice(0, 10).join(", ") || "Ninguno",
+                      size: 20,
+                    }),
+                    new TextRun({
+                      text: (r.missingInLocal?.length || 0) > 10 ? ` ... y ${(r.missingInLocal?.length || 0) - 10} más` : "",
+                      size: 20,
+                      italics: true,
+                    }),
+                  ],
+                  spacing: { after: 150 },
+                }),
+              ]),
+
+            // Footer
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `Documento generado el ${new Date().toLocaleString("es-ES")}`,
+                  size: 18,
+                  color: "888888",
+                  italics: true,
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 400 },
+            }),
+          ],
+        },
+      ],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `Auditoria_BD_${new Date().toISOString().split('T')[0]}.docx`);
+
+    toast({
+      title: "Word exportado",
+      description: "El informe de auditoría se ha descargado",
+    });
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'synced':
@@ -245,7 +471,15 @@ export default function AdminDbAudit() {
             disabled={!auditData?.results}
           >
             <Download className="w-4 h-4 mr-2" />
-            Exportar CSV
+            CSV
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={handleExportWord}
+            disabled={!auditData?.results}
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Word
           </Button>
           <Button 
             onClick={handleSyncAll}
