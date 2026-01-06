@@ -1,11 +1,15 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, CheckCircle, XCircle, Database, Link2, Languages, ArrowRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Database, Link2, Languages, ArrowRight, FileText, Download } from 'lucide-react';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, BorderStyle } from 'docx';
+import { saveAs } from 'file-saver';
+import { useToast } from '@/hooks/use-toast';
 
 // Schema data extracted from database
 const schemaData = {
@@ -396,6 +400,7 @@ const getPriorityBadge = (priority: string) => {
 };
 
 export default function DatabaseAudit() {
+  const { toast } = useToast();
   const totalColumns = schemaData.tables.reduce((acc, table) => acc + table.columns.length, 0);
   const spanishColumns = schemaData.tables.reduce((acc, table) => 
     acc + table.columns.filter(c => c.language === 'es').length, 0);
@@ -405,13 +410,312 @@ export default function DatabaseAudit() {
     acc + table.columns.filter(c => c.language === 'mixed').length, 0);
   const inconsistentMappings = mappingTable.filter(m => !m.consistent).length;
 
+  const generateWordReport = async () => {
+    try {
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: [
+            new Paragraph({
+              text: "Auditoría de Base de Datos - Vandarum",
+              heading: HeadingLevel.TITLE,
+            }),
+            new Paragraph({
+              text: `Fecha de generación: ${new Date().toLocaleDateString('es-ES')}`,
+              spacing: { after: 400 },
+            }),
+            
+            // Summary
+            new Paragraph({
+              text: "Resumen Ejecutivo",
+              heading: HeadingLevel.HEADING_1,
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({ text: `• Total de tablas: ${schemaData.tables.length}`, break: 1 }),
+                new TextRun({ text: `• Total de columnas: ${totalColumns}`, break: 1 }),
+                new TextRun({ text: `• Columnas en español: ${spanishColumns}`, break: 1 }),
+                new TextRun({ text: `• Columnas en inglés: ${englishColumns}`, break: 1 }),
+                new TextRun({ text: `• Columnas mixtas: ${mixedColumns}`, break: 1 }),
+                new TextRun({ text: `• Inconsistencias detectadas: ${inconsistencies.length}`, break: 1 }),
+                new TextRun({ text: `• Mapeos inconsistentes: ${inconsistentMappings} de ${mappingTable.length}`, break: 1 }),
+              ],
+            }),
+
+            // Inconsistencies
+            new Paragraph({
+              text: "Inconsistencias Detectadas",
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 400 },
+            }),
+            ...inconsistencies.flatMap(inc => [
+              new Paragraph({
+                text: `[${inc.severity.toUpperCase()}] ${inc.description}`,
+                heading: HeadingLevel.HEADING_2,
+              }),
+              new Paragraph({
+                text: `Tablas afectadas: ${inc.tables.join(', ')}`,
+              }),
+              new Paragraph({
+                text: "Ejemplos:",
+                spacing: { before: 200 },
+              }),
+              ...inc.examples.map(ex => new Paragraph({
+                text: `  • ${ex}`,
+              })),
+            ]),
+
+            // Schema Tables
+            new Paragraph({
+              text: "Esquema de Tablas",
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 400 },
+            }),
+            ...schemaData.tables.flatMap(table => [
+              new Paragraph({
+                text: `${table.name} - ${table.description}`,
+                heading: HeadingLevel.HEADING_2,
+              }),
+              new DocxTable({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [
+                  new DocxTableRow({
+                    children: [
+                      new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Columna", bold: true })] })] }),
+                      new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Tipo", bold: true })] })] }),
+                      new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Idioma", bold: true })] })] }),
+                    ],
+                  }),
+                  ...table.columns.map(col => new DocxTableRow({
+                    children: [
+                      new DocxTableCell({ children: [new Paragraph({ text: col.name })] }),
+                      new DocxTableCell({ children: [new Paragraph({ text: col.type })] }),
+                      new DocxTableCell({ children: [new Paragraph({ text: col.language.toUpperCase() })] }),
+                    ],
+                  })),
+                ],
+              }),
+            ]),
+
+            // Mapping Table
+            new Paragraph({
+              text: "Tabla de Mapeo de Campos",
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 400 },
+            }),
+            new DocxTable({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: [
+                new DocxTableRow({
+                  children: [
+                    new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Tabla Origen", bold: true })] })] }),
+                    new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Columna Origen", bold: true })] })] }),
+                    new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Tabla Destino", bold: true })] })] }),
+                    new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Columna Destino", bold: true })] })] }),
+                    new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Consistente", bold: true })] })] }),
+                  ],
+                }),
+                ...mappingTable.map(m => new DocxTableRow({
+                  children: [
+                    new DocxTableCell({ children: [new Paragraph({ text: m.sourceTable })] }),
+                    new DocxTableCell({ children: [new Paragraph({ text: m.sourceColumn })] }),
+                    new DocxTableCell({ children: [new Paragraph({ text: m.destTable })] }),
+                    new DocxTableCell({ children: [new Paragraph({ text: m.destColumn })] }),
+                    new DocxTableCell({ children: [new Paragraph({ text: m.consistent ? "Sí" : "No" })] }),
+                  ],
+                })),
+              ],
+            }),
+
+            // Recommendations
+            new Paragraph({
+              text: "Recomendaciones",
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 400 },
+            }),
+            ...recommendations.flatMap(rec => [
+              new Paragraph({
+                text: `[${rec.priority.toUpperCase()}] ${rec.action}`,
+                heading: HeadingLevel.HEADING_2,
+              }),
+              new Paragraph({ text: rec.description }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Antes: ", bold: true }),
+                  new TextRun({ text: rec.before }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Después: ", bold: true }),
+                  new TextRun({ text: rec.after }),
+                ],
+                spacing: { after: 200 },
+              }),
+            ]),
+          ],
+        }],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, `auditoria_bd_vandarum_${new Date().toISOString().split('T')[0]}.docx`);
+      
+      toast({
+        title: "Informe generado",
+        description: "El informe Word se ha descargado correctamente",
+      });
+    } catch (error) {
+      console.error('Error generating Word report:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo generar el informe Word",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const generatePdfReport = () => {
+    // Create a printable HTML version and use browser print to PDF
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Auditoría de Base de Datos - Vandarum</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; max-width: 900px; margin: 0 auto; }
+          h1 { color: #0d9488; border-bottom: 2px solid #0d9488; padding-bottom: 10px; }
+          h2 { color: #334155; margin-top: 30px; }
+          h3 { color: #64748b; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+          th { background: #f1f5f9; font-weight: 600; }
+          .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+          .badge-high { background: #fecaca; color: #991b1b; }
+          .badge-medium { background: #fef08a; color: #854d0e; }
+          .badge-low { background: #e2e8f0; color: #475569; }
+          .badge-es { background: #bbf7d0; color: #166534; }
+          .badge-en { background: #e2e8f0; color: #475569; }
+          .consistent-yes { color: #16a34a; font-weight: bold; }
+          .consistent-no { color: #dc2626; font-weight: bold; }
+          .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 20px 0; }
+          .summary-item { background: #f8fafc; padding: 15px; border-radius: 8px; }
+          .summary-value { font-size: 24px; font-weight: bold; color: #0d9488; }
+          .recommendation { background: #f8fafc; padding: 15px; border-radius: 8px; margin: 10px 0; }
+          .before { background: #fef2f2; padding: 10px; border-radius: 4px; margin: 5px 0; }
+          .after { background: #f0fdf4; padding: 10px; border-radius: 4px; margin: 5px 0; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <h1>Auditoría de Base de Datos - Vandarum</h1>
+        <p><strong>Fecha de generación:</strong> ${new Date().toLocaleDateString('es-ES')}</p>
+        
+        <h2>Resumen Ejecutivo</h2>
+        <div class="summary-grid">
+          <div class="summary-item"><div class="summary-value">${schemaData.tables.length}</div>Tablas</div>
+          <div class="summary-item"><div class="summary-value">${totalColumns}</div>Columnas</div>
+          <div class="summary-item"><div class="summary-value">${spanishColumns} ES / ${englishColumns} EN</div>Idiomas</div>
+          <div class="summary-item"><div class="summary-value">${inconsistencies.length}</div>Inconsistencias</div>
+        </div>
+
+        <h2>Inconsistencias Detectadas</h2>
+        ${inconsistencies.map(inc => `
+          <div class="recommendation">
+            <h3><span class="badge badge-${inc.severity}">${inc.severity.toUpperCase()}</span> ${inc.description}</h3>
+            <p><strong>Tablas afectadas:</strong> ${inc.tables.join(', ')}</p>
+            <ul>${inc.examples.map(ex => `<li>${ex}</li>`).join('')}</ul>
+          </div>
+        `).join('')}
+
+        <h2>Esquema de Tablas</h2>
+        ${schemaData.tables.map(table => `
+          <h3>${table.name}</h3>
+          <p><em>${table.description}</em></p>
+          <table>
+            <thead><tr><th>Columna</th><th>Tipo</th><th>Idioma</th></tr></thead>
+            <tbody>
+              ${table.columns.map(col => `
+                <tr>
+                  <td><code>${col.name}</code></td>
+                  <td>${col.type}</td>
+                  <td><span class="badge badge-${col.language}">${col.language.toUpperCase()}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `).join('')}
+
+        <h2>Tabla de Mapeo de Campos</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Tabla Origen</th>
+              <th>Columna Origen</th>
+              <th>Tabla Destino</th>
+              <th>Columna Destino</th>
+              <th>Consistente</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${mappingTable.map(m => `
+              <tr>
+                <td>${m.sourceTable}</td>
+                <td><code>${m.sourceColumn}</code></td>
+                <td>${m.destTable}</td>
+                <td><code>${m.destColumn}</code></td>
+                <td class="${m.consistent ? 'consistent-yes' : 'consistent-no'}">${m.consistent ? '✓ Sí' : '✗ No'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <h2>Recomendaciones</h2>
+        ${recommendations.map(rec => `
+          <div class="recommendation">
+            <h3><span class="badge badge-${rec.priority === 'alta' ? 'high' : rec.priority === 'media' ? 'medium' : 'low'}">${rec.priority.toUpperCase()}</span> ${rec.action}</h3>
+            <p>${rec.description}</p>
+            <div class="before"><strong>Antes:</strong> <code>${rec.before}</code></div>
+            <div class="after"><strong>Después:</strong> <code>${rec.after}</code></div>
+          </div>
+        `).join('')}
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
+    
+    toast({
+      title: "Informe listo",
+      description: "Usa Ctrl+P o Cmd+P para guardar como PDF",
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-display font-bold text-foreground">Auditoría de Base de Datos</h1>
-        <p className="text-muted-foreground mt-2">
-          Análisis de nomenclatura, consistencia y relaciones del esquema
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-foreground">Auditoría de Base de Datos</h1>
+          <p className="text-muted-foreground mt-2">
+            Análisis de nomenclatura, consistencia y relaciones del esquema
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={generateWordReport}>
+            <FileText className="w-4 h-4 mr-2" />
+            Descargar Word
+          </Button>
+          <Button variant="outline" onClick={generatePdfReport}>
+            <Download className="w-4 h-4 mr-2" />
+            Imprimir / PDF
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
