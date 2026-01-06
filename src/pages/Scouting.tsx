@@ -87,10 +87,29 @@ const Scouting = () => {
   // User role checks
   const isAnalyst = profile?.role === 'analyst';
   const isSupervisorOrAdmin = profile?.role === 'supervisor' || profile?.role === 'admin';
-  const userEmail = user?.email || 'unknown';
+  const userEmail = user?.email || '';
+
+  // Email validation helper
+  const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Validate user email before operations
+  const validateUserEmail = (): boolean => {
+    if (!userEmail || !isValidEmail(userEmail)) {
+      toast.error('Email de usuario inválido', {
+        description: 'Tu cuenta no tiene un email válido configurado. Por favor, actualiza tu perfil antes de continuar.',
+      });
+      return false;
+    }
+    return true;
+  };
 
   // Handle sending to approval
   const handleSendToApproval = (tech: QueueItemUI) => {
+    if (!validateUserEmail()) return;
+    
     changeStatusMutation.mutate({
       id: tech.id,
       status: 'pending_approval',
@@ -100,6 +119,8 @@ const Scouting = () => {
 
   // Handle approve to database
   const handleApproveToDb = (tech: QueueItemUI) => {
+    if (!validateUserEmail()) return;
+    
     approveToDbMutation.mutate({
       scoutingId: tech.id,
       approvedBy: userEmail,
@@ -112,6 +133,8 @@ const Scouting = () => {
       toast.error('Debes indicar una razón de rechazo');
       return;
     }
+    
+    if (!validateUserEmail()) return;
     
     moveToRejectedMutation.mutate({
       scoutingId: rejectionDialog.tech.id,
