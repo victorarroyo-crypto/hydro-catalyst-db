@@ -130,18 +130,29 @@ Deno.serve(async (req) => {
           
           console.log(`Loaded taxonomy maps: ${tiposMap.size} tipos, ${subcategoriasMap.size} subcategorias, ${sectoresMap.size} sectores`)
           
-          allData = allData.map(record => ({
-            ...record,
-            // Populate text fields from taxonomy IDs
-            "Tipo de tecnología": record.tipo_id ? tiposMap.get(record.tipo_id) || record["Tipo de tecnología"] : record["Tipo de tecnología"],
-            "Subcategoría": record.subcategoria_id ? subcategoriasMap.get(record.subcategoria_id) || record["Subcategoría"] : record["Subcategoría"],
-            "Sector y subsector": record.sector_id ? sectoresMap.get(record.sector_id) || record["Sector y subsector"] : record["Sector y subsector"],
-            // Clean user reference fields (users don't exist in external DB)
-            updated_by: null,
-            reviewer_id: null,
-            review_requested_by: null,
-          }))
-          console.log(`Enriched ${allData.length} technology records with taxonomy names`)
+          allData = allData.map(record => {
+            // Remove columns that don't exist in external DB
+            const { 
+              updated_by, 
+              reviewer_id, 
+              review_requested_by, 
+              review_requested_at,
+              reviewed_at,
+              review_status,
+              quality_score,
+              status,
+              ...rest 
+            } = record;
+            
+            return {
+              ...rest,
+              // Populate text fields from taxonomy IDs
+              "Tipo de tecnología": record.tipo_id ? tiposMap.get(record.tipo_id) || record["Tipo de tecnología"] : record["Tipo de tecnología"],
+              "Subcategoría": record.subcategoria_id ? subcategoriasMap.get(record.subcategoria_id) || record["Subcategoría"] : record["Subcategoría"],
+              "Sector y subsector": record.sector_id ? sectoresMap.get(record.sector_id) || record["Sector y subsector"] : record["Sector y subsector"],
+            };
+          });
+          console.log(`Cleaned and enriched ${allData.length} technology records`)
         }
 
         // Clean user references for casos_de_estudio table
