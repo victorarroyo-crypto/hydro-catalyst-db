@@ -57,15 +57,16 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { ScoutingReportModal } from '@/components/ScoutingReportModal';
 import { ScoutingTechFormModal } from '@/components/ScoutingTechFormModal';
 import { useAuth } from '@/contexts/AuthContext';
+// Use EXTERNAL scouting hooks - reads from Railway's Supabase
 import { 
-  useScoutingQueue, 
-  useActiveScoutingQueue,
+  useExternalScoutingQueue, 
+  useExternalActiveScoutingQueue,
   useRejectedTechnologies,
-  useChangeScoutingStatus,
-  useApproveToTechnologies,
-  useMoveToRejected,
-  useScoutingCounts
-} from '@/hooks/useScoutingData';
+  useChangeExternalScoutingStatus,
+  useApproveExternalToTechnologies,
+  useMoveExternalToRejected,
+  useExternalScoutingCounts
+} from '@/hooks/useExternalScoutingData';
 import { QueueItemUI, RejectedTechnology } from '@/types/scouting';
 
 const POLLING_INTERVAL = 5000; // 5 seconds (faster polling for live updates)
@@ -321,12 +322,12 @@ const Scouting = () => {
   const previousRunningJobRef = useRef<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Supabase queries for scouting_queue
-  const { data: activeItems = [], isLoading: activeLoading, refetch: refetchActive } = useActiveScoutingQueue();
-  const { data: reviewItems = [], isLoading: reviewLoading, refetch: refetchReview } = useScoutingQueue('review');
-  const { data: pendingApprovalItems = [], isLoading: pendingApprovalLoading, refetch: refetchPendingApproval } = useScoutingQueue('pending_approval');
+  // External Supabase queries for scouting_queue (reads from Railway's Supabase)
+  const { data: activeItems = [], isLoading: activeLoading, refetch: refetchActive } = useExternalActiveScoutingQueue();
+  const { data: reviewItems = [], isLoading: reviewLoading, refetch: refetchReview } = useExternalScoutingQueue('review');
+  const { data: pendingApprovalItems = [], isLoading: pendingApprovalLoading, refetch: refetchPendingApproval } = useExternalScoutingQueue('pending_approval');
   const { data: rejectedTechs = [], isLoading: rejectedLoading } = useRejectedTechnologies();
-  const { data: counts, refetch: refetchCounts } = useScoutingCounts();
+  const { data: counts, refetch: refetchCounts } = useExternalScoutingCounts();
   
   // Filtered items based on queueFilter
   const filteredQueueItems = useMemo(() => {
@@ -359,10 +360,10 @@ const Scouting = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Mutations
-  const changeStatusMutation = useChangeScoutingStatus();
-  const approveToDbMutation = useApproveToTechnologies();
-  const moveToRejectedMutation = useMoveToRejected();
+  // Mutations - use external hooks that read from Railway and write to Lovable Cloud
+  const changeStatusMutation = useChangeExternalScoutingStatus();
+  const approveToDbMutation = useApproveExternalToTechnologies();
+  const moveToRejectedMutation = useMoveExternalToRejected();
 
   // User role checks
   const isAnalyst = profile?.role === 'analyst';
