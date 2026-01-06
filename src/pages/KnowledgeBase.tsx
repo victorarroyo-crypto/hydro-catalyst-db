@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -126,6 +126,9 @@ export default function KnowledgeBase() {
   const { profile } = useAuth();
   const userRole = profile?.role;
   const queryClient = useQueryClient();
+  
+  // Active section state
+  const [activeSection, setActiveSection] = useState<'documents' | 'sources' | 'cases' | 'trends'>('documents');
   
   // Documents state
   const [uploading, setUploading] = useState(false);
@@ -591,35 +594,52 @@ export default function KnowledgeBase() {
         </div>
       </div>
 
-      <Tabs defaultValue="documents" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="documents" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Documentos</span>
-            <Badge variant="secondary" className="ml-1">{documents?.length || 0}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="sources" className="flex items-center gap-2">
-            <Globe className="h-4 w-4" />
-            <span className="hidden sm:inline">Fuentes</span>
-            <Badge variant="secondary" className="ml-1">{sources?.length || 0}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="cases" className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Casos</span>
-            <Badge variant="secondary" className="ml-1">{caseStudies?.length || 0}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="trends" className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            <span className="hidden sm:inline">Tendencias</span>
-            <Badge variant="secondary" className="ml-1">{trends?.length || 0}</Badge>
-          </TabsTrigger>
-        </TabsList>
+      {/* Section Dropdown */}
+      <div className="flex items-center gap-4">
+        <Select value={activeSection} onValueChange={(v) => setActiveSection(v as typeof activeSection)}>
+          <SelectTrigger className="w-[280px] bg-background">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-background border shadow-lg z-50">
+            <SelectItem value="documents">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Documentos Técnicos
+                <Badge variant="secondary" className="ml-1">{documents?.length || 0}</Badge>
+              </div>
+            </SelectItem>
+            <SelectItem value="sources">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                Fuentes de Scouting
+                <Badge variant="secondary" className="ml-1">{sources?.length || 0}</Badge>
+              </div>
+            </SelectItem>
+            <SelectItem value="cases">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Casos de Estudio
+                <Badge variant="secondary" className="ml-1">{caseStudies?.length || 0}</Badge>
+              </div>
+            </SelectItem>
+            <SelectItem value="trends">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Tendencias
+                <Badge variant="secondary" className="ml-1">{trends?.length || 0}</Badge>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-        {/* DOCUMENTS TAB */}
-        <TabsContent value="documents" className="space-y-4">
-          {/* Storage Card */}
-          <Card>
-            <CardContent className="pt-6">
+      <div className="space-y-4">
+        {/* DOCUMENTS SECTION */}
+        {activeSection === 'documents' && (
+          <>
+            {/* Storage Card */}
+            <Card>
+              <CardContent className="pt-6">
               <div className="flex items-center gap-4">
                 <div className="p-3 rounded-full bg-primary/10">
                   <HardDrive className="h-6 w-6 text-primary" />
@@ -797,10 +817,11 @@ export default function KnowledgeBase() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+          </>
+        )}
 
-        {/* SOURCES TAB */}
-        <TabsContent value="sources" className="space-y-4">
+        {/* SOURCES SECTION */}
+        {activeSection === 'sources' && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -896,10 +917,10 @@ export default function KnowledgeBase() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
-        {/* CASES TAB */}
-        <TabsContent value="cases" className="space-y-4">
+        {/* CASES SECTION */}
+        {activeSection === 'cases' && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -974,10 +995,10 @@ export default function KnowledgeBase() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
-        {/* TRENDS TAB */}
-        <TabsContent value="trends" className="space-y-4">
+        {/* TRENDS SECTION */}
+        {activeSection === 'trends' && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1031,8 +1052,8 @@ export default function KnowledgeBase() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       {/* Add/Edit Source Modal */}
       <Dialog open={showAddSourceModal} onOpenChange={setShowAddSourceModal}>
