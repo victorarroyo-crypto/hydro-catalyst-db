@@ -398,8 +398,30 @@ const Scouting = () => {
   });
 
   // If backend status says it's not running anymore, don't keep marking it as "running/stuck" in UI
-  const isActuallyRunning = hasActiveJobId ? (jobStatus ? jobStatus.status === 'running' : true) : false;
+  const backendFinished = jobStatus && ['completed', 'failed', 'cancelled'].includes(jobStatus.status);
+  const isActuallyRunning = hasActiveJobId && !backendFinished;
   const hasRunningJob = hasActiveJobId && isActuallyRunning;
+
+  // Effect to immediately sync when backend reports completion
+  const lastSyncedJobRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (backendFinished && activeJobId && lastSyncedJobRef.current !== activeJobId) {
+      lastSyncedJobRef.current = activeJobId;
+      console.log('[Scouting] Backend finished, syncing...', jobStatus?.status);
+      toast.success(`Scouting ${jobStatus?.status === 'completed' ? 'completado' : jobStatus?.status} - sincronizando...`);
+      setAssumedRunningJobId(null);
+      Promise.all([
+        refetchHistory(),
+        refetchActive(),
+        refetchReview(),
+        refetchPendingApproval(),
+        refetchCounts(),
+      ]).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+        queryClient.invalidateQueries({ queryKey: ['scouting-job-status'] });
+      });
+    }
+  }, [backendFinished, activeJobId, jobStatus?.status, queryClient, refetchHistory, refetchActive, refetchReview, refetchPendingApproval, refetchCounts]);
 
   // Determine heartbeat status for running job
   const heartbeatStatus = hasRunningJob && runningJob ? getHeartbeatStatus(runningJob.last_heartbeat) : 'ok';
