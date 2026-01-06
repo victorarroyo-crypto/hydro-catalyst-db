@@ -13,6 +13,7 @@ import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
 import Favorites from "./pages/Favorites";
 import Scouting from "./pages/Scouting";
+import ScoutingNew from "./pages/ScoutingNew";
 import Settings from "./pages/Settings";
 import QualityControl from "./pages/QualityControl";
 import Trends from "./pages/Trends";
@@ -57,6 +58,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/technologies" element={<Technologies />} />
               <Route path="/scouting" element={<Scouting />} />
+              <Route path="/scouting/new" element={<ScoutingNew />} />
               <Route path="/projects" element={<Projects />} />
               <Route path="/projects/:id" element={<ProjectDetail />} />
               <Route path="/favorites" element={<Favorites />} />
