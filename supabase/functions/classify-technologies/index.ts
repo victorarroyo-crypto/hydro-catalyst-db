@@ -242,16 +242,32 @@ RESPONDE ÚNICAMENTE en formato JSON válido, sin texto adicional:
     // Parse AI response
     let classifications: ClassificationResult[];
     try {
-      // Extract JSON from response (handle markdown code blocks)
-      let jsonStr = content;
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      // Extract JSON from response (handle markdown code blocks and extra text)
+      let jsonStr = content.trim();
+      
+      // Try to extract from markdown code blocks first
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       if (jsonMatch) {
-        jsonStr = jsonMatch[1];
+        jsonStr = jsonMatch[1].trim();
+      } else {
+        // Try to find JSON object directly (may have text before/after)
+        const jsonObjectMatch = jsonStr.match(/\{[\s\S]*"classifications"[\s\S]*\}/);
+        if (jsonObjectMatch) {
+          jsonStr = jsonObjectMatch[0];
+        }
       }
+      
+      console.log("Extracted JSON (first 500 chars):", jsonStr.substring(0, 500));
+      
       const parsed = JSON.parse(jsonStr);
       classifications = parsed.classifications;
+      
+      if (!Array.isArray(classifications)) {
+        throw new Error("classifications is not an array");
+      }
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
+      console.error("Raw content (first 1000 chars):", content.substring(0, 1000));
       throw new Error("Invalid AI response format");
     }
 
