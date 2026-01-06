@@ -604,12 +604,14 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
             description: 'Tu edición ha sido enviada para revisión. Un supervisor la aprobará.',
           });
         } else {
-          // Supervisors/Admins can edit directly
+          // Supervisors/Admins can edit directly - also record as reviewer
           const { error } = await supabase
             .from('technologies')
             .update({
               ...dataToSave,
               updated_by: user?.id,
+              reviewer_id: user?.id,
+              reviewed_at: new Date().toISOString(),
             })
             .eq('id', technology.id);
 

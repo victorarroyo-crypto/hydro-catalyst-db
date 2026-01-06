@@ -125,7 +125,9 @@ Deno.serve(async (req) => {
           ...proposedChanges,
           'Fecha de scouting': approvalDate.split('T')[0],
           'Estado del seguimiento': estadoSeguimiento,
-          updated_by: user.id,
+          updated_by: edit.created_by,
+          reviewer_id: user.id,
+          reviewed_at: approvalDate,
         })
         .select()
         .single()
@@ -150,8 +152,10 @@ Deno.serve(async (req) => {
         .from('technologies')
         .update({
           tipo_id: tipoId,
-          updated_by: user.id,
+          updated_by: edit.created_by,
           updated_at: approvalDate,
+          reviewer_id: user.id,
+          reviewed_at: approvalDate,
         })
         .eq('id', edit.technology_id)
 
@@ -171,8 +175,10 @@ Deno.serve(async (req) => {
           ...proposedChanges,
           'Fecha de scouting': approvalDate.split('T')[0],
           'Estado del seguimiento': estadoSeguimiento,
-          updated_by: user.id,
+          updated_by: edit.created_by,
           updated_at: approvalDate,
+          reviewer_id: user.id,
+          reviewed_at: approvalDate,
         })
         .eq('id', edit.technology_id)
 

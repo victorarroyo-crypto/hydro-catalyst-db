@@ -821,6 +821,7 @@ export type Database = {
           review_requested_at: string | null
           review_requested_by: string | null
           review_status: string | null
+          reviewed_at: string | null
           reviewer_id: string | null
           "Sector y subsector": string | null
           sector_id: string | null
@@ -855,6 +856,7 @@ export type Database = {
           review_requested_at?: string | null
           review_requested_by?: string | null
           review_status?: string | null
+          reviewed_at?: string | null
           reviewer_id?: string | null
           "Sector y subsector"?: string | null
           sector_id?: string | null
@@ -889,6 +891,7 @@ export type Database = {
           review_requested_at?: string | null
           review_requested_by?: string | null
           review_status?: string | null
+          reviewed_at?: string | null
           reviewer_id?: string | null
           "Sector y subsector"?: string | null
           sector_id?: string | null
