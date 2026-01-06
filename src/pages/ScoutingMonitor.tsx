@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { 
   Activity, 
   CheckCircle2, 
@@ -17,10 +18,21 @@ import {
   AlertTriangle,
   RefreshCw,
   Play,
-  Eye
+  Eye,
+  Bell,
+  BellRing,
+  Zap,
+  Ban,
+  Timer,
+  RotateCcw,
+  X
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, differenceInMinutes, differenceInSeconds } from 'date-fns';
 import { es } from 'date-fns/locale';
+
+// Alert thresholds
+const HEARTBEAT_WARNING_MS = 2 * 60 * 1000; // 2 minutes
+const HEARTBEAT_CRITICAL_MS = 4 * 60 * 1000; // 4 minutes
 
 interface ScoutingSession {
   id: string;
@@ -52,6 +64,17 @@ interface ScoutingLog {
   created_at: string;
 }
 
+interface SystemAlert {
+  id: string;
+  type: 'warning' | 'critical' | 'info';
+  category: 'stuck_job' | 'rate_limit' | 'model_change' | 'repeated_errors' | 'api_error' | 'quota_warning';
+  title: string;
+  message: string;
+  sessionId?: string;
+  timestamp: Date;
+  dismissed?: boolean;
+}
+
 const statusConfig = {
   running: { label: 'En Ejecución', color: 'bg-blue-500', icon: Activity },
   completed: { label: 'Completado', color: 'bg-green-500', icon: CheckCircle2 },
@@ -66,8 +89,25 @@ const logLevelConfig = {
   error: { color: 'text-red-600', bg: 'bg-red-50' },
 };
 
+const alertIcons = {
+  stuck_job: Timer,
+  rate_limit: Ban,
+  model_change: RotateCcw,
+  repeated_errors: AlertTriangle,
+  api_error: Zap,
+  quota_warning: Bell,
+};
+
 export default function ScoutingMonitor() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update current time every 10 seconds for heartbeat checking
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(new Date()), 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch sessions
   const { data: sessions, isLoading: loadingSessions, refetch: refetchSessions } = useQuery({
@@ -82,6 +122,22 @@ export default function ScoutingMonitor() {
       if (error) throw error;
       return data as ScoutingSession[];
     },
+  });
+
+  // Fetch all recent logs for alert detection
+  const { data: allRecentLogs } = useQuery({
+    queryKey: ['scouting-logs-all-recent'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('scouting_session_logs')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(500);
+      
+      if (error) throw error;
+      return data as ScoutingLog[];
+    },
+    refetchInterval: 15000, // Refresh every 15 seconds
   });
 
   // Fetch logs for selected session
@@ -101,6 +157,148 @@ export default function ScoutingMonitor() {
     },
     enabled: !!selectedSession,
   });
+
+  // Generate system alerts based on sessions and logs
+  const systemAlerts = useMemo((): SystemAlert[] => {
+    const alerts: SystemAlert[] = [];
+    
+    // Check for stuck jobs (no heartbeat)
+    sessions?.filter(s => s.status === 'running').forEach(session => {
+      const lastUpdate = new Date(session.updated_at);
+      const timeSinceUpdate = currentTime.getTime() - lastUpdate.getTime();
+      
+      if (timeSinceUpdate > HEARTBEAT_CRITICAL_MS) {
+        alerts.push({
+          id: `stuck-critical-${session.session_id}`,
+          type: 'critical',
+          category: 'stuck_job',
+          title: 'Job probablemente atascado',
+          message: `Sesión ${session.session_id.slice(0, 8)} sin actividad por ${Math.floor(timeSinceUpdate / 60000)} minutos. Fase: ${session.current_phase || 'desconocida'}`,
+          sessionId: session.session_id,
+          timestamp: new Date(),
+        });
+      } else if (timeSinceUpdate > HEARTBEAT_WARNING_MS) {
+        alerts.push({
+          id: `stuck-warning-${session.session_id}`,
+          type: 'warning',
+          category: 'stuck_job',
+          title: 'Posible retraso detectado',
+          message: `Sesión ${session.session_id.slice(0, 8)} sin actualización por ${Math.floor(timeSinceUpdate / 60000)} minutos`,
+          sessionId: session.session_id,
+          timestamp: new Date(),
+        });
+      }
+    });
+
+    // Analyze logs for patterns
+    if (allRecentLogs) {
+      // Check for rate limiting
+      const rateLimitLogs = allRecentLogs.filter(log => 
+        log.message.toLowerCase().includes('rate limit') ||
+        log.message.toLowerCase().includes('429') ||
+        log.message.toLowerCase().includes('too many requests') ||
+        (log.details && JSON.stringify(log.details).toLowerCase().includes('rate limit'))
+      );
+      
+      if (rateLimitLogs.length > 0) {
+        const recentRateLimit = rateLimitLogs[0];
+        alerts.push({
+          id: `rate-limit-${recentRateLimit.id}`,
+          type: 'warning',
+          category: 'rate_limit',
+          title: 'Rate limiting detectado',
+          message: `API reportó límite de velocidad. Última ocurrencia: ${format(new Date(recentRateLimit.timestamp), 'HH:mm:ss')}`,
+          sessionId: recentRateLimit.session_id,
+          timestamp: new Date(recentRateLimit.timestamp),
+        });
+      }
+
+      // Check for model changes
+      const modelChangeLogs = allRecentLogs.filter(log =>
+        log.message.toLowerCase().includes('model change') ||
+        log.message.toLowerCase().includes('fallback model') ||
+        log.message.toLowerCase().includes('switching model') ||
+        log.message.toLowerCase().includes('cambio de modelo') ||
+        (log.details && JSON.stringify(log.details).toLowerCase().includes('model_fallback'))
+      );
+
+      if (modelChangeLogs.length > 0) {
+        const recentModelChange = modelChangeLogs[0];
+        alerts.push({
+          id: `model-change-${recentModelChange.id}`,
+          type: 'info',
+          category: 'model_change',
+          title: 'Cambio de modelo LLM',
+          message: recentModelChange.message,
+          sessionId: recentModelChange.session_id,
+          timestamp: new Date(recentModelChange.timestamp),
+        });
+      }
+
+      // Check for repeated errors (3+ errors in last 5 minutes from same session)
+      const recentErrors = allRecentLogs.filter(log => 
+        log.level === 'error' &&
+        differenceInMinutes(currentTime, new Date(log.timestamp)) <= 5
+      );
+
+      const errorsBySession = recentErrors.reduce((acc, log) => {
+        acc[log.session_id] = (acc[log.session_id] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      Object.entries(errorsBySession).forEach(([sessionId, count]) => {
+        if (count >= 3) {
+          alerts.push({
+            id: `repeated-errors-${sessionId}`,
+            type: 'critical',
+            category: 'repeated_errors',
+            title: 'Errores repetidos',
+            message: `${count} errores en los últimos 5 minutos para sesión ${sessionId.slice(0, 8)}`,
+            sessionId,
+            timestamp: new Date(),
+          });
+        }
+      });
+
+      // Check for API errors
+      const apiErrorLogs = allRecentLogs.filter(log =>
+        log.level === 'error' && (
+          log.message.toLowerCase().includes('api error') ||
+          log.message.toLowerCase().includes('openai') ||
+          log.message.toLowerCase().includes('anthropic') ||
+          log.message.toLowerCase().includes('quota') ||
+          log.message.toLowerCase().includes('insufficient_quota')
+        )
+      );
+
+      if (apiErrorLogs.length > 0) {
+        const recentApiError = apiErrorLogs[0];
+        const isQuotaError = recentApiError.message.toLowerCase().includes('quota');
+        
+        alerts.push({
+          id: `api-error-${recentApiError.id}`,
+          type: isQuotaError ? 'critical' : 'warning',
+          category: isQuotaError ? 'quota_warning' : 'api_error',
+          title: isQuotaError ? 'Cuota de API agotada' : 'Error de API externa',
+          message: recentApiError.message,
+          sessionId: recentApiError.session_id,
+          timestamp: new Date(recentApiError.timestamp),
+        });
+      }
+    }
+
+    // Filter out dismissed alerts and sort by severity
+    return alerts
+      .filter(alert => !dismissedAlerts.has(alert.id))
+      .sort((a, b) => {
+        const severity = { critical: 0, warning: 1, info: 2 };
+        return severity[a.type] - severity[b.type];
+      });
+  }, [sessions, allRecentLogs, currentTime, dismissedAlerts]);
+
+  const dismissAlert = (alertId: string) => {
+    setDismissedAlerts(prev => new Set([...prev, alertId]));
+  };
 
   // Real-time subscription for sessions
   useEffect(() => {
@@ -151,6 +349,9 @@ export default function ScoutingMonitor() {
 
   const selectedSessionData = sessions?.find(s => s.session_id === selectedSession);
 
+  const criticalAlerts = systemAlerts.filter(a => a.type === 'critical');
+  const warningAlerts = systemAlerts.filter(a => a.type === 'warning');
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -160,11 +361,75 @@ export default function ScoutingMonitor() {
             Seguimiento en tiempo real de las sesiones de scouting automático
           </p>
         </div>
-        <Button onClick={() => refetchSessions()} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Actualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          {systemAlerts.length > 0 && (
+            <Badge variant={criticalAlerts.length > 0 ? "destructive" : "secondary"} className="gap-1">
+              <BellRing className="w-3 h-3" />
+              {systemAlerts.length} alerta{systemAlerts.length !== 1 ? 's' : ''}
+            </Badge>
+          )}
+          <Button onClick={() => refetchSessions()} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Actualizar
+          </Button>
+        </div>
       </div>
+
+      {/* System Alerts Panel */}
+      {systemAlerts.length > 0 && (
+        <div className="space-y-2">
+          {systemAlerts.map(alert => {
+            const AlertIcon = alertIcons[alert.category];
+            return (
+              <Alert 
+                key={alert.id} 
+                variant={alert.type === 'critical' ? 'destructive' : 'default'}
+                className={`${
+                  alert.type === 'critical' 
+                    ? 'border-red-500 bg-red-50 dark:bg-red-950/20' 
+                    : alert.type === 'warning'
+                    ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20'
+                    : 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
+                }`}
+              >
+                <AlertIcon className={`h-4 w-4 ${
+                  alert.type === 'critical' ? 'text-red-600' :
+                  alert.type === 'warning' ? 'text-yellow-600' : 'text-blue-600'
+                }`} />
+                <AlertTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    {alert.title}
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {format(alert.timestamp, 'HH:mm:ss')}
+                    </Badge>
+                  </span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 w-6 p-0"
+                    onClick={() => dismissAlert(alert.id)}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </AlertTitle>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{alert.message}</span>
+                  {alert.sessionId && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="text-xs p-0 h-auto"
+                      onClick={() => setSelectedSession(alert.sessionId!)}
+                    >
+                      Ver sesión
+                    </Button>
+                  )}
+                </AlertDescription>
+              </Alert>
+            );
+          })}
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
