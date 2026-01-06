@@ -11,10 +11,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, RefreshCw } from "lucide-react";
+import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, RefreshCw, DollarSign, Info } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
+import { getModelPricing, formatCost, estimateCostFromTotal } from "@/lib/aiModelPricing";
 
 interface KnowledgeDocument {
   id: string;
@@ -50,8 +51,29 @@ export default function KnowledgeBase() {
   const [editingDescId, setEditingDescId] = useState<string | null>(null);
   const [editingDesc, setEditingDesc] = useState("");
   const [generatingDescId, setGeneratingDescId] = useState<string | null>(null);
+  const [lastQueryCost, setLastQueryCost] = useState<number | null>(null);
 
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
+
+  // Get current model for knowledge base
+  const { data: modelConfig } = useQuery({
+    queryKey: ['knowledge-base-model'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ai_model_settings')
+        .select('model')
+        .eq('action_type', 'knowledge_base')
+        .single();
+      
+      if (error) return 'google/gemini-2.5-flash';
+      return data?.model || 'google/gemini-2.5-flash';
+    },
+  });
+
+  // Estimate cost per query (approx 3000-8000 tokens for KB queries)
+  const pricing = getModelPricing(modelConfig || 'google/gemini-2.5-flash');
+  const estimatedCostMin = (3000 * 0.6 * pricing.input + 3000 * 0.4 * pricing.output) / 1_000_000;
+  const estimatedCostMax = (8000 * 0.6 * pricing.input + 8000 * 0.4 * pricing.output) / 1_000_000;
 
   // Storage limit (1GB for knowledge-docs bucket)
   const STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024;
@@ -299,6 +321,7 @@ export default function KnowledgeBase() {
 
     setQuerying(true);
     setQueryResult(null);
+    setLastQueryCost(null);
 
     try {
       const { data, error } = await supabase.functions.invoke("query-knowledge-base", {
@@ -312,6 +335,20 @@ export default function KnowledgeBase() {
           answer: data.answer,
           sources: data.sources || [],
         });
+        
+        // Calculate and set query cost if usage data available
+        if (data.usage?.tokens) {
+          const queryCost = estimateCostFromTotal(
+            data.usage.model || modelConfig || 'google/gemini-2.5-flash', 
+            data.usage.tokens
+          );
+          setLastQueryCost(queryCost);
+        } else {
+          // Estimate based on answer length (rough approximation)
+          const estimatedTokens = Math.round(data.answer.length / 4) + 2000;
+          const queryCost = estimateCostFromTotal(modelConfig || 'google/gemini-2.5-flash', estimatedTokens);
+          setLastQueryCost(queryCost);
+        }
       } else {
         toast.error(data.error || "Error al consultar");
       }
@@ -430,6 +467,28 @@ export default function KnowledgeBase() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Cost Estimation */}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground p-2 bg-muted/50 rounded-lg">
+                  <DollarSign className="w-3 h-3" />
+                  <span>
+                    Modelo: <span className="font-mono">{(modelConfig || 'gemini-2.5-flash').replace('google/', '').replace('openai/', '')}</span>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    Coste estimado: ~${estimatedCostMin.toFixed(4)}-${estimatedCostMax.toFixed(4)}/consulta
+                  </span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="w-3 h-3 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Basado en precios públicos. El coste real puede variar.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                
                 <div className="flex gap-2">
                   <Textarea
                     placeholder="Ej: ¿Cuál es la eficiencia típica de un reactor MBR para eliminación de nitrógeno?"
@@ -465,7 +524,15 @@ export default function KnowledgeBase() {
                   <div className="space-y-4 mt-6">
                     <Card className="border-primary/20 bg-primary/5">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-lg">Respuesta</CardTitle>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">Respuesta</CardTitle>
+                          {lastQueryCost !== null && (
+                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600">
+                              <DollarSign className="w-3 h-3 mr-1" />
+                              {formatCost(lastQueryCost)}
+                            </Badge>
+                          )}
+                        </div>
                       </CardHeader>
                       <CardContent>
                         <div className="prose prose-sm max-w-none dark:prose-invert">

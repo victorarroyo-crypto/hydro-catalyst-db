@@ -14,9 +14,11 @@ import {
   RefreshCw,
   Brain,
   Sparkles,
-  Library
+  Library,
+  DollarSign
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { estimateCostFromTotal, formatCost, getModelPricing } from '@/lib/aiModelPricing';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -64,10 +66,12 @@ interface UsageStats {
 
 interface ModelStats {
   model: string;
+  fullModel: string;
   requests: number;
   tokens: number;
   avg_time: number;
   success_rate: number;
+  estimated_cost: number;
 }
 
 interface ActionStats {
@@ -161,12 +165,22 @@ const AIUsageDashboard: React.FC = () => {
     return Object.entries(byModel)
       .map(([model, data]) => ({
         model: model.replace('google/', '').replace('openai/', ''),
+        fullModel: model,
         requests: data.requests,
         tokens: data.tokens,
         avg_time: Math.round(data.time / data.requests),
         success_rate: Math.round((data.success / data.requests) * 100),
+        estimated_cost: estimateCostFromTotal(model, data.tokens),
       }))
       .sort((a, b) => b.requests - a.requests);
+  }, [logs]);
+
+  // Calculate total estimated cost
+  const totalEstimatedCost = React.useMemo(() => {
+    if (!logs || logs.length === 0) return 0;
+    return logs.reduce((sum, log) => {
+      return sum + estimateCostFromTotal(log.model || 'unknown', log.total_tokens || 0);
+    }, 0);
   }, [logs]);
 
   // Stats by action type
@@ -263,7 +277,7 @@ const AIUsageDashboard: React.FC = () => {
       </div>
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -287,6 +301,20 @@ const AIUsageDashboard: React.FC = () => {
               </div>
               <div className="p-3 bg-blue-500/10 rounded-lg">
                 <Zap className="w-6 h-6 text-blue-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Coste Estimado</p>
+                <p className="text-3xl font-bold text-green-600">{formatCost(totalEstimatedCost)}</p>
+              </div>
+              <div className="p-3 bg-green-500/10 rounded-lg">
+                <DollarSign className="w-6 h-6 text-green-500" />
               </div>
             </div>
           </CardContent>
@@ -327,6 +355,11 @@ const AIUsageDashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+      
+      {/* Cost Disclaimer */}
+      <p className="text-xs text-muted-foreground text-center">
+        * Costes estimados basados en precios públicos de Google y OpenAI. El coste real puede variar.
+      </p>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -466,6 +499,7 @@ const AIUsageDashboard: React.FC = () => {
                     <TableHead>Modelo</TableHead>
                     <TableHead className="text-right">Peticiones</TableHead>
                     <TableHead className="text-right">Tokens</TableHead>
+                    <TableHead className="text-right">Coste Est.</TableHead>
                     <TableHead className="text-right">Tiempo Promedio</TableHead>
                     <TableHead className="text-right">Tasa de Éxito</TableHead>
                   </TableRow>
@@ -476,6 +510,9 @@ const AIUsageDashboard: React.FC = () => {
                       <TableCell className="font-medium">{stat.model}</TableCell>
                       <TableCell className="text-right">{stat.requests.toLocaleString()}</TableCell>
                       <TableCell className="text-right">{stat.tokens.toLocaleString()}</TableCell>
+                      <TableCell className="text-right text-green-600 font-medium">
+                        {formatCost(stat.estimated_cost)}
+                      </TableCell>
                       <TableCell className="text-right">{stat.avg_time.toLocaleString()}ms</TableCell>
                       <TableCell className="text-right">
                         <Badge variant={stat.success_rate >= 95 ? 'default' : stat.success_rate >= 80 ? 'secondary' : 'destructive'}>
@@ -513,6 +550,7 @@ const AIUsageDashboard: React.FC = () => {
                   <TableHead>Acción</TableHead>
                   <TableHead>Modelo</TableHead>
                   <TableHead className="text-right">Tokens</TableHead>
+                  <TableHead className="text-right">Coste Est.</TableHead>
                   <TableHead className="text-right">Tiempo</TableHead>
                   <TableHead>Estado</TableHead>
                 </TableRow>
@@ -521,6 +559,7 @@ const AIUsageDashboard: React.FC = () => {
                 {recentLogs.map((log) => {
                   const actionInfo = ACTION_LABELS[log.action_type];
                   const ActionIcon = actionInfo?.icon || Activity;
+                  const logCost = estimateCostFromTotal(log.model || 'unknown', log.total_tokens || 0);
                   return (
                     <TableRow key={log.id}>
                       <TableCell className="text-sm text-muted-foreground">
@@ -536,6 +575,9 @@ const AIUsageDashboard: React.FC = () => {
                         {(log.model || '').replace('google/', '').replace('openai/', '')}
                       </TableCell>
                       <TableCell className="text-right">{(log.total_tokens || 0).toLocaleString()}</TableCell>
+                      <TableCell className="text-right text-green-600">
+                        {formatCost(logCost)}
+                      </TableCell>
                       <TableCell className="text-right">{(log.response_time_ms || 0).toLocaleString()}ms</TableCell>
                       <TableCell>
                         {log.success ? (

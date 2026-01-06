@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Save, Cpu, Sparkles, Zap, Brain, Rocket } from 'lucide-react';
+import { Loader2, Save, Cpu, Sparkles, Zap, Brain, Rocket, DollarSign } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getModelPricing, formatPricePerMillion } from '@/lib/aiModelPricing';
 
 interface AIModel {
   id: string;
@@ -25,49 +26,49 @@ const AVAILABLE_MODELS: AIModel[] = [
   {
     id: 'google/gemini-2.5-flash-lite',
     name: 'Gemini 2.5 Flash Lite',
-    description: 'El más rápido y económico. Ideal para tareas simples.',
+    description: 'El más rápido y económico.',
     icon: <Zap className="w-4 h-4" />,
     tier: 'fast',
   },
   {
     id: 'google/gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
-    description: 'Equilibrio entre velocidad y calidad. Recomendado.',
+    description: 'Equilibrio entre velocidad y calidad.',
     icon: <Sparkles className="w-4 h-4" />,
     tier: 'balanced',
   },
   {
     id: 'google/gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
-    description: 'Máxima calidad en razonamiento y contexto largo.',
+    description: 'Máxima calidad en razonamiento.',
     icon: <Brain className="w-4 h-4" />,
     tier: 'premium',
   },
   {
     id: 'google/gemini-3-pro-preview',
     name: 'Gemini 3 Pro (Preview)',
-    description: 'Próxima generación de Gemini. Experimental.',
+    description: 'Próxima generación. Experimental.',
     icon: <Rocket className="w-4 h-4" />,
     tier: 'premium',
   },
   {
     id: 'openai/gpt-5',
     name: 'GPT-5',
-    description: 'Modelo premium de OpenAI. Mayor precisión pero más costoso.',
+    description: 'Modelo premium de OpenAI.',
     icon: <Brain className="w-4 h-4" />,
     tier: 'premium',
   },
   {
     id: 'openai/gpt-5-mini',
     name: 'GPT-5 Mini',
-    description: 'Versión compacta de GPT-5. Buen balance costo-rendimiento.',
+    description: 'Buen balance costo-rendimiento.',
     icon: <Sparkles className="w-4 h-4" />,
     tier: 'balanced',
   },
   {
     id: 'openai/gpt-5-nano',
     name: 'GPT-5 Nano',
-    description: 'El más rápido de OpenAI. Para alto volumen de peticiones.',
+    description: 'El más rápido de OpenAI.',
     icon: <Zap className="w-4 h-4" />,
     tier: 'fast',
   },
@@ -187,7 +188,7 @@ export const AIModelSettings: React.FC = () => {
   const getTierBadge = (tier: string) => {
     switch (tier) {
       case 'fast':
-        return <Badge variant="secondary" className="bg-green-500/10 text-green-600">Rápido</Badge>;
+        return <Badge variant="secondary" className="bg-green-500/10 text-green-600">Económico</Badge>;
       case 'balanced':
         return <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">Equilibrado</Badge>;
       case 'premium':
@@ -195,6 +196,11 @@ export const AIModelSettings: React.FC = () => {
       default:
         return null;
     }
+  };
+
+  const getModelPrice = (modelId: string) => {
+    const pricing = getModelPricing(modelId);
+    return `$${pricing.input.toFixed(2)}/$${pricing.output.toFixed(2)}/M`;
   };
 
   if (isLoading) {
@@ -220,17 +226,24 @@ export const AIModelSettings: React.FC = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {settings.map((setting) => {
-          const currentModel = getModelInfo(setting.model);
-          return (
-            <div key={setting.action_type} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-foreground">{setting.label}</h4>
-                  <p className="text-sm text-muted-foreground">{setting.description}</p>
+          {settings.map((setting) => {
+            const currentModel = getModelInfo(setting.model);
+            const currentPrice = getModelPrice(setting.model);
+            return (
+              <div key={setting.action_type} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-foreground">{setting.label}</h4>
+                    <p className="text-sm text-muted-foreground">{setting.description}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {currentModel && getTierBadge(currentModel.tier)}
+                    <Badge variant="outline" className="text-xs font-mono">
+                      <DollarSign className="w-3 h-3 mr-0.5" />
+                      {currentPrice}
+                    </Badge>
+                  </div>
                 </div>
-                {currentModel && getTierBadge(currentModel.tier)}
-              </div>
               <Select
                 value={setting.model}
                 onValueChange={(value) => handleModelChange(setting.action_type, value)}
@@ -242,35 +255,47 @@ export const AIModelSettings: React.FC = () => {
                   <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                     Google Gemini
                   </div>
-                  {AVAILABLE_MODELS.filter((m) => m.id.startsWith('google/')).map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      <div className="flex items-center gap-2">
-                        {model.icon}
-                        <div>
-                          <span className="font-medium">{model.name}</span>
-                          <span className="text-muted-foreground text-xs ml-2">
-                            {model.description}
+                  {AVAILABLE_MODELS.filter((m) => m.id.startsWith('google/')).map((model) => {
+                    const modelPrice = getModelPricing(model.id);
+                    return (
+                      <SelectItem key={model.id} value={model.id}>
+                        <div className="flex items-center gap-2">
+                          {model.icon}
+                          <div className="flex-1">
+                            <span className="font-medium">{model.name}</span>
+                            <span className="text-muted-foreground text-xs ml-2">
+                              {model.description}
+                            </span>
+                          </div>
+                          <span className="text-xs text-green-600 font-mono">
+                            ${modelPrice.input.toFixed(2)}/M
                           </span>
                         </div>
-                      </div>
-                    </SelectItem>
-                  ))}
+                      </SelectItem>
+                    );
+                  })}
                   <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
                     OpenAI GPT
                   </div>
-                  {AVAILABLE_MODELS.filter((m) => m.id.startsWith('openai/')).map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      <div className="flex items-center gap-2">
-                        {model.icon}
-                        <div>
-                          <span className="font-medium">{model.name}</span>
-                          <span className="text-muted-foreground text-xs ml-2">
-                            {model.description}
+                  {AVAILABLE_MODELS.filter((m) => m.id.startsWith('openai/')).map((model) => {
+                    const modelPrice = getModelPricing(model.id);
+                    return (
+                      <SelectItem key={model.id} value={model.id}>
+                        <div className="flex items-center gap-2">
+                          {model.icon}
+                          <div className="flex-1">
+                            <span className="font-medium">{model.name}</span>
+                            <span className="text-muted-foreground text-xs ml-2">
+                              {model.description}
+                            </span>
+                          </div>
+                          <span className="text-xs text-green-600 font-mono">
+                            ${modelPrice.input.toFixed(2)}/M
                           </span>
                         </div>
-                      </div>
-                    </SelectItem>
-                  ))}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -296,10 +321,11 @@ export const AIModelSettings: React.FC = () => {
         <div className="mt-4 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
           <p className="font-medium mb-1">Recomendaciones:</p>
           <ul className="list-disc list-inside space-y-1">
-            <li><strong>Clasificación:</strong> Gemini 2.5 Flash o Pro para mayor precisión.</li>
-            <li><strong>Búsqueda:</strong> Gemini 2.5 Flash es ideal para respuestas rápidas.</li>
-            <li><strong>Base de Conocimiento:</strong> Gemini Pro o GPT-5 para contextos largos.</li>
+            <li><strong>Clasificación:</strong> Gemini 2.5 Flash (~$0.001/tecnología) o Pro para mayor precisión.</li>
+            <li><strong>Búsqueda:</strong> Gemini 2.5 Flash es ideal para respuestas rápidas (~$0.002/consulta).</li>
+            <li><strong>Base de Conocimiento:</strong> Gemini Pro o GPT-5 para contextos largos (~$0.01/consulta).</li>
           </ul>
+          <p className="text-xs mt-2 italic">* Precios por millón de tokens (input/output). Costes reales pueden variar.</p>
         </div>
       </CardContent>
     </Card>

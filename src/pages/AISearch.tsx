@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, Search, Loader2, Info, Filter, ChevronDown, ChevronUp, Eye, Bookmark, BookmarkCheck, Trash2, History } from 'lucide-react';
+import { Sparkles, Search, Loader2, Info, Filter, ChevronDown, ChevronUp, Eye, Bookmark, BookmarkCheck, Trash2, History, DollarSign } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getModelPricing, formatCost, estimateCostFromTotal } from '@/lib/aiModelPricing';
 import type { Technology } from '@/types/database';
 
 interface SearchResult {
@@ -76,6 +78,7 @@ const AISearch: React.FC = () => {
   const [savedSearchesOpen, setSavedSearchesOpen] = useState(false);
   const [selectedTechnology, setSelectedTechnology] = useState<Technology | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [lastQueryCost, setLastQueryCost] = useState<number | null>(null);
   
   // Save search modal
   const [saveModalOpen, setSaveModalOpen] = useState(false);
@@ -92,6 +95,26 @@ const AISearch: React.FC = () => {
     trlMax: null,
   });
   const [trlRange, setTrlRange] = useState<[number, number]>([1, 9]);
+
+  // Get current model for search
+  const { data: modelConfig } = useQuery({
+    queryKey: ['search-model'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ai_model_settings')
+        .select('model')
+        .eq('action_type', 'search')
+        .single();
+      
+      if (error) return 'google/gemini-2.5-flash';
+      return data?.model || 'google/gemini-2.5-flash';
+    },
+  });
+
+  // Estimate cost per query (approx 2000-5000 tokens)
+  const pricing = getModelPricing(modelConfig || 'google/gemini-2.5-flash');
+  const estimatedCostMin = (1500 * 0.6 * pricing.input + 1500 * 0.4 * pricing.output) / 1_000_000;
+  const estimatedCostMax = (5000 * 0.6 * pricing.input + 5000 * 0.4 * pricing.output) / 1_000_000;
 
   // Fetch taxonomy data for filters
   const { data: tipos } = useQuery({
@@ -209,6 +232,12 @@ const AISearch: React.FC = () => {
       if (error) throw error;
 
       setResults(data);
+
+      // Calculate and store the cost for this query
+      if (data.usage?.tokens) {
+        const queryCost = estimateCostFromTotal(data.usage.model || modelConfig || 'google/gemini-2.5-flash', data.usage.tokens);
+        setLastQueryCost(queryCost);
+      }
 
       if (data.matching_ids && data.matching_ids.length > 0) {
         // Filter out invalid UUIDs (AI sometimes returns names instead of IDs)
@@ -389,6 +418,27 @@ const AISearch: React.FC = () => {
           <p className="text-muted-foreground">
             Encuentra tecnologías usando lenguaje natural. Aplica filtros para refinar el análisis.
           </p>
+          {/* Cost Estimation */}
+          <TooltipProvider>
+            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <DollarSign className="w-3 h-3" />
+              <span>
+                Modelo: <span className="font-mono">{(modelConfig || 'gemini-2.5-flash').replace('google/', '').replace('openai/', '')}</span>
+              </span>
+              <span>•</span>
+              <span>
+                Coste estimado: ~${estimatedCostMin.toFixed(4)}-${estimatedCostMax.toFixed(4)}/consulta
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-3 h-3 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Coste basado en precios públicos. El coste real puede variar.</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         </div>
         {user && (
           <Button
@@ -719,6 +769,12 @@ const AISearch: React.FC = () => {
                 {results.usage && (
                   <Badge variant="outline" className="text-xs">
                     {results.usage.model.replace('google/', '').replace('openai/', '')} • {Math.round(results.usage.response_time_ms / 1000)}s
+                  </Badge>
+                )}
+                {lastQueryCost !== null && (
+                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600">
+                    <DollarSign className="w-3 h-3 mr-1" />
+                    {formatCost(lastQueryCost)}
                   </Badge>
                 )}
               </div>
