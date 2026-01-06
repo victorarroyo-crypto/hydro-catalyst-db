@@ -48,5 +48,8 @@ verify_jwt = false
 [functions.sync-databases]
 verify_jwt = false
 
-[functions.run-database-audit]
+[functions.external-scouting-queue]
+verify_jwt = false
+
+[functions.scouting-webhook]
 verify_jwt = false
