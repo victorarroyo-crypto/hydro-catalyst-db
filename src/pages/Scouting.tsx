@@ -294,7 +294,28 @@ const runScouting = async (params: {
 };
 
 const cancelScouting = async (jobId: string) => {
-  return proxyFetch<{ success: boolean }>(`/api/scouting/history/${jobId}/cancel`, 'PATCH');
+  // Try different cancel endpoints that might exist on the backend
+  const endpoints = [
+    { endpoint: `/api/scouting/cancel/${jobId}`, method: 'POST' as const },
+    { endpoint: `/api/scouting/${jobId}/cancel`, method: 'POST' as const },
+    { endpoint: `/api/scouting/jobs/${jobId}/cancel`, method: 'POST' as const },
+    { endpoint: `/api/scouting/cancel`, method: 'POST' as const, body: { job_id: jobId } },
+  ];
+  
+  for (const { endpoint, method, body } of endpoints) {
+    try {
+      console.log(`[cancelScouting] Trying ${method} ${endpoint}`);
+      const result = await proxyFetch<{ success: boolean }>(endpoint, method, body);
+      if (result.success) {
+        console.log(`[cancelScouting] Success with ${endpoint}`);
+        return result;
+      }
+    } catch (e) {
+      console.log(`[cancelScouting] Failed ${endpoint}:`, e);
+    }
+  }
+  
+  throw new Error('No se pudo cancelar el scouting - endpoint no disponible');
 };
 
 // Check if a job is potentially stuck (running for more than 10 minutes)
