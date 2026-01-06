@@ -23,6 +23,7 @@ import {
   Radio,
   Lightbulb,
   Database,
+  Rocket,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -57,6 +58,7 @@ const mainNavItems = [
 
 const scoutingSubItems = [
   { title: 'Cola de Revisión', url: '/scouting', icon: Radar },
+  { title: 'Nuevo Scouting', url: '/scouting/new', icon: Rocket },
   { title: 'Monitor', url: '/scouting-monitor', icon: Radio },
 ];
 
