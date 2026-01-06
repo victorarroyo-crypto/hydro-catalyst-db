@@ -360,6 +360,19 @@ const Scouting = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch technology counts per session from external DB
+  const { data: techCountsBySession } = useQuery({
+    queryKey: ['tech-counts-by-session-scouting'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('external-scouting-queue', {
+        body: { action: 'count_by_session' }
+      });
+      if (error) throw error;
+      return (data?.data || {}) as Record<string, number>;
+    },
+    refetchInterval: 30000,
+  });
+
   // Mutations - use external hooks that read from Railway and write to Lovable Cloud
   const changeStatusMutation = useChangeExternalScoutingStatus();
   const approveToDbMutation = useApproveExternalToTechnologies();
@@ -1511,11 +1524,19 @@ const Scouting = () => {
                               <>
                                 <div className="flex items-center gap-2 text-xs">
                                   <span className="text-green-600 font-medium">
-                                    {item.results_summary ? 
-                                      JSON.parse(typeof item.results_summary === 'string' ? item.results_summary : JSON.stringify(item.results_summary))?.technologies_found ?? 'N/A' :
-                                      'Ver cola'
-                                    } encontradas
+                                    {/* Show real count from external DB if available, otherwise fallback to results_summary */}
+                                    {techCountsBySession?.[item.id] !== undefined
+                                      ? `${techCountsBySession[item.id]} en cola`
+                                      : item.results_summary 
+                                        ? `${JSON.parse(typeof item.results_summary === 'string' ? item.results_summary : JSON.stringify(item.results_summary))?.technologies_found ?? 'N/A'} encontradas`
+                                        : 'Ver cola'
+                                    }
                                   </span>
+                                  {techCountsBySession?.[item.id] !== undefined && (
+                                    <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200">
+                                      ✓ real
+                                    </Badge>
+                                  )}
                                 </div>
                                 {item.tokens_used && (
                                   <span className="text-xs text-muted-foreground">
@@ -1525,7 +1546,14 @@ const Scouting = () => {
                               </>
                             )}
                             {item.status === 'running' && (
-                              <span className="text-xs text-blue-600">En progreso...</span>
+                              <>
+                                <span className="text-xs text-blue-600">En progreso...</span>
+                                {techCountsBySession?.[item.id] !== undefined && techCountsBySession[item.id] > 0 && (
+                                  <span className="text-xs text-green-600">
+                                    {techCountsBySession[item.id]} encontradas
+                                  </span>
+                                )}
+                              </>
                             )}
                             {item.status === 'failed' && (
                               <span className="text-xs text-red-600">Error</span>
