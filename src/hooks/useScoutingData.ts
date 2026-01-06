@@ -6,7 +6,8 @@ import {
   RejectedTechnology, 
   QueueItemUI, 
   normalizeScoutingItem,
-  ScoutingFormData 
+  ScoutingFormData,
+  formDataToDbFormat
 } from '@/types/scouting';
 
 // Note: These tables are new and may not be in the generated types yet
@@ -80,10 +81,13 @@ export const useUpdateScoutingItem = () => {
   
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<ScoutingFormData> }) => {
+      // Convert form data to database column names
+      const dbUpdates = formDataToDbFormat(updates as ScoutingFormData);
+      
       const { data, error } = await (supabase as any)
         .from('scouting_queue')
         .update({
-          ...updates,
+          ...dbUpdates,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
