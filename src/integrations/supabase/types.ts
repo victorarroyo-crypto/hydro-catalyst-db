@@ -346,6 +346,127 @@ export type Database = {
         }
         Relationships: []
       }
+      rejected_technologies: {
+        Row: {
+          "Aplicación principal": string | null
+          "Casos de referencia": string | null
+          "Comentarios del analista": string | null
+          created_at: string
+          "Descripción técnica breve": string | null
+          "Email de contacto": string | null
+          "Estado del seguimiento": string | null
+          "Fecha de scouting": string | null
+          "Grado de madurez (TRL)": number | null
+          id: string
+          "Nombre de la tecnología": string
+          original_data: Json | null
+          original_scouting_id: string | null
+          "País de origen": string | null
+          "Paises donde actua": string | null
+          "Porque es innovadora": string | null
+          "Proveedor / Empresa": string | null
+          rejected_at: string
+          rejected_by: string | null
+          rejection_category: string | null
+          rejection_reason: string
+          "Sector y subsector": string | null
+          sector_id: string | null
+          Subcategoría: string | null
+          subcategoria_id: number | null
+          subsector_industrial: string | null
+          "Tipo de tecnología": string
+          tipo_id: number | null
+          "Ventaja competitiva clave": string | null
+          "Web de la empresa": string | null
+        }
+        Insert: {
+          "Aplicación principal"?: string | null
+          "Casos de referencia"?: string | null
+          "Comentarios del analista"?: string | null
+          created_at?: string
+          "Descripción técnica breve"?: string | null
+          "Email de contacto"?: string | null
+          "Estado del seguimiento"?: string | null
+          "Fecha de scouting"?: string | null
+          "Grado de madurez (TRL)"?: number | null
+          id?: string
+          "Nombre de la tecnología": string
+          original_data?: Json | null
+          original_scouting_id?: string | null
+          "País de origen"?: string | null
+          "Paises donde actua"?: string | null
+          "Porque es innovadora"?: string | null
+          "Proveedor / Empresa"?: string | null
+          rejected_at?: string
+          rejected_by?: string | null
+          rejection_category?: string | null
+          rejection_reason: string
+          "Sector y subsector"?: string | null
+          sector_id?: string | null
+          Subcategoría?: string | null
+          subcategoria_id?: number | null
+          subsector_industrial?: string | null
+          "Tipo de tecnología"?: string
+          tipo_id?: number | null
+          "Ventaja competitiva clave"?: string | null
+          "Web de la empresa"?: string | null
+        }
+        Update: {
+          "Aplicación principal"?: string | null
+          "Casos de referencia"?: string | null
+          "Comentarios del analista"?: string | null
+          created_at?: string
+          "Descripción técnica breve"?: string | null
+          "Email de contacto"?: string | null
+          "Estado del seguimiento"?: string | null
+          "Fecha de scouting"?: string | null
+          "Grado de madurez (TRL)"?: number | null
+          id?: string
+          "Nombre de la tecnología"?: string
+          original_data?: Json | null
+          original_scouting_id?: string | null
+          "País de origen"?: string | null
+          "Paises donde actua"?: string | null
+          "Porque es innovadora"?: string | null
+          "Proveedor / Empresa"?: string | null
+          rejected_at?: string
+          rejected_by?: string | null
+          rejection_category?: string | null
+          rejection_reason?: string
+          "Sector y subsector"?: string | null
+          sector_id?: string | null
+          Subcategoría?: string | null
+          subcategoria_id?: number | null
+          subsector_industrial?: string | null
+          "Tipo de tecnología"?: string
+          tipo_id?: number | null
+          "Ventaja competitiva clave"?: string | null
+          "Web de la empresa"?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rejected_technologies_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_sectores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rejected_technologies_subcategoria_id_fkey"
+            columns: ["subcategoria_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_subcategorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rejected_technologies_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_tipos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_ai_searches: {
         Row: {
           created_at: string
@@ -375,6 +496,139 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      scouting_queue: {
+        Row: {
+          "Aplicación principal": string | null
+          "Casos de referencia": string | null
+          "Comentarios del analista": string | null
+          created_at: string
+          created_by: string | null
+          "Descripción técnica breve": string | null
+          "Email de contacto": string | null
+          "Estado del seguimiento": string | null
+          "Fecha de scouting": string | null
+          "Grado de madurez (TRL)": number | null
+          id: string
+          "Nombre de la tecnología": string
+          notes: string | null
+          "País de origen": string | null
+          "Paises donde actua": string | null
+          "Porque es innovadora": string | null
+          priority: string | null
+          "Proveedor / Empresa": string | null
+          queue_status: string | null
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          "Sector y subsector": string | null
+          sector_id: string | null
+          source: string | null
+          source_url: string | null
+          Subcategoría: string | null
+          subcategoria_id: number | null
+          subsector_industrial: string | null
+          "Tipo de tecnología": string
+          tipo_id: number | null
+          updated_at: string
+          "Ventaja competitiva clave": string | null
+          "Web de la empresa": string | null
+        }
+        Insert: {
+          "Aplicación principal"?: string | null
+          "Casos de referencia"?: string | null
+          "Comentarios del analista"?: string | null
+          created_at?: string
+          created_by?: string | null
+          "Descripción técnica breve"?: string | null
+          "Email de contacto"?: string | null
+          "Estado del seguimiento"?: string | null
+          "Fecha de scouting"?: string | null
+          "Grado de madurez (TRL)"?: number | null
+          id?: string
+          "Nombre de la tecnología": string
+          notes?: string | null
+          "País de origen"?: string | null
+          "Paises donde actua"?: string | null
+          "Porque es innovadora"?: string | null
+          priority?: string | null
+          "Proveedor / Empresa"?: string | null
+          queue_status?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          "Sector y subsector"?: string | null
+          sector_id?: string | null
+          source?: string | null
+          source_url?: string | null
+          Subcategoría?: string | null
+          subcategoria_id?: number | null
+          subsector_industrial?: string | null
+          "Tipo de tecnología"?: string
+          tipo_id?: number | null
+          updated_at?: string
+          "Ventaja competitiva clave"?: string | null
+          "Web de la empresa"?: string | null
+        }
+        Update: {
+          "Aplicación principal"?: string | null
+          "Casos de referencia"?: string | null
+          "Comentarios del analista"?: string | null
+          created_at?: string
+          created_by?: string | null
+          "Descripción técnica breve"?: string | null
+          "Email de contacto"?: string | null
+          "Estado del seguimiento"?: string | null
+          "Fecha de scouting"?: string | null
+          "Grado de madurez (TRL)"?: number | null
+          id?: string
+          "Nombre de la tecnología"?: string
+          notes?: string | null
+          "País de origen"?: string | null
+          "Paises donde actua"?: string | null
+          "Porque es innovadora"?: string | null
+          priority?: string | null
+          "Proveedor / Empresa"?: string | null
+          queue_status?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          "Sector y subsector"?: string | null
+          sector_id?: string | null
+          source?: string | null
+          source_url?: string | null
+          Subcategoría?: string | null
+          subcategoria_id?: number | null
+          subsector_industrial?: string | null
+          "Tipo de tecnología"?: string
+          tipo_id?: number | null
+          updated_at?: string
+          "Ventaja competitiva clave"?: string | null
+          "Web de la empresa"?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scouting_queue_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_sectores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scouting_queue_subcategoria_id_fkey"
+            columns: ["subcategoria_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_subcategorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scouting_queue_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_tipos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       taxonomy_sectores: {
         Row: {
@@ -826,12 +1080,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_scouting_to_technologies: {
+        Args: { scouting_id: string }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      reject_scouting_to_rejected: {
+        Args: { category?: string; reason: string; scouting_id: string }
+        Returns: string
       }
     }
     Enums: {
