@@ -126,11 +126,21 @@ Deno.serve(async (req) => {
     const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_KEY');
 
     if (!externalUrl || !externalKey) {
+      console.error('[external-scouting-queue] Missing credentials');
       throw new Error('External Supabase credentials not configured');
     }
 
-    // Create client for external Supabase
-    const externalSupabase = createClient(externalUrl, externalKey);
+    // Create client for external Supabase with timeout handling
+    const externalSupabase = createClient(externalUrl, externalKey, {
+      global: {
+        fetch: (url, options = {}) => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+          return fetch(url, { ...options, signal: controller.signal })
+            .finally(() => clearTimeout(timeoutId));
+        }
+      }
+    });
 
     const body: RequestBody = await req.json();
     const { action, status, id, updates } = body;
