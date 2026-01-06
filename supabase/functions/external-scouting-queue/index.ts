@@ -12,14 +12,89 @@ interface RequestBody {
   updates?: Record<string, unknown>;
 }
 
-// Status mapping for database queue_status column
+// External DB uses 'status' column, not 'queue_status'
+// Status mapping for external database
 const STATUS_MAPPING: Record<string, string[]> = {
-  'review': ['pending', 'review', 'reviewing'],
+  'review': ['pending', 'new', 'reviewing', 'in_review'],
   'pending_approval': ['pending_approval'],
   'approved': ['approved'],
   'rejected': ['rejected'],
-  'active': ['pending', 'review', 'reviewing', 'pending_approval'],
+  'active': ['pending', 'new', 'reviewing', 'in_review', 'pending_approval'],
 };
+
+// Map from local field names to external field names
+const LOCAL_TO_EXTERNAL_FIELD: Record<string, string> = {
+  'Nombre de la tecnología': 'nombre',
+  'Proveedor / Empresa': 'proveedor',
+  'País de origen': 'pais',
+  'Web de la empresa': 'web',
+  'Email de contacto': 'email',
+  'Descripción técnica breve': 'descripcion',
+  'Tipo de tecnología': 'tipo_sugerido',
+  'Subcategoría': 'subcategoria',
+  'Grado de madurez (TRL)': 'trl_estimado',
+  'Ventaja competitiva clave': 'ventaja_competitiva',
+  'Aplicación principal': 'aplicacion_principal',
+  'Porque es innovadora': 'innovacion',
+  'Casos de referencia': 'casos_referencia',
+  'Paises donde actua': 'paises_actua',
+  'Comentarios del analista': 'comentarios_analista',
+  'Sector y subsector': 'sector',
+  'queue_status': 'status',
+};
+
+// Map from external field names to local field names
+const EXTERNAL_TO_LOCAL_FIELD: Record<string, string> = {
+  'nombre': 'Nombre de la tecnología',
+  'proveedor': 'Proveedor / Empresa',
+  'pais': 'País de origen',
+  'web': 'Web de la empresa',
+  'email': 'Email de contacto',
+  'descripcion': 'Descripción técnica breve',
+  'tipo_sugerido': 'Tipo de tecnología',
+  'subcategoria': 'Subcategoría',
+  'subcategoria_sugerida': 'Subcategoría',
+  'trl_estimado': 'Grado de madurez (TRL)',
+  'ventaja_competitiva': 'Ventaja competitiva clave',
+  'aplicacion_principal': 'Aplicación principal',
+  'innovacion': 'Porque es innovadora',
+  'casos_referencia': 'Casos de referencia',
+  'paises_actua': 'Paises donde actua',
+  'comentarios_analista': 'Comentarios del analista',
+  'sector': 'Sector y subsector',
+  'subsector': 'subsector_industrial',
+  'status': 'queue_status',
+  'review_notes': 'notes',
+};
+
+// Transform external record to local format
+function transformToLocal(record: Record<string, unknown>): Record<string, unknown> {
+  const transformed: Record<string, unknown> = { id: record.id };
+  
+  for (const [extKey, localKey] of Object.entries(EXTERNAL_TO_LOCAL_FIELD)) {
+    if (record[extKey] !== undefined) {
+      transformed[localKey] = record[extKey];
+    }
+  }
+  
+  // Keep timestamps
+  if (record.created_at) transformed.created_at = record.created_at;
+  if (record.updated_at) transformed.updated_at = record.updated_at;
+  
+  return transformed;
+}
+
+// Transform local updates to external format
+function transformUpdatesToExternal(updates: Record<string, unknown>): Record<string, unknown> {
+  const transformed: Record<string, unknown> = {};
+  
+  for (const [key, value] of Object.entries(updates)) {
+    const extKey = LOCAL_TO_EXTERNAL_FIELD[key] || key;
+    transformed[extKey] = value;
+  }
+  
+  return transformed;
+}
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -42,8 +117,11 @@ Deno.serve(async (req) => {
     const body: RequestBody = await req.json();
     const { action, status, id, updates } = body;
 
+    console.log(`[external-scouting-queue] Action: ${action}, Status: ${status}, ID: ${id}`);
+
     if (action === 'list') {
       // Fetch scouting queue items from external DB
+      // External DB uses 'status' column, not 'queue_status'
       let query = externalSupabase
         .from('scouting_queue')
         .select('*')
@@ -51,7 +129,7 @@ Deno.serve(async (req) => {
 
       if (status && status !== 'all') {
         const dbStatuses = STATUS_MAPPING[status] || [status];
-        query = query.in('queue_status', dbStatuses);
+        query = query.in('status', dbStatuses); // Use 'status' not 'queue_status'
       }
 
       const { data, error } = await query;
@@ -61,8 +139,11 @@ Deno.serve(async (req) => {
         throw error;
       }
 
+      // Transform data to local format
+      const transformedData = (data || []).map(transformToLocal);
+
       return new Response(
-        JSON.stringify({ success: true, data }),
+        JSON.stringify({ success: true, data: transformedData }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -80,20 +161,26 @@ Deno.serve(async (req) => {
         throw error;
       }
 
+      // Transform to local format
+      const transformedData = transformToLocal(data);
+
       return new Response(
-        JSON.stringify({ success: true, data }),
+        JSON.stringify({ success: true, data: transformedData }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (action === 'update' && id && updates) {
+      // Transform updates to external field names
+      const externalUpdates = transformUpdatesToExternal(updates);
+      externalUpdates.updated_at = new Date().toISOString();
+      
+      console.log('[external-scouting-queue] Updating with:', externalUpdates);
+
       // Update item in external DB
       const { data, error } = await externalSupabase
         .from('scouting_queue')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString(),
-        })
+        .update(externalUpdates)
         .eq('id', id)
         .select()
         .single();
@@ -103,27 +190,27 @@ Deno.serve(async (req) => {
         throw error;
       }
 
+      // Transform response to local format
+      const transformedData = transformToLocal(data);
+
       return new Response(
-        JSON.stringify({ success: true, data }),
+        JSON.stringify({ success: true, data: transformedData }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (action === 'count') {
-      // Get counts from external DB
+      // Get counts from external DB using 'status' column
       const [reviewRes, pendingRes] = await Promise.all([
         externalSupabase
           .from('scouting_queue')
           .select('id', { count: 'exact', head: true })
-          .in('queue_status', ['pending', 'review', 'reviewing']),
+          .in('status', ['pending', 'new', 'reviewing', 'in_review']),
         externalSupabase
           .from('scouting_queue')
           .select('id', { count: 'exact', head: true })
-          .eq('queue_status', 'pending_approval'),
+          .eq('status', 'pending_approval'),
       ]);
-
-      // Rejected is in local DB (Lovable Cloud), not external
-      // We'll fetch it separately from local
 
       return new Response(
         JSON.stringify({
