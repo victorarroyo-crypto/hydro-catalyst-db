@@ -17,9 +17,10 @@ import {
   CheckCircle2,
   XCircle,
   FileText,
-  ExternalLink,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Ban,
+  Send
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -46,13 +47,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -66,98 +60,21 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { TRLBadge } from '@/components/TRLBadge';
 import { ScoutingReportModal } from '@/components/ScoutingReportModal';
-import { ScoutingTechDetailModal } from '@/components/ScoutingTechDetailModal';
+import { ScoutingTechFormModal } from '@/components/ScoutingTechFormModal';
+import { useAuth } from '@/contexts/AuthContext';
+import { 
+  useScoutingQueue, 
+  useRejectedTechnologies,
+  useChangeScoutingStatus,
+  useApproveToTechnologies,
+  useMoveToRejected,
+  useScoutingCounts
+} from '@/hooks/useScoutingData';
+import { QueueItemUI, RejectedTechnology } from '@/types/scouting';
 
 const POLLING_INTERVAL = 10000; // 10 seconds
-const NEW_ITEM_THRESHOLD = 30000; // 30 seconds for "Nueva" badge
 
-// Types based on actual API response
-interface ScoutingStats {
-  scoutings_this_week: number;
-  scoutings_this_month: number;
-  cost_this_month: number;
-  pending_technologies: number;
-  limits?: {
-    max_week: number;
-    max_month: number;
-    budget: number;
-  };
-}
-
-// API response structure (Spanish fields from Railway backend)
-interface QueueItemAPI {
-  id: string;
-  nombre: string;
-  proveedor: string;
-  pais: string;
-  relevance_score: number;
-  trl_estimado: number;
-  status: string;
-  created_at?: string;
-  // Other fields we may receive
-  web?: string;
-  email?: string;
-  descripcion?: string;
-  tipo_sugerido?: string;
-  subcategoria_sugerida?: string;
-  ventaja_competitiva?: string;
-  relevance_reason?: string;
-  source_url?: string;
-  review_notes?: string;
-  reviewed_by?: string;
-  reviewed_at?: string;
-  converted_technology_id?: string;
-  scouting_job_id?: string;
-  updated_at?: string;
-}
-
-// Normalized structure for UI
-interface QueueItem {
-  id: string;
-  name: string;
-  provider: string;
-  country: string;
-  score: number;
-  trl: number;
-  status: string;
-  created_at?: string;
-  // Extended fields for detail view
-  description?: string;
-  web?: string;
-  suggestedType?: string;
-  suggestedSubcategory?: string;
-  competitiveAdvantage?: string;
-  relevanceReason?: string;
-}
-
-interface QueueResponseAPI {
-  items: QueueItemAPI[];
-  count: number;
-}
-
-interface QueueResponse {
-  items: QueueItem[];
-  count: number;
-}
-
-// Transform API response to normalized structure
-const normalizeQueueItem = (item: QueueItemAPI): QueueItem => ({
-  id: item.id,
-  name: item.nombre || 'Sin nombre',
-  provider: item.proveedor || 'Desconocido',
-  country: item.pais || 'N/A',
-  score: item.relevance_score ?? 0,
-  trl: item.trl_estimado ?? 0,
-  status: item.status,
-  created_at: item.created_at,
-  description: item.descripcion,
-  web: item.web,
-  suggestedType: item.tipo_sugerido,
-  suggestedSubcategory: item.subcategoria_sugerida,
-  competitiveAdvantage: item.ventaja_competitiva,
-  relevanceReason: item.relevance_reason,
-});
-
+// Scouting config and history types (from Railway backend)
 interface ScoutingConfig {
   pais: string | null;
   tipo: string;
@@ -197,7 +114,6 @@ interface HistoryResponse {
   count: number;
 }
 
-// Job status response from /api/scouting/status/{job_id}
 interface JobStatus {
   job_id: string;
   status: 'running' | 'completed' | 'failed' | 'cancelled';
@@ -231,7 +147,7 @@ interface LLMProviderData {
 
 type LLMModelsResponse = Record<string, LLMProviderData>;
 
-// Proxy helper - all calls go through edge function to avoid CORS
+// Proxy helper - calls to Railway backend
 async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): Promise<T> {
   const { data, error } = await supabase.functions.invoke('scouting-proxy', {
     body: { endpoint, method, body },
@@ -242,19 +158,7 @@ async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): 
   return data.data as T;
 }
 
-// API functions via proxy
-const fetchStats = async (): Promise<ScoutingStats> => {
-  return proxyFetch<ScoutingStats>('/api/scouting/stats');
-};
-
-const fetchQueue = async (status: string): Promise<QueueResponse> => {
-  const apiData = await proxyFetch<QueueResponseAPI>(`/api/scouting/queue?status=${status}`);
-  return {
-    items: apiData.items.map(normalizeQueueItem),
-    count: apiData.count,
-  };
-};
-
+// API functions via proxy (for Railway backend - history, stats, etc.)
 const fetchHistory = async (): Promise<HistoryResponse> => {
   return proxyFetch<HistoryResponse>('/api/scouting/history');
 };
@@ -267,37 +171,19 @@ const fetchLLMModels = async (): Promise<LLMModelsResponse> => {
   return proxyFetch<LLMModelsResponse>('/api/llm/models');
 };
 
-const updateQueueItem = async ({ id, status }: { id: string; status: string }) => {
-  const { data, error } = await supabase.functions.invoke('scouting-update-queue', {
-    body: { id, status },
-  });
-
-  if (error) throw new Error(error.message);
-  if (!data?.success) throw new Error(data?.error || 'Error al actualizar');
-
-  return data.result;
-};
-
 const runScouting = async (params: { 
   config: { keywords: string[]; tipo: string; trl_min: number | null; instructions?: string };
   provider: string;
   model: string;
 }) => {
-  console.log('[Scouting] Iniciando via proxy:', '/api/scouting/run');
-  console.log('[Scouting] Payload:', JSON.stringify(params, null, 2));
-  
-  const result = await proxyFetch<{ job_id: string }>('/api/scouting/run', 'POST', {
+  return proxyFetch<{ job_id: string }>('/api/scouting/run', 'POST', {
     config: params.config,
     provider: params.provider,
     model: params.model,
   });
-  
-  console.log('[Scouting] Success:', result);
-  return result;
 };
 
 const cancelScouting = async (jobId: string) => {
-  // Try different cancel endpoints that might exist on the backend
   const endpoints = [
     { endpoint: `/api/scouting/cancel/${jobId}`, method: 'POST' as const },
     { endpoint: `/api/scouting/${jobId}/cancel`, method: 'POST' as const },
@@ -307,12 +193,8 @@ const cancelScouting = async (jobId: string) => {
   
   for (const { endpoint, method, body } of endpoints) {
     try {
-      console.log(`[cancelScouting] Trying ${method} ${endpoint}`);
       const result = await proxyFetch<{ success: boolean }>(endpoint, method, body);
-      if (result.success) {
-        console.log(`[cancelScouting] Success with ${endpoint}`);
-        return result;
-      }
+      if (result.success) return result;
     } catch (e) {
       console.log(`[cancelScouting] Failed ${endpoint}:`, e);
     }
@@ -321,7 +203,7 @@ const cancelScouting = async (jobId: string) => {
   throw new Error('No se pudo cancelar el scouting - endpoint no disponible');
 };
 
-// Check if a job is potentially stuck (running for more than 10 minutes)
+// Check if a job is potentially stuck
 const isJobPotentiallyStuck = (startedAt: string): boolean => {
   const startTime = new Date(startedAt).getTime();
   const now = Date.now();
@@ -379,7 +261,8 @@ const getLogIcon = (level: string) => {
 
 const Scouting = () => {
   const queryClient = useQueryClient();
-  const [queueFilter, setQueueFilter] = useState('pending');
+  const { user, profile } = useAuth();
+  const [queueFilter, setQueueFilter] = useState('review');
   const [keywords, setKeywords] = useState('');
   const [tipo, setTipo] = useState('all');
   const [trlMin, setTrlMin] = useState('none');
@@ -390,37 +273,20 @@ const Scouting = () => {
   const [activeTab, setActiveTab] = useState('queue');
   const [isPolling, setIsPolling] = useState(false);
   const [lastPollTime, setLastPollTime] = useState<Date | null>(null);
-  const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
-  const [selectedTech, setSelectedTech] = useState<QueueItem | null>(null);
+  const [selectedTech, setSelectedTech] = useState<QueueItemUI | null>(null);
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [rejectionDialog, setRejectionDialog] = useState<{ tech: QueueItemUI; stage: 'analyst' | 'supervisor' | 'admin' } | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   const previousRunningJobRef = useRef<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Queries
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['scouting-stats'],
-    queryFn: fetchStats,
-  });
+  // Supabase queries for scouting_queue
+  const { data: reviewItems = [], isLoading: reviewLoading, refetch: refetchReview } = useScoutingQueue('review');
+  const { data: pendingApprovalItems = [], isLoading: pendingApprovalLoading } = useScoutingQueue('pending_approval');
+  const { data: rejectedTechs = [], isLoading: rejectedLoading } = useRejectedTechnologies();
+  const { data: counts } = useScoutingCounts();
 
-  const { data: pendingQueue, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
-    queryKey: ['scouting-queue', 'pending'],
-    queryFn: () => fetchQueue('pending'),
-  });
-
-  const { data: reviewQueue, isLoading: reviewLoading } = useQuery({
-    queryKey: ['scouting-queue', 'review'],
-    queryFn: () => fetchQueue('review'),
-  });
-
-  const { data: approvedQueue, isLoading: approvedLoading } = useQuery({
-    queryKey: ['scouting-queue', 'approved'],
-    queryFn: () => fetchQueue('approved'),
-  });
-
-  const { data: rejectedQueue, isLoading: rejectedLoading } = useQuery({
-    queryKey: ['scouting-queue', 'rejected'],
-    queryFn: () => fetchQueue('rejected'),
-  });
-
+  // Railway backend queries (history, stats)
   const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } = useQuery({
     queryKey: ['scouting-history'],
     queryFn: fetchHistory,
@@ -431,8 +297,18 @@ const Scouting = () => {
     queryKey: ['llm-models'],
     queryFn: fetchLLMModels,
     retry: 2,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
+
+  // Mutations
+  const changeStatusMutation = useChangeScoutingStatus();
+  const approveToDbMutation = useApproveToTechnologies();
+  const moveToRejectedMutation = useMoveToRejected();
+
+  // User role checks
+  const isAnalyst = profile?.role === 'analyst';
+  const isSupervisorOrAdmin = profile?.role === 'supervisor' || profile?.role === 'admin';
+  const userEmail = user?.email || 'unknown';
 
   // Detect running scouting job
   const history = historyData?.items ?? [];
@@ -444,129 +320,10 @@ const Scouting = () => {
     queryKey: ['scouting-job-status', runningJob?.id],
     queryFn: () => fetchJobStatus(runningJob!.id),
     enabled: hasRunningJob && !!runningJob?.id,
-    refetchInterval: hasRunningJob ? 3000 : false, // Poll every 3 seconds for live updates
+    refetchInterval: hasRunningJob ? 3000 : false,
   });
 
-  // Check if an item is new (added in the last 30 seconds)
-  const isNewItem = useCallback((itemId: string) => {
-    return newItemIds.has(itemId);
-  }, [newItemIds]);
-
-  // Store refs to avoid stale closures
-  const knownItemIdsRef = useRef<Set<string>>(new Set());
-  const hasRunningJobRef = useRef(false);
-  
-  // Keep refs in sync
-  useEffect(() => {
-    hasRunningJobRef.current = hasRunningJob;
-  }, [hasRunningJob]);
-
-  // Effect to manage polling lifecycle
-  useEffect(() => {
-    // Clear any existing interval first
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-
-    if (hasRunningJob && runningJob) {
-      console.log('[Scouting] Starting polling for running job:', runningJob.id);
-      
-      const pollFn = async () => {
-        if (!hasRunningJobRef.current) {
-          console.log('[Scouting] No running job, skipping poll');
-          return;
-        }
-        
-        setIsPolling(true);
-        setLastPollTime(new Date());
-        
-        try {
-          // Fetch queue
-          const response = await fetchQueue('pending');
-          const currentIds = new Set(response.items.map(item => item.id));
-          
-          // Find newly added items
-          const newItems = response.items.filter(item => !knownItemIdsRef.current.has(item.id));
-          
-          if (newItems.length > 0) {
-            console.log('[Scouting] Found new items:', newItems.map(i => i.name));
-            
-            // Mark new items for animation
-            setNewItemIds(prev => {
-              const updated = new Set(prev);
-              newItems.forEach(item => updated.add(item.id));
-              return updated;
-            });
-            
-            // Clear "new" badge after threshold
-            setTimeout(() => {
-              setNewItemIds(prev => {
-                const updated = new Set(prev);
-                newItems.forEach(item => updated.delete(item.id));
-                return updated;
-              });
-            }, NEW_ITEM_THRESHOLD);
-            
-            // Invalidate query to update UI
-            queryClient.invalidateQueries({ queryKey: ['scouting-queue', 'pending'] });
-            queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
-          }
-          
-          // Update known items ref
-          knownItemIdsRef.current = currentIds;
-          
-          // Also check if the job is still running
-          await refetchHistory();
-        } catch (error) {
-          console.error('[Scouting] Polling error:', error);
-        } finally {
-          setIsPolling(false);
-        }
-      };
-      
-      // Initial poll
-      pollFn();
-      
-      // Set up interval
-      pollingIntervalRef.current = setInterval(pollFn, POLLING_INTERVAL);
-      previousRunningJobRef.current = runningJob.id;
-      
-    } else if (previousRunningJobRef.current && !hasRunningJob) {
-      // Job just completed - show notification
-      console.log('[Scouting] Scouting job completed');
-      
-      // Count pending items and show toast
-      const pendingCount = pendingQueue?.items?.length ?? 0;
-      toast.success(`Scouting completado - ${pendingCount} tecnología(s) encontrada(s)`, {
-        icon: <CheckCircle2 className="w-5 h-5 text-green-500" />,
-        duration: 5000,
-      });
-      
-      // Refresh all data
-      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
-      queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
-      
-      previousRunningJobRef.current = null;
-      setIsPolling(false);
-    }
-    
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-    };
-  }, [hasRunningJob, runningJob?.id, queryClient, pendingQueue?.items?.length, refetchHistory]);
-
-  // Initialize known items on first load
-  useEffect(() => {
-    if (pendingQueue?.items && knownItemIdsRef.current.size === 0) {
-      knownItemIdsRef.current = new Set(pendingQueue.items.map(item => item.id));
-    }
-  }, [pendingQueue?.items]);
-
-  // Models are already grouped by provider in the API response
+  // Models by provider
   const modelsByProvider = llmModelsData ?? {};
 
   const availableModelValues = useMemo(() => {
@@ -577,90 +334,80 @@ const Scouting = () => {
     return values;
   }, [modelsByProvider]);
 
-  // Ensure selectedModel is valid once models are loaded (prevents "se queda en groq" aunque el usuario elija GPT)
+  // Ensure selectedModel is valid
   useEffect(() => {
     if (llmModelsLoading) return;
     if (availableModelValues.length === 0) return;
-
     if (selectedModel && availableModelValues.includes(selectedModel)) return;
-
-    const preferred =
-      availableModelValues.find((v) => v.startsWith('openai/')) ??
-      availableModelValues.find((v) => v.startsWith('gpt/')) ??
-      availableModelValues[0];
-
+    const preferred = availableModelValues.find((v) => v.startsWith('openai/')) ?? availableModelValues[0];
     setSelectedModel(preferred);
   }, [llmModelsLoading, availableModelValues, selectedModel]);
 
-  // Mutations
-  const updateMutation = useMutation({
-    mutationFn: updateQueueItem,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
-      queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
-      toast.success('Tecnología actualizada');
-    },
-    onError: () => {
-      toast.error('Error al actualizar la tecnología');
-    },
-  });
+  // Polling effect for running jobs
+  useEffect(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
 
+    if (hasRunningJob && runningJob) {
+      const pollFn = async () => {
+        setIsPolling(true);
+        setLastPollTime(new Date());
+        try {
+          await refetchReview();
+          await refetchHistory();
+        } catch (error) {
+          console.error('[Scouting] Polling error:', error);
+        } finally {
+          setIsPolling(false);
+        }
+      };
+      
+      pollFn();
+      pollingIntervalRef.current = setInterval(pollFn, POLLING_INTERVAL);
+      previousRunningJobRef.current = runningJob.id;
+      
+    } else if (previousRunningJobRef.current && !hasRunningJob) {
+      toast.success(`Scouting completado`);
+      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+      previousRunningJobRef.current = null;
+      setIsPolling(false);
+    }
+    
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [hasRunningJob, runningJob?.id, queryClient, refetchHistory, refetchReview]);
+
+  // Scouting mutation
   const scoutingMutation = useMutation({
     mutationFn: runScouting,
     onMutate: () => {
-      console.log('[Scouting] Mutation started...');
       toast.loading('Iniciando scouting...', { id: 'scouting-start' });
     },
     onSuccess: (data) => {
-      console.log('[Scouting] Mutation success:', data);
-      queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
       queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
       toast.success(`Scouting iniciado (Job ID: ${data.job_id?.slice(0, 8)}...)`, { id: 'scouting-start' });
       setKeywords('');
       setTipo('all');
       setTrlMin('none');
       setInstructions('');
-      // Switch to queue tab and open pending section to watch results
       setActiveTab('queue');
-      setQueueFilter('pending');
+      setQueueFilter('review');
     },
     onError: (error: Error) => {
-      console.error('[Scouting] Mutation error:', error);
-      
       const errorMessage = error.message || '';
-      
-      // Check for conflict error (409) - already running scouting
       if (errorMessage.includes('409') || errorMessage.toLowerCase().includes('ya hay un scouting')) {
-        toast.error(
-          'Ya hay un scouting en ejecución. Espera a que termine o cancélalo desde la pestaña "Historial".',
-          { id: 'scouting-start', duration: 8000 }
-        );
-        // Switch to history tab to show the running job
+        toast.error('Ya hay un scouting en ejecución.', { id: 'scouting-start', duration: 8000 });
         setActiveTab('history');
-      }
-      // Check for rate limit error (429)
-      else if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('límite')) {
-        // Calculate next Monday (when weekly limit resets)
-        const now = new Date();
-        const daysUntilMonday = (8 - now.getDay()) % 7 || 7;
-        const nextMonday = new Date(now);
-        nextMonday.setDate(now.getDate() + daysUntilMonday);
-        nextMonday.setHours(0, 0, 0, 0);
-        
-        const formatter = new Intl.DateTimeFormat('es-ES', { 
-          weekday: 'long', 
-          day: 'numeric', 
-          month: 'long',
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-        
-        toast.error(
-          `Límite semanal alcanzado (100 scoutings). Se reinicia el ${formatter.format(nextMonday)}.`,
-          { id: 'scouting-start', duration: 8000 }
-        );
+      } else if (errorMessage.includes('429')) {
+        toast.error('Límite semanal alcanzado.', { id: 'scouting-start', duration: 8000 });
       } else {
-        toast.error(`Error: ${errorMessage || 'No se pudo iniciar el scouting'}`, { id: 'scouting-start' });
+        toast.error(`Error: ${errorMessage}`, { id: 'scouting-start' });
       }
     },
   });
@@ -669,7 +416,6 @@ const Scouting = () => {
     mutationFn: cancelScouting,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
-      queryClient.invalidateQueries({ queryKey: ['scouting-stats'] });
       toast.success('Scouting cancelado');
       setCancelConfirmJob(null);
     },
@@ -685,13 +431,11 @@ const Scouting = () => {
       toast.error('Introduce al menos una keyword');
       return;
     }
-
     if (!selectedModel) {
       toast.error('Selecciona un modelo LLM');
       return;
     }
     
-    // Parse provider/model from selectedModel
     const [provider, ...modelParts] = selectedModel.split('/');
     const model = modelParts.join('/');
     
@@ -707,47 +451,221 @@ const Scouting = () => {
     });
   };
 
-  const pendingItems = pendingQueue?.items ?? [];
-  const reviewItems = reviewQueue?.items ?? [];
-  const approvedItems = approvedQueue?.items ?? [];
-  const rejectedItems = rejectedQueue?.items ?? [];
-  
-  // Combine pending and review items into a single "En Revisión" section
-  const allReviewItems = [...pendingItems, ...reviewItems];
-  const reviewSectionLoading = pendingLoading || reviewLoading;
-  
+  // Handle sending to approval
+  const handleSendToApproval = (tech: QueueItemUI) => {
+    changeStatusMutation.mutate({
+      id: tech.id,
+      status: 'pending_approval',
+      reviewedBy: userEmail,
+    });
+  };
+
+  // Handle approve to database
+  const handleApproveToDb = (tech: QueueItemUI) => {
+    approveToDbMutation.mutate({
+      scoutingId: tech.id,
+      approvedBy: userEmail,
+    });
+  };
+
+  // Handle rejection confirmation
+  const handleConfirmRejection = () => {
+    if (!rejectionDialog || !rejectionReason.trim()) {
+      toast.error('Debes indicar una razón de rechazo');
+      return;
+    }
+    
+    moveToRejectedMutation.mutate({
+      scoutingId: rejectionDialog.tech.id,
+      rejectionReason: rejectionReason.trim(),
+      rejectedBy: userEmail,
+      rejectionStage: rejectionDialog.stage,
+    }, {
+      onSuccess: () => {
+        setRejectionDialog(null);
+        setRejectionReason('');
+      }
+    });
+  };
+
+  // Queue sections configuration
   const queueSections = [
     { 
       id: 'review', 
       title: 'En Revisión (Analista)', 
-      items: allReviewItems, 
-      loading: reviewSectionLoading,
+      items: reviewItems, 
+      loading: reviewLoading,
       icon: Eye,
       color: 'text-blue-500',
       bgColor: 'bg-blue-500/10',
-      description: 'Tecnologías para evaluar: editar, completar información y aprobar o rechazar'
+      description: 'Tecnologías para evaluar: editar, completar información y enviar a aprobación o rechazar',
+      count: counts?.review ?? 0,
     },
     { 
-      id: 'approved', 
-      title: 'Pendiente Aprobación Supervisor', 
-      items: approvedItems, 
-      loading: approvedLoading,
-      icon: CheckCircle2,
+      id: 'pending_approval', 
+      title: 'Pendiente Aprobación (Supervisor)', 
+      items: pendingApprovalItems, 
+      loading: pendingApprovalLoading,
+      icon: Send,
       color: 'text-orange-500',
       bgColor: 'bg-orange-500/10',
-      description: 'Sugeridas por analistas - esperando aprobación de Supervisor/Admin para añadir a BD'
+      description: 'Revisadas por analistas - esperando aprobación final para añadir a BD principal',
+      count: counts?.pending_approval ?? 0,
     },
     { 
       id: 'rejected', 
       title: 'Rechazadas', 
-      items: rejectedItems, 
+      items: [], // Rejected items come from different table
       loading: rejectedLoading,
-      icon: XCircle,
+      icon: Ban,
       color: 'text-red-500',
       bgColor: 'bg-red-500/10',
-      description: 'Tecnologías descartadas'
+      description: 'Tecnologías descartadas - solo lectura',
+      count: counts?.rejected ?? 0,
     },
   ];
+
+  // Render technology card
+  const renderTechCard = (item: QueueItemUI, sectionId: string) => (
+    <Card 
+      key={item.id} 
+      className="hover:shadow-md transition-all border cursor-pointer"
+      onClick={() => {
+        setSelectedTech(item);
+        setShowFormModal(true);
+      }}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-base truncate">{item.name}</CardTitle>
+          <Badge className={getScoreColor(item.score)}>
+            {item.score}
+          </Badge>
+        </div>
+        <CardDescription className="flex items-center gap-1 text-xs">
+          <Building2 className="w-3 h-3" />
+          {item.provider}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin className="w-3 h-3" />
+            {item.country}
+          </span>
+          <TRLBadge trl={item.trl} />
+        </div>
+        
+        {/* Action buttons based on status and role */}
+        <div className="flex gap-2">
+          {sectionId === 'review' && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedTech(item);
+                  setShowFormModal(true);
+                }}
+              >
+                <FileText className="w-3 h-3 mr-1" />
+                Editar
+              </Button>
+              <Button
+                size="sm"
+                className="flex-1 text-xs bg-blue-600 hover:bg-blue-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSendToApproval(item);
+                }}
+                disabled={changeStatusMutation.isPending}
+              >
+                <Send className="w-3 h-3 mr-1" />
+                A Aprobación
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs text-red-600 border-red-300 hover:bg-red-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRejectionDialog({ tech: item, stage: 'analyst' });
+                }}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </>
+          )}
+          
+          {sectionId === 'pending_approval' && isSupervisorOrAdmin && (
+            <>
+              <Button
+                size="sm"
+                className="flex-1 text-xs bg-green-600 hover:bg-green-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleApproveToDb(item);
+                }}
+                disabled={approveToDbMutation.isPending}
+              >
+                <Rocket className="w-3 h-3 mr-1" />
+                Aprobar a BD
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs text-red-600 border-red-300 hover:bg-red-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRejectionDialog({ tech: item, stage: 'supervisor' });
+                }}
+              >
+                <X className="w-3 h-3 mr-1" />
+                Rechazar
+              </Button>
+            </>
+          )}
+          
+          {sectionId === 'pending_approval' && !isSupervisorOrAdmin && (
+            <div className="text-xs text-muted-foreground text-center w-full">
+              Esperando aprobación de supervisor
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  // Render rejected technology card
+  const renderRejectedCard = (item: RejectedTechnology) => (
+    <Card key={item.id} className="border opacity-75">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-base truncate">{item.nombre}</CardTitle>
+          <Badge variant="destructive" className="text-xs">
+            Rechazada
+          </Badge>
+        </div>
+        <CardDescription className="flex items-center gap-1 text-xs">
+          <Building2 className="w-3 h-3" />
+          {item.proveedor}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="text-xs text-muted-foreground">
+          <strong>Razón:</strong> {item.rejection_reason}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          <strong>Por:</strong> {item.rejected_by} ({item.rejection_stage})
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {item.rejected_at && new Date(item.rejected_at).toLocaleDateString('es-ES')}
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="p-6 space-y-6">
@@ -758,7 +676,7 @@ const Scouting = () => {
           Scouting Tecnológico
         </h1>
         <p className="text-muted-foreground mt-1">
-          Descubre y rastrea nuevas tecnologías emergentes en el sector del agua
+          Descubre y rastrea nuevas tecnologías emergentes
         </p>
       </div>
 
@@ -766,69 +684,61 @@ const Scouting = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Scoutings esta semana</CardDescription>
-            <Clock className="w-4 h-4 text-muted-foreground" />
+            <CardDescription>En revisión</CardDescription>
+            <Eye className="w-4 h-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-600">
+              {counts?.review ?? 0}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardDescription>Pendiente aprobación</CardDescription>
+            <Send className="w-4 h-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-orange-600">
+              {counts?.pending_approval ?? 0}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardDescription>Rechazadas</CardDescription>
+            <Ban className="w-4 h-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-red-600">
+              {counts?.rejected ?? 0}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardDescription>Scouting activo</CardDescription>
+            <Radar className="w-4 h-4 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
-              {statsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : stats?.scoutings_this_week ?? 0}
-            </div>
-            {stats?.limits && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Límite: {stats.limits.max_week}/semana
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Scoutings este mes</CardDescription>
-            <CalendarDays className="w-4 h-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">
-              {statsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : stats?.scoutings_this_month ?? 0}
-            </div>
-            {stats?.limits && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Límite: {stats.limits.max_month}/mes
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Coste este mes</CardDescription>
-            <DollarSign className="w-4 h-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">
-              {statsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : `$${(stats?.cost_this_month ?? 0).toFixed(2)}`}
-            </div>
-            {stats?.limits && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Presupuesto: ${stats.limits.budget.toFixed(2)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Tecnologías pendientes</CardDescription>
-            <AlertCircle className="w-4 h-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-amber-500">
-              {statsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : stats?.pending_technologies ?? 0}
+              {hasRunningJob ? (
+                <span className="text-green-600 flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Sí
+                </span>
+              ) : (
+                <span className="text-muted-foreground">No</span>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Live Progress Panel - Always visible when Scouting is Running */}
+      {/* Live Progress Panel */}
       {hasRunningJob && (
         <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 animate-fade-in mb-6">
           <CardHeader className="pb-3">
@@ -843,7 +753,7 @@ const Scouting = () => {
                 </div>
                 <div>
                   <CardTitle className="text-lg flex items-center gap-2">
-                    🔍 Scouting en Progreso
+                    Scouting en Progreso
                     <Badge variant="outline" className="ml-2 bg-primary/10 text-primary border-primary/30">
                       En vivo
                     </Badge>
@@ -852,205 +762,43 @@ const Scouting = () => {
                     {runningJob?.config?.keywords && (
                       <span>Buscando: <strong>{runningJob.config.keywords.join(', ')}</strong></span>
                     )}
-                    {runningJob?.llm_model && (
-                      <span className="ml-2 text-xs opacity-75">• {runningJob.llm_model}</span>
-                    )}
                   </CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                {jobStatusLoading && (
-                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                  onClick={() => setCancelConfirmJob(runningJob)}
-                >
-                  <X className="w-4 h-4 mr-1" />
-                  Cancelar
-                </Button>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={() => setCancelConfirmJob(runningJob)}
+              >
+                <X className="w-4 h-4 mr-1" />
+                Cancelar
+              </Button>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Visual Progress Bar with Phases */}
-            {(() => {
-              const phases = [
-                { id: 'init', label: 'Iniciando', icon: '🚀' },
-                { id: 'search', label: 'Buscando fuentes', icon: '🔍' },
-                { id: 'scraping', label: 'Extrayendo datos', icon: '📥' },
-                { id: 'analyzing', label: 'Analizando con IA', icon: '🤖' },
-                { id: 'classifying', label: 'Clasificando', icon: '🏷️' },
-                { id: 'saving', label: 'Guardando', icon: '💾' },
-              ];
-              
-              const currentPhase = jobStatus?.current_phase ?? jobStatus?.progress?.current_step ?? 'init';
-              const currentPhaseIndex = phases.findIndex(p => 
-                currentPhase.toLowerCase().includes(p.id) || 
-                p.label.toLowerCase().includes(currentPhase.toLowerCase())
-              );
-              const activeIndex = currentPhaseIndex >= 0 ? currentPhaseIndex : 0;
-              const progressPercent = ((activeIndex + 1) / phases.length) * 100;
-              
-              return (
-                <div className="space-y-3">
-                  {/* Progress bar */}
-                  <div className="relative">
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-primary to-primary/70 transition-all duration-500 ease-out"
-                        style={{ width: `${Math.max(progressPercent, 10)}%` }}
-                      />
-                      <div 
-                        className="absolute top-0 h-full w-20 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse"
-                        style={{ left: `${Math.max(progressPercent - 15, 0)}%` }}
-                      />
-                    </div>
+          <CardContent>
+            {jobStatus?.progress && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-background/60 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-primary">
+                    {jobStatus.progress.pages_analyzed ?? 0}
                   </div>
-                  
-                  {/* Phase indicators */}
-                  <div className="flex justify-between text-xs">
-                    {phases.map((phase, idx) => (
-                      <div 
-                        key={phase.id}
-                        className={`flex flex-col items-center gap-1 transition-all duration-300 ${
-                          idx < activeIndex ? 'text-green-600' :
-                          idx === activeIndex ? 'text-primary font-medium scale-110' :
-                          'text-muted-foreground opacity-50'
-                        }`}
-                      >
-                        <span className={`text-lg ${idx === activeIndex ? 'animate-bounce' : ''}`}>
-                          {idx < activeIndex ? '✅' : phase.icon}
-                        </span>
-                        <span className="hidden sm:block text-center max-w-[60px]">{phase.label}</span>
-                      </div>
-                    ))}
+                  <div className="text-xs text-muted-foreground">Páginas analizadas</div>
+                </div>
+                <div className="bg-background/60 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {jobStatus.progress.technologies_found ?? 0}
                   </div>
+                  <div className="text-xs text-muted-foreground">Tecnologías encontradas</div>
                 </div>
-              );
-            })()}
-
-            {/* Progress Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-background/60 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-primary">
-                  {jobStatus?.progress?.pages_analyzed ?? 0}
-                </div>
-                <div className="text-xs text-muted-foreground">Páginas analizadas</div>
-              </div>
-              <div className="bg-background/60 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {jobStatus?.progress?.technologies_found ?? 0}
-                </div>
-                <div className="text-xs text-muted-foreground">Tecnologías encontradas</div>
-              </div>
-              <div className="bg-background/60 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-amber-500">
-                  {jobStatus?.progress?.candidates_evaluating ?? '—'}
-                </div>
-                <div className="text-xs text-muted-foreground">Candidatas evaluándose</div>
-              </div>
-              <div className="bg-background/60 rounded-lg p-3 text-center">
-                <div className="text-sm font-medium text-foreground">
-                  {(() => {
-                    const started = new Date(runningJob.started_at);
-                    const now = new Date();
-                    const diffMs = now.getTime() - started.getTime();
-                    const diffMins = Math.floor(diffMs / 60000);
-                    const diffSecs = Math.floor((diffMs % 60000) / 1000);
-                    return `${diffMins}m ${diffSecs}s`;
-                  })()}
-                </div>
-                <div className="text-xs text-muted-foreground">Tiempo transcurrido</div>
-              </div>
-            </div>
-
-            {/* Activity Indicator */}
-            <div className="bg-background/60 rounded-lg p-3 space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
-                <span>Actividad en tiempo real</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(jobStatus?.progress?.current_sources || []).slice(0, 4).map((source: string, idx: number) => (
-                  <Badge key={idx} variant="outline" className="text-xs animate-fade-in">
-                    🌐 {source.length > 30 ? source.substring(0, 30) + '...' : source}
-                  </Badge>
-                ))}
-                {(!jobStatus?.progress?.current_sources || jobStatus.progress.current_sources.length === 0) && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Explorando fuentes de información...</span>
+                <div className="bg-background/60 rounded-lg p-3 text-center col-span-2">
+                  <div className="text-sm font-medium text-foreground">
+                    {jobStatus.progress.current_step || jobStatus.current_phase || 'Procesando...'}
                   </div>
-                )}
-              </div>
-              {jobStatus?.progress?.last_action && (
-                <p className="text-xs text-muted-foreground italic">
-                  Última acción: {jobStatus.progress.last_action}
-                </p>
-              )}
-            </div>
-
-            {/* Live Logs */}
-            {jobStatus?.logs && jobStatus.logs.length > 0 ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <FileText className="w-4 h-4" />
-                  Últimos logs
-                </div>
-                <ScrollArea className="h-24 rounded-md border bg-background/80 p-3">
-                  <div className="space-y-1.5">
-                    {jobStatus.logs.slice(-6).reverse().map((log, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`flex items-start gap-2 text-xs font-mono ${
-                          idx === 0 ? 'opacity-100' : 'opacity-70'
-                        }`}
-                      >
-                        {getLogIcon(log.level)}
-                        <span className="text-muted-foreground whitespace-nowrap">
-                          {new Date(log.timestamp).toLocaleTimeString('es-ES')}
-                        </span>
-                        <span className="text-foreground">{log.message}</span>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-            ) : (
-              <div className="bg-background/60 rounded-lg p-3 flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  </div>
-                  <span className="absolute -bottom-1 -right-1 text-xs">🔄</span>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Conectando con el motor de scouting...</p>
-                  <p className="text-xs text-muted-foreground">Los resultados aparecerán aquí en tiempo real</p>
+                  <div className="text-xs text-muted-foreground">Fase actual</div>
                 </div>
               </div>
             )}
-
-            {/* Polling indicator */}
-            <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-              <span>
-                Iniciado: {new Date(runningJob.started_at).toLocaleTimeString('es-ES')}
-              </span>
-              <div className="flex items-center gap-2">
-                {isPolling && (
-                  <>
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    <span>Actualizando cola...</span>
-                  </>
-                )}
-                {lastPollTime && !isPolling && (
-                  <span>Última act. cola: {lastPollTime.toLocaleTimeString('es-ES')}</span>
-                )}
-              </div>
-            </div>
           </CardContent>
         </Card>
       )}
@@ -1073,11 +821,9 @@ const Scouting = () => {
 
         {/* Queue Tab */}
         <TabsContent value="queue" className="space-y-4">
-
           <div className="mb-4">
             <p className="text-muted-foreground">
               Las tecnologías pasan por un proceso de revisión antes de añadirse a la base de datos principal.
-              Solo las tecnologías con <span className="font-medium text-green-600">revisión completa</span> pueden transferirse.
             </p>
           </div>
 
@@ -1110,7 +856,7 @@ const Scouting = () => {
                           {section.loading ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
                           ) : (
-                            section.items.length
+                            section.id === 'rejected' ? rejectedTechs.length : section.items.length
                           )}
                         </Badge>
                         <svg 
@@ -1131,94 +877,23 @@ const Scouting = () => {
                         <div className="flex items-center justify-center py-8">
                           <Loader2 className="w-6 h-6 animate-spin text-primary" />
                         </div>
-                      ) : section.items.length > 0 ? (
-                        <div className="space-y-4">
-                          {/* Action bar for approved items */}
-                          {section.id === 'approved' && section.items.length > 0 && (
-                            <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                              <div className="flex items-center gap-2">
-                                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                                <span className="text-sm font-medium text-green-700">
-                                  {section.items.length} tecnología(s) lista(s) para añadir a la BD principal
-                                </span>
-                              </div>
-                              <Button 
-                                size="sm" 
-                                className="bg-green-600 hover:bg-green-700"
-                                onClick={() => {
-                                  // TODO: Implement bulk transfer to main DB
-                                  toast.info('Funcionalidad de transferencia masiva en desarrollo');
-                                }}
-                              >
-                                <Rocket className="w-4 h-4 mr-1" />
-                                Transferir todas a BD
-                              </Button>
-                            </div>
-                          )}
-                          
+                      ) : section.id === 'rejected' ? (
+                        // Rejected technologies section
+                        rejectedTechs.length > 0 ? (
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {section.items.map((item) => {
-                              const isNew = section.id === 'pending' && isNewItem(item.id);
-                              return (
-                                <Card 
-                                  key={item.id} 
-                                  className={`hover:shadow-md transition-all border cursor-pointer ${
-                                    isNew ? 'animate-fade-in ring-2 ring-primary/30 bg-primary/5' : ''
-                                  }`}
-                                  onClick={() => setSelectedTech(item)}
-                                >
-                                  <CardHeader className="pb-3">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                                        <CardTitle className="text-base truncate">{item.name}</CardTitle>
-                                        {isNew && (
-                                          <Badge className="bg-primary text-primary-foreground text-xs shrink-0 animate-pulse">
-                                            <Sparkles className="w-3 h-3 mr-1" />
-                                            Nueva
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      <Badge className={getScoreColor(item.score)}>
-                                        {item.score}
-                                      </Badge>
-                                    </div>
-                                    <CardDescription className="flex items-center gap-1 text-xs">
-                                      <Building2 className="w-3 h-3" />
-                                      {item.provider}
-                                    </CardDescription>
-                                  </CardHeader>
-                                <CardContent className="space-y-3">
-                                  <div className="flex items-center justify-between">
-                                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                      <MapPin className="w-3 h-3" />
-                                      {item.country}
-                                    </span>
-                                    <TRLBadge trl={item.trl} />
-                                  </div>
-                                  
-                                  {/* Ver ficha button */}
-                                  <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    className="w-full"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedTech(item);
-                                    }}
-                                  >
-                                    <FileText className="w-3 h-3 mr-1" />
-                                    Ver ficha completa
-                                  </Button>
-                                  
-                                  {/* Status indicator */}
-                                  <div className="text-xs text-muted-foreground text-center pt-1">
-                                    Haz clic para ver detalles y acciones
-                                  </div>
-                                </CardContent>
-                              </Card>
-                              );
-                            })}
+                            {rejectedTechs.map(renderRejectedCard)}
                           </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <Icon className={`w-10 h-10 ${section.color} opacity-30 mb-3`} />
+                            <p className="text-sm text-muted-foreground">
+                              No hay tecnologías rechazadas
+                            </p>
+                          </div>
+                        )
+                      ) : section.items.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {section.items.map((item) => renderTechCard(item, section.id))}
                         </div>
                       ) : (
                         <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -1348,11 +1023,7 @@ const Scouting = () => {
                               <div className="flex flex-col gap-0.5">
                                 <span className="font-medium">{model.name}</span>
                                 <span className="text-xs text-muted-foreground">
-                                  {model.description} • {model.cost_per_1m_tokens === 0 ? (
-                                    <span className="text-green-600 font-medium">Gratis</span>
-                                  ) : (
-                                    <span>${model.cost_per_1m_tokens}/1M tokens</span>
-                                  )}
+                                  {model.description} • ${model.cost_per_1m_tokens}/1M tokens
                                 </span>
                               </div>
                             </SelectItem>
@@ -1362,9 +1033,6 @@ const Scouting = () => {
                     </SelectContent>
                   </Select>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  El modelo seleccionado se usará para analizar y clasificar tecnologías
-                </p>
               </div>
 
               <Button 
@@ -1377,11 +1045,6 @@ const Scouting = () => {
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                     Iniciando scouting...
-                  </>
-                ) : llmModelsLoading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Cargando modelos...
                   </>
                 ) : hasRunningJob ? (
                   <>
@@ -1405,7 +1068,7 @@ const Scouting = () => {
             <CardHeader>
               <CardTitle>Historial de Scoutings</CardTitle>
               <CardDescription>
-                Registro de todos los scoutings ejecutados - Haz clic en "Ver informe" para detalles completos
+                Registro de todos los scoutings ejecutados
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1431,11 +1094,7 @@ const Scouting = () => {
                         <TableCell>
                           <div className="space-y-1">
                             <div className="font-medium">
-                              {new Date(item.started_at).toLocaleDateString('es-ES', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric'
-                              })}
+                              {new Date(item.started_at).toLocaleDateString('es-ES')}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {new Date(item.started_at).toLocaleTimeString('es-ES', {
@@ -1446,53 +1105,27 @@ const Scouting = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            {item.config.keywords?.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {item.config.keywords.slice(0, 3).map((kw, i) => (
-                                  <Badge key={i} variant="outline" className="text-xs">
-                                    {kw}
-                                  </Badge>
-                                ))}
-                                {item.config.keywords.length > 3 && (
-                                  <Badge variant="outline" className="text-xs">
-                                    +{item.config.keywords.length - 3}
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
-                            {item.config.tipo && (
-                              <div className="text-xs text-muted-foreground">
-                                Tipo: {item.config.tipo}
-                              </div>
+                          <div className="flex flex-wrap gap-1">
+                            {item.config.keywords?.slice(0, 3).map((kw, i) => (
+                              <Badge key={i} variant="outline" className="text-xs">
+                                {kw}
+                              </Badge>
+                            ))}
+                            {(item.config.keywords?.length ?? 0) > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{(item.config.keywords?.length ?? 0) - 3}
+                              </Badge>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2">
                             {getStatusBadge(item.status)}
-                            {item.status === 'running' && (
-                              <>
-                                {isJobPotentiallyStuck(item.started_at) && (
-                                  <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">
-                                    <AlertTriangle className="w-3 h-3 mr-1" />
-                                    Posiblemente atascado
-                                  </Badge>
-                                )}
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => setCancelConfirmJob(item)}
-                                  disabled={cancelMutation.isPending}
-                                >
-                                  {cancelMutation.isPending ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <X className="w-3 h-3" />
-                                  )}
-                                  Cancelar
-                                </Button>
-                              </>
+                            {item.status === 'running' && isJobPotentiallyStuck(item.started_at) && (
+                              <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                Atascado?
+                              </Badge>
                             )}
                           </div>
                         </TableCell>
@@ -1507,14 +1140,24 @@ const Scouting = () => {
                             : '-'}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setSelectedReport(item)}
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            Ver informe
-                          </Button>
+                          {item.status === 'running' ? (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => setCancelConfirmJob(item)}
+                              disabled={cancelMutation.isPending}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setSelectedReport(item)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1540,20 +1183,68 @@ const Scouting = () => {
         onClose={() => setSelectedReport(null)} 
       />
 
-      {/* Technology Detail Modal */}
-      <ScoutingTechDetailModal
-        technology={selectedTech}
-        onClose={() => setSelectedTech(null)}
-        onStatusChange={() => {
-          queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
-        }}
-      />
+      {/* Technology Form Modal */}
+      {selectedTech && (
+        <ScoutingTechFormModal
+          technology={selectedTech}
+          open={showFormModal}
+          onOpenChange={(open) => {
+            setShowFormModal(open);
+            if (!open) setSelectedTech(null);
+          }}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+          }}
+        />
+      )}
 
-      {/* Cancel Confirmation Dialog */}
+      {/* Rejection Dialog */}
+      <AlertDialog open={!!rejectionDialog} onOpenChange={() => setRejectionDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rechazar tecnología</AlertDialogTitle>
+            <AlertDialogDescription>
+              Estás a punto de rechazar <strong>"{rejectionDialog?.tech.name}"</strong>. 
+              Esta acción moverá la tecnología a la lista de rechazadas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium">
+              Razón del rechazo <span className="text-destructive">*</span>
+            </label>
+            <Textarea
+              placeholder="Indica el motivo por el que se rechaza esta tecnología..."
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              className="mt-2"
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRejectionReason('')}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmRejection}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!rejectionReason.trim() || moveToRejectedMutation.isPending}
+            >
+              {moveToRejectedMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <X className="w-4 h-4 mr-2" />
+              )}
+              Confirmar rechazo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Scouting Confirmation */}
       <AlertDialog open={!!cancelConfirmJob} onOpenChange={() => setCancelConfirmJob(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Cancelar este scouting en ejecución?</AlertDialogTitle>
+            <AlertDialogTitle>¿Cancelar scouting?</AlertDialogTitle>
             <AlertDialogDescription>
               {cancelConfirmJob && (
                 <>
@@ -1561,15 +1252,13 @@ const Scouting = () => {
                   <span className="font-medium">
                     {cancelConfirmJob.config.keywords?.join(', ') || 'N/A'}
                   </span>{' '}
-                  será cancelado. Esta acción no se puede deshacer.
+                  será cancelado.
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={cancelMutation.isPending}>
-              No, mantener
-            </AlertDialogCancel>
+            <AlertDialogCancel>No, mantener</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => cancelConfirmJob && cancelMutation.mutate(cancelConfirmJob.id)}
               disabled={cancelMutation.isPending}
@@ -1581,7 +1270,7 @@ const Scouting = () => {
                   Cancelando...
                 </>
               ) : (
-                'Sí, cancelar scouting'
+                'Sí, cancelar'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
