@@ -59,6 +59,7 @@ import { ScoutingTechFormModal } from '@/components/ScoutingTechFormModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   useScoutingQueue, 
+  useActiveScoutingQueue,
   useRejectedTechnologies,
   useChangeScoutingStatus,
   useApproveToTechnologies,
@@ -298,7 +299,8 @@ const getLogIcon = (level: string) => {
 const Scouting = () => {
   const queryClient = useQueryClient();
   const { user, profile } = useAuth();
-  const [queueFilter, setQueueFilter] = useState('review');
+  const [queueFilter, setQueueFilter] = useState('all'); // 'all' | 'review' | 'pending_approval'
+  const [expandedSection, setExpandedSection] = useState<string>(''); // For accordion behavior
   const [keywords, setKeywords] = useState('');
   const [tipo, setTipo] = useState('all');
   const [trlMin, setTrlMin] = useState('none');
@@ -320,10 +322,22 @@ const Scouting = () => {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Supabase queries for scouting_queue
+  const { data: activeItems = [], isLoading: activeLoading, refetch: refetchActive } = useActiveScoutingQueue();
   const { data: reviewItems = [], isLoading: reviewLoading, refetch: refetchReview } = useScoutingQueue('review');
-  const { data: pendingApprovalItems = [], isLoading: pendingApprovalLoading } = useScoutingQueue('pending_approval');
+  const { data: pendingApprovalItems = [], isLoading: pendingApprovalLoading, refetch: refetchPendingApproval } = useScoutingQueue('pending_approval');
   const { data: rejectedTechs = [], isLoading: rejectedLoading } = useRejectedTechnologies();
-  const { data: counts } = useScoutingCounts();
+  const { data: counts, refetch: refetchCounts } = useScoutingCounts();
+  
+  // Filtered items based on queueFilter
+  const filteredQueueItems = useMemo(() => {
+    if (queueFilter === 'all') return activeItems;
+    if (queueFilter === 'review') return reviewItems;
+    if (queueFilter === 'pending_approval') return pendingApprovalItems;
+    return activeItems;
+  }, [queueFilter, activeItems, reviewItems, pendingApprovalItems]);
+  
+  const isQueueLoading = queueFilter === 'all' ? activeLoading : 
+    queueFilter === 'review' ? reviewLoading : pendingApprovalLoading;
 
   // Railway backend queries (history, stats)
   const {
@@ -396,7 +410,7 @@ const Scouting = () => {
     setSelectedModel(preferred);
   }, [llmModelsLoading, availableModelValues, selectedModel]);
 
-  // Polling effect for running jobs
+  // Polling effect for running jobs + auto-refresh on completion
   useEffect(() => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -408,8 +422,13 @@ const Scouting = () => {
         setIsPolling(true);
         setLastPollTime(new Date());
         try {
-          await refetchReview();
-          await refetchHistory();
+          await Promise.all([
+            refetchActive(),
+            refetchReview(),
+            refetchPendingApproval(),
+            refetchCounts(),
+            refetchHistory(),
+          ]);
         } catch (error) {
           console.error('[Scouting] Polling error:', error);
         } finally {
@@ -422,8 +441,16 @@ const Scouting = () => {
       previousRunningJobRef.current = runningJob.id;
       
     } else if (previousRunningJobRef.current && !hasRunningJob) {
-      toast.success(`Scouting completado`);
-      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+      // Scouting completed - refresh all queue data
+      toast.success(`Scouting completado - actualizando lista...`);
+      Promise.all([
+        refetchActive(),
+        refetchReview(),
+        refetchPendingApproval(),
+        refetchCounts(),
+      ]).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+      });
       previousRunningJobRef.current = null;
       setIsPolling(false);
     }
@@ -434,7 +461,7 @@ const Scouting = () => {
         pollingIntervalRef.current = null;
       }
     };
-  }, [hasRunningJob, runningJob?.id, queryClient, refetchHistory, refetchReview]);
+  }, [hasRunningJob, runningJob?.id, queryClient, refetchHistory, refetchReview, refetchActive, refetchPendingApproval, refetchCounts]);
 
   // Scouting mutation
   const scoutingMutation = useMutation({
@@ -580,42 +607,6 @@ const Scouting = () => {
     });
   };
 
-  // Queue sections configuration
-  const queueSections = [
-    { 
-      id: 'review', 
-      title: 'En Revisión (Analista)', 
-      items: reviewItems, 
-      loading: reviewLoading,
-      icon: Eye,
-      color: 'text-blue-500',
-      bgColor: 'bg-blue-500/10',
-      description: 'Tecnologías para evaluar: editar, completar información y enviar a aprobación o rechazar',
-      count: counts?.review ?? 0,
-    },
-    { 
-      id: 'pending_approval', 
-      title: 'Pendiente Aprobación (Supervisor)', 
-      items: pendingApprovalItems, 
-      loading: pendingApprovalLoading,
-      icon: Send,
-      color: 'text-orange-500',
-      bgColor: 'bg-orange-500/10',
-      description: 'Revisadas por analistas - esperando aprobación final para añadir a BD principal',
-      count: counts?.pending_approval ?? 0,
-    },
-    { 
-      id: 'rejected', 
-      title: 'Rechazadas', 
-      items: [], // Rejected items come from different table
-      loading: rejectedLoading,
-      icon: Ban,
-      color: 'text-red-500',
-      bgColor: 'bg-red-500/10',
-      description: 'Tecnologías descartadas - solo lectura',
-      count: counts?.rejected ?? 0,
-    },
-  ];
 
   // Render technology card
   const renderTechCard = (item: QueueItemUI, sectionId: string) => (
@@ -1077,88 +1068,147 @@ const Scouting = () => {
             </p>
           </div>
 
-          <div className="space-y-4">
-            {queueSections.map((section) => {
-              const Icon = section.icon;
-              const isOpen = queueFilter === section.id;
-              
-              return (
-                <Card 
-                  key={section.id} 
-                  className={`transition-all ${isOpen ? 'ring-2 ring-primary/20' : ''}`}
-                >
-                  <CardHeader 
-                    className={`cursor-pointer hover:bg-muted/50 transition-colors ${section.bgColor} rounded-t-lg`}
-                    onClick={() => setQueueFilter(isOpen ? '' : section.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Icon className={`w-5 h-5 ${section.color}`} />
-                        <div>
-                          <CardTitle className="text-base">{section.title}</CardTitle>
-                          <CardDescription className="text-xs mt-0.5">
-                            {section.description}
-                          </CardDescription>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary" className="text-sm">
-                          {section.loading ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            section.id === 'rejected' ? rejectedTechs.length : section.items.length
-                          )}
-                        </Badge>
-                        <svg 
-                          className={`w-5 h-5 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                          fill="none" 
-                          viewBox="0 0 24 24" 
-                          stroke="currentColor"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  
-                  {isOpen && (
-                    <CardContent className="pt-4">
-                      {section.loading ? (
-                        <div className="flex items-center justify-center py-8">
-                          <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                        </div>
-                      ) : section.id === 'rejected' ? (
-                        // Rejected technologies section
-                        rejectedTechs.length > 0 ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {rejectedTechs.map(renderRejectedCard)}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-8 text-center">
-                            <Icon className={`w-10 h-10 ${section.color} opacity-30 mb-3`} />
-                            <p className="text-sm text-muted-foreground">
-                              No hay tecnologías rechazadas
-                            </p>
-                          </div>
-                        )
-                      ) : section.items.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {section.items.map((item) => renderTechCard(item, section.id))}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center py-8 text-center">
-                          <Icon className={`w-10 h-10 ${section.color} opacity-30 mb-3`} />
-                          <p className="text-sm text-muted-foreground">
-                            No hay tecnologías en esta fase
-                          </p>
-                        </div>
-                      )}
-                    </CardContent>
-                  )}
-                </Card>
-              );
-            })}
+          {/* Queue Filter Tabs */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Button
+              variant={queueFilter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setQueueFilter('all')}
+              className="flex items-center gap-2"
+            >
+              <Radar className="w-4 h-4" />
+              Todas
+              <Badge variant="secondary" className="ml-1 text-xs">
+                {(counts?.review ?? 0) + (counts?.pending_approval ?? 0)}
+              </Badge>
+            </Button>
+            <Button
+              variant={queueFilter === 'review' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setQueueFilter('review')}
+              className="flex items-center gap-2"
+            >
+              <Eye className="w-4 h-4 text-blue-500" />
+              En Revisión
+              <Badge variant="secondary" className="ml-1 text-xs bg-blue-500/20 text-blue-600">
+                {counts?.review ?? 0}
+              </Badge>
+            </Button>
+            <Button
+              variant={queueFilter === 'pending_approval' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setQueueFilter('pending_approval')}
+              className="flex items-center gap-2"
+            >
+              <Send className="w-4 h-4 text-orange-500" />
+              Pendiente Aprobación
+              <Badge variant="secondary" className="ml-1 text-xs bg-orange-500/20 text-orange-600">
+                {counts?.pending_approval ?? 0}
+              </Badge>
+            </Button>
+            
+            {/* Refresh button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                refetchActive();
+                refetchReview();
+                refetchPendingApproval();
+                refetchCounts();
+              }}
+              disabled={isQueueLoading}
+              className="ml-auto"
+            >
+              <RefreshCw className={`w-4 h-4 ${isQueueLoading ? 'animate-spin' : ''}`} />
+            </Button>
           </div>
+
+          {/* Queue Items Grid */}
+          {isQueueLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : filteredQueueItems.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredQueueItems.map((item) => {
+                // Determine section ID based on item's queue_status or status
+                const itemStatus = item.queue_status || item.status || 'review';
+                const sectionId = itemStatus === 'pending_approval' ? 'pending_approval' : 'review';
+                return renderTechCard(item, sectionId);
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Radar className="w-12 h-12 text-muted-foreground/30 mb-4" />
+              <p className="text-muted-foreground">
+                {queueFilter === 'all' 
+                  ? 'No hay tecnologías en la cola de revisión' 
+                  : queueFilter === 'review' 
+                    ? 'No hay tecnologías en revisión'
+                    : 'No hay tecnologías pendientes de aprobación'}
+              </p>
+              {hasRunningJob && (
+                <p className="text-sm text-primary mt-2">
+                  Hay un scouting en progreso - las nuevas tecnologías aparecerán aquí pronto
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Rejected Section - Collapsible */}
+          <Card className="mt-6">
+            <CardHeader 
+              className="cursor-pointer hover:bg-muted/50 transition-colors bg-red-500/10 rounded-t-lg"
+              onClick={() => setExpandedSection(expandedSection === 'rejected' ? '' : 'rejected')}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Ban className="w-5 h-5 text-red-500" />
+                  <div>
+                    <CardTitle className="text-base">Rechazadas</CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Tecnologías descartadas - solo lectura
+                    </CardDescription>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant="secondary" className="text-sm bg-red-500/20 text-red-600">
+                    {counts?.rejected ?? 0}
+                  </Badge>
+                  <svg 
+                    className={`w-5 h-5 text-muted-foreground transition-transform ${expandedSection === 'rejected' ? 'rotate-180' : ''}`}
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            </CardHeader>
+            
+            {expandedSection === 'rejected' && (
+              <CardContent className="pt-4">
+                {rejectedLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : rejectedTechs.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {rejectedTechs.map(renderRejectedCard)}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <Ban className="w-10 h-10 text-red-500 opacity-30 mb-3" />
+                    <p className="text-sm text-muted-foreground">
+                      No hay tecnologías rechazadas
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
         </TabsContent>
 
         {/* New Scouting Tab */}

@@ -80,6 +80,7 @@ export interface QueueItemUI {
   score: number;
   trl: number;
   status: string;
+  queue_status?: string; // Raw queue_status from DB for filtering (optional for backwards compat)
   created_at?: string;
   // Extended fields
   description?: string;
@@ -109,6 +110,7 @@ export const normalizeScoutingItem = (item: ScoutingQueueItem): QueueItemUI => (
   score: 0, // No relevance_score in DB schema
   trl: item["Grado de madurez (TRL)"] ?? 0,
   status: item.queue_status || 'pending',
+  queue_status: item.queue_status || 'pending',
   created_at: item.created_at,
   description: item["Descripción técnica breve"] || undefined,
   web: item["Web de la empresa"] || undefined,
