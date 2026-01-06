@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface RequestBody {
-  action: 'list' | 'get' | 'update' | 'count';
+  action: 'list' | 'get' | 'update' | 'count' | 'count_by_session';
   status?: string;
   id?: string;
   updates?: Record<string, unknown>;
@@ -239,6 +239,32 @@ Deno.serve(async (req) => {
             pending_approval: pendingRes.count ?? 0,
           },
         }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'count_by_session') {
+      // Count technologies grouped by scouting_job_id (session_id)
+      const { data, error } = await externalSupabase
+        .from('scouting_queue')
+        .select('scouting_job_id');
+
+      if (error) {
+        console.error('[external-scouting-queue] Count by session error:', error);
+        throw error;
+      }
+
+      // Group and count by scouting_job_id
+      const counts: Record<string, number> = {};
+      for (const item of data || []) {
+        const sessionId = item.scouting_job_id;
+        if (sessionId) {
+          counts[sessionId] = (counts[sessionId] || 0) + 1;
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, data: counts }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

@@ -145,6 +145,22 @@ export default function ScoutingMonitor() {
     refetchInterval: 30000,
   });
 
+  // Fetch technology counts per session by calling external-scouting-queue
+  const { data: techCountsBySession } = useQuery({
+    queryKey: ['tech-counts-by-session'],
+    queryFn: async () => {
+      // Call the external-scouting-queue edge function to get counts by scouting_job_id
+      const { data, error } = await supabase.functions.invoke('external-scouting-queue', {
+        body: { action: 'count_by_session' }
+      });
+      
+      if (error) throw error;
+      // Expected response: { session_id: count, ... }
+      return (data?.data || {}) as Record<string, number>;
+    },
+    refetchInterval: 30000,
+  });
+
   // Fetch all recent logs for alert detection
   const { data: allRecentLogs } = useQuery({
     queryKey: ['scouting-logs-all-recent'],
@@ -489,17 +505,22 @@ export default function ScoutingMonitor() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tecnologías Reportadas
+              Tecnologías Encontradas
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
               <Cpu className="w-5 h-5 text-purple-500" />
               <span className="text-2xl font-bold">
-                {sessions?.reduce((acc, s) => acc + (s.technologies_found || 0), 0) || 0}
+                {Object.values(techCountsBySession || {}).reduce((a, b) => a + b, 0) || 
+                 sessions?.reduce((acc, s) => acc + (s.technologies_found || 0), 0) || 0}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Según webhooks recibidos</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {techCountsBySession && Object.keys(techCountsBySession).length > 0 
+                ? 'Vinculadas por scouting_job_id' 
+                : 'Según webhooks recibidos'}
+            </p>
           </CardContent>
         </Card>
 
@@ -602,9 +623,13 @@ export default function ScoutingMonitor() {
                             )}
                             
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1" title="Tecnologías en cola (real)">
                                 <Cpu className="w-3 h-3" />
-                                {session.technologies_found || 0}
+                                {techCountsBySession?.[session.session_id] ?? session.technologies_found ?? 0}
+                                {techCountsBySession?.[session.session_id] !== undefined && 
+                                 techCountsBySession[session.session_id] !== (session.technologies_found || 0) && (
+                                  <span className="text-primary font-medium">✓</span>
+                                )}
                               </span>
                               <span className="flex items-center gap-1">
                                 <Globe className="w-3 h-3" />
