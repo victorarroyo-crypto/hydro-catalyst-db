@@ -164,9 +164,9 @@ export const useApproveToTechnologies = () => {
   
   return useMutation({
     mutationFn: async ({ scoutingId, approvedBy }: { scoutingId: string; approvedBy: string }) => {
-      const { data, error } = await (supabase as any).rpc('approve_to_technologies', {
-        p_scouting_id: scoutingId,
-        p_approved_by: approvedBy,
+      // Use the database function that exists
+      const { data, error } = await (supabase as any).rpc('approve_scouting_to_technologies', {
+        scouting_id: scoutingId,
       });
       
       if (error) throw error;
@@ -199,11 +199,11 @@ export const useMoveToRejected = () => {
       rejectedBy: string; 
       rejectionStage: 'analyst' | 'supervisor' | 'admin';
     }) => {
-      const { data, error } = await (supabase as any).rpc('move_to_rejected', {
-        p_scouting_id: scoutingId,
-        p_rejection_reason: rejectionReason,
-        p_rejected_by: rejectedBy,
-        p_rejection_stage: rejectionStage,
+      // Use the database function that exists
+      const { data, error } = await (supabase as any).rpc('reject_scouting_to_rejected', {
+        scouting_id: scoutingId,
+        reason: rejectionReason,
+        category: rejectionStage,
       });
       
       if (error) throw error;
