@@ -424,9 +424,11 @@ const Scouting = () => {
     refetchInterval: isPolling ? POLLING_INTERVAL : false,
   });
 
-  const { data: llmModelsData, isLoading: llmModelsLoading } = useQuery({
+  const { data: llmModelsData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useQuery({
     queryKey: ['llm-models'],
     queryFn: fetchLLMModels,
+    retry: 2,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   // Detect running scouting job
@@ -1188,45 +1190,61 @@ const Scouting = () => {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Modelo LLM</label>
-                <Select value={selectedModel} onValueChange={setSelectedModel}>
-                  <SelectTrigger>
-                    {llmModelsLoading ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Cargando modelos...</span>
-                      </div>
-                    ) : (
-                      <SelectValue placeholder="Seleccionar modelo" />
-                    )}
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {Object.entries(modelsByProvider).map(([providerKey, providerData]) => (
-                      <SelectGroup key={providerKey}>
-                        <SelectLabel className="font-semibold text-primary capitalize">
-                          {providerData.name}
-                        </SelectLabel>
-                        {providerData.models.map((model) => (
-                          <SelectItem 
-                            key={model.id} 
-                            value={`${providerKey}/${model.id}`}
-                            className="py-2"
-                          >
-                            <div className="flex flex-col gap-0.5">
-                              <span className="font-medium">{model.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {model.description} • {model.cost_per_1m_tokens === 0 ? (
-                                  <span className="text-green-600 font-medium">Gratis</span>
-                                ) : (
-                                  <span>${model.cost_per_1m_tokens}/1M tokens</span>
-                                )}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {llmModelsError ? (
+                  <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                    <AlertCircle className="w-4 h-4 text-destructive" />
+                    <span className="text-sm text-destructive">Error al cargar modelos</span>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => refetchLLMModels()}
+                      className="ml-auto"
+                    >
+                      <RefreshCw className="w-3 h-3 mr-1" />
+                      Reintentar
+                    </Button>
+                  </div>
+                ) : (
+                  <Select value={selectedModel} onValueChange={setSelectedModel}>
+                    <SelectTrigger>
+                      {llmModelsLoading ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Cargando modelos...</span>
+                        </div>
+                      ) : (
+                        <SelectValue placeholder="Seleccionar modelo" />
+                      )}
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {Object.entries(modelsByProvider).map(([providerKey, providerData]) => (
+                        <SelectGroup key={providerKey}>
+                          <SelectLabel className="font-semibold text-primary capitalize">
+                            {providerData.name}
+                          </SelectLabel>
+                          {providerData.models.map((model) => (
+                            <SelectItem 
+                              key={model.id} 
+                              value={`${providerKey}/${model.id}`}
+                              className="py-2"
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-medium">{model.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {model.description} • {model.cost_per_1m_tokens === 0 ? (
+                                    <span className="text-green-600 font-medium">Gratis</span>
+                                  ) : (
+                                    <span>${model.cost_per_1m_tokens}/1M tokens</span>
+                                  )}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <p className="text-xs text-muted-foreground">
                   El modelo seleccionado se usará para analizar y clasificar tecnologías
                 </p>
@@ -1236,14 +1254,16 @@ const Scouting = () => {
                 size="lg" 
                 className="w-full"
                 onClick={handleStartScouting}
-                disabled={scoutingMutation.isPending || llmModelsLoading}
+                disabled={scoutingMutation.isPending || llmModelsLoading || llmModelsError}
               >
                 {scoutingMutation.isPending ? (
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                ) : llmModelsLoading ? (
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                 ) : (
                   <Rocket className="w-5 h-5 mr-2" />
                 )}
-                Iniciar Scouting
+                {llmModelsLoading ? 'Cargando modelos...' : 'Iniciar Scouting'}
               </Button>
             </CardContent>
           </Card>
