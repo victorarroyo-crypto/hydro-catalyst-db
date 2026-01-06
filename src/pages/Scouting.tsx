@@ -152,9 +152,16 @@ async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): 
   const { data, error } = await supabase.functions.invoke('scouting-proxy', {
     body: { endpoint, method, body },
   });
-  
+
   if (error) throw new Error(error.message);
-  if (!data?.success) throw new Error(data?.error || 'Error en proxy');
+
+  // Preserve backend details (e.g., 409 already running with job_id) for UI handling
+  if (!data?.success) {
+    const err = new Error(data?.error || 'Error en proxy') as Error & { details?: unknown };
+    err.details = data?.details;
+    throw err;
+  }
+
   return data.data as T;
 }
 
@@ -273,6 +280,7 @@ const Scouting = () => {
   const [activeTab, setActiveTab] = useState('queue');
   const [isPolling, setIsPolling] = useState(false);
   const [lastPollTime, setLastPollTime] = useState<Date | null>(null);
+  const [assumedRunningJobId, setAssumedRunningJobId] = useState<string | null>(null);
   const [selectedTech, setSelectedTech] = useState<QueueItemUI | null>(null);
   const [showFormModal, setShowFormModal] = useState(false);
   const [rejectionDialog, setRejectionDialog] = useState<{ tech: QueueItemUI; stage: 'analyst' | 'supervisor' | 'admin' } | null>(null);
@@ -287,7 +295,13 @@ const Scouting = () => {
   const { data: counts } = useScoutingCounts();
 
   // Railway backend queries (history, stats)
-  const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } = useQuery({
+  const {
+    data: historyData,
+    isLoading: historyLoading,
+    isError: historyError,
+    error: historyErrorObj,
+    refetch: refetchHistory,
+  } = useQuery({
     queryKey: ['scouting-history'],
     queryFn: fetchHistory,
     refetchInterval: isPolling ? POLLING_INTERVAL : false,
@@ -313,13 +327,14 @@ const Scouting = () => {
   // Detect running scouting job
   const history = historyData?.items ?? [];
   const runningJob = history.find(job => job.status === 'running');
-  const hasRunningJob = !!runningJob;
+  const activeJobId = runningJob?.id ?? assumedRunningJobId;
+  const hasRunningJob = !!activeJobId;
 
   // Fetch live job status when there's a running job
   const { data: jobStatus, isLoading: jobStatusLoading } = useQuery({
-    queryKey: ['scouting-job-status', runningJob?.id],
-    queryFn: () => fetchJobStatus(runningJob!.id),
-    enabled: hasRunningJob && !!runningJob?.id,
+    queryKey: ['scouting-job-status', activeJobId],
+    queryFn: () => fetchJobStatus(activeJobId!),
+    enabled: !!activeJobId,
     refetchInterval: hasRunningJob ? 3000 : false,
   });
 
@@ -399,11 +414,19 @@ const Scouting = () => {
       setActiveTab('queue');
       setQueueFilter('review');
     },
-    onError: (error: Error) => {
+    onError: (error: Error & { details?: any }) => {
       const errorMessage = error.message || '';
+      const jobIdFrom409 =
+        error.details?.body?.detail?.job_id ||
+        error.details?.body?.job_id ||
+        null;
+
       if (errorMessage.includes('409') || errorMessage.toLowerCase().includes('ya hay un scouting')) {
+        if (jobIdFrom409) setAssumedRunningJobId(jobIdFrom409);
         toast.error('Ya hay un scouting en ejecución.', { id: 'scouting-start', duration: 8000 });
         setActiveTab('history');
+        // Force refresh so the UI shows the running job panel/history as soon as possible
+        queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
       } else if (errorMessage.includes('429')) {
         toast.error('Límite semanal alcanzado.', { id: 'scouting-start', duration: 8000 });
       } else {
@@ -679,6 +702,66 @@ const Scouting = () => {
           Descubre y rastrea nuevas tecnologías emergentes
         </p>
       </div>
+
+      {/* Backend status / error banner */}
+      {historyError && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-destructive" />
+              No puedo leer el estado del scouting ahora mismo
+            </CardTitle>
+            <CardDescription>
+              {String((historyErrorObj as any)?.message || 'Error al consultar el backend de scouting.')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => refetchHistory()}>
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Reintentar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {assumedRunningJobId && !runningJob && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              Hay un scouting en ejecución (detectado por el backend)
+            </CardTitle>
+            <CardDescription>
+              Job ID: <span className="font-mono">{assumedRunningJobId}</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => refetchHistory()}>
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Actualizar
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setCancelConfirmJob({
+              id: assumedRunningJobId,
+              started_at: new Date().toISOString(),
+              completed_at: null,
+              status: 'running',
+              trigger_type: 'unknown',
+              triggered_by: userEmail,
+              config: { pais: null, tipo: '', fuentes: [], trl_min: null, keywords: [], subcategoria: null, instrucciones_adicionales: null },
+              llm_model: '',
+              results_summary: null,
+              tokens_used: null,
+              estimated_cost: null,
+              error_message: null,
+              logs: [],
+              created_at: new Date().toISOString(),
+            })}>
+              <X className="w-4 h-4 mr-1" />
+              Intentar cancelar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
