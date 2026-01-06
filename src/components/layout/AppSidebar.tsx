@@ -20,6 +20,7 @@ import {
   BarChart3,
   FileText,
   Globe,
+  Radio,
   Lightbulb,
   Database,
 } from 'lucide-react';
@@ -57,6 +58,7 @@ const mainNavItems = [
 
 const internalNavItems = [
   { title: 'Centro de Supervisión', url: '/quality-control', icon: ShieldCheck },
+  { title: 'Monitor Scouting', url: '/scouting-monitor', icon: Radio },
 ];
 
 const knowledgeBaseItems = [
