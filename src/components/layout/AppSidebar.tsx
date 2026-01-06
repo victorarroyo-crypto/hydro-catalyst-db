@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import vandarumSymbol from '@/assets/vandarum-symbol-orange-transparent.png';
 import { useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -84,8 +83,8 @@ export function AppSidebar() {
     <Sidebar className={cn('border-r-0', collapsed ? 'w-16' : 'w-64')} collapsible="icon">
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <Link to="/dashboard" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-            <img src={vandarumSymbol} alt="Vandarum" className="w-8 h-8 object-contain" />
+          <div className="w-10 h-10 rounded-lg gradient-primary flex items-center justify-center shadow-glow">
+            <Droplets className="w-6 h-6 text-sidebar-primary" />
           </div>
           {!collapsed && (
             <div className="flex flex-col">
