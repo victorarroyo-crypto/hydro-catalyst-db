@@ -23,7 +23,15 @@ export const useScoutingQueue = (status?: string) => {
         .order('created_at', { ascending: false });
       
       if (status) {
-        query = query.eq('status', status);
+        // Map UI status to database queue_status
+        const statusMapping: Record<string, string[]> = {
+          'review': ['pending', 'review', 'reviewing'],
+          'pending_approval': ['pending_approval'],
+          'approved': ['approved'],
+          'rejected': ['rejected'],
+        };
+        const dbStatuses = statusMapping[status] || [status];
+        query = query.in('queue_status', dbStatuses);
       }
       
       const { data, error } = await query;
@@ -110,7 +118,7 @@ export const useChangeScoutingStatus = () => {
       reviewedBy?: string;
     }) => {
       const updateData: Record<string, unknown> = {
-        status,
+        queue_status: status,
         updated_at: new Date().toISOString(),
       };
       
@@ -120,8 +128,8 @@ export const useChangeScoutingStatus = () => {
       }
       
       if (status === 'approved' && reviewedBy) {
-        updateData.approved_by = reviewedBy;
-        updateData.approved_at = new Date().toISOString();
+        updateData.reviewed_by = reviewedBy;
+        updateData.reviewed_at = new Date().toISOString();
       }
       
       const { data, error } = await (supabase as any)
@@ -219,8 +227,8 @@ export const useScoutingCounts = () => {
     queryFn: async () => {
       const supabaseAny = supabase as any;
       const [reviewRes, pendingRes, rejectedRes] = await Promise.all([
-        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).eq('status', 'review'),
-        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval'),
+        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).in('queue_status', ['pending', 'review', 'reviewing']),
+        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).eq('queue_status', 'pending_approval'),
         supabaseAny.from('rejected_technologies').select('id', { count: 'exact', head: true }),
       ]);
       
