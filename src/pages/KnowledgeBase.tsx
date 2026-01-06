@@ -10,13 +10,31 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, AlertCircle, SplitSquareVertical, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, RefreshCw, DollarSign, Info } from "lucide-react";
+import { 
+  Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, 
+  AlertCircle, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, 
+  RefreshCw, DollarSign, Info, Globe, TrendingUp, Star, MapPin, 
+  Building2, ExternalLink, Calendar, Plus, RotateCcw, Edit
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
 import { getModelPricing, formatCost, estimateCostFromTotal } from "@/lib/aiModelPricing";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 
+// Types
 interface KnowledgeDocument {
   id: string;
   name: string;
@@ -28,6 +46,50 @@ interface KnowledgeDocument {
   description: string | null;
 }
 
+interface ScoutingSource {
+  id: string;
+  nombre: string;
+  url: string;
+  tipo: string | null;
+  descripcion: string | null;
+  pais: string | null;
+  sector_foco: string | null;
+  tecnologias_foco: string | null;
+  frecuencia_escaneo: string | null;
+  ultima_revision: string | null;
+  proxima_revision: string | null;
+  tecnologias_encontradas: number;
+  calidad_score: number | null;
+  activo: boolean;
+  notas: string | null;
+  created_at: string;
+}
+
+interface CaseStudy {
+  id: string;
+  name: string;
+  description: string | null;
+  entity_type: string | null;
+  country: string | null;
+  sector: string | null;
+  technology_types: string[] | null;
+  original_data: Record<string, unknown> | null;
+  source_technology_id: string | null;
+  created_at: string;
+}
+
+interface TechnologicalTrend {
+  id: string;
+  name: string;
+  description: string | null;
+  technology_type: string;
+  subcategory: string | null;
+  sector: string | null;
+  created_at: string;
+  source_technology_id: string | null;
+  original_data: Record<string, unknown> | null;
+}
+
 interface QueryResult {
   answer: string;
   sources: Array<{
@@ -37,10 +99,35 @@ interface QueryResult {
   }>;
 }
 
+const TIPO_OPTIONS = [
+  { value: 'directorio', label: 'Directorio' },
+  { value: 'feria', label: 'Feria' },
+  { value: 'revista', label: 'Revista' },
+  { value: 'aceleradora', label: 'Aceleradora' },
+  { value: 'asociacion', label: 'Asociación' },
+  { value: 'empresa', label: 'Empresa' },
+  { value: 'otro', label: 'Otro' },
+];
+
+const FRECUENCIA_OPTIONS = [
+  { value: 'semanal', label: 'Semanal' },
+  { value: 'mensual', label: 'Mensual' },
+  { value: 'trimestral', label: 'Trimestral' },
+  { value: 'anual', label: 'Anual' },
+];
+
+const SECTOR_FOCO_OPTIONS = [
+  { value: 'municipal', label: 'Municipal' },
+  { value: 'industrial', label: 'Industrial' },
+  { value: 'ambos', label: 'Ambos' },
+];
+
 export default function KnowledgeBase() {
   const { profile } = useAuth();
   const userRole = profile?.role;
   const queryClient = useQueryClient();
+  
+  // Documents state
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [query, setQuery] = useState("");
@@ -48,12 +135,34 @@ export default function KnowledgeBase() {
   const [querying, setQuerying] = useState(false);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [editingDescId, setEditingDescId] = useState<string | null>(null);
-  const [editingDesc, setEditingDesc] = useState("");
   const [generatingDescId, setGeneratingDescId] = useState<string | null>(null);
   const [lastQueryCost, setLastQueryCost] = useState<number | null>(null);
+  
+  // Sources state
+  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
+  const [editingSource, setEditingSource] = useState<ScoutingSource | null>(null);
+  const [sourceForm, setSourceForm] = useState({
+    nombre: '',
+    url: '',
+    tipo: '',
+    descripcion: '',
+    pais: '',
+    sector_foco: '',
+    frecuencia_escaneo: '',
+    calidad_score: 3,
+    activo: true,
+    notas: '',
+  });
+  
+  // Case studies state
+  const [selectedCase, setSelectedCase] = useState<CaseStudy | null>(null);
+  const [caseSearchQuery, setCaseSearchQuery] = useState('');
+  
+  // Trends state
+  const [selectedTrend, setSelectedTrend] = useState<TechnologicalTrend | null>(null);
 
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
+  const isAdmin = userRole === "admin";
 
   // Get current model for knowledge base
   const { data: modelConfig } = useQuery({
@@ -70,12 +179,10 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Estimate cost per query (approx 3000-8000 tokens for KB queries)
   const pricing = getModelPricing(modelConfig || 'google/gemini-2.5-flash');
   const estimatedCostMin = (3000 * 0.6 * pricing.input + 3000 * 0.4 * pricing.output) / 1_000_000;
   const estimatedCostMax = (8000 * 0.6 * pricing.input + 8000 * 0.4 * pricing.output) / 1_000_000;
 
-  // Storage limit (1GB for knowledge-docs bucket)
   const STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024;
 
   // Fetch documents
@@ -92,10 +199,51 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Upload document mutation
+  // Fetch scouting sources
+  const { data: sources, isLoading: loadingSources } = useQuery({
+    queryKey: ["scouting-sources"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("scouting_sources")
+        .select("*")
+        .order("calidad_score", { ascending: false });
+      
+      if (error) throw error;
+      return data as ScoutingSource[];
+    },
+  });
+
+  // Fetch case studies
+  const { data: caseStudies, isLoading: loadingCases } = useQuery({
+    queryKey: ['case-studies'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('casos_de_estudio')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as CaseStudy[];
+    },
+  });
+
+  // Fetch trends
+  const { data: trends, isLoading: loadingTrends } = useQuery({
+    queryKey: ['technological-trends'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('technological_trends')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as TechnologicalTrend[];
+    },
+  });
+
+  // Document mutations
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      // Upload to storage
       const filePath = `${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from("knowledge-docs")
@@ -103,7 +251,6 @@ export default function KnowledgeBase() {
 
       if (uploadError) throw uploadError;
 
-      // Create document record
       const { data: doc, error: docError } = await supabase
         .from("knowledge_documents")
         .insert({
@@ -118,7 +265,6 @@ export default function KnowledgeBase() {
 
       if (docError) throw docError;
 
-      // Trigger processing
       const { error: processError } = await supabase.functions.invoke(
         "process-knowledge-document",
         { body: { documentId: doc.id } }
@@ -126,7 +272,6 @@ export default function KnowledgeBase() {
 
       if (processError) {
         console.error("Processing error:", processError);
-        // Don't throw - document is uploaded, just processing failed
         toast.error("Documento subido pero hubo un error al procesarlo");
       }
 
@@ -142,13 +287,10 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Delete document mutation
   const deleteMutation = useMutation({
     mutationFn: async (doc: KnowledgeDocument) => {
-      // Delete from storage
       await supabase.storage.from("knowledge-docs").remove([doc.file_path]);
       
-      // Delete record (chunks will cascade delete)
       const { error } = await supabase
         .from("knowledge_documents")
         .delete()
@@ -165,7 +307,6 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Rename document mutation
   const renameMutation = useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
       const { error } = await supabase
@@ -186,84 +327,115 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Update description mutation
-  const updateDescMutation = useMutation({
-    mutationFn: async ({ id, description }: { id: string; description: string | null }) => {
-      const { error } = await supabase
-        .from("knowledge_documents")
-        .update({ description })
-        .eq("id", id);
-
-      if (error) throw error;
+  // Source mutations
+  const saveSourceMutation = useMutation({
+    mutationFn: async (data: typeof sourceForm) => {
+      if (editingSource) {
+        const { error } = await supabase
+          .from("scouting_sources")
+          .update({
+            nombre: data.nombre,
+            url: data.url,
+            tipo: data.tipo || null,
+            descripcion: data.descripcion || null,
+            pais: data.pais || null,
+            sector_foco: data.sector_foco || null,
+            frecuencia_escaneo: data.frecuencia_escaneo || null,
+            calidad_score: data.calidad_score,
+            activo: data.activo,
+            notas: data.notas || null,
+          })
+          .eq("id", editingSource.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("scouting_sources")
+          .insert({
+            nombre: data.nombre,
+            url: data.url,
+            tipo: data.tipo || null,
+            descripcion: data.descripcion || null,
+            pais: data.pais || null,
+            sector_foco: data.sector_foco || null,
+            frecuencia_escaneo: data.frecuencia_escaneo || null,
+            calidad_score: data.calidad_score,
+            activo: data.activo,
+            notas: data.notas || null,
+          });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
-      toast.success("Descripción actualizada");
-      setEditingDescId(null);
-      setEditingDesc("");
+      queryClient.invalidateQueries({ queryKey: ["scouting-sources"] });
+      toast.success(editingSource ? "Fuente actualizada" : "Fuente añadida");
+      setShowAddSourceModal(false);
+      setEditingSource(null);
+      resetSourceForm();
     },
-    onError: () => {
-      toast.error("Error al actualizar la descripción");
+    onError: (error) => {
+      toast.error("Error al guardar la fuente");
+      console.error(error);
     },
   });
 
-  const handleStartEdit = (doc: KnowledgeDocument) => {
-    setEditingDocId(doc.id);
-    setEditingName(doc.name);
+  const deleteSourceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("scouting_sources")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["scouting-sources"] });
+      toast.success("Fuente eliminada");
+    },
+    onError: () => {
+      toast.error("Error al eliminar la fuente");
+    },
+  });
+
+  const resetSourceForm = () => {
+    setSourceForm({
+      nombre: '',
+      url: '',
+      tipo: '',
+      descripcion: '',
+      pais: '',
+      sector_foco: '',
+      frecuencia_escaneo: '',
+      calidad_score: 3,
+      activo: true,
+      notas: '',
+    });
   };
 
-  const handleCancelEdit = () => {
-    setEditingDocId(null);
-    setEditingName("");
+  const handleEditSource = (source: ScoutingSource) => {
+    setEditingSource(source);
+    setSourceForm({
+      nombre: source.nombre,
+      url: source.url,
+      tipo: source.tipo || '',
+      descripcion: source.descripcion || '',
+      pais: source.pais || '',
+      sector_foco: source.sector_foco || '',
+      frecuencia_escaneo: source.frecuencia_escaneo || '',
+      calidad_score: source.calidad_score || 3,
+      activo: source.activo,
+      notas: source.notas || '',
+    });
+    setShowAddSourceModal(true);
   };
 
-  const handleSaveEdit = (id: string) => {
-    if (!editingName.trim()) {
-      toast.error("El nombre no puede estar vacío");
+  const handleSaveSource = () => {
+    if (!sourceForm.nombre.trim() || !sourceForm.url.trim()) {
+      toast.error("Nombre y URL son obligatorios");
       return;
     }
-    renameMutation.mutate({ id, name: editingName.trim() });
+    saveSourceMutation.mutate(sourceForm);
   };
 
-  const handleStartEditDesc = (doc: KnowledgeDocument) => {
-    setEditingDescId(doc.id);
-    setEditingDesc(doc.description || "");
-  };
-
-  const handleCancelEditDesc = () => {
-    setEditingDescId(null);
-    setEditingDesc("");
-  };
-
-  const handleSaveDesc = (id: string) => {
-    updateDescMutation.mutate({ id, description: editingDesc.trim() || null });
-  };
-
-  // Generate description with AI
-  const handleGenerateDescription = async (docId: string) => {
-    setGeneratingDescId(docId);
-    try {
-      const { data, error } = await supabase.functions.invoke("process-knowledge-document", {
-        body: { documentId: docId, regenerateDescription: true },
-      });
-      
-      if (error) throw error;
-      
-      if (data.success) {
-        toast.success("Descripción generada con IA");
-        queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
-      } else {
-        toast.error(data.error || "Error al generar descripción");
-      }
-    } catch (error) {
-      console.error("Error generating description:", error);
-      toast.error("Error al generar la descripción");
-    } finally {
-      setGeneratingDescId(null);
-    }
-  };
-
-  // Handle file upload with automatic splitting for large PDFs
+  // File upload handler
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -282,7 +454,6 @@ export default function KnowledgeBase() {
     setUploadProgress(null);
     
     try {
-      // Split PDF if needed
       toast.info("Analizando documento...");
       const { parts, totalPages, wasSplit } = await splitPdfIfNeeded(file);
       
@@ -292,12 +463,9 @@ export default function KnowledgeBase() {
       
       setUploadProgress({ current: 0, total: parts.length });
       
-      // Upload each part
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
         setUploadProgress({ current: i + 1, total: parts.length });
-        
-        // Create a File object from the blob
         const partFile = new File([part.blob], part.name, { type: "application/pdf" });
         await uploadMutation.mutateAsync(partFile);
       }
@@ -315,7 +483,7 @@ export default function KnowledgeBase() {
     }
   };
 
-  // Handle query
+  // Query handler
   const handleQuery = async () => {
     if (!query.trim()) return;
 
@@ -336,7 +504,6 @@ export default function KnowledgeBase() {
           sources: data.sources || [],
         });
         
-        // Calculate and set query cost if usage data available
         if (data.usage?.tokens) {
           const queryCost = estimateCostFromTotal(
             data.usage.model || modelConfig || 'google/gemini-2.5-flash', 
@@ -344,7 +511,6 @@ export default function KnowledgeBase() {
           );
           setLastQueryCost(queryCost);
         } else {
-          // Estimate based on answer length (rough approximation)
           const estimatedTokens = Math.round(data.answer.length / 4) + 2000;
           const queryCost = estimateCostFromTotal(modelConfig || 'google/gemini-2.5-flash', estimatedTokens);
           setLastQueryCost(queryCost);
@@ -360,6 +526,7 @@ export default function KnowledgeBase() {
     }
   };
 
+  // Helpers
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "processed":
@@ -380,7 +547,20 @@ export default function KnowledgeBase() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  // Calculate total storage used
+  const renderStars = (score: number | null) => {
+    const stars = score || 0;
+    return (
+      <div className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <Star 
+            key={i} 
+            className={`w-3 h-3 ${i <= stars ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/30'}`} 
+          />
+        ))}
+      </div>
+    );
+  };
+
   const totalStorageUsed = documents?.reduce((acc, doc) => acc + (doc.file_size || 0), 0) || 0;
   const storagePercentage = Math.min((totalStorageUsed / STORAGE_LIMIT_BYTES) * 100, 100);
   const storageRemaining = STORAGE_LIMIT_BYTES - totalStorageUsed;
@@ -391,6 +571,12 @@ export default function KnowledgeBase() {
     return "bg-primary";
   };
 
+  const filteredCases = caseStudies?.filter(c => 
+    !caseSearchQuery || 
+    c.name.toLowerCase().includes(caseSearchQuery.toLowerCase()) ||
+    c.description?.toLowerCase().includes(caseSearchQuery.toLowerCase())
+  ) || [];
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -400,490 +586,652 @@ export default function KnowledgeBase() {
             Base de Conocimiento
           </h1>
           <p className="text-muted-foreground mt-1">
-            Documentos técnicos para consultas con IA contextualizada
+            Documentos, fuentes, casos de estudio y tendencias tecnológicas
           </p>
         </div>
       </div>
 
-      {/* Storage Usage Card */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-full bg-primary/10">
-              <HardDrive className="h-6 w-6 text-primary" />
-            </div>
-            <div className="flex-1 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Almacenamiento</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-sm text-muted-foreground cursor-help">
-                        {formatFileSize(totalStorageUsed)} / {formatFileSize(STORAGE_LIMIT_BYTES)}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Espacio libre: {formatFileSize(storageRemaining)}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+      <Tabs defaultValue="documents" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="documents" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Documentos</span>
+            <Badge variant="secondary" className="ml-1">{documents?.length || 0}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="sources" className="flex items-center gap-2">
+            <Globe className="h-4 w-4" />
+            <span className="hidden sm:inline">Fuentes</span>
+            <Badge variant="secondary" className="ml-1">{sources?.length || 0}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="cases" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Casos</span>
+            <Badge variant="secondary" className="ml-1">{caseStudies?.length || 0}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="trends" className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            <span className="hidden sm:inline">Tendencias</span>
+            <Badge variant="secondary" className="ml-1">{trends?.length || 0}</Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* DOCUMENTS TAB */}
+        <TabsContent value="documents" className="space-y-4">
+          {/* Storage Card */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-full bg-primary/10">
+                  <HardDrive className="h-6 w-6 text-primary" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Almacenamiento</span>
+                    <span className="text-sm text-muted-foreground">
+                      {formatFileSize(totalStorageUsed)} / {formatFileSize(STORAGE_LIMIT_BYTES)}
+                    </span>
+                  </div>
+                  <div className="relative h-3 w-full rounded-full bg-muted overflow-hidden">
+                    <div 
+                      className={`absolute left-0 top-0 h-full transition-all duration-500 rounded-full ${getStorageColor()}`}
+                      style={{ width: `${storagePercentage}%` }}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="relative h-3 w-full rounded-full bg-muted overflow-hidden">
-                <div 
-                  className={`absolute left-0 top-0 h-full transition-all duration-500 rounded-full ${getStorageColor()}`}
-                  style={{ width: `${storagePercentage}%` }}
+            </CardContent>
+          </Card>
+
+          {/* Query Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                Consulta Técnica
+              </CardTitle>
+              <CardDescription>
+                Haz preguntas sobre tratamiento de aguas basadas en los documentos cargados
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground p-2 bg-muted/50 rounded-lg">
+                <DollarSign className="w-3 h-3" />
+                <span>Coste estimado: ~${estimatedCostMin.toFixed(4)}-${estimatedCostMax.toFixed(4)}/consulta</span>
+              </div>
+              
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="Ej: ¿Cuál es la eficiencia típica de un reactor MBR?"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="min-h-[100px]"
                 />
               </div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Usado: {storagePercentage.toFixed(1)}%</span>
-                <span>Libre: {formatFileSize(storageRemaining)}</span>
+              <div className="flex justify-between items-center">
+                <Button onClick={handleQuery} disabled={querying || !query.trim()}>
+                  {querying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                  Consultar
+                </Button>
+                {lastQueryCost && (
+                  <span className="text-xs text-muted-foreground">
+                    Coste: ${lastQueryCost.toFixed(4)}
+                  </span>
+                )}
               </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      <Tabs defaultValue="query" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="query" className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4" />
-            Consultar
-          </TabsTrigger>
-            <TabsTrigger value="documents" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Documentos ({documents?.length || 0})
-            </TabsTrigger>
-          </TabsList>
+              {queryResult && (
+                <Card className="mt-4">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Respuesta</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown>{queryResult.answer}</ReactMarkdown>
+                    </div>
+                    {queryResult.sources.length > 0 && (
+                      <div className="mt-4 pt-4 border-t">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Fuentes:</p>
+                        <div className="space-y-1">
+                          {queryResult.sources.map((source, i) => (
+                            <div key={i} className="text-xs text-muted-foreground flex items-center gap-1">
+                              <FileText className="w-3 h-3" />
+                              {source.documentName}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </CardContent>
+          </Card>
 
-          <TabsContent value="query" className="space-y-4">
-            <Card>
-              <CardHeader>
+          {/* Documents List */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Documentos Técnicos</CardTitle>
+                <CardDescription>PDFs cargados para consultas con IA</CardDescription>
+              </div>
+              {canManage && (
+                <div>
+                  <input
+                    type="file"
+                    id="file-upload"
+                    accept=".pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    disabled={uploading}
+                  />
+                  <label htmlFor="file-upload">
+                    <Button asChild disabled={uploading}>
+                      <span>
+                        {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                        Subir PDF
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent>
+              {loadingDocs ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : documents?.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No hay documentos cargados</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {documents?.map((doc) => (
+                    <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                        <div className="min-w-0">
+                          {editingDocId === doc.id ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                className="h-8"
+                              />
+                              <Button size="sm" variant="ghost" onClick={() => renameMutation.mutate({ id: doc.id, name: editingName })}>
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setEditingDocId(null)}>
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <p className="font-medium truncate">{doc.name}</p>
+                          )}
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatFileSize(doc.file_size)}</span>
+                            <span>•</span>
+                            <span>{doc.chunk_count} chunks</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(doc.status)}
+                        {canManage && (
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            {isAdmin && (
+                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* SOURCES TAB */}
+        <TabsContent value="sources" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Search className="h-5 w-5" />
-                  Consulta Técnica
+                  <Globe className="h-5 w-5" />
+                  Fuentes de Scouting
                 </CardTitle>
                 <CardDescription>
-                  Haz preguntas sobre tratamiento de aguas basadas en los documentos cargados
+                  Webs, ferias, directorios y fuentes para descubrir nuevas tecnologías
                 </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Cost Estimation */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground p-2 bg-muted/50 rounded-lg">
-                  <DollarSign className="w-3 h-3" />
-                  <span>
-                    Modelo: <span className="font-mono">{(modelConfig || 'gemini-2.5-flash').replace('google/', '').replace('openai/', '')}</span>
-                  </span>
-                  <span>•</span>
-                  <span>
-                    Coste estimado: ~${estimatedCostMin.toFixed(4)}-${estimatedCostMax.toFixed(4)}/consulta
-                  </span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="w-3 h-3 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Basado en precios públicos. El coste real puede variar.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                
-                <div className="flex gap-2">
-                  <Textarea
-                    placeholder="Ej: ¿Cuál es la eficiencia típica de un reactor MBR para eliminación de nitrógeno?"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    className="min-h-[100px]"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && e.ctrlKey) {
-                        handleQuery();
-                      }
-                    }}
-                  />
-                </div>
-                <Button 
-                  onClick={handleQuery} 
-                  disabled={querying || !query.trim()}
-                  className="w-full"
-                >
-                  {querying ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Consultando...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4 mr-2" />
-                      Consultar Base de Conocimiento
-                    </>
-                  )}
+              </div>
+              {canManage && (
+                <Button onClick={() => { resetSourceForm(); setEditingSource(null); setShowAddSourceModal(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Añadir Fuente
                 </Button>
-
-                {queryResult && (
-                  <div className="space-y-4 mt-6">
-                    <Card className="border-primary/20 bg-primary/5">
+              )}
+            </CardHeader>
+            <CardContent>
+              {loadingSources ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : sources?.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No hay fuentes configuradas</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {sources?.map((source) => (
+                    <Card key={source.id} className={`relative ${!source.activo ? 'opacity-60' : ''}`}>
                       <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-lg">Respuesta</CardTitle>
-                          {lastQueryCost !== null && (
-                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600">
-                              <DollarSign className="w-3 h-3 mr-1" />
-                              {formatCost(lastQueryCost)}
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="text-base line-clamp-1">{source.nombre}</CardTitle>
+                          {renderStars(source.calidad_score)}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {source.tipo && (
+                            <Badge variant="secondary" className="text-xs">
+                              {TIPO_OPTIONS.find(t => t.value === source.tipo)?.label || source.tipo}
                             </Badge>
+                          )}
+                          {source.pais && (
+                            <Badge variant="outline" className="text-xs">
+                              <MapPin className="w-2 h-2 mr-1" />
+                              {source.pais}
+                            </Badge>
+                          )}
+                          {!source.activo && (
+                            <Badge variant="destructive" className="text-xs">Inactivo</Badge>
                           )}
                         </div>
                       </CardHeader>
-                      <CardContent>
-                        <div className="prose prose-sm max-w-none dark:prose-invert">
-                          <ReactMarkdown>{queryResult.answer}</ReactMarkdown>
+                      <CardContent className="pt-0">
+                        {source.descripcion && (
+                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                            {source.descripcion}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {source.frecuencia_escaneo && (
+                            <span>📅 {FRECUENCIA_OPTIONS.find(f => f.value === source.frecuencia_escaneo)?.label}</span>
+                          )}
+                          {source.tecnologias_encontradas > 0 && (
+                            <span>🔍 {source.tecnologias_encontradas} techs</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-3">
+                          <Button size="sm" variant="outline" asChild>
+                            <a href={source.url} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              Visitar
+                            </a>
+                          </Button>
+                          {canManage && (
+                            <>
+                              <Button size="sm" variant="ghost" onClick={() => handleEditSource(source)}>
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              {isAdmin && (
+                                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteSourceMutation.mutate(source.id)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
-
-                    {queryResult.sources.length > 0 && (
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm flex items-center gap-2">
-                            <FileText className="h-4 w-4" />
-                            Fuentes ({queryResult.sources.length})
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ScrollArea className="h-[200px]">
-                            <div className="space-y-2">
-                              {queryResult.sources.map((source, index) => (
-                                <div
-                                  key={index}
-                                  className="p-3 rounded-lg bg-muted/50 text-sm"
-                                >
-                                  <p className="font-medium text-primary">
-                                    {source.documentName}
-                                  </p>
-                                  <p className="text-muted-foreground mt-1 text-xs">
-                                    {source.preview}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                )}
-
-                {!queryResult && !querying && documents?.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No hay documentos en la base de conocimiento.</p>
-                    <p className="text-sm">Sube documentos técnicos en la pestaña "Documentos".</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="documents" className="space-y-4">
-            {canManage && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Upload className="h-5 w-5" />
-                    Subir Documento
-                  </CardTitle>
-                  <CardDescription>
-                    PDFs grandes se dividen automáticamente en partes más pequeñas
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <Input
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleFileUpload}
-                      disabled={uploading}
-                      className="max-w-md"
-                    />
-                    {uploading && !uploadProgress && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Analizando documento...
-                      </div>
-                    )}
-                  </div>
-                  
-                  {uploadProgress && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <SplitSquareVertical className="h-4 w-4" />
-                        <span>Subiendo parte {uploadProgress.current} de {uploadProgress.total}</span>
-                      </div>
-                      <Progress 
-                        value={(uploadProgress.current / uploadProgress.total) * 100} 
-                        className="h-2"
-                      />
-                    </div>
-                  )}
-                  
-                  <p className="text-sm text-muted-foreground">
-                    Formatos: PDF. Tamaño máximo: 100MB. PDFs &gt;8MB se dividen automáticamente.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Documentos Cargados</CardTitle>
-                  <CardDescription>
-                    Documentos procesados y disponibles para consultas
-                  </CardDescription>
+                  ))}
                 </div>
-                {canManage && documents && documents.some(d => !d.description && d.status === 'processed') && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      const docsWithoutDesc = documents.filter(d => !d.description && d.status === 'processed');
-                      toast.info(`Generando descripciones para ${docsWithoutDesc.length} documentos...`);
-                      for (const doc of docsWithoutDesc) {
-                        await handleGenerateDescription(doc.id);
-                      }
-                      toast.success("Descripciones generadas");
-                    }}
-                    className="gap-2"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Generar todas las descripciones
-                  </Button>
-                )}
-              </CardHeader>
-              <CardContent>
-                {loadingDocs ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  </div>
-                ) : documents && documents.length > 0 ? (
-                  <div className="space-y-2">
-                    {documents.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-start gap-3 flex-1 min-w-0">
-                            <FileText className="h-8 w-8 text-primary shrink-0 mt-1" />
-                            <div className="min-w-0 flex-1 space-y-2">
-                              {/* Document name */}
-                              {editingDocId === doc.id ? (
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    value={editingName}
-                                    onChange={(e) => setEditingName(e.target.value)}
-                                    className="h-8 max-w-sm"
-                                    autoFocus
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") handleSaveEdit(doc.id);
-                                      if (e.key === "Escape") handleCancelEdit();
-                                    }}
-                                  />
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => handleSaveEdit(doc.id)}
-                                    disabled={renameMutation.isPending}
-                                  >
-                                    <Check className="h-4 w-4 text-green-600" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={handleCancelEdit}
-                                  >
-                                    <X className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="font-medium">{doc.name}</p>
-                                  {canManage && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6 shrink-0"
-                                      onClick={() => handleStartEdit(doc)}
-                                      title="Editar nombre"
-                                    >
-                                      <Pencil className="h-3 w-3" />
-                                    </Button>
-                                  )}
-                                  {getStatusBadge(doc.status)}
-                                </div>
-                              )}
-                              
-                              {/* Metadata */}
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                                <span>{formatFileSize(doc.file_size)}</span>
-                                <span>•</span>
-                                <span>{doc.chunk_count} fragmentos</span>
-                                <span>•</span>
-                                <span>{new Date(doc.created_at).toLocaleDateString("es-ES")}</span>
-                              </div>
-                              
-                              {/* Description section */}
-                              {editingDescId === doc.id ? (
-                                <div className="flex items-start gap-2">
-                                  <Textarea
-                                    value={editingDesc}
-                                    onChange={(e) => setEditingDesc(e.target.value)}
-                                    placeholder="Añadir descripción..."
-                                    className="text-sm flex-1 min-h-[80px]"
-                                    autoFocus
-                                  />
-                                  <div className="flex flex-col gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      onClick={() => handleSaveDesc(doc.id)}
-                                      disabled={updateDescMutation.isPending}
-                                    >
-                                      <Check className="h-4 w-4 text-green-600" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      onClick={handleCancelEditDesc}
-                                    >
-                                      <X className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  {doc.description ? (
-                                    <div className="text-sm text-muted-foreground bg-muted/30 rounded-md p-2 whitespace-pre-wrap">
-                                      {doc.description}
-                                    </div>
-                                  ) : (
-                                    <p className="text-xs text-muted-foreground/60 italic">
-                                      Sin descripción
-                                    </p>
-                                  )}
-                                  {canManage && (
-                                    <div className="flex items-center gap-1">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 text-xs gap-1"
-                                        onClick={() => handleStartEditDesc(doc)}
-                                      >
-                                        <Pencil className="h-3 w-3" />
-                                        Editar
-                                      </Button>
-                                      {doc.status === "processed" && (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-6 text-xs gap-1"
-                                          onClick={() => handleGenerateDescription(doc.id)}
-                                          disabled={generatingDescId === doc.id}
-                                        >
-                                          {generatingDescId === doc.id ? (
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                          ) : (
-                                            <Sparkles className="h-3 w-3 text-primary" />
-                                          )}
-                                          Generar con IA
-                                        </Button>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {/* Action buttons */}
-                          <div className="flex items-center gap-1 shrink-0">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={async () => {
-                                try {
-                                  const { data, error } = await supabase.storage
-                                    .from("knowledge-docs")
-                                    .createSignedUrl(doc.file_path, 3600);
-                                  
-                                  if (error) throw error;
-                                  if (data?.signedUrl) {
-                                    window.open(data.signedUrl, "_blank");
-                                  }
-                                } catch (error) {
-                                  console.error("Error getting signed URL:", error);
-                                  toast.error("Error al obtener el documento");
-                                }
-                              }}
-                              title="Ver documento"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={async () => {
-                                try {
-                                  const { data, error } = await supabase.storage
-                                    .from("knowledge-docs")
-                                    .createSignedUrl(doc.file_path, 3600, { download: true });
-                                  
-                                  if (error) throw error;
-                                  if (data?.signedUrl) {
-                                    const link = document.createElement("a");
-                                    link.href = data.signedUrl;
-                                    link.download = doc.name;
-                                    link.click();
-                                  }
-                                } catch (error) {
-                                  console.error("Error downloading:", error);
-                                  toast.error("Error al descargar el documento");
-                                }
-                              }}
-                              title="Descargar documento"
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            {userRole === "admin" && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => deleteMutation.mutate(doc)}
-                                disabled={deleteMutation.isPending}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            )}
-                          </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* CASES TAB */}
+        <TabsContent value="cases" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Casos de Estudio
+              </CardTitle>
+              <CardDescription>
+                Proyectos municipales, corporaciones y casos de implementación
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar casos..."
+                    value={caseSearchQuery}
+                    onChange={(e) => setCaseSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              
+              {loadingCases ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : filteredCases.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No hay casos de estudio</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {filteredCases.map((caseStudy) => (
+                    <Card 
+                      key={caseStudy.id} 
+                      className="cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => setSelectedCase(caseStudy)}
+                    >
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="text-base line-clamp-2">{caseStudy.name}</CardTitle>
+                          {caseStudy.entity_type && (
+                            <Badge variant="secondary" className="shrink-0 text-xs">{caseStudy.entity_type}</Badge>
+                          )}
                         </div>
-                      </div>
+                        <CardDescription className="flex items-center gap-2">
+                          {caseStudy.country && (
+                            <>
+                              <MapPin className="w-3 h-3" />
+                              {caseStudy.country}
+                            </>
+                          )}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        {caseStudy.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2">{caseStudy.description}</p>
+                        )}
+                        {caseStudy.technology_types && caseStudy.technology_types.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {caseStudy.technology_types.slice(0, 2).map((type, i) => (
+                              <Badge key={i} variant="outline" className="text-xs">{type}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TRENDS TAB */}
+        <TabsContent value="trends" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Tendencias Tecnológicas
+              </CardTitle>
+              <CardDescription>
+                Categorías y tendencias identificadas en el sector del tratamiento de agua
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingTrends ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : trends?.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No hay tendencias registradas</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {trends?.map((trend) => (
+                    <Card 
+                      key={trend.id} 
+                      className="cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => setSelectedTrend(trend)}
+                    >
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base line-clamp-2">{trend.name}</CardTitle>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="secondary" className="text-xs">{trend.technology_type}</Badge>
+                          {trend.subcategory && (
+                            <Badge variant="outline" className="text-xs">{trend.subcategory}</Badge>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        {trend.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-3">{trend.description}</p>
+                        )}
+                        {trend.sector && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            <span className="font-medium">Sector:</span> {trend.sector}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Add/Edit Source Modal */}
+      <Dialog open={showAddSourceModal} onOpenChange={setShowAddSourceModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingSource ? 'Editar Fuente' : 'Añadir Fuente de Scouting'}</DialogTitle>
+            <DialogDescription>
+              Configura una nueva fuente para descubrir tecnologías
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label>Nombre *</Label>
+                <Input 
+                  value={sourceForm.nombre} 
+                  onChange={(e) => setSourceForm(prev => ({ ...prev, nombre: e.target.value }))}
+                  placeholder="IFAT Munich"
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>URL *</Label>
+                <Input 
+                  value={sourceForm.url} 
+                  onChange={(e) => setSourceForm(prev => ({ ...prev, url: e.target.value }))}
+                  placeholder="https://ifat.de"
+                />
+              </div>
+              <div>
+                <Label>Tipo</Label>
+                <Select value={sourceForm.tipo} onValueChange={(v) => setSourceForm(prev => ({ ...prev, tipo: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {TIPO_OPTIONS.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                     ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No hay documentos cargados</p>
-                    <p className="text-sm">Sube tu primer documento técnico</p>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>País</Label>
+                <Input 
+                  value={sourceForm.pais} 
+                  onChange={(e) => setSourceForm(prev => ({ ...prev, pais: e.target.value }))}
+                  placeholder="Alemania"
+                />
+              </div>
+              <div>
+                <Label>Sector Foco</Label>
+                <Select value={sourceForm.sector_foco} onValueChange={(v) => setSourceForm(prev => ({ ...prev, sector_foco: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {SECTOR_FOCO_OPTIONS.map(s => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Frecuencia Escaneo</Label>
+                <Select value={sourceForm.frecuencia_escaneo} onValueChange={(v) => setSourceForm(prev => ({ ...prev, frecuencia_escaneo: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {FRECUENCIA_OPTIONS.map(f => (
+                      <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Calidad (1-5)</Label>
+                <Select value={String(sourceForm.calidad_score)} onValueChange={(v) => setSourceForm(prev => ({ ...prev, calidad_score: parseInt(v) }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n} ⭐</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch 
+                  checked={sourceForm.activo} 
+                  onCheckedChange={(c) => setSourceForm(prev => ({ ...prev, activo: c }))} 
+                />
+                <Label>Activo</Label>
+              </div>
+              <div className="col-span-2">
+                <Label>Descripción</Label>
+                <Textarea 
+                  value={sourceForm.descripcion} 
+                  onChange={(e) => setSourceForm(prev => ({ ...prev, descripcion: e.target.value }))}
+                  placeholder="Breve descripción de la fuente..."
+                  rows={2}
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Notas</Label>
+                <Textarea 
+                  value={sourceForm.notas} 
+                  onChange={(e) => setSourceForm(prev => ({ ...prev, notas: e.target.value }))}
+                  placeholder="Notas internas..."
+                  rows={2}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddSourceModal(false)}>Cancelar</Button>
+            <Button onClick={handleSaveSource} disabled={saveSourceMutation.isPending}>
+              {saveSourceMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Case Study Detail Modal */}
+      <Dialog open={!!selectedCase} onOpenChange={(open) => !open && setSelectedCase(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {selectedCase && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-xl">{selectedCase.name}</DialogTitle>
+                <DialogDescription className="flex items-center gap-2">
+                  {selectedCase.country && (
+                    <>
+                      <MapPin className="w-3 h-3" />
+                      {selectedCase.country}
+                    </>
+                  )}
+                  {selectedCase.entity_type && (
+                    <Badge variant="secondary">{selectedCase.entity_type}</Badge>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              <Separator />
+              <div className="space-y-4">
+                {selectedCase.description && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Descripción</h4>
+                    <p className="text-sm text-muted-foreground">{selectedCase.description}</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+                {selectedCase.sector && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Sector</h4>
+                    <p className="text-sm text-muted-foreground">{selectedCase.sector}</p>
+                  </div>
+                )}
+                {selectedCase.technology_types && selectedCase.technology_types.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Tipos de Tecnología</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedCase.technology_types.map((type, i) => (
+                        <Badge key={i} variant="outline">{type}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Trend Detail Modal */}
+      <Dialog open={!!selectedTrend} onOpenChange={(open) => !open && setSelectedTrend(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {selectedTrend && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-xl">{selectedTrend.name}</DialogTitle>
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge variant="secondary">{selectedTrend.technology_type}</Badge>
+                  {selectedTrend.subcategory && (
+                    <Badge variant="outline">{selectedTrend.subcategory}</Badge>
+                  )}
+                </div>
+              </DialogHeader>
+              <Separator />
+              <div className="space-y-4">
+                {selectedTrend.description && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Descripción</h4>
+                    <p className="text-sm text-muted-foreground">{selectedTrend.description}</p>
+                  </div>
+                )}
+                {selectedTrend.sector && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Sector</h4>
+                    <p className="text-sm text-muted-foreground">{selectedTrend.sector}</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
