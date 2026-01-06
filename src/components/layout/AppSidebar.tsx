@@ -51,14 +51,17 @@ import { cn } from '@/lib/utils';
 const mainNavItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   { title: 'Consultar Tecnologías', url: '/technologies', icon: Search },
-  { title: 'Scouting', url: '/scouting', icon: Radar },
   { title: 'Mis Proyectos', url: '/projects', icon: FolderOpen },
   { title: 'Favoritos', url: '/favorites', icon: Star },
 ];
 
+const scoutingSubItems = [
+  { title: 'Cola de Revisión', url: '/scouting', icon: Radar },
+  { title: 'Monitor', url: '/scouting-monitor', icon: Radio },
+];
+
 const internalNavItems = [
   { title: 'Centro de Supervisión', url: '/quality-control', icon: ShieldCheck },
-  { title: 'Monitor Scouting', url: '/scouting-monitor', icon: Radio },
 ];
 
 const knowledgeBaseItems = [
@@ -98,11 +101,15 @@ export function AppSidebar() {
   const [auditOpen, setAuditOpen] = useState(
     auditSubItems.some((item) => location.pathname === item.url)
   );
+  const [scoutingOpen, setScoutingOpen] = useState(
+    scoutingSubItems.some((item) => location.pathname === item.url)
+  );
 
   const isActive = (path: string) => location.pathname === path;
   const isKnowledgeBaseActive = location.pathname === '/knowledge-base';
   const isAiToolActive = aiToolsItems.some((item) => location.pathname === item.url);
   const isAuditActive = auditSubItems.some((item) => location.pathname === item.url);
+  const isScoutingActive = scoutingSubItems.some((item) => location.pathname === item.url);
 
   return (
     <Sidebar className={cn('border-r-0', collapsed ? 'w-16' : 'w-64')} collapsible="icon">
@@ -150,6 +157,60 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+
+              {/* Scouting Submenu */}
+              <Collapsible
+                open={scoutingOpen}
+                onOpenChange={setScoutingOpen}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      className={cn(
+                        'transition-all duration-200 w-full',
+                        isScoutingActive
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                      )}
+                    >
+                      <Radar className="w-5 h-5" />
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 text-left">Scouting</span>
+                          <ChevronDown className={cn(
+                            "w-4 h-4 transition-transform duration-200",
+                            scoutingOpen && "rotate-180"
+                          )} />
+                        </>
+                      )}
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {scoutingSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isActive(item.url)}
+                            className={cn(
+                              'transition-all duration-200',
+                              isActive(item.url)
+                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                            )}
+                          >
+                            <Link to={item.url} className="flex items-center gap-2">
+                              <item.icon className="w-4 h-4" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
