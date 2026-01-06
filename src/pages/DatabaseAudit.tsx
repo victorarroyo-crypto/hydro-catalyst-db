@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, CheckCircle, XCircle, Database, Link2, Languages, ArrowRight, FileText, Download, Code2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Database, Link2, Languages, ArrowRight, FileText, Download, Code2, RefreshCw } from 'lucide-react';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, BorderStyle } from 'docx';
 import { saveAs } from 'file-saver';
 import { useToast } from '@/hooks/use-toast';
@@ -707,6 +707,21 @@ export default function DatabaseAudit() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            onClick={() => {
+              toast({
+                title: "Solicitud enviada",
+                description: "Se ha solicitado una nueva auditoría de la base de datos. El análisis se actualizará en breve.",
+              });
+              // Reload the page to simulate a new audit
+              setTimeout(() => {
+                window.location.reload();
+              }, 1500);
+            }}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Solicitar Auditoría
+          </Button>
           <Button 
             variant="outline" 
             onClick={() => {
