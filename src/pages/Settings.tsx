@@ -13,11 +13,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { generateDatabaseDocumentation } from '@/lib/generateDatabaseDocumentation';
+import { generateScoutingWebhookDocumentation } from '@/lib/generateScoutingWebhookDocumentation';
 import { 
   User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, 
   CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle,
   Users, Crown, Eye, Edit, Briefcase, Building, Star, RefreshCw, Key, Sun, Moon,
-  Info, ExternalLink, FileText, HelpCircle, Trash2, BookOpen, Download
+  Info, ExternalLink, FileText, HelpCircle, Trash2, BookOpen, Download, Webhook
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -1052,6 +1053,35 @@ const Settings: React.FC = () => {
                   <span className="flex items-center gap-2">
                     <Download className="w-4 h-4" />
                     Descargar Arquitectura de Base de Datos
+                  </span>
+                  <FileText className="w-4 h-4" />
+                </Button>
+                <Button 
+                  onClick={async () => {
+                    toast({
+                      title: 'Generando documento...',
+                      description: 'Por favor espera mientras se genera el Word',
+                    });
+                    try {
+                      await generateScoutingWebhookDocumentation();
+                      toast({
+                        title: 'Documento generado',
+                        description: 'La guía de integración se ha descargado correctamente',
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: 'Error al generar documento',
+                        description: error.message,
+                        variant: 'destructive',
+                      });
+                    }
+                  }}
+                  variant="outline" 
+                  className="w-full justify-between"
+                >
+                  <span className="flex items-center gap-2">
+                    <Webhook className="w-4 h-4" />
+                    Guía de Integración Webhook Scouting
                   </span>
                   <FileText className="w-4 h-4" />
                 </Button>
