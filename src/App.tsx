@@ -29,6 +29,7 @@ import Privacy from "./pages/Privacy";
 import Cookies from "./pages/Cookies";
 import NotFound from "./pages/NotFound";
 import DatabaseAudit from "./pages/DatabaseAudit";
+import AdminDbAudit from "./pages/AdminDbAudit";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -71,6 +72,7 @@ const App = () => (
               <Route path="/settings" element={<Settings />} />
               <Route path="/taxonomy-admin" element={<TaxonomyAdmin />} />
               <Route path="/database-audit" element={<DatabaseAudit />} />
+              <Route path="/admin/db-audit" element={<AdminDbAudit />} />
             </Route>
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
