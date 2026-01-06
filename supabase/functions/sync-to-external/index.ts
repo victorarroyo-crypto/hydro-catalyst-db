@@ -43,6 +43,9 @@ const FIELDS_TO_EXCLUDE: Record<string, string[]> = {
     'rejected_by',
     'original_data',
   ],
+  scouting_sources: [
+    'created_by',
+  ],
 }
 
 // Clean record by removing fields that don't exist in external DB

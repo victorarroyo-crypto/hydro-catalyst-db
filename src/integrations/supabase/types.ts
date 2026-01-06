@@ -630,6 +630,69 @@ export type Database = {
           },
         ]
       }
+      scouting_sources: {
+        Row: {
+          activo: boolean | null
+          calidad_score: number | null
+          created_at: string
+          created_by: string | null
+          descripcion: string | null
+          frecuencia_escaneo: string | null
+          id: string
+          nombre: string
+          notas: string | null
+          pais: string | null
+          proxima_revision: string | null
+          sector_foco: string | null
+          tecnologias_encontradas: number | null
+          tecnologias_foco: string | null
+          tipo: string | null
+          ultima_revision: string | null
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          activo?: boolean | null
+          calidad_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          descripcion?: string | null
+          frecuencia_escaneo?: string | null
+          id?: string
+          nombre: string
+          notas?: string | null
+          pais?: string | null
+          proxima_revision?: string | null
+          sector_foco?: string | null
+          tecnologias_encontradas?: number | null
+          tecnologias_foco?: string | null
+          tipo?: string | null
+          ultima_revision?: string | null
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          activo?: boolean | null
+          calidad_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          descripcion?: string | null
+          frecuencia_escaneo?: string | null
+          id?: string
+          nombre?: string
+          notas?: string | null
+          pais?: string | null
+          proxima_revision?: string | null
+          sector_foco?: string | null
+          tecnologias_encontradas?: number | null
+          tecnologias_foco?: string | null
+          tipo?: string | null
+          ultima_revision?: string | null
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       taxonomy_sectores: {
         Row: {
           descripcion: string | null
