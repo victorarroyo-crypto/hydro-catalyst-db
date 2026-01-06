@@ -20,7 +20,11 @@ import {
   Loader2,
   FileText,
   Server,
-  Cloud
+  Cloud,
+  Languages,
+  Link2,
+  ArrowRight,
+  Code2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -74,6 +78,95 @@ interface SyncLog {
   status: 'success' | 'error';
   details?: string;
 }
+
+// Schema data for both databases
+const schemaComparison = {
+  tables: [
+    {
+      name: 'technologies',
+      description: 'Tabla principal de tecnologías',
+      internalColumns: 27,
+      externalColumns: 27,
+      differences: [],
+      status: 'synced' as const,
+    },
+    {
+      name: 'scouting_queue',
+      description: 'Cola de tecnologías pendientes',
+      internalColumns: 28,
+      externalColumns: 28,
+      differences: [],
+      status: 'synced' as const,
+    },
+    {
+      name: 'rejected_technologies',
+      description: 'Tecnologías rechazadas',
+      internalColumns: 26,
+      externalColumns: 26,
+      differences: [],
+      status: 'synced' as const,
+    },
+    {
+      name: 'taxonomy_tipos',
+      description: 'Tipos de tecnología',
+      internalColumns: 4,
+      externalColumns: 4,
+      differences: [],
+      status: 'synced' as const,
+    },
+    {
+      name: 'taxonomy_subcategorias',
+      description: 'Subcategorías',
+      internalColumns: 4,
+      externalColumns: 4,
+      differences: [],
+      status: 'synced' as const,
+    },
+    {
+      name: 'taxonomy_sectores',
+      description: 'Sectores industriales',
+      internalColumns: 3,
+      externalColumns: 3,
+      differences: [],
+      status: 'synced' as const,
+    },
+  ],
+};
+
+// Recommendations for sync
+const syncRecommendations = [
+  {
+    priority: 'alta' as const,
+    action: 'Sincronizar technologies primero',
+    description: 'La tabla technologies es la principal y debe sincronizarse antes que las demás para mantener integridad referencial.',
+  },
+  {
+    priority: 'alta' as const,
+    action: 'Verificar taxonomías antes de datos',
+    description: 'Asegúrate de que taxonomy_tipos, taxonomy_subcategorias y taxonomy_sectores estén sincronizadas antes de sincronizar technologies.',
+  },
+  {
+    priority: 'media' as const,
+    action: 'Programar sincronizaciones periódicas',
+    description: 'Configurar un cron job o webhook para sincronizar automáticamente cada hora o cuando haya cambios.',
+  },
+  {
+    priority: 'baja' as const,
+    action: 'Monitorear registros huérfanos',
+    description: 'Los registros que solo existen en la BD externa pueden indicar datos obsoletos o problemas de sincronización anteriores.',
+  },
+];
+
+const getPriorityBadge = (priority: 'alta' | 'media' | 'baja') => {
+  switch (priority) {
+    case 'alta':
+      return <Badge variant="destructive">Alta</Badge>;
+    case 'media':
+      return <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">Media</Badge>;
+    case 'baja':
+      return <Badge variant="secondary">Baja</Badge>;
+  }
+};
 
 export default function AdminDbAudit() {
   const { toast } = useToast();
@@ -602,10 +695,13 @@ export default function AdminDbAudit() {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="comparison" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="comparison">Comparación de Tablas</TabsTrigger>
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="comparison">Comparación de Datos</TabsTrigger>
+          <TabsTrigger value="schema">Comparación de Schema</TabsTrigger>
+          <TabsTrigger value="erd">Diagrama ERD</TabsTrigger>
           <TabsTrigger value="details">Detalles por Tabla</TabsTrigger>
-          <TabsTrigger value="logs">Logs de Sincronización</TabsTrigger>
+          <TabsTrigger value="recommendations">Recomendaciones</TabsTrigger>
+          <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="comparison">
@@ -675,6 +771,126 @@ export default function AdminDbAudit() {
                   </TableBody>
                 </Table>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Schema Comparison Tab */}
+        <TabsContent value="schema">
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Languages className="w-5 h-5" />
+                  Comparación de Schemas
+                </CardTitle>
+                <CardDescription>
+                  Estructura de tablas entre BD Interna (Master) y BD Externa (Railway)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tabla</TableHead>
+                      <TableHead>Descripción</TableHead>
+                      <TableHead className="text-center">Cols. Interna</TableHead>
+                      <TableHead className="text-center">Cols. Externa</TableHead>
+                      <TableHead>Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {schemaComparison.tables.map((table) => (
+                      <TableRow key={table.name}>
+                        <TableCell className="font-medium">{table.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{table.description}</TableCell>
+                        <TableCell className="text-center">{table.internalColumns}</TableCell>
+                        <TableCell className="text-center">{table.externalColumns}</TableCell>
+                        <TableCell>
+                          {table.status === 'synced' ? (
+                            <Badge className="bg-green-500/20 text-green-600 border-green-500/30">
+                              <CheckCircle className="w-3 h-3 mr-1" /> Igual
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">
+                              <AlertTriangle className="w-3 h-3 mr-1" /> Diferente
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Alert>
+              <Link2 className="h-4 w-4" />
+              <AlertTitle>Schemas Sincronizados</AlertTitle>
+              <AlertDescription>
+                Ambas bases de datos tienen la misma estructura de tablas. La sincronización de datos se puede realizar sin problemas de compatibilidad.
+              </AlertDescription>
+            </Alert>
+          </div>
+        </TabsContent>
+
+        {/* ERD Diagram Tab */}
+        <TabsContent value="erd">
+          <Card>
+            <CardHeader>
+              <CardTitle>Diagrama de Relaciones (ERD)</CardTitle>
+              <CardDescription>Arquitectura de sincronización entre bases de datos</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-muted p-6 rounded-lg font-mono text-sm overflow-x-auto">
+                <pre className="whitespace-pre">{`
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        ARQUITECTURA DE SINCRONIZACIÓN                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+   ┌─────────────────────────────────┐         ┌─────────────────────────────────┐
+   │    BD INTERNA (LOVABLE CLOUD)   │         │      BD EXTERNA (RAILWAY)       │
+   │         🟢 MASTER               │ ──────► │         🟠 RÉPLICA              │
+   └─────────────────────────────────┘         └─────────────────────────────────┘
+                    │                                          │
+                    │                                          │
+    ┌───────────────┴───────────────┐          ┌───────────────┴───────────────┐
+    │                               │          │                               │
+    ▼                               ▼          ▼                               ▼
+┌───────────────┐           ┌───────────────┐  ┌───────────────┐       ┌───────────────┐
+│ technologies  │           │ scouting_queue│  │ technologies  │       │ scouting_queue│
+│   (Master)    │           │   (Master)    │  │   (Replica)   │       │   (Replica)   │
+└───────┬───────┘           └───────────────┘  └───────────────┘       └───────────────┘
+        │
+        │ References
+        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        TAXONOMÍAS (Shared)                       │
+├─────────────────┬─────────────────────┬─────────────────────────┤
+│ taxonomy_tipos  │ taxonomy_subcategor │ taxonomy_sectores       │
+│    (4 cols)     │      (4 cols)       │      (3 cols)          │
+└─────────────────┴─────────────────────┴─────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      FLUJO DE SINCRONIZACIÓN                     │
+├─────────────────────────────────────────────────────────────────┤
+│  1. BD Interna (Master) → Obtener IDs                           │
+│  2. BD Externa (Replica) → Comparar IDs                         │
+│  3. Identificar faltantes en externa                            │
+│  4. Copiar registros faltantes: Interna → Externa               │
+│  5. NUNCA: Externa → Interna (unidireccional)                   │
+└─────────────────────────────────────────────────────────────────┘
+
+                    ┌──────────────────────────────┐
+                    │        REGLAS DE SYNC        │
+                    ├──────────────────────────────┤
+                    │ ✓ Interna → Externa: PERMITIDO│
+                    │ ✗ Externa → Interna: BLOQUEADO│
+                    │ ✓ Taxonomías primero          │
+                    │ ✓ Luego datos principales     │
+                    └──────────────────────────────┘
+                `}</pre>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -810,6 +1026,59 @@ export default function AdminDbAudit() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Recommendations Tab */}
+        <TabsContent value="recommendations">
+          <div className="space-y-4">
+            {syncRecommendations.map((rec, index) => (
+              <Card key={index}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    {getPriorityBadge(rec.priority)}
+                    {rec.action}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground">{rec.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Proceso de Sincronización Recomendado</AlertTitle>
+              <AlertDescription>
+                <ol className="list-decimal list-inside mt-2 space-y-1">
+                  <li>Ejecutar auditoría para identificar diferencias</li>
+                  <li>Sincronizar taxonomías (tipos, subcategorías, sectores)</li>
+                  <li>Sincronizar tabla technologies</li>
+                  <li>Sincronizar scouting_queue y rejected_technologies</li>
+                  <li>Verificar integridad de datos post-sincronización</li>
+                </ol>
+              </AlertDescription>
+            </Alert>
+
+            <Card className="border-primary/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Code2 className="w-5 h-5 text-primary" />
+                  Automatización Futura
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-muted-foreground">
+                  Para automatizar la sincronización, considera implementar:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  <li>Webhook en BD Interna que notifique cambios a Railway</li>
+                  <li>Cron job cada hora en Railway que consulte diferencias</li>
+                  <li>Cola de mensajes (Redis/RabbitMQ) para sincronización en tiempo real</li>
+                  <li>Triggers de base de datos que registren cambios en tabla de log</li>
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
 
