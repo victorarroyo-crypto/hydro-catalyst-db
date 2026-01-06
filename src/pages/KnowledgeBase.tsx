@@ -19,7 +19,8 @@ import {
   Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, 
   AlertCircle, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, 
   RefreshCw, DollarSign, Info, Globe, TrendingUp, Star, MapPin, 
-  Building2, ExternalLink, Calendar, Plus, RotateCcw, Edit, LayoutGrid, List
+  Building2, ExternalLink, Calendar, Plus, RotateCcw, Edit, LayoutGrid, List,
+  Database, ArrowRight, Lightbulb, Send
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
@@ -460,6 +461,102 @@ export default function KnowledgeBase() {
     }
     saveSourceMutation.mutate(sourceForm);
   };
+
+  // Move case study to technologies
+  const moveCaseToTechnologies = useMutation({
+    mutationFn: async (caseStudy: CaseStudy) => {
+      const originalData = caseStudy.original_data || {};
+      const { error } = await supabase
+        .from("technologies")
+        .insert({
+          "Nombre de la tecnología": caseStudy.name,
+          "Tipo de tecnología": caseStudy.technology_types?.[0] || "Sin clasificar",
+          "Descripción técnica breve": caseStudy.description,
+          "País de origen": caseStudy.country,
+          "Sector y subsector": caseStudy.sector,
+          "Proveedor / Empresa": (originalData as Record<string, unknown>)["Proveedor / Empresa"] as string || null,
+          "Web de la empresa": (originalData as Record<string, unknown>)["Web de la empresa"] as string || null,
+          "Email de contacto": (originalData as Record<string, unknown>)["Email de contacto"] as string || null,
+          "Aplicación principal": (originalData as Record<string, unknown>)["Aplicación principal"] as string || null,
+          "Ventaja competitiva clave": (originalData as Record<string, unknown>)["Ventaja competitiva clave"] as string || null,
+          "Porque es innovadora": (originalData as Record<string, unknown>)["Porque es innovadora"] as string || null,
+          "Casos de referencia": (originalData as Record<string, unknown>)["Casos de referencia"] as string || null,
+          "Grado de madurez (TRL)": (originalData as Record<string, unknown>)["Grado de madurez (TRL)"] as number || null,
+          status: "active",
+        });
+      if (error) throw error;
+      
+      // Delete from case studies
+      const { error: deleteError } = await supabase
+        .from("casos_de_estudio")
+        .delete()
+        .eq("id", caseStudy.id);
+      if (deleteError) throw deleteError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["case-studies"] });
+      queryClient.invalidateQueries({ queryKey: ["technologies"] });
+      toast.success("Movido a Tecnologías correctamente");
+      setSelectedCase(null);
+    },
+    onError: (error) => {
+      console.error(error);
+      toast.error("Error al mover a Tecnologías");
+    },
+  });
+
+  // Move case study to trends
+  const moveCaseToTrends = useMutation({
+    mutationFn: async (caseStudy: CaseStudy) => {
+      const { error } = await supabase
+        .from("technological_trends")
+        .insert([{
+          name: caseStudy.name,
+          technology_type: caseStudy.technology_types?.[0] || "Sin clasificar",
+          description: caseStudy.description,
+          sector: caseStudy.sector,
+          original_data: caseStudy.original_data ? JSON.parse(JSON.stringify(caseStudy.original_data)) : null,
+          source_technology_id: caseStudy.source_technology_id,
+        }]);
+      if (error) throw error;
+      
+      // Delete from case studies
+      const { error: deleteError } = await supabase
+        .from("casos_de_estudio")
+        .delete()
+        .eq("id", caseStudy.id);
+      if (deleteError) throw deleteError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["case-studies"] });
+      queryClient.invalidateQueries({ queryKey: ["technological-trends"] });
+      toast.success("Movido a Tendencias correctamente");
+      setSelectedCase(null);
+    },
+    onError: (error) => {
+      console.error(error);
+      toast.error("Error al mover a Tendencias");
+    },
+  });
+
+  // Delete case study
+  const deleteCaseMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("casos_de_estudio")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["case-studies"] });
+      toast.success("Caso de estudio eliminado");
+      setSelectedCase(null);
+    },
+    onError: () => {
+      toast.error("Error al eliminar");
+    },
+  });
 
   // File upload handler
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1319,48 +1416,162 @@ export default function KnowledgeBase() {
 
       {/* Case Study Detail Modal */}
       <Dialog open={!!selectedCase} onOpenChange={(open) => !open && setSelectedCase(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           {selectedCase && (
             <>
               <DialogHeader>
                 <DialogTitle className="text-xl">{selectedCase.name}</DialogTitle>
-                <DialogDescription className="flex items-center gap-2">
+                <DialogDescription className="flex items-center gap-2 flex-wrap">
                   {selectedCase.country && (
-                    <>
+                    <Badge variant="outline" className="flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
                       {selectedCase.country}
-                    </>
+                    </Badge>
                   )}
                   {selectedCase.entity_type && (
                     <Badge variant="secondary">{selectedCase.entity_type}</Badge>
                   )}
+                  {selectedCase.sector && (
+                    <Badge variant="outline">{selectedCase.sector}</Badge>
+                  )}
                 </DialogDescription>
               </DialogHeader>
               <Separator />
-              <div className="space-y-4">
-                {selectedCase.description && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-1">Descripción</h4>
-                    <p className="text-sm text-muted-foreground">{selectedCase.description}</p>
-                  </div>
-                )}
-                {selectedCase.sector && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-1">Sector</h4>
-                    <p className="text-sm text-muted-foreground">{selectedCase.sector}</p>
-                  </div>
-                )}
-                {selectedCase.technology_types && selectedCase.technology_types.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-1">Tipos de Tecnología</h4>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedCase.technology_types.map((type, i) => (
-                        <Badge key={i} variant="outline">{type}</Badge>
-                      ))}
+              
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Left column - Main info */}
+                <div className="space-y-4">
+                  {selectedCase.description && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-1">Descripción</h4>
+                      <p className="text-sm text-muted-foreground">{selectedCase.description}</p>
+                    </div>
+                  )}
+                  
+                  {selectedCase.technology_types && selectedCase.technology_types.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-1">Tipos de Tecnología</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedCase.technology_types.map((type, i) => (
+                          <Badge key={i} variant="outline">{type}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right column - Original data if exists */}
+                <div className="space-y-4">
+                  {selectedCase.original_data && (
+                    <>
+                      {(selectedCase.original_data as Record<string, unknown>)["Proveedor / Empresa"] && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-1">Proveedor / Empresa</h4>
+                          <p className="text-sm text-muted-foreground">{String((selectedCase.original_data as Record<string, unknown>)["Proveedor / Empresa"])}</p>
+                        </div>
+                      )}
+                      {(selectedCase.original_data as Record<string, unknown>)["Web de la empresa"] && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-1">Web</h4>
+                          <a 
+                            href={String((selectedCase.original_data as Record<string, unknown>)["Web de la empresa"])} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            {String((selectedCase.original_data as Record<string, unknown>)["Web de la empresa"])}
+                          </a>
+                        </div>
+                      )}
+                      {(selectedCase.original_data as Record<string, unknown>)["Aplicación principal"] && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-1">Aplicación Principal</h4>
+                          <p className="text-sm text-muted-foreground">{String((selectedCase.original_data as Record<string, unknown>)["Aplicación principal"])}</p>
+                        </div>
+                      )}
+                      {(selectedCase.original_data as Record<string, unknown>)["Ventaja competitiva clave"] && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-1">Ventaja Competitiva</h4>
+                          <p className="text-sm text-muted-foreground">{String((selectedCase.original_data as Record<string, unknown>)["Ventaja competitiva clave"])}</p>
+                        </div>
+                      )}
+                      {(selectedCase.original_data as Record<string, unknown>)["Porque es innovadora"] && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-1">¿Por qué es innovadora?</h4>
+                          <p className="text-sm text-muted-foreground">{String((selectedCase.original_data as Record<string, unknown>)["Porque es innovadora"])}</p>
+                        </div>
+                      )}
+                      {(selectedCase.original_data as Record<string, unknown>)["Grado de madurez (TRL)"] && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-1">TRL</h4>
+                          <Badge variant="secondary">TRL {String((selectedCase.original_data as Record<string, unknown>)["Grado de madurez (TRL)"])}</Badge>
+                        </div>
+                      )}
+                      {(selectedCase.original_data as Record<string, unknown>)["Casos de referencia"] && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-1">Casos de Referencia</h4>
+                          <p className="text-sm text-muted-foreground">{String((selectedCase.original_data as Record<string, unknown>)["Casos de referencia"])}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              {canManage && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Acciones</h4>
+                    <div className="flex flex-wrap gap-2">
+                      <Button 
+                        variant="default"
+                        size="sm"
+                        onClick={() => moveCaseToTechnologies.mutate(selectedCase)}
+                        disabled={moveCaseToTechnologies.isPending || moveCaseToTrends.isPending}
+                      >
+                        {moveCaseToTechnologies.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Database className="h-4 w-4 mr-2" />
+                        )}
+                        Enviar a Tecnologías
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={() => moveCaseToTrends.mutate(selectedCase)}
+                        disabled={moveCaseToTechnologies.isPending || moveCaseToTrends.isPending}
+                      >
+                        {moveCaseToTrends.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Lightbulb className="h-4 w-4 mr-2" />
+                        )}
+                        Enviar a Tendencias
+                      </Button>
+                      {isAdmin && (
+                        <Button 
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => deleteCaseMutation.mutate(selectedCase.id)}
+                          disabled={deleteCaseMutation.isPending}
+                        >
+                          {deleteCaseMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Trash2 className="h-4 w-4 mr-2" />
+                          )}
+                          Eliminar
+                        </Button>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </>
           )}
         </DialogContent>
