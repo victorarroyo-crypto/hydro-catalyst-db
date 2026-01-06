@@ -73,6 +73,8 @@ import {
 import { QueueItemUI, RejectedTechnology } from '@/types/scouting';
 
 const POLLING_INTERVAL = 10000; // 10 seconds
+const STUCK_JOB_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes without progress = potentially stuck
+const STUCK_JOB_HARD_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without progress = likely stuck
 
 // Scouting config and history types (from Railway backend)
 interface ScoutingConfig {
@@ -210,12 +212,25 @@ const cancelScouting = async (jobId: string) => {
   throw new Error('No se pudo cancelar el scouting - endpoint no disponible');
 };
 
-// Check if a job is potentially stuck
-const isJobPotentiallyStuck = (startedAt: string): boolean => {
+// Check if a job is potentially stuck (soft threshold)
+const isJobPotentiallyStuck = (startedAt: string, logsCount: number, tokensUsed: number | null): boolean => {
   const startTime = new Date(startedAt).getTime();
-  const now = Date.now();
-  const tenMinutes = 10 * 60 * 1000;
-  return (now - startTime) > tenMinutes;
+  const elapsed = Date.now() - startTime;
+  // Soft stuck: running > 5 min AND no logs or tokens
+  return elapsed > STUCK_JOB_THRESHOLD_MS && logsCount === 0 && !tokensUsed;
+};
+
+// Check if a job is likely stuck (hard threshold)
+const isJobLikelyStuck = (startedAt: string, logsCount: number, tokensUsed: number | null): boolean => {
+  const startTime = new Date(startedAt).getTime();
+  const elapsed = Date.now() - startTime;
+  // Hard stuck: running > 10 min AND no logs or tokens
+  return elapsed > STUCK_JOB_HARD_THRESHOLD_MS && logsCount === 0 && !tokensUsed;
+};
+
+// Get elapsed time in minutes
+const getElapsedMinutes = (startedAt: string): number => {
+  return Math.floor((Date.now() - new Date(startedAt).getTime()) / 60000);
 };
 
 // Score badge color helper
@@ -285,6 +300,8 @@ const Scouting = () => {
   const [showFormModal, setShowFormModal] = useState(false);
   const [rejectionDialog, setRejectionDialog] = useState<{ tech: QueueItemUI; stage: 'analyst' | 'supervisor' | 'admin' } | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [forceCancelAttempts, setForceCancelAttempts] = useState(0);
+  const [isForceCancelling, setIsForceCancelling] = useState(false);
   const previousRunningJobRef = useRef<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -337,6 +354,13 @@ const Scouting = () => {
     enabled: !!activeJobId,
     refetchInterval: hasRunningJob ? 3000 : false,
   });
+
+  // Determine if the running job is stuck (computed after jobStatus is available)
+  const jobLogsCount = runningJob?.logs?.length ?? jobStatus?.logs?.length ?? 0;
+  const jobTokensUsed = runningJob?.tokens_used ?? null;
+  const isStuckSoft = runningJob && isJobPotentiallyStuck(runningJob.started_at, jobLogsCount, jobTokensUsed);
+  const isStuckHard = runningJob && isJobLikelyStuck(runningJob.started_at, jobLogsCount, jobTokensUsed);
+  const elapsedMinutes = runningJob ? getElapsedMinutes(runningJob.started_at) : 0;
 
   // Models by provider
   const modelsByProvider = llmModelsData ?? {};
@@ -441,12 +465,43 @@ const Scouting = () => {
       queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
       toast.success('Scouting cancelado');
       setCancelConfirmJob(null);
+      setForceCancelAttempts(0);
+      setIsForceCancelling(false);
     },
     onError: () => {
       toast.error('Error al cancelar el scouting');
       setCancelConfirmJob(null);
     },
   });
+
+  // Force cancel with multiple retry attempts and clear feedback
+  const handleForceCancel = useCallback(async (jobId: string) => {
+    setIsForceCancelling(true);
+    setForceCancelAttempts(prev => prev + 1);
+    
+    const toastId = toast.loading(`Intentando cancelar (intento ${forceCancelAttempts + 1})...`);
+    
+    try {
+      await cancelScouting(jobId);
+      queryClient.invalidateQueries({ queryKey: ['scouting-history'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-job-status'] });
+      toast.success('Job cancelado correctamente', { id: toastId });
+      setForceCancelAttempts(0);
+      setAssumedRunningJobId(null);
+    } catch (error) {
+      const attempt = forceCancelAttempts + 1;
+      if (attempt < 3) {
+        toast.error(`Cancelación fallida (intento ${attempt}/3). El backend puede no tener endpoint de cancelación.`, { id: toastId, duration: 5000 });
+      } else {
+        toast.error(
+          `No se pudo cancelar después de ${attempt} intentos. El job puede haber terminado o el backend no soporta cancelación. Intenta refrescar.`,
+          { id: toastId, duration: 8000 }
+        );
+      }
+    } finally {
+      setIsForceCancelling(false);
+    }
+  }, [forceCancelAttempts, queryClient]);
 
   const handleStartScouting = () => {
     const keywordList = keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
@@ -886,6 +941,76 @@ const Scouting = () => {
         </Card>
       )}
 
+      {/* Stuck Job Warning Banner */}
+      {hasRunningJob && runningJob && (isStuckSoft || isStuckHard) && (
+        <Card className={`border-2 animate-fade-in mb-6 ${isStuckHard ? 'border-destructive/50 bg-destructive/5' : 'border-yellow-500/50 bg-yellow-500/5'}`}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className={`w-6 h-6 ${isStuckHard ? 'text-destructive' : 'text-yellow-600'}`} />
+                <div>
+                  <CardTitle className={`text-base flex items-center gap-2 ${isStuckHard ? 'text-destructive' : 'text-yellow-700'}`}>
+                    {isStuckHard ? '⚠️ Job probablemente atascado' : '⏳ Job posiblemente atascado'}
+                  </CardTitle>
+                  <CardDescription>
+                    Ejecutando desde hace <strong>{elapsedMinutes} minutos</strong> sin generar logs ni consumir tokens.
+                    {isStuckHard && ' El proceso del backend puede haber fallado silenciosamente.'}
+                  </CardDescription>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Job ID: <code className="font-mono bg-muted px-1 rounded">{runningJob.id.slice(0, 8)}...</code></span>
+              <span>•</span>
+              <span>Logs: {jobLogsCount}</span>
+              <span>•</span>
+              <span>Tokens: {jobTokensUsed ?? 0}</span>
+              {forceCancelAttempts > 0 && (
+                <>
+                  <span>•</span>
+                  <span className="text-destructive">Intentos de cancelación: {forceCancelAttempts}</span>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  refetchHistory();
+                  toast.info('Actualizando estado...');
+                }}
+              >
+                <RefreshCw className="w-4 h-4 mr-1" />
+                Actualizar estado
+              </Button>
+              <Button
+                variant={isStuckHard ? 'destructive' : 'outline'}
+                size="sm"
+                disabled={isForceCancelling}
+                onClick={() => handleForceCancel(runningJob.id)}
+                className={!isStuckHard ? 'text-yellow-700 border-yellow-500 hover:bg-yellow-50' : ''}
+              >
+                {isForceCancelling ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Ban className="w-4 h-4 mr-1" />
+                )}
+                {isForceCancelling ? 'Cancelando...' : 'Forzar cancelación'}
+              </Button>
+            </div>
+            {forceCancelAttempts >= 3 && (
+              <p className="text-xs text-muted-foreground">
+                💡 Si la cancelación no funciona, es posible que el backend externo no soporte esta operación.
+                El job puede terminar por sí solo o requerir intervención manual en Railway.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
@@ -1204,7 +1329,7 @@ const Scouting = () => {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {getStatusBadge(item.status)}
-                            {item.status === 'running' && isJobPotentiallyStuck(item.started_at) && (
+                            {item.status === 'running' && isJobPotentiallyStuck(item.started_at, item.logs?.length ?? 0, item.tokens_used) && (
                               <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">
                                 <AlertTriangle className="w-3 h-3 mr-1" />
                                 Atascado?
