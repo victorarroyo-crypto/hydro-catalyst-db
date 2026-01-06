@@ -44,3 +44,9 @@ verify_jwt = false
 
 [functions.run-database-audit]
 verify_jwt = false
+
+[functions.sync-databases]
+verify_jwt = false
+
+[functions.run-database-audit]
+verify_jwt = false
