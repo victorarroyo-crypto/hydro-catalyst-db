@@ -465,25 +465,37 @@ export default function KnowledgeBase() {
   // Move case study to technologies
   const moveCaseToTechnologies = useMutation({
     mutationFn: async (caseStudy: CaseStudy) => {
-      const originalData = caseStudy.original_data || {};
-      const { error } = await supabase
+      const originalData = (caseStudy.original_data || {}) as Record<string, unknown>;
+      
+      // Get all fields from original_data with proper fallbacks
+      const technologyData = {
+        "Nombre de la tecnología": caseStudy.name,
+        "Tipo de tecnología": (originalData["Tipo de tecnología"] as string) || caseStudy.technology_types?.[0] || "Sin clasificar",
+        "Subcategoría": (originalData["Subcategoría"] as string) || null,
+        "Descripción técnica breve": (originalData["Descripción técnica breve"] as string) || caseStudy.description || null,
+        "País de origen": (originalData["País de origen"] as string) || caseStudy.country || null,
+        "Sector y subsector": (originalData["Sector y subsector"] as string) || caseStudy.sector || null,
+        "Proveedor / Empresa": (originalData["Proveedor / Empresa"] as string) || null,
+        "Web de la empresa": (originalData["Web de la empresa"] as string) || null,
+        "Email de contacto": (originalData["Email de contacto"] as string) || null,
+        "Aplicación principal": (originalData["Aplicación principal"] as string) || null,
+        "Ventaja competitiva clave": (originalData["Ventaja competitiva clave"] as string) || null,
+        "Porque es innovadora": (originalData["Porque es innovadora"] as string) || null,
+        "Casos de referencia": (originalData["Casos de referencia"] as string) || null,
+        "Paises donde actua": (originalData["Paises donde actua"] as string) || null,
+        "Comentarios del analista": (originalData["Comentarios del analista"] as string) || null,
+        "Estado del seguimiento": (originalData["Estado del seguimiento"] as string) || null,
+        "Fecha de scouting": (originalData["Fecha de scouting"] as string) || null,
+        "Grado de madurez (TRL)": (originalData["Grado de madurez (TRL)"] as number) || null,
+        status: "active",
+      };
+      
+      const { data: insertedTech, error } = await supabase
         .from("technologies")
-        .insert({
-          "Nombre de la tecnología": caseStudy.name,
-          "Tipo de tecnología": caseStudy.technology_types?.[0] || "Sin clasificar",
-          "Descripción técnica breve": caseStudy.description,
-          "País de origen": caseStudy.country,
-          "Sector y subsector": caseStudy.sector,
-          "Proveedor / Empresa": (originalData as Record<string, unknown>)["Proveedor / Empresa"] as string || null,
-          "Web de la empresa": (originalData as Record<string, unknown>)["Web de la empresa"] as string || null,
-          "Email de contacto": (originalData as Record<string, unknown>)["Email de contacto"] as string || null,
-          "Aplicación principal": (originalData as Record<string, unknown>)["Aplicación principal"] as string || null,
-          "Ventaja competitiva clave": (originalData as Record<string, unknown>)["Ventaja competitiva clave"] as string || null,
-          "Porque es innovadora": (originalData as Record<string, unknown>)["Porque es innovadora"] as string || null,
-          "Casos de referencia": (originalData as Record<string, unknown>)["Casos de referencia"] as string || null,
-          "Grado de madurez (TRL)": (originalData as Record<string, unknown>)["Grado de madurez (TRL)"] as number || null,
-          status: "active",
-        });
+        .insert(technologyData)
+        .select()
+        .single();
+      
       if (error) throw error;
       
       // Delete from case studies
@@ -492,16 +504,18 @@ export default function KnowledgeBase() {
         .delete()
         .eq("id", caseStudy.id);
       if (deleteError) throw deleteError;
+      
+      return insertedTech;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["case-studies"] });
       queryClient.invalidateQueries({ queryKey: ["technologies"] });
-      toast.success("Movido a Tecnologías correctamente");
+      toast.success(`"${data["Nombre de la tecnología"]}" movido a Tecnologías correctamente`);
       setSelectedCase(null);
     },
     onError: (error) => {
-      console.error(error);
-      toast.error("Error al mover a Tecnologías");
+      console.error("Error moving to technologies:", error);
+      toast.error("Error al mover a Tecnologías: " + (error as Error).message);
     },
   });
 
