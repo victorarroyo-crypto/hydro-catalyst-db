@@ -208,6 +208,9 @@ interface JobStatus {
     pages_analyzed: number;
     technologies_found: number;
     current_step: string | null;
+    candidates_evaluating?: number;
+    current_sources?: string[];
+    last_action?: string;
   } | null;
   logs: ScoutingLog[];
   error_message: string | null;
@@ -872,8 +875,65 @@ const Scouting = () => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Visual Progress Bar with Phases */}
+            {(() => {
+              const phases = [
+                { id: 'init', label: 'Iniciando', icon: '🚀' },
+                { id: 'search', label: 'Buscando fuentes', icon: '🔍' },
+                { id: 'scraping', label: 'Extrayendo datos', icon: '📥' },
+                { id: 'analyzing', label: 'Analizando con IA', icon: '🤖' },
+                { id: 'classifying', label: 'Clasificando', icon: '🏷️' },
+                { id: 'saving', label: 'Guardando', icon: '💾' },
+              ];
+              
+              const currentPhase = jobStatus?.current_phase ?? jobStatus?.progress?.current_step ?? 'init';
+              const currentPhaseIndex = phases.findIndex(p => 
+                currentPhase.toLowerCase().includes(p.id) || 
+                p.label.toLowerCase().includes(currentPhase.toLowerCase())
+              );
+              const activeIndex = currentPhaseIndex >= 0 ? currentPhaseIndex : 0;
+              const progressPercent = ((activeIndex + 1) / phases.length) * 100;
+              
+              return (
+                <div className="space-y-3">
+                  {/* Progress bar */}
+                  <div className="relative">
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-primary to-primary/70 transition-all duration-500 ease-out"
+                        style={{ width: `${Math.max(progressPercent, 10)}%` }}
+                      />
+                      <div 
+                        className="absolute top-0 h-full w-20 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse"
+                        style={{ left: `${Math.max(progressPercent - 15, 0)}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Phase indicators */}
+                  <div className="flex justify-between text-xs">
+                    {phases.map((phase, idx) => (
+                      <div 
+                        key={phase.id}
+                        className={`flex flex-col items-center gap-1 transition-all duration-300 ${
+                          idx < activeIndex ? 'text-green-600' :
+                          idx === activeIndex ? 'text-primary font-medium scale-110' :
+                          'text-muted-foreground opacity-50'
+                        }`}
+                      >
+                        <span className={`text-lg ${idx === activeIndex ? 'animate-bounce' : ''}`}>
+                          {idx < activeIndex ? '✅' : phase.icon}
+                        </span>
+                        <span className="hidden sm:block text-center max-w-[60px]">{phase.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Progress Stats */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="bg-background/60 rounded-lg p-3 text-center">
                 <div className="text-2xl font-bold text-primary">
                   {jobStatus?.progress?.pages_analyzed ?? 0}
@@ -887,11 +947,50 @@ const Scouting = () => {
                 <div className="text-xs text-muted-foreground">Tecnologías encontradas</div>
               </div>
               <div className="bg-background/60 rounded-lg p-3 text-center">
-                <div className="text-sm font-medium text-foreground capitalize">
-                  {jobStatus?.current_phase ?? jobStatus?.progress?.current_step ?? 'Iniciando...'}
+                <div className="text-2xl font-bold text-amber-500">
+                  {jobStatus?.progress?.candidates_evaluating ?? '—'}
                 </div>
-                <div className="text-xs text-muted-foreground">Fase actual</div>
+                <div className="text-xs text-muted-foreground">Candidatas evaluándose</div>
               </div>
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <div className="text-sm font-medium text-foreground">
+                  {(() => {
+                    const started = new Date(runningJob.started_at);
+                    const now = new Date();
+                    const diffMs = now.getTime() - started.getTime();
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffSecs = Math.floor((diffMs % 60000) / 1000);
+                    return `${diffMins}m ${diffSecs}s`;
+                  })()}
+                </div>
+                <div className="text-xs text-muted-foreground">Tiempo transcurrido</div>
+              </div>
+            </div>
+
+            {/* Activity Indicator */}
+            <div className="bg-background/60 rounded-lg p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                <span>Actividad en tiempo real</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(jobStatus?.progress?.current_sources || []).slice(0, 4).map((source: string, idx: number) => (
+                  <Badge key={idx} variant="outline" className="text-xs animate-fade-in">
+                    🌐 {source.length > 30 ? source.substring(0, 30) + '...' : source}
+                  </Badge>
+                ))}
+                {(!jobStatus?.progress?.current_sources || jobStatus.progress.current_sources.length === 0) && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Explorando fuentes de información...</span>
+                  </div>
+                )}
+              </div>
+              {jobStatus?.progress?.last_action && (
+                <p className="text-xs text-muted-foreground italic">
+                  Última acción: {jobStatus.progress.last_action}
+                </p>
+              )}
             </div>
 
             {/* Live Logs */}
@@ -901,9 +1000,9 @@ const Scouting = () => {
                   <FileText className="w-4 h-4" />
                   Últimos logs
                 </div>
-                <ScrollArea className="h-32 rounded-md border bg-background/80 p-3">
+                <ScrollArea className="h-24 rounded-md border bg-background/80 p-3">
                   <div className="space-y-1.5">
-                    {jobStatus.logs.slice(-8).reverse().map((log, idx) => (
+                    {jobStatus.logs.slice(-6).reverse().map((log, idx) => (
                       <div 
                         key={idx} 
                         className={`flex items-start gap-2 text-xs font-mono ${
@@ -921,10 +1020,17 @@ const Scouting = () => {
                 </ScrollArea>
               </div>
             ) : (
-              <div className="bg-background/60 rounded-lg p-4 text-center text-muted-foreground">
-                <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-                <p className="text-sm">Esperando logs del backend...</p>
-                <p className="text-xs mt-1">El proceso de scouting puede tardar varios minutos</p>
+              <div className="bg-background/60 rounded-lg p-3 flex items-center gap-3">
+                <div className="relative">
+                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  </div>
+                  <span className="absolute -bottom-1 -right-1 text-xs">🔄</span>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Conectando con el motor de scouting...</p>
+                  <p className="text-xs text-muted-foreground">Los resultados aparecerán aquí en tiempo real</p>
+                </div>
               </div>
             )}
 
