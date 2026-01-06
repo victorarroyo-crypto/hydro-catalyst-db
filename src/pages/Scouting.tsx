@@ -643,14 +643,14 @@ const Scouting = () => {
     <Card key={item.id} className="border opacity-75">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base truncate">{item.nombre}</CardTitle>
+          <CardTitle className="text-base truncate">{item["Nombre de la tecnología"]}</CardTitle>
           <Badge variant="destructive" className="text-xs">
             Rechazada
           </Badge>
         </div>
         <CardDescription className="flex items-center gap-1 text-xs">
           <Building2 className="w-3 h-3" />
-          {item.proveedor}
+          {item["Proveedor / Empresa"]}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -658,7 +658,7 @@ const Scouting = () => {
           <strong>Razón:</strong> {item.rejection_reason}
         </div>
         <div className="text-xs text-muted-foreground">
-          <strong>Por:</strong> {item.rejected_by} ({item.rejection_stage})
+          <strong>Por:</strong> {item.rejected_by} ({item.rejection_category || 'N/A'})
         </div>
         <div className="text-xs text-muted-foreground">
           {item.rejected_at && new Date(item.rejected_at).toLocaleDateString('es-ES')}
