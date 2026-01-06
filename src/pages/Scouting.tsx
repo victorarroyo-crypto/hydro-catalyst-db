@@ -1258,16 +1258,29 @@ const Scouting = () => {
                 size="lg" 
                 className="w-full"
                 onClick={handleStartScouting}
-                disabled={scoutingMutation.isPending || llmModelsLoading || llmModelsError}
+                disabled={scoutingMutation.isPending || llmModelsLoading || !!llmModelsError || hasRunningJob}
               >
                 {scoutingMutation.isPending ? (
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Iniciando scouting...
+                  </>
                 ) : llmModelsLoading ? (
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Cargando modelos...
+                  </>
+                ) : hasRunningJob ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Scouting en progreso...
+                  </>
                 ) : (
-                  <Rocket className="w-5 h-5 mr-2" />
+                  <>
+                    <Rocket className="w-5 h-5 mr-2" />
+                    Iniciar Scouting
+                  </>
                 )}
-                {llmModelsLoading ? 'Cargando modelos...' : 'Iniciar Scouting'}
               </Button>
             </CardContent>
           </Card>
