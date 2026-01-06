@@ -709,26 +709,20 @@ const Scouting = () => {
   const approvedItems = approvedQueue?.items ?? [];
   const rejectedItems = rejectedQueue?.items ?? [];
   
+  // Combine pending and review items into a single "En Revisión" section
+  const allReviewItems = [...pendingItems, ...reviewItems];
+  const reviewSectionLoading = pendingLoading || reviewLoading;
+  
   const queueSections = [
-    { 
-      id: 'pending', 
-      title: 'Pendientes de Revisión', 
-      items: pendingItems, 
-      loading: pendingLoading,
-      icon: Clock,
-      color: 'text-amber-500',
-      bgColor: 'bg-amber-500/10',
-      description: 'Tecnologías recién descubiertas esperando primera revisión'
-    },
     { 
       id: 'review', 
       title: 'En Revisión (Analista)', 
-      items: reviewItems, 
-      loading: reviewLoading,
+      items: allReviewItems, 
+      loading: reviewSectionLoading,
       icon: Eye,
       color: 'text-blue-500',
       bgColor: 'bg-blue-500/10',
-      description: 'Tecnologías siendo editadas y evaluadas por analistas'
+      description: 'Tecnologías para evaluar: editar, completar información y aprobar o rechazar'
     },
     { 
       id: 'approved', 
