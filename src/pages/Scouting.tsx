@@ -319,6 +319,7 @@ const Scouting = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [forceCancelAttempts, setForceCancelAttempts] = useState(0);
   const [isForceCancelling, setIsForceCancelling] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const previousRunningJobRef = useRef<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -628,6 +629,91 @@ const Scouting = () => {
     }
   }, [forceCancelAttempts, queryClient]);
 
+  // Reconcile state: compare Railway history vs Monitor (scouting_sessions)
+  const handleReconcileState = useCallback(async () => {
+    setIsReconciling(true);
+    const toastId = toast.loading('Reconciliando estado...');
+
+    try {
+      // Fetch Railway history to get jobs marked as "running"
+      const railwayHistory = historyData?.items ?? [];
+      const railwayRunning = railwayHistory.filter(job => job.status === 'running');
+
+      if (railwayRunning.length === 0 && !assumedRunningJobId) {
+        toast.success('No hay jobs fantasma pendientes.', { id: toastId });
+        setIsReconciling(false);
+        return;
+      }
+
+      // Fetch local scouting_sessions (Monitor data) for these job IDs
+      const jobIdsToCheck = [
+        ...railwayRunning.map(j => j.id),
+        ...(assumedRunningJobId ? [assumedRunningJobId] : []),
+      ].filter(Boolean);
+
+      const { data: localSessions, error: localError } = await supabase
+        .from('scouting_sessions')
+        .select('session_id,status,completed_at')
+        .in('session_id', jobIdsToCheck);
+
+      if (localError) throw localError;
+
+      const reconcileResults: string[] = [];
+
+      for (const jobId of jobIdsToCheck) {
+        const railwayJob = railwayRunning.find(j => j.id === jobId);
+        const localSession = localSessions?.find(s => s.session_id === jobId);
+
+        // Check for discrepancy
+        const railwayStatus = railwayJob?.status ?? 'running';
+        const localStatus = localSession?.status ?? 'no_data';
+
+        const localFinishedStates = ['completed', 'failed', 'cancelled', 'canceled'];
+        const localIsFinished = localFinishedStates.includes(localStatus);
+
+        if (railwayStatus === 'running' && localIsFinished) {
+          // Railway stale, Monitor says finished
+          reconcileResults.push(`Job ${jobId.slice(0, 8)}... → Monitor: ${localStatus} (Railway stale)`);
+        } else if (railwayStatus === 'running' && localStatus === 'no_data') {
+          // Railway says running, but Monitor never received it
+          reconcileResults.push(`Job ${jobId.slice(0, 8)}... → Sin datos en Monitor (Railway fantasma)`);
+        } else if (localIsFinished) {
+          reconcileResults.push(`Job ${jobId.slice(0, 8)}... → ${localStatus}`);
+        }
+      }
+
+      // Clear local assumed state
+      setAssumedRunningJobId(null);
+      setForceCancelAttempts(0);
+
+      // Refresh everything
+      await Promise.all([
+        refetchHistory(),
+        refetchActive(),
+        refetchReview(),
+        refetchPendingApproval(),
+        refetchCounts(),
+      ]);
+
+      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-job-status'] });
+
+      if (reconcileResults.length > 0) {
+        toast.success(
+          `Reconciliado: ${reconcileResults.length} job(s) limpiados.\n${reconcileResults.join('\n')}`,
+          { id: toastId, duration: 8000 }
+        );
+      } else {
+        toast.success('Estado sincronizado correctamente.', { id: toastId });
+      }
+    } catch (error) {
+      console.error('[Scouting] Reconcile error:', error);
+      toast.error(`Error al reconciliar: ${(error as Error).message}`, { id: toastId });
+    } finally {
+      setIsReconciling(false);
+    }
+  }, [historyData?.items, assumedRunningJobId, queryClient, refetchHistory, refetchActive, refetchReview, refetchPendingApproval, refetchCounts]);
+
   const handleStartScouting = () => {
     const keywordList = keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
     if (keywordList.length === 0) {
@@ -908,7 +994,7 @@ const Scouting = () => {
       )}
 
       {/* Stats Dashboard */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardDescription>En revisión</CardDescription>
@@ -961,6 +1047,29 @@ const Scouting = () => {
                 <span className="text-muted-foreground">No</span>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Reconcile State Button Card */}
+        <Card className="flex flex-col justify-center items-center">
+          <CardContent className="py-4 flex flex-col items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReconcileState}
+              disabled={isReconciling}
+              className="flex items-center gap-2"
+            >
+              {isReconciling ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Reconciliar estado
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Compara Railway vs Monitor y limpia jobs fantasma
+            </p>
           </CardContent>
         </Card>
       </div>
