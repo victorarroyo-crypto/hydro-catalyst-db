@@ -35,3 +35,9 @@ verify_jwt = false
 
 [functions.scouting-proxy]
 verify_jwt = false
+
+[functions.migrate-scouting-data]
+verify_jwt = false
+
+[functions.field-mappings]
+verify_jwt = false
