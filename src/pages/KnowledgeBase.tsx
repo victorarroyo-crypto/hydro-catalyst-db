@@ -19,7 +19,7 @@ import {
   Upload, Search, FileText, Loader2, Trash2, BookOpen, MessageSquare, 
   AlertCircle, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, 
   RefreshCw, DollarSign, Info, Globe, TrendingUp, Star, MapPin, 
-  Building2, ExternalLink, Calendar, Plus, RotateCcw, Edit
+  Building2, ExternalLink, Calendar, Plus, RotateCcw, Edit, LayoutGrid, List
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
@@ -173,6 +173,19 @@ export default function KnowledgeBase() {
   
   // Trends state
   const [selectedTrend, setSelectedTrend] = useState<TechnologicalTrend | null>(null);
+
+  // View mode state for each section
+  const [viewMode, setViewMode] = useState<{
+    documents: 'grid' | 'list';
+    sources: 'grid' | 'list';
+    cases: 'grid' | 'list';
+    trends: 'grid' | 'list';
+  }>({
+    documents: 'list',
+    sources: 'grid',
+    cases: 'grid',
+    trends: 'grid',
+  });
 
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
   const isAdmin = userRole === "admin";
@@ -590,6 +603,28 @@ export default function KnowledgeBase() {
     c.description?.toLowerCase().includes(caseSearchQuery.toLowerCase())
   ) || [];
 
+  // View toggle component
+  const ViewToggle = ({ section }: { section: 'documents' | 'sources' | 'cases' | 'trends' }) => (
+    <div className="flex items-center gap-1 border rounded-lg p-1">
+      <Button
+        variant={viewMode[section] === 'grid' ? 'default' : 'ghost'}
+        size="sm"
+        className="h-8 px-3"
+        onClick={() => setViewMode(prev => ({ ...prev, [section]: 'grid' }))}
+      >
+        <LayoutGrid className="h-4 w-4" />
+      </Button>
+      <Button
+        variant={viewMode[section] === 'list' ? 'default' : 'ghost'}
+        size="sm"
+        className="h-8 px-3"
+        onClick={() => setViewMode(prev => ({ ...prev, [section]: 'list' }))}
+      >
+        <List className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -608,6 +643,7 @@ export default function KnowledgeBase() {
             {activeSection === 'trends' && 'Tendencias y evolución tecnológica'}
           </p>
         </div>
+        <ViewToggle section={activeSection} />
       </div>
 
       <div className="space-y-4">
@@ -742,7 +778,7 @@ export default function KnowledgeBase() {
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No hay documentos cargados</p>
                 </div>
-              ) : (
+              ) : viewMode.documents === 'list' ? (
                 <div className="space-y-2">
                   {documents?.map((doc) => (
                     <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
@@ -791,6 +827,46 @@ export default function KnowledgeBase() {
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {documents?.map((doc) => (
+                    <Card key={doc.id} className="relative">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                            <CardTitle className="text-base line-clamp-2">{doc.name}</CardTitle>
+                          </div>
+                          {getStatusBadge(doc.status)}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+                          <span>{formatFileSize(doc.file_size)}</span>
+                          <span>•</span>
+                          <span>{doc.chunk_count} chunks</span>
+                        </div>
+                        {doc.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{doc.description}</p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          {canManage && (
+                            <>
+                              <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              {isAdmin && (
+                                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -827,7 +903,7 @@ export default function KnowledgeBase() {
                   <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No hay fuentes configuradas</p>
                 </div>
-              ) : (
+              ) : viewMode.sources === 'grid' ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {sources?.map((source) => (
                     <Card key={source.id} className={`relative ${!source.activo ? 'opacity-60' : ''}`}>
@@ -891,6 +967,45 @@ export default function KnowledgeBase() {
                     </Card>
                   ))}
                 </div>
+              ) : (
+                <div className="space-y-2">
+                  {sources?.map((source) => (
+                    <div key={source.id} className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 ${!source.activo ? 'opacity-60' : ''}`}>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <Globe className="h-5 w-5 text-muted-foreground shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{source.nombre}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {source.tipo && <span>{TIPO_OPTIONS.find(t => t.value === source.tipo)?.label}</span>}
+                            {source.pais && <><span>•</span><span>{source.pais}</span></>}
+                            {source.tecnologias_encontradas > 0 && <><span>•</span><span>{source.tecnologias_encontradas} techs</span></>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {renderStars(source.calidad_score)}
+                        {!source.activo && <Badge variant="destructive" className="text-xs">Inactivo</Badge>}
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={source.url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </Button>
+                        {canManage && (
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => handleEditSource(source)}>
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                            {isAdmin && (
+                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteSourceMutation.mutate(source.id)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -930,7 +1045,7 @@ export default function KnowledgeBase() {
                   <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No hay casos de estudio</p>
                 </div>
-              ) : (
+              ) : viewMode.cases === 'grid' ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {filteredCases.map((caseStudy) => (
                     <Card 
@@ -969,6 +1084,35 @@ export default function KnowledgeBase() {
                     </Card>
                   ))}
                 </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredCases.map((caseStudy) => (
+                    <div 
+                      key={caseStudy.id} 
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                      onClick={() => setSelectedCase(caseStudy)}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{caseStudy.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {caseStudy.country && <><MapPin className="w-3 h-3" /><span>{caseStudy.country}</span></>}
+                            {caseStudy.sector && <><span>•</span><span>{caseStudy.sector}</span></>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {caseStudy.entity_type && (
+                          <Badge variant="secondary" className="text-xs">{caseStudy.entity_type}</Badge>
+                        )}
+                        {caseStudy.technology_types && caseStudy.technology_types.length > 0 && (
+                          <Badge variant="outline" className="text-xs">{caseStudy.technology_types.length} tipos</Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -996,7 +1140,7 @@ export default function KnowledgeBase() {
                   <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No hay tendencias registradas</p>
                 </div>
-              ) : (
+              ) : viewMode.trends === 'grid' ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {trends?.map((trend) => (
                     <Card 
@@ -1024,6 +1168,31 @@ export default function KnowledgeBase() {
                         )}
                       </CardContent>
                     </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {trends?.map((trend) => (
+                    <div 
+                      key={trend.id} 
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                      onClick={() => setSelectedTrend(trend)}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <TrendingUp className="h-5 w-5 text-muted-foreground shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{trend.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{trend.technology_type}</span>
+                            {trend.subcategory && <><span>•</span><span>{trend.subcategory}</span></>}
+                            {trend.sector && <><span>•</span><span>{trend.sector}</span></>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">{trend.technology_type}</Badge>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
