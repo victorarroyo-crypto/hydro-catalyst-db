@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -126,9 +127,18 @@ export default function KnowledgeBase() {
   const { profile } = useAuth();
   const userRole = profile?.role;
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   
-  // Active section state
-  const [activeSection, setActiveSection] = useState<'documents' | 'sources' | 'cases' | 'trends'>('documents');
+  // Get section from URL or default to 'documents'
+  const sectionFromUrl = searchParams.get('section') as 'documents' | 'sources' | 'cases' | 'trends' | null;
+  const [activeSection, setActiveSection] = useState<'documents' | 'sources' | 'cases' | 'trends'>(sectionFromUrl || 'documents');
+  
+  // Update section when URL changes
+  useEffect(() => {
+    if (sectionFromUrl && ['documents', 'sources', 'cases', 'trends'].includes(sectionFromUrl)) {
+      setActiveSection(sectionFromUrl);
+    }
+  }, [sectionFromUrl]);
   
   // Documents state
   const [uploading, setUploading] = useState(false);
@@ -586,51 +596,18 @@ export default function KnowledgeBase() {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <BookOpen className="h-8 w-8" />
-            Base de Conocimiento
+            {activeSection === 'documents' && 'Documentos Técnicos'}
+            {activeSection === 'sources' && 'Fuentes de Scouting'}
+            {activeSection === 'cases' && 'Casos de Estudio'}
+            {activeSection === 'trends' && 'Tendencias Tecnológicas'}
           </h1>
           <p className="text-muted-foreground mt-1">
-            Documentos, fuentes, casos de estudio y tendencias tecnológicas
+            {activeSection === 'documents' && 'Gestión de documentos técnicos y consultas con IA'}
+            {activeSection === 'sources' && 'Fuentes de información para scouting tecnológico'}
+            {activeSection === 'cases' && 'Casos de estudio y aplicaciones reales'}
+            {activeSection === 'trends' && 'Tendencias y evolución tecnológica'}
           </p>
         </div>
-      </div>
-
-      {/* Section Dropdown */}
-      <div className="flex items-center gap-4">
-        <Select value={activeSection} onValueChange={(v) => setActiveSection(v as typeof activeSection)}>
-          <SelectTrigger className="w-[280px] bg-background">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-background border shadow-lg z-50">
-            <SelectItem value="documents">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Documentos Técnicos
-                <Badge variant="secondary" className="ml-1">{documents?.length || 0}</Badge>
-              </div>
-            </SelectItem>
-            <SelectItem value="sources">
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4" />
-                Fuentes de Scouting
-                <Badge variant="secondary" className="ml-1">{sources?.length || 0}</Badge>
-              </div>
-            </SelectItem>
-            <SelectItem value="cases">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4" />
-                Casos de Estudio
-                <Badge variant="secondary" className="ml-1">{caseStudies?.length || 0}</Badge>
-              </div>
-            </SelectItem>
-            <SelectItem value="trends">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Tendencias
-                <Badge variant="secondary" className="ml-1">{trends?.length || 0}</Badge>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="space-y-4">

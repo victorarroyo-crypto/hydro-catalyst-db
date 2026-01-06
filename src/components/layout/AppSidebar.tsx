@@ -18,6 +18,9 @@ import {
   Cpu,
   ChevronDown,
   BarChart3,
+  FileText,
+  Globe,
+  Lightbulb,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -53,7 +56,13 @@ const mainNavItems = [
 
 const internalNavItems = [
   { title: 'Centro de Supervisión', url: '/quality-control', icon: ShieldCheck },
-  { title: 'Base de Conocimiento', url: '/knowledge-base', icon: Library },
+];
+
+const knowledgeBaseItems = [
+  { title: 'Documentos Técnicos', url: '/knowledge-base?section=documents', icon: FileText },
+  { title: 'Fuentes de Scouting', url: '/knowledge-base?section=sources', icon: Globe },
+  { title: 'Casos de Estudio', url: '/knowledge-base?section=cases', icon: BookOpen },
+  { title: 'Tendencias', url: '/knowledge-base?section=trends', icon: Lightbulb },
 ];
 
 const aiToolsItems = [
@@ -75,8 +84,12 @@ export function AppSidebar() {
   const [aiToolsOpen, setAiToolsOpen] = useState(
     aiToolsItems.some((item) => location.pathname === item.url)
   );
+  const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(
+    location.pathname === '/knowledge-base'
+  );
 
   const isActive = (path: string) => location.pathname === path;
+  const isKnowledgeBaseActive = location.pathname === '/knowledge-base';
   const isAiToolActive = aiToolsItems.some((item) => location.pathname === item.url);
 
   return (
@@ -156,6 +169,60 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+
+                {/* Knowledge Base Submenu */}
+                <Collapsible
+                  open={knowledgeBaseOpen}
+                  onOpenChange={setKnowledgeBaseOpen}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        className={cn(
+                          'transition-all duration-200 w-full',
+                          isKnowledgeBaseActive
+                            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                            : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                        )}
+                      >
+                        <Library className="w-5 h-5" />
+                        {!collapsed && (
+                          <>
+                            <span className="flex-1 text-left">Base de Conocimiento</span>
+                            <ChevronDown className={cn(
+                              "w-4 h-4 transition-transform duration-200",
+                              knowledgeBaseOpen && "rotate-180"
+                            )} />
+                          </>
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {knowledgeBaseItems.map((item) => (
+                          <SidebarMenuSubItem key={item.title}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={location.pathname + location.search === item.url}
+                              className={cn(
+                                'transition-all duration-200',
+                                location.pathname + location.search === item.url
+                                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                  : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                              )}
+                            >
+                              <Link to={item.url} className="flex items-center gap-2">
+                                <item.icon className="w-4 h-4" />
+                                <span>{item.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
 
                 {/* AI Tools Submenu */}
                 <Collapsible
