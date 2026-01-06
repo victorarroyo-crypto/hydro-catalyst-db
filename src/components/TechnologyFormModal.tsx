@@ -284,6 +284,40 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     },
     enabled: !!technology?.id,
   });
+
+  // Fetch editor profile name (updated_by)
+  const { data: editorProfile } = useQuery({
+    queryKey: ['editor-profile', (technology as any)?.updated_by],
+    queryFn: async () => {
+      const updatedBy = (technology as any)?.updated_by;
+      if (!updatedBy) return null;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', updatedBy)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!(technology as any)?.updated_by,
+  });
+
+  // Fetch reviewer profile name (reviewer_id)
+  const { data: reviewerProfile } = useQuery({
+    queryKey: ['reviewer-profile', (technology as any)?.reviewer_id],
+    queryFn: async () => {
+      const reviewerId = (technology as any)?.reviewer_id;
+      if (!reviewerId) return null;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', reviewerId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!(technology as any)?.reviewer_id,
+  });
   
   const [formData, setFormData] = useState<FormData>({
     "Nombre de la tecnología": '',
@@ -1192,6 +1226,52 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               type="number" 
             />
           </FormSection>
+
+          {/* Audit Info - only show when editing */}
+          {isEditing && technology && (
+            <FormSection title="Información de Auditoría">
+              <div>
+                <Label className="text-sm text-muted-foreground">Última edición por</Label>
+                <div className="mt-1 p-2 bg-muted rounded-md text-sm">
+                  {editorProfile?.full_name || 'No disponible'}
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Fecha de última edición</Label>
+                <div className="mt-1 p-2 bg-muted rounded-md text-sm">
+                  {(technology as any)?.updated_at 
+                    ? new Date((technology as any).updated_at).toLocaleString('es-ES', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    : 'No disponible'}
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Revisado/Aprobado por</Label>
+                <div className="mt-1 p-2 bg-muted rounded-md text-sm">
+                  {reviewerProfile?.full_name || 'No disponible'}
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Fecha de revisión/aprobación</Label>
+                <div className="mt-1 p-2 bg-muted rounded-md text-sm">
+                  {(technology as any)?.reviewed_at 
+                    ? new Date((technology as any).reviewed_at).toLocaleString('es-ES', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    : 'No disponible'}
+                </div>
+              </div>
+            </FormSection>
+          )}
 
           {/* Edit comment for analysts */}
           {isEditing && isAnalyst && (
