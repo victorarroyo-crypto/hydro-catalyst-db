@@ -57,6 +57,7 @@ interface QueueItem {
   score: number;
   trl: number;
   status: string;
+  queue_status?: string;
   created_at?: string;
   description?: string;
   web?: string;

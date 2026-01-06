@@ -13,6 +13,16 @@ import {
 // Note: These tables are new and may not be in the generated types yet
 // Using type assertions to work with the new tables
 
+// Status mapping for database queue_status
+const STATUS_MAPPING: Record<string, string[]> = {
+  'review': ['pending', 'review', 'reviewing'],
+  'pending_approval': ['pending_approval'],
+  'approved': ['approved'],
+  'rejected': ['rejected'],
+  // Combined filter for "all active" items
+  'active': ['pending', 'review', 'reviewing', 'pending_approval'],
+};
+
 // Fetch scouting queue items by status
 export const useScoutingQueue = (status?: string) => {
   return useQuery({
@@ -24,18 +34,28 @@ export const useScoutingQueue = (status?: string) => {
         .order('created_at', { ascending: false });
       
       if (status) {
-        // Map UI status to database queue_status
-        const statusMapping: Record<string, string[]> = {
-          'review': ['pending', 'review', 'reviewing'],
-          'pending_approval': ['pending_approval'],
-          'approved': ['approved'],
-          'rejected': ['rejected'],
-        };
-        const dbStatuses = statusMapping[status] || [status];
+        const dbStatuses = STATUS_MAPPING[status] || [status];
         query = query.in('queue_status', dbStatuses);
       }
       
       const { data, error } = await query;
+      
+      if (error) throw error;
+      return (data as ScoutingQueueItem[]).map(normalizeScoutingItem);
+    },
+  });
+};
+
+// Fetch active scouting queue items (review + pending_approval)
+export const useActiveScoutingQueue = () => {
+  return useQuery({
+    queryKey: ['scouting-queue', 'active'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('scouting_queue')
+        .select('*')
+        .in('queue_status', STATUS_MAPPING.active)
+        .order('created_at', { ascending: false });
       
       if (error) throw error;
       return (data as ScoutingQueueItem[]).map(normalizeScoutingItem);
