@@ -4,8 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bot, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Bot, Play, CheckCircle2, AlertCircle, Loader2, DollarSign, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import { getModelPricing, formatPricePerMillion } from '@/lib/aiModelPricing';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ClassificationResult {
   id: string;
@@ -53,6 +55,27 @@ export const AIClassificationPanel: React.FC = () => {
       };
     },
   });
+
+  // Get current model for classification
+  const { data: modelConfig } = useQuery({
+    queryKey: ['classification-model'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ai_model_settings')
+        .select('model')
+        .eq('action_type', 'classification')
+        .single();
+      
+      if (error) return 'google/gemini-2.5-flash';
+      return data?.model || 'google/gemini-2.5-flash';
+    },
+  });
+
+  // Calculate estimated cost per technology (approx 500 tokens per classification)
+  const estimatedTokensPerTech = 500;
+  const pricing = getModelPricing(modelConfig || 'google/gemini-2.5-flash');
+  const costPerTech = (estimatedTokensPerTech * 0.6 * pricing.input + estimatedTokensPerTech * 0.4 * pricing.output) / 1_000_000;
+  const totalEstimatedCost = costPerTech * (stats?.unclassified || 0);
 
   const classifyMutation = useMutation({
     mutationFn: async (): Promise<ClassificationResponse> => {
@@ -120,6 +143,43 @@ export const AIClassificationPanel: React.FC = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Cost Estimation */}
+        <TooltipProvider>
+          <div className="p-3 rounded-lg bg-muted/50 border space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground flex items-center gap-1">
+                Modelo actual
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Configurable en Ajustes → Modelos de IA</p>
+                  </TooltipContent>
+                </Tooltip>
+              </span>
+              <span className="font-medium font-mono text-xs">
+                {(modelConfig || 'gemini-2.5-flash').replace('google/', '').replace('openai/', '')}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Coste por tecnología</span>
+              <span className="font-medium text-green-600">~${costPerTech.toFixed(4)}</span>
+            </div>
+            {stats?.unclassified && stats.unclassified > 0 && (
+              <div className="flex items-center justify-between text-sm pt-1 border-t">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <DollarSign className="w-3 h-3" />
+                  Coste total estimado
+                </span>
+                <span className="font-bold text-green-600">
+                  ~${totalEstimatedCost < 0.01 ? totalEstimatedCost.toFixed(4) : totalEstimatedCost.toFixed(2)}
+                </span>
+              </div>
+            )}
+          </div>
+        </TooltipProvider>
+
         {/* Progress Stats */}
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
@@ -139,6 +199,9 @@ export const AIClassificationPanel: React.FC = () => {
           <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
             <p className="text-sm font-medium text-primary">
               Sesión actual: {totalClassified} tecnologías clasificadas
+              <span className="text-xs text-muted-foreground ml-2">
+                (~${(costPerTech * totalClassified).toFixed(4)})
+              </span>
             </p>
           </div>
         )}
