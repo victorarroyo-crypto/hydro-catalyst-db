@@ -1450,8 +1450,8 @@ const Scouting = () => {
                       <TableHead>Fecha</TableHead>
                       <TableHead>Configuración</TableHead>
                       <TableHead>Estado</TableHead>
+                      <TableHead>Resultados</TableHead>
                       <TableHead>Modelo</TableHead>
-                      <TableHead className="text-right">Coste</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1506,14 +1506,36 @@ const Scouting = () => {
                           </div>
                         </TableCell>
                         <TableCell>
+                          <div className="flex flex-col gap-1">
+                            {item.status === 'completed' && (
+                              <>
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="text-green-600 font-medium">
+                                    {item.results_summary ? 
+                                      JSON.parse(typeof item.results_summary === 'string' ? item.results_summary : JSON.stringify(item.results_summary))?.technologies_found ?? 'N/A' :
+                                      'Ver cola'
+                                    } encontradas
+                                  </span>
+                                </div>
+                                {item.tokens_used && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {item.tokens_used.toLocaleString()} tokens
+                                  </span>
+                                )}
+                              </>
+                            )}
+                            {item.status === 'running' && (
+                              <span className="text-xs text-blue-600">En progreso...</span>
+                            )}
+                            {item.status === 'failed' && (
+                              <span className="text-xs text-red-600">Error</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <span className="text-xs text-muted-foreground">
                             {item.llm_model || 'N/A'}
                           </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {item.estimated_cost !== null 
-                            ? `$${item.estimated_cost.toFixed(4)}` 
-                            : '-'}
                         </TableCell>
                         <TableCell className="text-right">
                           {item.status === 'running' ? (

@@ -124,6 +124,27 @@ export default function ScoutingMonitor() {
     },
   });
 
+  // Fetch scouting queue counts
+  const { data: queueCounts } = useQuery({
+    queryKey: ['scouting-queue-counts-monitor'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('scouting_queue')
+        .select('queue_status');
+      
+      if (error) throw error;
+      
+      const counts = {
+        total: data?.length || 0,
+        pending: data?.filter(d => d.queue_status === 'pending').length || 0,
+        review: data?.filter(d => d.queue_status === 'review').length || 0,
+        pending_approval: data?.filter(d => d.queue_status === 'pending_approval').length || 0,
+      };
+      return counts;
+    },
+    refetchInterval: 30000,
+  });
+
   // Fetch all recent logs for alert detection
   const { data: allRecentLogs } = useQuery({
     queryKey: ['scouting-logs-all-recent'],
@@ -432,7 +453,7 @@ export default function ScoutingMonitor() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -468,7 +489,7 @@ export default function ScoutingMonitor() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tecnologías Encontradas
+              Tecnologías Reportadas
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -478,6 +499,29 @@ export default function ScoutingMonitor() {
                 {sessions?.reduce((acc, s) => acc + (s.technologies_found || 0), 0) || 0}
               </span>
             </div>
+            <p className="text-xs text-muted-foreground mt-1">Según webhooks recibidos</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-primary">
+              En Cola de Revisión
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <Eye className="w-5 h-5 text-primary" />
+              <span className="text-2xl font-bold text-primary">
+                {queueCounts?.total || 0}
+              </span>
+            </div>
+            <a 
+              href="/scouting" 
+              className="text-xs text-primary underline hover:no-underline mt-1 inline-block"
+            >
+              Ver cola completa →
+            </a>
           </CardContent>
         </Card>
 
