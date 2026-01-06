@@ -60,6 +60,8 @@ const Scouting = () => {
   const [showFormModal, setShowFormModal] = useState(false);
   const [rejectionDialog, setRejectionDialog] = useState<{ tech: QueueItemUI; stage: 'analyst' | 'supervisor' | 'admin' } | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [approvalDialog, setApprovalDialog] = useState<{ tech: QueueItemUI; action: 'send' | 'approve' } | null>(null);
+  const [approvalEmail, setApprovalEmail] = useState('');
 
   // External Supabase queries for scouting_queue
   const { data: activeItems = [], isLoading: activeLoading, refetch: refetchActive } = useExternalActiveScoutingQueue();
@@ -106,25 +108,51 @@ const Scouting = () => {
     return true;
   };
 
-  // Handle sending to approval
-  const handleSendToApproval = (tech: QueueItemUI) => {
-    if (!validateUserEmail()) return;
-    
-    changeStatusMutation.mutate({
-      id: tech.id,
-      status: 'pending_approval',
-      reviewedBy: userEmail,
-    });
+  // Handle opening approval dialog for sending to approval
+  const handleOpenSendToApproval = (tech: QueueItemUI) => {
+    setApprovalEmail(userEmail);
+    setApprovalDialog({ tech, action: 'send' });
   };
 
-  // Handle approve to database
-  const handleApproveToDb = (tech: QueueItemUI) => {
-    if (!validateUserEmail()) return;
+  // Handle opening approval dialog for final approval
+  const handleOpenApproveToDb = (tech: QueueItemUI) => {
+    setApprovalEmail(userEmail);
+    setApprovalDialog({ tech, action: 'approve' });
+  };
+
+  // Handle confirm approval action
+  const handleConfirmApproval = () => {
+    if (!approvalDialog) return;
     
-    approveToDbMutation.mutate({
-      scoutingId: tech.id,
-      approvedBy: userEmail,
-    });
+    if (!approvalEmail || !isValidEmail(approvalEmail)) {
+      toast.error('Email inválido', {
+        description: 'Por favor, introduce un email válido para continuar.',
+      });
+      return;
+    }
+
+    if (approvalDialog.action === 'send') {
+      changeStatusMutation.mutate({
+        id: approvalDialog.tech.id,
+        status: 'pending_approval',
+        reviewedBy: approvalEmail,
+      }, {
+        onSuccess: () => {
+          setApprovalDialog(null);
+          setApprovalEmail('');
+        }
+      });
+    } else {
+      approveToDbMutation.mutate({
+        scoutingId: approvalDialog.tech.id,
+        approvedBy: approvalEmail,
+      }, {
+        onSuccess: () => {
+          setApprovalDialog(null);
+          setApprovalEmail('');
+        }
+      });
+    }
   };
 
   // Handle rejection confirmation
@@ -204,7 +232,7 @@ const Scouting = () => {
                 <Button
                   size="sm"
                   variant="default"
-                  onClick={() => handleSendToApproval(item)}
+                  onClick={() => handleOpenSendToApproval(item)}
                   disabled={changeStatusMutation.isPending}
                   className="flex-1"
                 >
@@ -228,7 +256,7 @@ const Scouting = () => {
               <Button
                 size="sm"
                 variant="default"
-                onClick={() => handleApproveToDb(item)}
+                onClick={() => handleOpenApproveToDb(item)}
                 disabled={approveToDbMutation.isPending}
                 className="flex-1 bg-green-600 hover:bg-green-700"
               >
@@ -461,6 +489,57 @@ const Scouting = () => {
           }}
         />
       )}
+
+      {/* Approval Dialog with editable email */}
+      <AlertDialog open={!!approvalDialog} onOpenChange={() => setApprovalDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {approvalDialog?.action === 'send' ? 'Enviar a aprobación' : 'Aprobar tecnología'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {approvalDialog?.action === 'send' 
+                ? <>Vas a enviar <strong>"{approvalDialog?.tech.name}"</strong> para aprobación del supervisor.</>
+                : <>Vas a aprobar <strong>"{approvalDialog?.tech.name}"</strong> y añadirla a la base de datos principal.</>
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4 space-y-2">
+            <label className="text-sm font-medium">
+              Email del revisor <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="email"
+              placeholder="tu@email.com"
+              value={approvalEmail}
+              onChange={(e) => setApprovalEmail(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {approvalEmail && !isValidEmail(approvalEmail) && (
+              <p className="text-xs text-destructive">Por favor, introduce un email válido</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setApprovalEmail('')}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmApproval}
+              disabled={!approvalEmail || !isValidEmail(approvalEmail) || changeStatusMutation.isPending || approveToDbMutation.isPending}
+              className={approvalDialog?.action === 'approve' ? 'bg-green-600 hover:bg-green-700' : ''}
+            >
+              {(changeStatusMutation.isPending || approveToDbMutation.isPending) ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : approvalDialog?.action === 'send' ? (
+                <Send className="w-4 h-4 mr-2" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+              )}
+              {approvalDialog?.action === 'send' ? 'Enviar' : 'Aprobar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Rejection Dialog */}
       <AlertDialog open={!!rejectionDialog} onOpenChange={() => setRejectionDialog(null)}>
