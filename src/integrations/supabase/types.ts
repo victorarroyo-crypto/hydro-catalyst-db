@@ -630,6 +630,104 @@ export type Database = {
           },
         ]
       }
+      scouting_session_logs: {
+        Row: {
+          created_at: string
+          details: Json | null
+          id: string
+          level: string
+          message: string
+          phase: string | null
+          session_id: string
+          timestamp: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          level?: string
+          message: string
+          phase?: string | null
+          session_id: string
+          timestamp?: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          level?: string
+          message?: string
+          phase?: string | null
+          session_id?: string
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scouting_session_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_sessions"
+            referencedColumns: ["session_id"]
+          },
+        ]
+      }
+      scouting_sessions: {
+        Row: {
+          completed_at: string | null
+          config: Json | null
+          created_at: string
+          current_phase: string | null
+          error_message: string | null
+          id: string
+          progress_percentage: number | null
+          session_id: string
+          sites_examined: number | null
+          started_at: string
+          status: string
+          summary: Json | null
+          technologies_approved: number | null
+          technologies_discarded: number | null
+          technologies_found: number | null
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          config?: Json | null
+          created_at?: string
+          current_phase?: string | null
+          error_message?: string | null
+          id?: string
+          progress_percentage?: number | null
+          session_id: string
+          sites_examined?: number | null
+          started_at?: string
+          status?: string
+          summary?: Json | null
+          technologies_approved?: number | null
+          technologies_discarded?: number | null
+          technologies_found?: number | null
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          config?: Json | null
+          created_at?: string
+          current_phase?: string | null
+          error_message?: string | null
+          id?: string
+          progress_percentage?: number | null
+          session_id?: string
+          sites_examined?: number | null
+          started_at?: string
+          status?: string
+          summary?: Json | null
+          technologies_approved?: number | null
+          technologies_discarded?: number | null
+          technologies_found?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       scouting_sources: {
         Row: {
           activo: boolean | null
