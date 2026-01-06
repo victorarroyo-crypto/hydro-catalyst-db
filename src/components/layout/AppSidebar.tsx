@@ -21,6 +21,7 @@ import {
   FileText,
   Globe,
   Lightbulb,
+  Database,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -74,6 +75,7 @@ const aiToolsItems = [
 
 const settingsItems = [
   { title: 'Configuración', url: '/settings', icon: Settings },
+  { title: 'Auditoría BD', url: '/database-audit', icon: Database, adminOnly: true },
 ];
 
 export function AppSidebar() {
@@ -288,25 +290,27 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {settingsItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.url)}
-                    className={cn(
-                      'transition-all duration-200',
-                      isActive(item.url)
-                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                        : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                    )}
-                  >
-                    <Link to={item.url} className="flex items-center gap-3">
-                      <item.icon className="w-5 h-5" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {settingsItems
+                .filter((item) => !(item as any).adminOnly || profile?.role === 'admin')
+                .map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                      className={cn(
+                        'transition-all duration-200',
+                        isActive(item.url)
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                      )}
+                    >
+                      <Link to={item.url} className="flex items-center gap-3">
+                        <item.icon className="w-5 h-5" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={signOut}
