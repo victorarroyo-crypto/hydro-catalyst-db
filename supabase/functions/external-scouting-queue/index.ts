@@ -13,13 +13,13 @@ interface RequestBody {
 }
 
 // External DB uses 'status' column, not 'queue_status'
-// Status mapping for external database
+// Status mapping for external database - maps UI filter names to external DB values
 const STATUS_MAPPING: Record<string, string[]> = {
-  'review': ['pending', 'new', 'reviewing', 'in_review'],
+  'review': ['pending', 'new', 'reviewing', 'in_review', 'review'], // Added 'review' as possible value
   'pending_approval': ['pending_approval'],
   'approved': ['approved'],
   'rejected': ['rejected'],
-  'active': ['pending', 'new', 'reviewing', 'in_review', 'pending_approval'],
+  'active': ['pending', 'new', 'reviewing', 'in_review', 'review', 'pending_approval'],
 };
 
 // Map from local field names to external field names
@@ -67,13 +67,31 @@ const EXTERNAL_TO_LOCAL_FIELD: Record<string, string> = {
   'review_notes': 'notes',
 };
 
+// Status value mapping from external to local UI values
+const STATUS_VALUE_MAPPING: Record<string, string> = {
+  'pending': 'review',
+  'new': 'review', 
+  'reviewing': 'review',
+  'in_review': 'review',
+  'review': 'review', // External DB may use 'review' directly
+  'pending_approval': 'pending_approval',
+  'approved': 'approved',
+  'rejected': 'rejected',
+};
+
 // Transform external record to local format
 function transformToLocal(record: Record<string, unknown>): Record<string, unknown> {
   const transformed: Record<string, unknown> = { id: record.id };
   
   for (const [extKey, localKey] of Object.entries(EXTERNAL_TO_LOCAL_FIELD)) {
     if (record[extKey] !== undefined) {
-      transformed[localKey] = record[extKey];
+      // Special handling for status field - map values
+      if (extKey === 'status') {
+        const extStatus = record[extKey] as string;
+        transformed[localKey] = STATUS_VALUE_MAPPING[extStatus] || extStatus;
+      } else {
+        transformed[localKey] = record[extKey];
+      }
     }
   }
   
@@ -201,11 +219,12 @@ Deno.serve(async (req) => {
 
     if (action === 'count') {
       // Get counts from external DB using 'status' column
+      // External DB uses 'review' and 'pending_approval' as status values
       const [reviewRes, pendingRes] = await Promise.all([
         externalSupabase
           .from('scouting_queue')
           .select('id', { count: 'exact', head: true })
-          .in('status', ['pending', 'new', 'reviewing', 'in_review']),
+          .in('status', ['pending', 'new', 'reviewing', 'in_review', 'review']),
         externalSupabase
           .from('scouting_queue')
           .select('id', { count: 'exact', head: true })
