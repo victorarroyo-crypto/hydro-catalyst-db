@@ -47,6 +47,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { TRLBadge } from '@/components/TRLBadge';
 import { toast } from 'sonner';
+import { ScoutingTechFormModal } from './ScoutingTechFormModal';
 
 interface QueueItem {
   id: string;
@@ -119,6 +120,7 @@ export const ScoutingTechDetailModal = ({
 }: ScoutingTechDetailModalProps) => {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     status: string;
     label: string;
@@ -445,29 +447,14 @@ export const ScoutingTechDetailModal = ({
             </div>
 
             <div className="flex flex-col sm:flex-row w-full gap-2 sm:items-center sm:justify-between">
-              {/* Edit toggle */}
+              {/* Edit button - opens full form modal */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  if (isEditing) {
-                    // TODO: Save edits to backend
-                    toast.info('Guardado de ediciones en desarrollo');
-                  }
-                  setIsEditing(!isEditing);
-                }}
+                onClick={() => setShowFormModal(true)}
               >
-                {isEditing ? (
-                  <>
-                    <Save className="w-4 h-4 mr-1" />
-                    Guardar cambios
-                  </>
-                ) : (
-                  <>
-                    <Edit className="w-4 h-4 mr-1" />
-                    Editar ficha
-                  </>
-                )}
+                <Edit className="w-4 h-4 mr-1" />
+                Editar ficha
               </Button>
 
               {/* Phase navigation */}
@@ -591,6 +578,18 @@ export const ScoutingTechDetailModal = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Full Edit Form Modal */}
+      <ScoutingTechFormModal
+        technology={technology}
+        open={showFormModal}
+        onOpenChange={setShowFormModal}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+          onStatusChange?.();
+          onClose();
+        }}
+      />
     </>
   );
 };
