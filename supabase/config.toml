@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.scouting-webhook]
 verify_jwt = false
+
+[functions.enrich-technology]
+verify_jwt = false

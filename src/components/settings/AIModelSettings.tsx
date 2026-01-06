@@ -95,6 +95,10 @@ const ACTION_LABELS: Record<string, { label: string; description: string }> = {
     label: 'Base de Conocimiento',
     description: 'Modelo para responder preguntas usando documentos cargados.',
   },
+  enrichment: {
+    label: 'Enriquecimiento de Fichas',
+    description: 'Modelo para generar y mejorar contenido de fichas tecnológicas automáticamente.',
+  },
 };
 
 export const AIModelSettings: React.FC = () => {
