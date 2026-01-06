@@ -102,11 +102,25 @@ function transformToLocal(record: Record<string, unknown>): Record<string, unkno
   return transformed;
 }
 
+// Fields that should NOT be sent to external DB (they don't exist or have different types)
+const EXCLUDED_EXTERNAL_FIELDS = [
+  'reviewed_by',     // External DB expects UUID, we have email
+  'reviewed_at',     // May not exist in external DB
+  'review_status',   // Local-only field
+  'reviewer_id',     // Local-only field
+];
+
 // Transform local updates to external format
 function transformUpdatesToExternal(updates: Record<string, unknown>): Record<string, unknown> {
   const transformed: Record<string, unknown> = {};
   
   for (const [key, value] of Object.entries(updates)) {
+    // Skip fields that don't exist in external DB
+    if (EXCLUDED_EXTERNAL_FIELDS.includes(key)) {
+      console.log(`[external-scouting-queue] Skipping field "${key}" (not in external DB)`);
+      continue;
+    }
+    
     const extKey = LOCAL_TO_EXTERNAL_FIELD[key] || key;
     transformed[extKey] = value;
   }
