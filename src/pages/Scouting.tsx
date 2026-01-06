@@ -624,9 +624,19 @@ const Scouting = () => {
     onError: (error: Error) => {
       console.error('[Scouting] Mutation error:', error);
       
-      // Check for rate limit error (429)
       const errorMessage = error.message || '';
-      if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('límite')) {
+      
+      // Check for conflict error (409) - already running scouting
+      if (errorMessage.includes('409') || errorMessage.toLowerCase().includes('ya hay un scouting')) {
+        toast.error(
+          'Ya hay un scouting en ejecución. Espera a que termine o cancélalo desde la pestaña "Historial".',
+          { id: 'scouting-start', duration: 8000 }
+        );
+        // Switch to history tab to show the running job
+        setActiveTab('history');
+      }
+      // Check for rate limit error (429)
+      else if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('límite')) {
         // Calculate next Monday (when weekly limit resets)
         const now = new Date();
         const daysUntilMonday = (8 - now.getDay()) % 7 || 7;
