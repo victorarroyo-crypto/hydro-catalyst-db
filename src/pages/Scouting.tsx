@@ -621,7 +621,32 @@ const Scouting = () => {
     },
     onError: (error: Error) => {
       console.error('[Scouting] Mutation error:', error);
-      toast.error(`Error: ${error.message || 'No se pudo iniciar el scouting'}`, { id: 'scouting-start' });
+      
+      // Check for rate limit error (429)
+      const errorMessage = error.message || '';
+      if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('límite')) {
+        // Calculate next Monday (when weekly limit resets)
+        const now = new Date();
+        const daysUntilMonday = (8 - now.getDay()) % 7 || 7;
+        const nextMonday = new Date(now);
+        nextMonday.setDate(now.getDate() + daysUntilMonday);
+        nextMonday.setHours(0, 0, 0, 0);
+        
+        const formatter = new Intl.DateTimeFormat('es-ES', { 
+          weekday: 'long', 
+          day: 'numeric', 
+          month: 'long',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        
+        toast.error(
+          `Límite semanal alcanzado (100 scoutings). Se reinicia el ${formatter.format(nextMonday)}.`,
+          { id: 'scouting-start', duration: 8000 }
+        );
+      } else {
+        toast.error(`Error: ${errorMessage || 'No se pudo iniciar el scouting'}`, { id: 'scouting-start' });
+      }
     },
   });
 
