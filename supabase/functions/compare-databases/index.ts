@@ -22,7 +22,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { tables = ['technologies', 'casos_de_estudio', 'technological_trends'], detailed = false } = await req.json().catch(() => ({}));
+    // All synchronized tables - ordered by dependency for clarity
+    const defaultTables = [
+      'taxonomy_tipos',
+      'taxonomy_subcategorias', 
+      'taxonomy_sectores',
+      'technologies',
+      'casos_de_estudio',
+      'technological_trends',
+      'projects',
+      'project_technologies'
+    ];
+    
+    const { tables = defaultTables, detailed = false } = await req.json().catch(() => ({}));
 
     console.log('Comparing databases for tables:', tables);
     console.log('Detailed mode:', detailed);
@@ -49,7 +61,7 @@ Deno.serve(async (req) => {
       console.log(`\n--- Comparing table: ${table} ---`);
 
       try {
-        // Get local data
+        // Get local data - handle different ID types
         const { data: localData, error: localError, count: localCount } = await localSupabase
           .from(table)
           .select('id', { count: 'exact' });
@@ -83,8 +95,9 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const localIds = new Set((localData || []).map((r: { id: string }) => r.id));
-        const externalIds = new Set((externalData || []).map((r: { id: string }) => r.id));
+        // Convert IDs to strings for consistent comparison (handles uuid, integer, varchar)
+        const localIds = new Set((localData || []).map((r: { id: string | number }) => String(r.id)));
+        const externalIds = new Set((externalData || []).map((r: { id: string | number }) => String(r.id)));
 
         // Find differences
         const missingInExternal = [...localIds].filter(id => !externalIds.has(id));
