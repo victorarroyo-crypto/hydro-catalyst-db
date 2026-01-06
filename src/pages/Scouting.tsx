@@ -387,22 +387,26 @@ const Scouting = () => {
   const history = historyData?.items ?? [];
   const runningJob = history.find(job => job.status === 'running');
   const activeJobId = runningJob?.id ?? assumedRunningJobId;
-  const hasRunningJob = !!activeJobId;
+  const hasActiveJobId = !!activeJobId;
 
-  // Fetch live job status when there's a running job
+  // Fetch live job status when there's an active job id
   const { data: jobStatus, isLoading: jobStatusLoading } = useQuery({
     queryKey: ['scouting-job-status', activeJobId],
     queryFn: () => fetchJobStatus(activeJobId!),
-    enabled: !!activeJobId,
-    refetchInterval: hasRunningJob ? 3000 : false,
+    enabled: hasActiveJobId,
+    refetchInterval: hasActiveJobId ? 3000 : false,
   });
 
+  // If backend status says it's not running anymore, don't keep marking it as "running/stuck" in UI
+  const isActuallyRunning = hasActiveJobId ? (jobStatus ? jobStatus.status === 'running' : true) : false;
+  const hasRunningJob = hasActiveJobId && isActuallyRunning;
+
   // Determine heartbeat status for running job
-  const heartbeatStatus = runningJob ? getHeartbeatStatus(runningJob.last_heartbeat) : 'ok';
-  const heartbeatElapsedMinutes = runningJob ? getHeartbeatElapsedMinutes(runningJob.last_heartbeat) : 0;
+  const heartbeatStatus = hasRunningJob && runningJob ? getHeartbeatStatus(runningJob.last_heartbeat) : 'ok';
+  const heartbeatElapsedMinutes = hasRunningJob && runningJob ? getHeartbeatElapsedMinutes(runningJob.last_heartbeat) : 0;
   const currentPhase = runningJob?.current_phase ?? jobStatus?.current_phase;
   const phaseInfo = getPhaseInfo(currentPhase);
-  const elapsedMinutes = runningJob ? getElapsedMinutes(runningJob.started_at) : 0;
+  const elapsedMinutes = hasRunningJob && runningJob ? getElapsedMinutes(runningJob.started_at) : 0;
 
   // Models by provider
   const modelsByProvider = llmModelsData ?? {};
@@ -454,6 +458,22 @@ const Scouting = () => {
       pollingIntervalRef.current = setInterval(pollFn, POLLING_INTERVAL);
       previousRunningJobRef.current = runningJob.id;
       
+    } else if (runningJob && !hasRunningJob) {
+      // History says "running" but backend status already says it's finished -> sync and refresh
+      toast.success('Scouting finalizado - sincronizando...');
+      setAssumedRunningJobId(null);
+      Promise.all([
+        refetchHistory(),
+        refetchActive(),
+        refetchReview(),
+        refetchPendingApproval(),
+        refetchCounts(),
+      ]).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+      });
+      previousRunningJobRef.current = null;
+      setIsPolling(false);
+
     } else if (previousRunningJobRef.current && !hasRunningJob) {
       // Scouting completed - refresh all queue data
       toast.success(`Scouting completado - actualizando lista...`);
