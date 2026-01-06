@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,11 +6,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, CheckCircle, XCircle, Database, Link2, Languages, ArrowRight, FileText, Download, Code2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Database, Link2, Languages, ArrowRight, FileText, Download, Code2, RefreshCw, Loader2 } from 'lucide-react';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, BorderStyle } from 'docx';
 import { saveAs } from 'file-saver';
 import { useToast } from '@/hooks/use-toast';
-
+import { supabase } from '@/integrations/supabase/client';
 // Schema data extracted from database
 const schemaData = {
   tables: [
@@ -401,6 +401,8 @@ const getPriorityBadge = (priority: string) => {
 
 export default function DatabaseAudit() {
   const { toast } = useToast();
+  const [isRunningAudit, setIsRunningAudit] = useState(false);
+  
   const totalColumns = schemaData.tables.reduce((acc, table) => acc + table.columns.length, 0);
   const spanishColumns = schemaData.tables.reduce((acc, table) => 
     acc + table.columns.filter(c => c.language === 'es').length, 0);
@@ -409,6 +411,52 @@ export default function DatabaseAudit() {
   const mixedColumns = schemaData.tables.reduce((acc, table) => 
     acc + table.columns.filter(c => c.language === 'mixed').length, 0);
   const inconsistentMappings = mappingTable.filter(m => !m.consistent).length;
+
+  const runDatabaseAudit = async () => {
+    setIsRunningAudit(true);
+    toast({
+      title: "Ejecutando auditoría",
+      description: "Analizando el esquema de la base de datos...",
+    });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('run-database-audit');
+      
+      if (error) {
+        console.error('Audit error:', error);
+        toast({
+          title: "Error en auditoría",
+          description: error.message || "No se pudo completar la auditoría",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('Audit result:', data);
+      
+      toast({
+        title: "Auditoría completada",
+        description: `Se analizaron ${data.summary?.totalTables || 0} tablas con ${data.summary?.totalColumns || 0} columnas. Se encontraron ${data.inconsistencies?.length || 0} inconsistencias.`,
+      });
+
+      // Store results in sessionStorage and reload to show them
+      if (data) {
+        sessionStorage.setItem('lastAuditResult', JSON.stringify(data));
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      }
+    } catch (err) {
+      console.error('Audit failed:', err);
+      toast({
+        title: "Error",
+        description: "Fallo al ejecutar la auditoría de base de datos",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRunningAudit(false);
+    }
+  };
 
   const generateWordReport = async () => {
     try {
@@ -708,19 +756,15 @@ export default function DatabaseAudit() {
         </div>
         <div className="flex gap-2">
           <Button 
-            onClick={() => {
-              toast({
-                title: "Solicitud enviada",
-                description: "Se ha solicitado una nueva auditoría de la base de datos. El análisis se actualizará en breve.",
-              });
-              // Reload the page to simulate a new audit
-              setTimeout(() => {
-                window.location.reload();
-              }, 1500);
-            }}
+            onClick={runDatabaseAudit}
+            disabled={isRunningAudit}
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Solicitar Auditoría
+            {isRunningAudit ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            {isRunningAudit ? 'Ejecutando...' : 'Solicitar Auditoría'}
           </Button>
           <Button 
             variant="outline" 

@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.field-mappings]
 verify_jwt = false
+
+[functions.run-database-audit]
+verify_jwt = false
