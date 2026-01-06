@@ -13,14 +13,16 @@ import {
 // Note: These tables are new and may not be in the generated types yet
 // Using type assertions to work with the new tables
 
-// Status mapping for database status column
+// Status mapping for database queue_status column
+// Values in DB: 'pending', 'reviewing', 'approved', 'rejected' (per constraint)
+// Plus 'pending_approval' and 'review' may be used by external systems
 const STATUS_MAPPING: Record<string, string[]> = {
-  'review': ['review'],
+  'review': ['pending', 'review', 'reviewing'],
   'pending_approval': ['pending_approval'],
   'approved': ['approved'],
   'rejected': ['rejected'],
-  // Combined filter for "all active" items
-  'active': ['review', 'pending_approval'],
+  // Combined filter for "all active" items (not yet approved/rejected)
+  'active': ['pending', 'review', 'reviewing', 'pending_approval'],
 };
 
 // Fetch scouting queue items by status
@@ -35,7 +37,7 @@ export const useScoutingQueue = (status?: string) => {
       
       if (status) {
         const dbStatuses = STATUS_MAPPING[status] || [status];
-        query = query.in('status', dbStatuses);
+        query = query.in('queue_status', dbStatuses);
       }
       
       const { data, error } = await query;
@@ -54,7 +56,7 @@ export const useActiveScoutingQueue = () => {
       const { data, error } = await (supabase as any)
         .from('scouting_queue')
         .select('*')
-        .in('status', STATUS_MAPPING.active)
+        .in('queue_status', STATUS_MAPPING.active)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -142,7 +144,7 @@ export const useChangeScoutingStatus = () => {
       reviewedBy?: string;
     }) => {
       const updateData: Record<string, unknown> = {
-        status: status,
+        queue_status: status,
         updated_at: new Date().toISOString(),
       };
       
@@ -251,8 +253,8 @@ export const useScoutingCounts = () => {
     queryFn: async () => {
       const supabaseAny = supabase as any;
       const [reviewRes, pendingRes, rejectedRes] = await Promise.all([
-        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).eq('status', 'review'),
-        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval'),
+        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).in('queue_status', ['pending', 'review', 'reviewing']),
+        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).eq('queue_status', 'pending_approval'),
         supabaseAny.from('rejected_technologies').select('id', { count: 'exact', head: true }),
       ]);
       
