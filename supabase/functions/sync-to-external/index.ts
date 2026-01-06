@@ -27,7 +27,22 @@ const FIELDS_TO_EXCLUDE: Record<string, string[]> = {
   project_technologies: [
     'added_by',
   ],
-  // Add other tables here if needed
+  scouting_queue: [
+    'tipo_id',
+    'subcategoria_id',
+    'sector_id',
+    'subsector_industrial',
+    'created_by',
+    'reviewed_by',
+  ],
+  rejected_technologies: [
+    'tipo_id',
+    'subcategoria_id',
+    'sector_id',
+    'subsector_industrial',
+    'rejected_by',
+    'original_data',
+  ],
 }
 
 // Clean record by removing fields that don't exist in external DB
