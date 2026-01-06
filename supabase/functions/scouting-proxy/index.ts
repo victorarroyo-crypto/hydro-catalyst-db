@@ -12,16 +12,31 @@ const API_BASE = 'https://watertech-scouting-production.up.railway.app';
 
 // Allowlist of permitted endpoint patterns
 const ALLOWED_ENDPOINT_PATTERNS = [
+  // Scouting queue operations
   /^\/api\/scouting\/queue\/?$/,
   /^\/api\/scouting\/queue\/[a-f0-9-]+\/?$/,
+  // Sources management
   /^\/api\/scouting\/sources\/?$/,
   /^\/api\/scouting\/sources\/[a-f0-9-]+\/?$/,
+  // Technologies
   /^\/api\/scouting\/technologies\/?$/,
   /^\/api\/scouting\/technologies\/[a-f0-9-]+\/?$/,
+  // Stats and sync
   /^\/api\/scouting\/stats\/?$/,
   /^\/api\/scouting\/sync\/?$/,
   /^\/api\/scouting\/import\/?$/,
   /^\/api\/scouting\/export\/?$/,
+  // Scouting execution - run, status, cancel, history
+  /^\/api\/scouting\/run\/?$/,
+  /^\/api\/scouting\/history\/?$/,
+  /^\/api\/scouting\/status\/[a-f0-9-]+\/?$/,
+  /^\/api\/scouting\/cancel\/[a-f0-9-]+\/?$/,
+  /^\/api\/scouting\/[a-f0-9-]+\/cancel\/?$/,
+  /^\/api\/scouting\/jobs\/[a-f0-9-]+\/cancel\/?$/,
+  /^\/api\/scouting\/cancel\/?$/,
+  // LLM models endpoint
+  /^\/api\/llm\/models\/?$/,
+  // Health check
   /^\/api\/health\/?$/,
 ];
 
