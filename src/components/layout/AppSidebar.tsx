@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import vandarumSymbol from '@/assets/vandarum-symbol-orange-new.png';
+import vandarumSymbol from '@/assets/vandarum-symbol-orange-transparent.png';
 import { useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
