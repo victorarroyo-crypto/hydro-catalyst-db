@@ -81,6 +81,9 @@ const Technologies: React.FC = () => {
           const { data, error } = await supabase
             .from('technologies')
             .select('*')
+            // IMPORTANT: enforce deterministic ordering for stable pagination across batches
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: false })
             .range(from, from + batchSize - 1);
           
           if (error) throw error;
