@@ -12,11 +12,12 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { generateDatabaseDocumentation } from '@/lib/generateDatabaseDocumentation';
 import { 
   User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, 
   CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle,
   Users, Crown, Eye, Edit, Briefcase, Building, Star, RefreshCw, Key, Sun, Moon,
-  Info, ExternalLink, FileText, HelpCircle, Trash2
+  Info, ExternalLink, FileText, HelpCircle, Trash2, BookOpen, Download
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -1011,6 +1012,52 @@ const Settings: React.FC = () => {
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                 </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="w-5 h-5" />
+                  Documentación Técnica
+                </CardTitle>
+                <CardDescription>
+                  Descarga la documentación completa de la arquitectura del sistema
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button 
+                  onClick={async () => {
+                    toast({
+                      title: 'Generando documento...',
+                      description: 'Por favor espera mientras se genera el Word',
+                    });
+                    try {
+                      await generateDatabaseDocumentation();
+                      toast({
+                        title: 'Documento generado',
+                        description: 'La documentación se ha descargado correctamente',
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: 'Error al generar documento',
+                        description: error.message,
+                        variant: 'destructive',
+                      });
+                    }
+                  }}
+                  variant="outline" 
+                  className="w-full justify-between"
+                >
+                  <span className="flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    Descargar Arquitectura de Base de Datos
+                  </span>
+                  <FileText className="w-4 h-4" />
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Incluye: esquema de tablas, relaciones, mapeo de campos, flujo de trabajo, roles, sincronización y políticas RLS
+                </p>
               </CardContent>
             </Card>
           </>
