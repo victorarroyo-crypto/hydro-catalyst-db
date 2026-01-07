@@ -69,6 +69,36 @@ serve(async (req) => {
       });
     }
 
+    // Prevent duplicate active sessions (e.g., Railway already running a job)
+    const { data: existingSession, error: existingSessionError } = await supabase
+      .from('study_sessions')
+      .select('id, status, session_type')
+      .eq('study_id', study_id)
+      .eq('session_type', session_type)
+      .in('status', ['pending', 'running'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingSessionError) {
+      console.warn('Failed to check for existing active session:', existingSessionError);
+    }
+
+    if (existingSession) {
+      console.log('Active session already exists, returning it:', existingSession.id);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          session_id: existingSession.id,
+          study_id,
+          session_type,
+          status: existingSession.status,
+          already_running: true,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     console.log('Starting study session:', { study_id, session_type, phase });
 
     // Create session record in database
