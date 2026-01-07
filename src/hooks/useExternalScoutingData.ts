@@ -207,8 +207,7 @@ export const useApproveExternalToTechnologies = () => {
         sector_id: scoutingRecord.sector_id,
         subsector_industrial: scoutingRecord.subsector_industrial,
         status: 'active',
-        review_status: 'approved',
-        reviewed_at: now,
+        review_status: 'none',
       };
       
       // Add reviewer_id if provided
