@@ -6,6 +6,7 @@ import {
   ScoutingStudy,
   StudyEvaluation,
 } from '@/hooks/useScoutingStudies';
+import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -40,6 +41,7 @@ import {
   Shield,
   Trophy,
 } from 'lucide-react';
+import AISessionPanel from './AISessionPanel';
 
 interface Props {
   studyId: string;
@@ -57,10 +59,21 @@ export default function StudyPhase5Evaluation({ studyId, study }: Props) {
   const { data: shortlist, isLoading: loadingShortlist } = useStudyShortlist(studyId);
   const { data: evaluations, isLoading: loadingEvaluations } = useStudyEvaluations(studyId);
   const upsertEvaluation = useUpsertEvaluation();
+  const aiSession = useAIStudySession(studyId);
   
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [evalForm, setEvalForm] = useState<Partial<StudyEvaluation>>({});
   const [activeTab, setActiveTab] = useState('scores');
+
+  const handleStartAIEvaluation = () => {
+    aiSession.startSession('evaluation', {
+      problem_statement: study.problem_statement,
+      objectives: study.objectives,
+      context: study.context,
+      constraints: study.constraints,
+      shortlist_ids: shortlist?.map(s => s.id) || [],
+    });
+  };
 
   const handleOpenEvaluation = (shortlistId: string) => {
     const existing = evaluations?.find(e => e.shortlist_id === shortlistId);
@@ -144,6 +157,24 @@ export default function StudyPhase5Evaluation({ studyId, study }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* AI Session Panel */}
+      <AISessionPanel
+        state={{
+          isActive: aiSession.isActive,
+          isStarting: aiSession.isStarting,
+          currentPhase: aiSession.currentPhase,
+          progress: aiSession.progress,
+          status: aiSession.status,
+          error: aiSession.error,
+          logs: aiSession.logs,
+        }}
+        onStart={handleStartAIEvaluation}
+        onCancel={aiSession.cancelSession}
+        isStarting={aiSession.isStarting}
+        title="Evaluación Automática"
+        description="Evalúa cada tecnología de la shortlist con análisis SWOT y puntuaciones"
+      />
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Fase 5: Evaluación Comparativa</h2>
@@ -151,10 +182,6 @@ export default function StudyPhase5Evaluation({ studyId, study }: Props) {
             Evalúa cada tecnología de la lista corta según criterios técnicos y económicos
           </p>
         </div>
-        <Button variant="outline" disabled>
-          <Sparkles className="w-4 h-4 mr-2" />
-          Analizar con IA
-        </Button>
       </div>
 
       {shortlist?.length === 0 ? (

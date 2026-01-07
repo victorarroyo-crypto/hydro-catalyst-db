@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStudySolutions, useAddSolution, ScoutingStudy, StudySolution } from '@/hooks/useScoutingStudies';
+import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ import {
   Loader2,
   Sparkles,
 } from 'lucide-react';
+import AISessionPanel from './AISessionPanel';
 
 interface Props {
   studyId: string;
@@ -44,6 +46,7 @@ const TIME_RANGES = ['< 3 meses', '3-6 meses', '6-12 meses', '1-2 años', '> 2 a
 export default function StudyPhase2Solutions({ studyId, study }: Props) {
   const { data: solutions, isLoading } = useStudySolutions(studyId);
   const addSolution = useAddSolution();
+  const aiSession = useAIStudySession(studyId);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newSolution, setNewSolution] = useState({
     category: '',
@@ -56,6 +59,15 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
     implementation_time: '',
     priority: 0,
   });
+
+  const handleStartAISolutions = () => {
+    aiSession.startSession('solutions', {
+      problem_statement: study.problem_statement,
+      objectives: study.objectives,
+      context: study.context,
+      constraints: study.constraints,
+    });
+  };
 
   const handleAddSolution = async () => {
     if (!newSolution.name.trim() || !newSolution.category.trim()) return;
@@ -97,6 +109,24 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* AI Session Panel */}
+      <AISessionPanel
+        state={{
+          isActive: aiSession.isActive,
+          isStarting: aiSession.isStarting,
+          currentPhase: aiSession.currentPhase,
+          progress: aiSession.progress,
+          status: aiSession.status,
+          error: aiSession.error,
+          logs: aiSession.logs,
+        }}
+        onStart={handleStartAISolutions}
+        onCancel={aiSession.cancelSession}
+        isStarting={aiSession.isStarting}
+        title="Sugerencia de Soluciones"
+        description="La IA analiza el problema y sugiere categorías de soluciones"
+      />
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Fase 2: Soluciones Genéricas</h2>
@@ -105,10 +135,6 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" disabled>
-            <Sparkles className="w-4 h-4 mr-2" />
-            Sugerir con IA
-          </Button>
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
               <Button>
