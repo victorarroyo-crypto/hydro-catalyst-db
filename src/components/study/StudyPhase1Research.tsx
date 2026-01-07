@@ -483,41 +483,44 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
           {research?.map((item) => {
             const SourceIcon = getSourceIcon(item.source_type);
             
-            const handleViewSource = async (e: React.MouseEvent) => {
-              // For storage URLs on non-public buckets, generate a signed URL
-              // The knowledge-documents bucket is public, so we just open directly
-              // Only intercept if there's a specific issue with the URL
-              if (item.knowledge_doc_id && item.source_url?.includes('/object/public/')) {
-                // It's already a public URL, let it open directly
-                return;
-              }
+            const handleDownload = async () => {
+              if (!item.knowledge_doc_id || !item.source_url) return;
               
-              // For private bucket URLs, generate a signed URL
-              if (item.knowledge_doc_id && item.source_url?.includes('supabase.co/storage')) {
-                e.preventDefault();
-                try {
-                  // Extract file path from the URL
-                  const urlParts = item.source_url.split('/knowledge-documents/');
-                  if (urlParts.length > 1) {
-                    const filePath = decodeURIComponent(urlParts[1]);
-                    const { data, error } = await supabase.storage
-                      .from('knowledge-documents')
-                      .createSignedUrl(filePath, 3600); // 1 hour expiry
-                    
-                    if (data?.signedUrl) {
-                      window.open(data.signedUrl, '_blank');
-                    } else {
-                      console.error('Error getting signed URL:', error);
-                      toast({
-                        title: 'Error',
-                        description: 'No se pudo abrir el documento',
-                        variant: 'destructive',
-                      });
-                    }
+              try {
+                // Extract file path from the URL
+                const urlParts = item.source_url.split('/knowledge-documents/');
+                if (urlParts.length > 1) {
+                  const filePath = decodeURIComponent(urlParts[1]);
+                  const { data, error } = await supabase.storage
+                    .from('knowledge-documents')
+                    .download(filePath);
+                  
+                  if (data) {
+                    // Create download link
+                    const url = URL.createObjectURL(data);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = item.title + '.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  } else {
+                    console.error('Error downloading:', error);
+                    toast({
+                      title: 'Error',
+                      description: 'No se pudo descargar el documento',
+                      variant: 'destructive',
+                    });
                   }
-                } catch (err) {
-                  console.error('Error opening document:', err);
                 }
+              } catch (err) {
+                console.error('Error downloading:', err);
+                toast({
+                  title: 'Error',
+                  description: 'No se pudo descargar el documento',
+                  variant: 'destructive',
+                });
               }
             };
 
@@ -582,12 +585,19 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
                       Añadido {format(new Date(item.created_at), "d MMM yyyy", { locale: es })}
                     </span>
                     <div className="flex items-center gap-3">
-                      {item.source_url && (
+                      {item.knowledge_doc_id && item.source_url && (
+                        <button
+                          onClick={handleDownload}
+                          className="flex items-center gap-1 text-primary hover:underline cursor-pointer"
+                        >
+                          Descargar <ExternalLink className="w-3 h-3" />
+                        </button>
+                      )}
+                      {!item.knowledge_doc_id && item.source_url && (
                         <a
                           href={item.source_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          onClick={handleViewSource}
                           className="flex items-center gap-1 text-primary hover:underline cursor-pointer"
                         >
                           Ver fuente <ExternalLink className="w-3 h-3" />
