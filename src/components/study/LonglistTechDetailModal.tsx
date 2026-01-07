@@ -78,10 +78,19 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     applications: [] as string[],
     type_suggested: '',
     subcategory_suggested: '',
+    // Campos adicionales para paridad con BD
+    ventaja_competitiva: '',
+    innovacion: '',
+    casos_referencia: '',
+    paises_actua: '',
+    sector: '',
+    email: '',
   });
 
   React.useEffect(() => {
     if (item) {
+      // Cast item to any to access extended fields that might exist
+      const extendedItem = item as any;
       setEditData({
         technology_name: item.technology_name || '',
         provider: item.provider || '',
@@ -93,6 +102,12 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
         applications: item.applications || [],
         type_suggested: item.type_suggested || '',
         subcategory_suggested: item.subcategory_suggested || '',
+        ventaja_competitiva: extendedItem.ventaja_competitiva || '',
+        innovacion: extendedItem.innovacion || '',
+        casos_referencia: extendedItem.casos_referencia || '',
+        paises_actua: extendedItem.paises_actua || '',
+        sector: extendedItem.sector || '',
+        email: extendedItem.email || '',
       });
     }
   }, [item]);
@@ -313,90 +328,202 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
           </div>
 
           {isEditing ? (
-            /* Edit Mode */
-            <div className="space-y-4 py-4 border rounded-lg p-4 bg-muted/30">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nombre de la Tecnología</Label>
-                  <Input
-                    value={editData.technology_name}
-                    onChange={(e) => setEditData({ ...editData, technology_name: e.target.value })}
-                  />
+            /* Edit Mode - All fields matching TechnologyDetailModal */
+            <div className="space-y-6 py-4">
+              {/* Información General */}
+              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Información General
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Nombre de la Tecnología</Label>
+                    <Input
+                      value={editData.technology_name}
+                      onChange={(e) => setEditData({ ...editData, technology_name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Proveedor / Empresa</Label>
+                    <Input
+                      value={editData.provider}
+                      onChange={(e) => setEditData({ ...editData, provider: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>País de Origen</Label>
+                    <Input
+                      value={editData.country}
+                      onChange={(e) => setEditData({ ...editData, country: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Países donde actúa</Label>
+                    <Input
+                      value={editData.paises_actua}
+                      onChange={(e) => setEditData({ ...editData, paises_actua: e.target.value })}
+                      placeholder="Ej: España, Francia, Alemania"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Web de la Empresa</Label>
+                    <Input
+                      value={editData.web}
+                      onChange={(e) => setEditData({ ...editData, web: e.target.value })}
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email de Contacto</Label>
+                    <Input
+                      value={editData.email}
+                      onChange={(e) => setEditData({ ...editData, email: e.target.value })}
+                      placeholder="contacto@empresa.com"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Clasificación */}
+              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Tag className="w-4 h-4" />
+                  Clasificación
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Tipo de Tecnología</Label>
+                    <Input
+                      value={editData.type_suggested}
+                      onChange={(e) => setEditData({ ...editData, type_suggested: e.target.value })}
+                      placeholder="Ej: Procesos industriales"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Subcategoría</Label>
+                    <Input
+                      value={editData.subcategory_suggested}
+                      onChange={(e) => setEditData({ ...editData, subcategory_suggested: e.target.value })}
+                      placeholder="Ej: Tratamiento de aguas"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Sector</Label>
+                    <Input
+                      value={editData.sector}
+                      onChange={(e) => setEditData({ ...editData, sector: e.target.value })}
+                      placeholder="Ej: Industria / Agua"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>TRL (Grado de Madurez)</Label>
+                    <Select
+                      value={editData.trl?.toString() ?? ''}
+                      onValueChange={(v) => setEditData({ ...editData, trl: v ? Number(v) : null })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar TRL" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                          <SelectItem key={n} value={String(n)}>TRL {n}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Proveedor / Empresa</Label>
+                  <Label>Aplicación Principal</Label>
                   <Input
-                    value={editData.provider}
-                    onChange={(e) => setEditData({ ...editData, provider: e.target.value })}
+                    value={editData.applications?.join(', ') || ''}
+                    onChange={(e) => setEditData({ ...editData, applications: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                    placeholder="Separar con comas: Aplicación 1, Aplicación 2"
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              {/* Descripción Técnica */}
+              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Descripción Técnica
+                </h3>
                 <div className="space-y-2">
-                  <Label>País de Origen</Label>
-                  <Input
-                    value={editData.country}
-                    onChange={(e) => setEditData({ ...editData, country: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>TRL</Label>
-                  <Select
-                    value={editData.trl?.toString() ?? ''}
-                    onValueChange={(v) => setEditData({ ...editData, trl: v ? Number(v) : null })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar TRL" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
-                        <SelectItem key={n} value={String(n)}>TRL {n}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Tipo de Tecnología</Label>
-                  <Input
-                    value={editData.type_suggested}
-                    onChange={(e) => setEditData({ ...editData, type_suggested: e.target.value })}
-                    placeholder="Ej: Procesos industriales"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Subcategoría</Label>
-                  <Input
-                    value={editData.subcategory_suggested}
-                    onChange={(e) => setEditData({ ...editData, subcategory_suggested: e.target.value })}
-                    placeholder="Ej: Tratamiento de aguas"
+                  <Label>Descripción Técnica Breve</Label>
+                  <Textarea
+                    value={editData.brief_description}
+                    onChange={(e) => setEditData({ ...editData, brief_description: e.target.value })}
+                    rows={4}
+                    placeholder="Descripción detallada de la tecnología..."
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Web de la Empresa</Label>
-                <Input
-                  value={editData.web}
-                  onChange={(e) => setEditData({ ...editData, web: e.target.value })}
-                  placeholder="https://..."
-                />
+
+              {/* Diferenciación */}
+              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Trophy className="w-4 h-4" />
+                  Diferenciación
+                </h3>
+                <div className="space-y-2">
+                  <Label>Ventaja Competitiva Clave</Label>
+                  <Textarea
+                    value={editData.ventaja_competitiva}
+                    onChange={(e) => setEditData({ ...editData, ventaja_competitiva: e.target.value })}
+                    rows={2}
+                    placeholder="¿Qué hace única a esta tecnología?"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Por qué es Innovadora</Label>
+                  <Textarea
+                    value={editData.innovacion}
+                    onChange={(e) => setEditData({ ...editData, innovacion: e.target.value })}
+                    rows={2}
+                    placeholder="¿Qué la hace innovadora?"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Descripción Técnica Breve</Label>
-                <Textarea
-                  value={editData.brief_description}
-                  onChange={(e) => setEditData({ ...editData, brief_description: e.target.value })}
-                  rows={3}
-                />
+
+              {/* Referencias */}
+              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Referencias
+                </h3>
+                <div className="space-y-2">
+                  <Label>Casos de Referencia</Label>
+                  <Textarea
+                    value={editData.casos_referencia}
+                    onChange={(e) => setEditData({ ...editData, casos_referencia: e.target.value })}
+                    rows={2}
+                    placeholder="Implementaciones o casos de uso conocidos"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Comentarios del Analista</Label>
-                <Textarea
-                  value={editData.inclusion_reason}
-                  onChange={(e) => setEditData({ ...editData, inclusion_reason: e.target.value })}
-                  rows={2}
-                />
+
+              {/* Información Interna */}
+              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Información Interna
+                </h3>
+                <div className="space-y-2">
+                  <Label>Comentarios del Analista</Label>
+                  <Textarea
+                    value={editData.inclusion_reason}
+                    onChange={(e) => setEditData({ ...editData, inclusion_reason: e.target.value })}
+                    rows={3}
+                    placeholder="Notas internas sobre esta tecnología..."
+                  />
+                </div>
               </div>
             </div>
           ) : (
