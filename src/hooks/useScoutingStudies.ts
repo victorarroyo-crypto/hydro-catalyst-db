@@ -24,6 +24,7 @@ export interface ScoutingStudy {
 export interface StudyResearch {
   id: string;
   study_id: string;
+  session_id: string | null;
   title: string;
   source_type: 'paper' | 'report' | 'article' | 'patent' | 'website' | 'other' | null;
   source_url: string | null;
@@ -32,7 +33,8 @@ export interface StudyResearch {
   summary: string | null;
   key_findings: string[] | null;
   relevance_score: number | null;
-  ai_extracted: boolean;
+  ai_generated: boolean;
+  ai_extracted: boolean | null;
   knowledge_doc_id: string | null;
   created_by: string | null;
   created_at: string;
