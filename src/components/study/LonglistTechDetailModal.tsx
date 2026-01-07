@@ -237,10 +237,19 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   };
 
   const handleEnrichmentComplete = (enrichedData: Record<string, any>) => {
+    // Map ALL enriched fields to editData
     setEditData(prev => ({
       ...prev,
       brief_description: enrichedData.descripcion || prev.brief_description,
       inclusion_reason: enrichedData.comentarios_analista || prev.inclusion_reason,
+      ventaja_competitiva: enrichedData.ventaja_competitiva || prev.ventaja_competitiva,
+      innovacion: enrichedData.innovacion || prev.innovacion,
+      casos_referencia: enrichedData.casos_referencia || prev.casos_referencia,
+      paises_actua: enrichedData.paises_actua || prev.paises_actua,
+      sector: enrichedData.sector || prev.sector,
+      applications: enrichedData.aplicacion_principal 
+        ? enrichedData.aplicacion_principal.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : prev.applications,
     }));
     
     setTimeout(() => {
@@ -527,7 +536,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
               </div>
             </div>
           ) : (
-            /* View Mode - Same structure as TechnologyDetailModal */
+            /* View Mode - Same structure as TechnologyDetailModal with ALL fields */
             <>
               {/* Información General */}
               <div>
@@ -538,7 +547,9 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
                 <div className="bg-muted/30 rounded-lg p-4 space-y-1">
                   <InfoRow icon={Building2} label="Proveedor / Empresa" value={item.provider} />
                   <InfoRow icon={MapPin} label="País de origen" value={item.country} />
+                  <InfoRow icon={Globe} label="Países donde actúa" value={editData.paises_actua} />
                   <InfoRow icon={Globe} label="Web de la empresa" value={item.web} isLink />
+                  <InfoRow icon={Mail} label="Email de contacto" value={editData.email} />
                 </div>
               </div>
 
@@ -553,6 +564,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
                 <div className="bg-muted/30 rounded-lg p-4 space-y-1">
                   <InfoRow icon={Tag} label="Tipo de tecnología" value={item.type_suggested} />
                   <InfoRow icon={Tag} label="Subcategoría" value={item.subcategory_suggested} />
+                  <InfoRow icon={Tag} label="Sector" value={editData.sector} />
                   {item.applications && item.applications.length > 0 && (
                     <div className="flex items-start gap-3 py-2">
                       <Lightbulb className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -570,37 +582,54 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
               </div>
 
               {/* Descripción Técnica */}
-              {item.brief_description && (
-                <>
-                  <Separator />
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-                      <FileText className="w-4 h-4" />
-                      Descripción Técnica
-                    </h3>
-                    <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
-                      {item.brief_description}
-                    </p>
-                  </div>
-                </>
-              )}
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Descripción Técnica
+                </h3>
+                <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
+                  {item.brief_description || <span className="italic text-muted-foreground/60">Sin descripción</span>}
+                </p>
+              </div>
+
+              {/* Diferenciación */}
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <Trophy className="w-4 h-4" />
+                  Diferenciación
+                </h3>
+                <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+                  <InfoRow icon={Trophy} label="Ventaja competitiva clave" value={editData.ventaja_competitiva} />
+                  <InfoRow icon={Lightbulb} label="Por qué es innovadora" value={editData.innovacion} />
+                </div>
+              </div>
+
+              {/* Referencias */}
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Referencias
+                </h3>
+                <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+                  <InfoRow icon={Users} label="Casos de referencia" value={editData.casos_referencia} />
+                </div>
+              </div>
 
               {/* Información Interna */}
-              {item.inclusion_reason && (
-                <>
-                  <Separator />
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4" />
-                      Información Interna
-                    </h3>
-                    <div className="bg-muted/30 rounded-lg p-4 space-y-1">
-                      <InfoRow icon={MessageSquare} label="Comentarios del analista" value={item.inclusion_reason} />
-                      <InfoRow icon={Calendar} label="Fecha de adición" value={new Date(item.added_at).toLocaleDateString('es-ES')} />
-                    </div>
-                  </div>
-                </>
-              )}
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Información Interna
+                </h3>
+                <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+                  <InfoRow icon={MessageSquare} label="Comentarios del analista" value={item.inclusion_reason} />
+                  <InfoRow icon={Calendar} label="Fecha de adición" value={new Date(item.added_at).toLocaleDateString('es-ES')} />
+                </div>
+              </div>
 
               {/* Metadata */}
               <div className="text-xs text-muted-foreground pt-4 border-t flex justify-between">
