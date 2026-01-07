@@ -679,6 +679,7 @@ export type Database = {
           current_phase: string | null
           error_message: string | null
           id: string
+          last_heartbeat: string | null
           progress_percentage: number | null
           session_id: string
           sites_examined: number | null
@@ -697,6 +698,7 @@ export type Database = {
           current_phase?: string | null
           error_message?: string | null
           id?: string
+          last_heartbeat?: string | null
           progress_percentage?: number | null
           session_id: string
           sites_examined?: number | null
@@ -715,6 +717,7 @@ export type Database = {
           current_phase?: string | null
           error_message?: string | null
           id?: string
+          last_heartbeat?: string | null
           progress_percentage?: number | null
           session_id?: string
           sites_examined?: number | null
@@ -1247,6 +1250,11 @@ export type Database = {
       approve_scouting_to_technologies: {
         Args: { scouting_id: string }
         Returns: string
+      }
+      close_zombie_jobs: { Args: { max_age_minutes?: number }; Returns: number }
+      force_close_scouting_job: {
+        Args: { close_reason?: string; job_id: string }
+        Returns: boolean
       }
       has_role: {
         Args: {

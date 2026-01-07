@@ -24,6 +24,7 @@ import {
   Lightbulb,
   Database,
   Rocket,
+  Wrench,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -87,6 +88,7 @@ const settingsItems = [
 const auditSubItems = [
   { title: '1. Auditoría de Schema', url: '/database-audit' },
   { title: '2. Sincronizar BDs', url: '/admin/db-audit' },
+  { title: '3. Scouting Jobs', url: '/admin/scouting-jobs', icon: Wrench },
 ];
 
 export function AppSidebar() {
