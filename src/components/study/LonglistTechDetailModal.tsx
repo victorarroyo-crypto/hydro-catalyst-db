@@ -28,16 +28,20 @@ import {
   Building2, 
   MapPin, 
   Globe, 
+  Mail,
   FileText, 
   Lightbulb, 
+  Trophy,
+  Users,
+  MessageSquare,
   Calendar,
+  Tag,
   Edit,
   Save,
   X,
   Loader2,
   Database,
   ExternalLink,
-  Sparkles
 } from 'lucide-react';
 import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
 import type { Tables } from '@/integrations/supabase/types';
@@ -198,7 +202,6 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   };
 
   // Convert longlist item to a technology-like object for the AIEnrichmentButton
-  // Uses the property names expected by AIEnrichmentButton interface
   const technologyLikeObject = {
     id: item.id,
     nombre: item.technology_name,
@@ -219,15 +222,12 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   };
 
   const handleEnrichmentComplete = (enrichedData: Record<string, any>) => {
-    // Map enriched data back to our edit format
-    // The edge function returns fields like: descripcion, aplicacion_principal, etc.
     setEditData(prev => ({
       ...prev,
       brief_description: enrichedData.descripcion || prev.brief_description,
       inclusion_reason: enrichedData.comentarios_analista || prev.inclusion_reason,
     }));
     
-    // Auto-save after enrichment
     setTimeout(() => {
       handleSave();
     }, 500);
@@ -266,237 +266,225 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" aria-describedby="longlist-tech-detail-description">
         <DialogHeader className="pb-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <DialogTitle className="text-xl font-display mb-2">
                 {item.technology_name}
               </DialogTitle>
-              <DialogDescription className="sr-only">
-                Detalles de la tecnología {item.technology_name} en la lista larga
+              <DialogDescription id="longlist-tech-detail-description" className="sr-only">
+                Detalles de la tecnología {item.technology_name}
               </DialogDescription>
               <div className="flex items-center gap-2 flex-wrap">
-                {item.trl && <TRLBadge trl={item.trl} />}
-                <Badge variant={item.source === 'database' ? 'default' : 'outline'}>
-                  {item.source === 'database' ? 'Desde BD' : item.source === 'ai' ? 'IA' : 'Manual'}
-                </Badge>
+                <TRLBadge trl={item.trl} />
                 {item.already_in_db && (
-                  <Badge variant="secondary">
-                    <Database className="w-3 h-3 mr-1" />
-                    En BD
-                  </Badge>
-                )}
-                {item.confidence_score && (
-                  <Badge variant="outline">
-                    Confianza: {Math.round(item.confidence_score * 100)}%
-                  </Badge>
+                  <Badge variant="outline">en_revision</Badge>
                 )}
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <AIEnrichmentButton 
-                technology={technologyLikeObject as any}
-                onEnrichmentComplete={handleEnrichmentComplete}
-              />
-              {isEditing ? (
-                <>
-                  <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
-                    <X className="w-4 h-4 mr-1" />
-                    Cancelar
-                  </Button>
-                  <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                    {isSaving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
-                    Guardar
-                  </Button>
-                </>
-              ) : (
-                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-                  <Edit className="w-4 h-4 mr-1" />
-                  Editar
-                </Button>
-              )}
             </div>
           </div>
         </DialogHeader>
 
-        <Separator />
-
-        {isEditing ? (
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nombre de la Tecnología</Label>
-                <Input
-                  value={editData.technology_name}
-                  onChange={(e) => setEditData({ ...editData, technology_name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Proveedor / Empresa</Label>
-                <Input
-                  value={editData.provider}
-                  onChange={(e) => setEditData({ ...editData, provider: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>País de Origen</Label>
-                <Input
-                  value={editData.country}
-                  onChange={(e) => setEditData({ ...editData, country: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>TRL</Label>
-                <Select
-                  value={editData.trl?.toString() ?? ''}
-                  onValueChange={(v) => setEditData({ ...editData, trl: v ? Number(v) : null })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar TRL" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
-                      <SelectItem key={n} value={String(n)}>TRL {n}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Tipo de Tecnología</Label>
-                <Input
-                  value={editData.type_suggested}
-                  onChange={(e) => setEditData({ ...editData, type_suggested: e.target.value })}
-                  placeholder="Ej: Procesos industriales"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Subcategoría</Label>
-                <Input
-                  value={editData.subcategory_suggested}
-                  onChange={(e) => setEditData({ ...editData, subcategory_suggested: e.target.value })}
-                  placeholder="Ej: Tratamiento de aguas"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Web de la Empresa</Label>
-              <Input
-                value={editData.web}
-                onChange={(e) => setEditData({ ...editData, web: e.target.value })}
-                placeholder="https://..."
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Descripción Técnica Breve</Label>
-              <Textarea
-                value={editData.brief_description}
-                onChange={(e) => setEditData({ ...editData, brief_description: e.target.value })}
-                rows={3}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Razón de Inclusión / Comentarios</Label>
-              <Textarea
-                value={editData.inclusion_reason}
-                onChange={(e) => setEditData({ ...editData, inclusion_reason: e.target.value })}
-                rows={2}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="py-4 space-y-6">
-            {/* Provider & Location Section */}
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <InfoRow 
-                  icon={Building2} 
-                  label="Proveedor / Empresa" 
-                  value={item.provider} 
-                />
-                <InfoRow 
-                  icon={MapPin} 
-                  label="País de Origen" 
-                  value={item.country} 
-                />
-                <InfoRow 
-                  icon={Globe} 
-                  label="Web" 
-                  value={item.web} 
-                  isLink 
-                />
-              </div>
-              <div>
-                <InfoRow 
-                  icon={Lightbulb} 
-                  label="Tipo de Tecnología" 
-                  value={item.type_suggested} 
-                />
-                <InfoRow 
-                  icon={FileText} 
-                  label="Subcategoría" 
-                  value={item.subcategory_suggested} 
-                />
-                <InfoRow 
-                  icon={Calendar} 
-                  label="Añadida el" 
-                  value={new Date(item.added_at).toLocaleDateString('es-ES')} 
-                />
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Description Section */}
-            {item.brief_description && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Descripción Técnica
-                </h4>
-                <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-                  {item.brief_description}
-                </p>
-              </div>
+        <div className="space-y-6">
+          {/* Action Buttons - Same style as TechnologyDetailModal */}
+          <div className="flex gap-2 flex-wrap">
+            {isEditing ? (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+                  <X className="w-4 h-4 mr-2" />
+                  Cancelar
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  Guardar
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                <Edit className="w-4 h-4 mr-2" />
+                Editar
+              </Button>
             )}
+            <AIEnrichmentButton 
+              technology={technologyLikeObject as any}
+              onEnrichmentComplete={handleEnrichmentComplete}
+            />
+          </div>
 
-            {/* Applications */}
-            {item.applications && item.applications.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <Lightbulb className="w-4 h-4" />
-                  Aplicaciones
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {item.applications.map((app, idx) => (
-                    <Badge key={idx} variant="outline">{app}</Badge>
-                  ))}
+          {isEditing ? (
+            /* Edit Mode */
+            <div className="space-y-4 py-4 border rounded-lg p-4 bg-muted/30">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nombre de la Tecnología</Label>
+                  <Input
+                    value={editData.technology_name}
+                    onChange={(e) => setEditData({ ...editData, technology_name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Proveedor / Empresa</Label>
+                  <Input
+                    value={editData.provider}
+                    onChange={(e) => setEditData({ ...editData, provider: e.target.value })}
+                  />
                 </div>
               </div>
-            )}
-
-            {/* Inclusion Reason */}
-            {item.inclusion_reason && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>País de Origen</Label>
+                  <Input
+                    value={editData.country}
+                    onChange={(e) => setEditData({ ...editData, country: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>TRL</Label>
+                  <Select
+                    value={editData.trl?.toString() ?? ''}
+                    onValueChange={(v) => setEditData({ ...editData, trl: v ? Number(v) : null })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar TRL" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                        <SelectItem key={n} value={String(n)}>TRL {n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Tipo de Tecnología</Label>
+                  <Input
+                    value={editData.type_suggested}
+                    onChange={(e) => setEditData({ ...editData, type_suggested: e.target.value })}
+                    placeholder="Ej: Procesos industriales"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Subcategoría</Label>
+                  <Input
+                    value={editData.subcategory_suggested}
+                    onChange={(e) => setEditData({ ...editData, subcategory_suggested: e.target.value })}
+                    placeholder="Ej: Tratamiento de aguas"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Web de la Empresa</Label>
+                <Input
+                  value={editData.web}
+                  onChange={(e) => setEditData({ ...editData, web: e.target.value })}
+                  placeholder="https://..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Descripción Técnica Breve</Label>
+                <Textarea
+                  value={editData.brief_description}
+                  onChange={(e) => setEditData({ ...editData, brief_description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Comentarios del Analista</Label>
+                <Textarea
+                  value={editData.inclusion_reason}
+                  onChange={(e) => setEditData({ ...editData, inclusion_reason: e.target.value })}
+                  rows={2}
+                />
+              </div>
+            </div>
+          ) : (
+            /* View Mode - Same structure as TechnologyDetailModal */
+            <>
+              {/* Información General */}
               <div>
-                <h4 className="text-sm font-medium mb-2">Razón de Inclusión</h4>
-                <p className="text-sm text-muted-foreground italic bg-muted/50 rounded-lg p-3">
-                  "{item.inclusion_reason}"
-                </p>
+                <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Información General
+                </h3>
+                <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+                  <InfoRow icon={Building2} label="Proveedor / Empresa" value={item.provider} />
+                  <InfoRow icon={MapPin} label="País de origen" value={item.country} />
+                  <InfoRow icon={Globe} label="Web de la empresa" value={item.web} isLink />
+                </div>
               </div>
-            )}
 
-            {/* Source Info */}
-            {item.source_research_id && (
-              <div className="text-xs text-muted-foreground">
-                Fuente: Investigación del estudio
+              <Separator />
+
+              {/* Clasificación */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <Tag className="w-4 h-4" />
+                  Clasificación
+                </h3>
+                <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+                  <InfoRow icon={Tag} label="Tipo de tecnología" value={item.type_suggested} />
+                  <InfoRow icon={Tag} label="Subcategoría" value={item.subcategory_suggested} />
+                  {item.applications && item.applications.length > 0 && (
+                    <div className="flex items-start gap-3 py-2">
+                      <Lightbulb className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground mb-1">Aplicaciones</p>
+                        <div className="flex flex-wrap gap-1">
+                          {item.applications.map((app, idx) => (
+                            <Badge key={idx} variant="outline" className="text-xs">{app}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Descripción Técnica */}
+              {item.brief_description && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Descripción Técnica
+                    </h3>
+                    <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
+                      {item.brief_description}
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {/* Información Interna */}
+              {item.inclusion_reason && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4" />
+                      Información Interna
+                    </h3>
+                    <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+                      <InfoRow icon={MessageSquare} label="Comentarios del analista" value={item.inclusion_reason} />
+                      <InfoRow icon={Calendar} label="Fecha de adición" value={new Date(item.added_at).toLocaleDateString('es-ES')} />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Metadata */}
+              <div className="text-xs text-muted-foreground pt-4 border-t flex justify-between">
+                <span>Fuente: {item.source === 'database' ? 'Base de datos' : item.source === 'ai' ? 'IA' : 'Manual'}</span>
+                {item.confidence_score && (
+                  <span>Confianza: {Math.round(item.confidence_score * 100)}%</span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
 
         <Separator />
 
