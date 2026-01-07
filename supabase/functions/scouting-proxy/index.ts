@@ -1,7 +1,7 @@
 // Lovable Cloud Function: proxy requests to the external scouting backend (avoids browser CORS)
 // Security: Implements endpoint allowlist, method validation, and path traversal protection
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
