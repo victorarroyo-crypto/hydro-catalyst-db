@@ -108,7 +108,7 @@ export function useStartStudySession() {
       config?: Record<string, unknown>;
     }) => {
       const { data, error } = await supabase.functions.invoke('study-start-session', {
-        body: { studyId, sessionType, config },
+        body: { study_id: studyId, session_type: sessionType, config },
       });
 
       if (error) throw error;
