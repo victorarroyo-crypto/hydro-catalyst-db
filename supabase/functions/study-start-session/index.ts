@@ -252,8 +252,11 @@ serve(async (req) => {
     console.log('LLM config sent to Railway:', { provider: railwayPayload.provider, model: railwayPayload.model });
 
     // Add timeout to prevent edge function from hanging
+    // NOTE: A timeout here does NOT necessarily mean the backend job didn't start.
+    // We keep the DB session in "pending" on timeout to avoid creating duplicates.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+    const timeoutMs = 55000; // 55s timeout
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     let railwayResponse: Response;
     try {
@@ -270,13 +273,37 @@ serve(async (req) => {
       clearTimeout(timeoutId);
       const isTimeout = fetchError instanceof Error && fetchError.name === 'AbortError';
       console.error('Railway fetch error:', fetchError);
-      
-      // Update session status to failed
+
+      if (isTimeout) {
+        // Do NOT mark as failed: Railway might have accepted the request but responded slowly.
+        await supabase.from('study_session_logs').insert({
+          session_id: sessionData.id,
+          study_id,
+          level: 'warn',
+          phase: session_type,
+          message: `Timeout esperando respuesta del backend (>${Math.round(timeoutMs / 1000)}s). La sesión queda en "pending".`,
+          details: { timeout_ms: timeoutMs }
+        });
+
+        return new Response(JSON.stringify({
+          success: true,
+          session_id: sessionData.id,
+          study_id,
+          session_type,
+          status: 'pending',
+          backend_timeout: true
+        }), {
+          status: 202,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Non-timeout connection error: mark as failed
       await supabase
         .from('study_sessions')
-        .update({ 
-          status: 'failed', 
-          error_message: isTimeout ? 'Backend timeout' : `Connection error: ${fetchError}` 
+        .update({
+          status: 'failed',
+          error_message: `Connection error: ${String(fetchError)}`
         })
         .eq('id', sessionData.id);
 
@@ -285,16 +312,16 @@ serve(async (req) => {
         study_id,
         level: 'error',
         phase: session_type,
-        message: isTimeout ? 'Timeout al conectar con backend de IA' : 'Error de conexión con backend',
+        message: 'Error de conexión con backend',
         details: { error: String(fetchError) }
       });
 
-      return new Response(JSON.stringify({ 
-        error: isTimeout ? 'Backend timeout' : 'Connection failed', 
+      return new Response(JSON.stringify({
+        error: 'Connection failed',
         session_id: sessionData.id
-      }), { 
-        status: 504, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
     clearTimeout(timeoutId);
