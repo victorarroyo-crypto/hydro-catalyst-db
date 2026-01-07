@@ -12,8 +12,10 @@ const ALLOWED_ENDPOINT_PATTERNS = [
   /^\/api\/study\/(start|stop|status|cancel)$/,
   /^\/api\/study\/session\/[a-f0-9-]+$/,
   /^\/api\/study\/session\/[a-f0-9-]+\/(logs|progress|results)$/,
+  /^\/api\/study\/research$/,
   /^\/api\/health$/,
   /^\/api\/models$/,
+  /^\/api\/llm\/models$/,
 ];
 
 const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE'];
