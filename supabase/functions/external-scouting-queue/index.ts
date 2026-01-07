@@ -65,6 +65,10 @@ const EXTERNAL_TO_LOCAL_FIELD: Record<string, string> = {
   'subsector': 'subsector_industrial',
   'status': 'queue_status',
   'review_notes': 'notes',
+  // Taxonomy ID fields - keep as-is if they exist in external DB
+  'tipo_id': 'tipo_id',
+  'subcategoria_id': 'subcategoria_id',
+  'sector_id': 'sector_id',
 };
 
 // Status value mapping from external to local UI values
@@ -98,6 +102,15 @@ function transformToLocal(record: Record<string, unknown>): Record<string, unkno
   // Keep timestamps
   if (record.created_at) transformed.created_at = record.created_at;
   if (record.updated_at) transformed.updated_at = record.updated_at;
+  
+  // Also copy any fields that exist in external but aren't explicitly mapped
+  // This ensures we don't lose taxonomy IDs or other numeric fields
+  const unmappedFields = ['tipo_id', 'subcategoria_id', 'sector_id', 'scouting_job_id'];
+  for (const field of unmappedFields) {
+    if (record[field] !== undefined && transformed[field] === undefined) {
+      transformed[field] = record[field];
+    }
+  }
   
   return transformed;
 }
