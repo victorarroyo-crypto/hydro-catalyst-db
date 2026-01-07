@@ -56,3 +56,12 @@ verify_jwt = false
 
 [functions.enrich-technology]
 verify_jwt = false
+
+[functions.study-start-session]
+verify_jwt = false
+
+[functions.study-webhook]
+verify_jwt = false
+
+[functions.study-proxy]
+verify_jwt = false
