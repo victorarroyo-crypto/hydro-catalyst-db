@@ -16,6 +16,7 @@ import { generateDatabaseDocumentation } from '@/lib/generateDatabaseDocumentati
 import { generateScoutingWebhookDocumentation } from '@/lib/generateScoutingWebhookDocumentation';
 import { generateTaxonomyDocumentation } from '@/lib/generateTaxonomyDocumentation';
 import { generateModulesDocumentation } from '@/lib/generateModulesDocumentation';
+import { generateStudyArchitectureDoc } from '@/lib/generateStudyArchitectureDoc';
 import { 
   User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, 
   CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle,
@@ -1147,6 +1148,38 @@ const Settings: React.FC = () => {
                 </Button>
                 <p className="text-xs text-muted-foreground">
                   Incluye: catálogo de tipos/subcategorías/sectores, análisis de brechas, subcategorías pendientes de mapeo y recomendaciones
+                </p>
+                <Button 
+                  onClick={async () => {
+                    toast({
+                      title: 'Generando arquitectura de estudios...',
+                      description: 'Documentando tablas, webhooks y componentes',
+                    });
+                    try {
+                      await generateStudyArchitectureDoc();
+                      toast({
+                        title: 'Documento generado',
+                        description: 'La arquitectura del módulo de estudios se ha descargado',
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: 'Error al generar documento',
+                        description: error.message,
+                        variant: 'destructive',
+                      });
+                    }
+                  }}
+                  variant="outline" 
+                  className="w-full justify-between"
+                >
+                  <span className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" />
+                    Arquitectura Módulo Estudios
+                  </span>
+                  <FileText className="w-4 h-4" />
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Incluye: schema de tablas, flujo de datos, webhook events, componentes React y hooks
                 </p>
               </CardContent>
             </Card>
