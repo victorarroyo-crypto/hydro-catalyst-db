@@ -42,8 +42,13 @@ import {
   Loader2,
   MapPin,
   Building2,
+  Eye,
 } from 'lucide-react';
 import AISessionPanel from './AISessionPanel';
+import { LonglistTechDetailModal } from './LonglistTechDetailModal';
+import type { Tables } from '@/integrations/supabase/types';
+
+type LonglistItem = Tables<'study_longlist'>;
 
 interface Props {
   studyId: string;
@@ -61,6 +66,8 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
   const [addMode, setAddMode] = useState<'database' | 'manual'>('database');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTech, setSelectedTech] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<LonglistItem | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   
   const [manualEntry, setManualEntry] = useState({
     technology_name: '',
@@ -432,6 +439,17 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
                       {item.source === 'database' ? 'BD' : 'Manual'}
                     </Badge>
                     <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedItem(item as LonglistItem);
+                        setIsDetailOpen(true);
+                      }}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      Ver ficha
+                    </Button>
+                    <Button
                       variant="ghost"
                       size="icon"
                       className="opacity-0 group-hover:opacity-100"
@@ -446,6 +464,14 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
           ))}
         </div>
       )}
+
+      {/* Detail Modal */}
+      <LonglistTechDetailModal
+        item={selectedItem}
+        open={isDetailOpen}
+        onOpenChange={setIsDetailOpen}
+        studyId={studyId}
+      />
     </div>
   );
 }
