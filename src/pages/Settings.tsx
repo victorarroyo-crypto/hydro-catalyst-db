@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { generateDatabaseDocumentation } from '@/lib/generateDatabaseDocumentation';
 import { generateScoutingWebhookDocumentation } from '@/lib/generateScoutingWebhookDocumentation';
 import { generateTaxonomyDocumentation } from '@/lib/generateTaxonomyDocumentation';
+import { generateModulesDocumentation } from '@/lib/generateModulesDocumentation';
 import { 
   User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, 
   CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle,
@@ -1112,6 +1113,35 @@ const Settings: React.FC = () => {
                   <span className="flex items-center gap-2">
                     <Tag className="w-4 h-4" />
                     Análisis de Taxonomía
+                  </span>
+                  <FileText className="w-4 h-4" />
+                </Button>
+                <Button 
+                  onClick={async () => {
+                    toast({
+                      title: 'Generando informe de módulos...',
+                      description: 'Compilando información del sistema',
+                    });
+                    try {
+                      await generateModulesDocumentation();
+                      toast({
+                        title: 'Documento generado',
+                        description: 'El informe de módulos se ha descargado correctamente',
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: 'Error al generar documento',
+                        description: error.message,
+                        variant: 'destructive',
+                      });
+                    }
+                  }}
+                  variant="outline" 
+                  className="w-full justify-between"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Informe de Módulos y Pantallas
                   </span>
                   <FileText className="w-4 h-4" />
                 </Button>
