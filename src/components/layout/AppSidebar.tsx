@@ -89,6 +89,7 @@ const auditSubItems = [
   { title: '1. Auditoría de Schema', url: '/database-audit' },
   { title: '2. Sincronizar BDs', url: '/admin/db-audit' },
   { title: '3. Scouting Jobs', url: '/admin/scouting-jobs', icon: Wrench },
+  { title: '4. Auditoría Taxonomía', url: '/taxonomy-audit', icon: Database },
 ];
 
 export function AppSidebar() {
