@@ -1008,12 +1008,17 @@ export type Database = {
           already_in_db: boolean | null
           applications: string[] | null
           brief_description: string | null
+          casos_referencia: string | null
           confidence_score: number | null
           country: string | null
+          email: string | null
           existing_technology_id: string | null
           id: string
           inclusion_reason: string | null
+          innovacion: string | null
+          paises_actua: string | null
           provider: string | null
+          sector: string | null
           session_id: string | null
           solution_id: string | null
           source: string | null
@@ -1024,6 +1029,7 @@ export type Database = {
           technology_name: string
           trl: number | null
           type_suggested: string | null
+          ventaja_competitiva: string | null
           web: string | null
         }
         Insert: {
@@ -1032,12 +1038,17 @@ export type Database = {
           already_in_db?: boolean | null
           applications?: string[] | null
           brief_description?: string | null
+          casos_referencia?: string | null
           confidence_score?: number | null
           country?: string | null
+          email?: string | null
           existing_technology_id?: string | null
           id?: string
           inclusion_reason?: string | null
+          innovacion?: string | null
+          paises_actua?: string | null
           provider?: string | null
+          sector?: string | null
           session_id?: string | null
           solution_id?: string | null
           source?: string | null
@@ -1048,6 +1059,7 @@ export type Database = {
           technology_name: string
           trl?: number | null
           type_suggested?: string | null
+          ventaja_competitiva?: string | null
           web?: string | null
         }
         Update: {
@@ -1056,12 +1068,17 @@ export type Database = {
           already_in_db?: boolean | null
           applications?: string[] | null
           brief_description?: string | null
+          casos_referencia?: string | null
           confidence_score?: number | null
           country?: string | null
+          email?: string | null
           existing_technology_id?: string | null
           id?: string
           inclusion_reason?: string | null
+          innovacion?: string | null
+          paises_actua?: string | null
           provider?: string | null
+          sector?: string | null
           session_id?: string | null
           solution_id?: string | null
           source?: string | null
@@ -1072,6 +1089,7 @@ export type Database = {
           technology_name?: string
           trl?: number | null
           type_suggested?: string | null
+          ventaja_competitiva?: string | null
           web?: string | null
         }
         Relationships: [
