@@ -293,6 +293,7 @@ export function useAddResearch() {
           summary: research.summary,
           key_findings: research.key_findings,
           relevance_score: research.relevance_score,
+          knowledge_doc_id: research.knowledge_doc_id,
           created_by: user?.id,
         })
         .select()
