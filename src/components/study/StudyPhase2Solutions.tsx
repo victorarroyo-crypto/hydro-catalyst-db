@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,11 @@ import {
   ExternalLink,
   Database,
   CheckCircle2,
+  Link2,
+  Info,
+  Building2,
+  FileText,
+  Target,
 } from 'lucide-react';
 import AISessionPanel from './AISessionPanel';
 import { toast } from 'sonner';
@@ -66,8 +72,290 @@ interface ExtractedTechnology {
   added_at: string;
 }
 
+// Extended solution type with new fields
+interface ExtendedSolution extends StudySolution {
+  source_url?: string | null;
+  source_title?: string | null;
+  detailed_info?: string | null;
+  applicable_sectors?: string[] | null;
+  key_providers?: string[] | null;
+  case_studies?: string[] | null;
+}
+
 const COST_RANGES = ['Muy Bajo', 'Bajo', 'Medio', 'Alto', 'Muy Alto'];
 const TIME_RANGES = ['< 3 meses', '3-6 meses', '6-12 meses', '1-2 años', '> 2 años'];
+
+// Solution Card with expandable detail modal
+function SolutionCard({ solution }: { solution: ExtendedSolution }) {
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  
+  const hasExtendedInfo = solution.source_url || solution.detailed_info || 
+    (solution.key_providers && solution.key_providers.length > 0) ||
+    (solution.case_studies && solution.case_studies.length > 0) ||
+    (solution.applicable_sectors && solution.applicable_sectors.length > 0);
+
+  return (
+    <>
+      <Card className="flex flex-col h-full hover:border-primary/50 transition-colors">
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1">
+              <CardTitle className="text-base">{solution.name}</CardTitle>
+              {solution.description && (
+                <CardDescription className="line-clamp-2">{solution.description}</CardDescription>
+              )}
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 shrink-0"
+              onClick={() => setIsDetailOpen(true)}
+            >
+              <Info className="w-4 h-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3 flex-1">
+          <div className="flex flex-wrap gap-2">
+            {solution.estimated_trl_range && (
+              <Badge variant="outline">TRL {solution.estimated_trl_range}</Badge>
+            )}
+            {solution.cost_range && (
+              <Badge variant="outline">
+                <DollarSign className="w-3 h-3 mr-1" />
+                {solution.cost_range}
+              </Badge>
+            )}
+            {solution.implementation_time && (
+              <Badge variant="outline">
+                <Clock className="w-3 h-3 mr-1" />
+                {solution.implementation_time}
+              </Badge>
+            )}
+          </div>
+          
+          {solution.advantages && solution.advantages.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-green-600 mb-1 flex items-center gap-1">
+                <ThumbsUp className="w-3 h-3" /> Ventajas
+              </h4>
+              <ul className="text-sm space-y-0.5">
+                {solution.advantages.slice(0, 3).map((adv, idx) => (
+                  <li key={idx} className="text-muted-foreground">• {adv}</li>
+                ))}
+                {solution.advantages.length > 3 && (
+                  <li className="text-muted-foreground text-xs">+{solution.advantages.length - 3} más...</li>
+                )}
+              </ul>
+            </div>
+          )}
+          
+          {solution.disadvantages && solution.disadvantages.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-red-600 mb-1 flex items-center gap-1">
+                <ThumbsDown className="w-3 h-3" /> Desventajas
+              </h4>
+              <ul className="text-sm space-y-0.5">
+                {solution.disadvantages.slice(0, 2).map((dis, idx) => (
+                  <li key={idx} className="text-muted-foreground">• {dis}</li>
+                ))}
+                {solution.disadvantages.length > 2 && (
+                  <li className="text-muted-foreground text-xs">+{solution.disadvantages.length - 2} más...</li>
+                )}
+              </ul>
+            </div>
+          )}
+          
+          {/* Source link if available */}
+          {solution.source_url && (
+            <a 
+              href={solution.source_url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-2"
+            >
+              <Link2 className="w-3 h-3" />
+              {solution.source_title || 'Ver fuente'}
+            </a>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Detail Modal */}
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lightbulb className="w-5 h-5 text-primary" />
+              {solution.name}
+            </DialogTitle>
+            <DialogDescription>
+              {solution.category}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-[60vh] pr-4">
+            <div className="space-y-6">
+              {/* Description */}
+              {solution.description && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Descripción
+                  </h4>
+                  <p className="text-sm text-muted-foreground">{solution.description}</p>
+                </div>
+              )}
+              
+              {/* Detailed info */}
+              {solution.detailed_info && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Info className="w-4 h-4" /> Información Detallada
+                  </h4>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{solution.detailed_info}</p>
+                </div>
+              )}
+              
+              {/* Badges row */}
+              <div className="flex flex-wrap gap-2">
+                {solution.estimated_trl_range && (
+                  <Badge variant="outline">TRL {solution.estimated_trl_range}</Badge>
+                )}
+                {solution.cost_range && (
+                  <Badge variant="outline">
+                    <DollarSign className="w-3 h-3 mr-1" />
+                    {solution.cost_range}
+                  </Badge>
+                )}
+                {solution.implementation_time && (
+                  <Badge variant="outline">
+                    <Clock className="w-3 h-3 mr-1" />
+                    {solution.implementation_time}
+                  </Badge>
+                )}
+              </div>
+              
+              {/* Advantages */}
+              {solution.advantages && solution.advantages.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-green-600 mb-2 flex items-center gap-2">
+                    <ThumbsUp className="w-4 h-4" /> Ventajas
+                  </h4>
+                  <ul className="text-sm space-y-1">
+                    {solution.advantages.map((adv, idx) => (
+                      <li key={idx} className="text-muted-foreground flex items-start gap-2">
+                        <span className="text-green-500 mt-1">•</span> {adv}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Disadvantages */}
+              {solution.disadvantages && solution.disadvantages.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-red-600 mb-2 flex items-center gap-2">
+                    <ThumbsDown className="w-4 h-4" /> Desventajas
+                  </h4>
+                  <ul className="text-sm space-y-1">
+                    {solution.disadvantages.map((dis, idx) => (
+                      <li key={idx} className="text-muted-foreground flex items-start gap-2">
+                        <span className="text-red-500 mt-1">•</span> {dis}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Applicable Contexts */}
+              {solution.applicable_contexts && solution.applicable_contexts.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Target className="w-4 h-4" /> Contextos Aplicables
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {solution.applicable_contexts.map((ctx, idx) => (
+                      <Badge key={idx} variant="secondary">{ctx}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Applicable Sectors */}
+              {solution.applicable_sectors && solution.applicable_sectors.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Building2 className="w-4 h-4" /> Sectores Aplicables
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {solution.applicable_sectors.map((sec, idx) => (
+                      <Badge key={idx} variant="outline">{sec}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Key Providers */}
+              {solution.key_providers && solution.key_providers.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Building2 className="w-4 h-4" /> Proveedores Clave
+                  </h4>
+                  <ul className="text-sm space-y-1">
+                    {solution.key_providers.map((prov, idx) => (
+                      <li key={idx} className="text-muted-foreground">• {prov}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Case Studies */}
+              {solution.case_studies && solution.case_studies.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Casos de Estudio
+                  </h4>
+                  <ul className="text-sm space-y-1">
+                    {solution.case_studies.map((cs, idx) => (
+                      <li key={idx} className="text-muted-foreground">• {cs}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Source URL */}
+              {solution.source_url && (
+                <div className="pt-4 border-t">
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Link2 className="w-4 h-4" /> Fuente
+                  </h4>
+                  <a 
+                    href={solution.source_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    {solution.source_title || solution.source_url}
+                  </a>
+                </div>
+              )}
+              
+              {!hasExtendedInfo && (
+                <div className="text-center py-4 text-muted-foreground">
+                  <Info className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No hay información adicional disponible para esta solución.</p>
+                  <p className="text-xs mt-1">Ejecuta una nueva sesión de IA para enriquecer los datos.</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 
 export default function StudyPhase2Solutions({ studyId, study }: Props) {
   const { data: solutions, isLoading } = useStudySolutions(studyId);
@@ -404,61 +692,15 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
                     {category}
                   </h3>
                   <div className="grid gap-4 md:grid-cols-2">
-                    {categorySolutions.map((solution) => (
-                      <Card key={solution.id}>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">{solution.name}</CardTitle>
-                          {solution.description && (
-                            <CardDescription>{solution.description}</CardDescription>
-                          )}
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="flex flex-wrap gap-2">
-                            {solution.estimated_trl_range && (
-                              <Badge variant="outline">TRL {solution.estimated_trl_range}</Badge>
-                            )}
-                            {solution.cost_range && (
-                              <Badge variant="outline">
-                                <DollarSign className="w-3 h-3 mr-1" />
-                                {solution.cost_range}
-                              </Badge>
-                            )}
-                            {solution.implementation_time && (
-                              <Badge variant="outline">
-                                <Clock className="w-3 h-3 mr-1" />
-                                {solution.implementation_time}
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          {solution.advantages && solution.advantages.length > 0 && (
-                            <div>
-                              <h4 className="text-xs font-medium text-green-600 mb-1 flex items-center gap-1">
-                                <ThumbsUp className="w-3 h-3" /> Ventajas
-                              </h4>
-                              <ul className="text-sm space-y-0.5">
-                                {solution.advantages.map((adv, idx) => (
-                                  <li key={idx} className="text-muted-foreground">• {adv}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          
-                          {solution.disadvantages && solution.disadvantages.length > 0 && (
-                            <div>
-                              <h4 className="text-xs font-medium text-red-600 mb-1 flex items-center gap-1">
-                                <ThumbsDown className="w-3 h-3" /> Desventajas
-                              </h4>
-                              <ul className="text-sm space-y-0.5">
-                                {solution.disadvantages.map((dis, idx) => (
-                                  <li key={idx} className="text-muted-foreground">• {dis}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
+                    {categorySolutions.map((solution) => {
+                      const extSol = solution as ExtendedSolution;
+                      return (
+                        <SolutionCard 
+                          key={solution.id} 
+                          solution={extSol} 
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               ))}
