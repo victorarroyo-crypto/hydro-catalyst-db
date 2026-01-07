@@ -1,9 +1,18 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Loader2,
   Sparkles,
@@ -16,18 +25,19 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { AIStudySessionState } from '@/hooks/useAIStudySession';
+import { useLLMModels } from '@/hooks/useLLMModels';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 interface AISessionPanelProps {
   state: AIStudySessionState;
-  onStart: () => void;
+  onStart: (provider: string, model: string) => void;
   onCancel: () => void;
   isStarting?: boolean;
   title?: string;
   description?: string;
+  showModelSelector?: boolean;
 }
 
 const STATUS_CONFIG = {
@@ -53,9 +63,43 @@ export default function AISessionPanel({
   isStarting = false,
   title = 'Análisis con IA',
   description = 'Ejecuta análisis automatizado con inteligencia artificial',
+  showModelSelector = true,
 }: AISessionPanelProps) {
   const [showLogs, setShowLogs] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch LLM models
+  const { data: llmModelsData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useLLMModels();
+
+  const modelsByProvider = llmModelsData ?? {};
+
+  const availableModelValues = useMemo(() => {
+    const values: string[] = [];
+    for (const [providerKey, providerData] of Object.entries(modelsByProvider)) {
+      for (const model of providerData.models) values.push(`${providerKey}/${model.id}`);
+    }
+    return values;
+  }, [modelsByProvider]);
+
+  // Ensure selectedModel is valid
+  useEffect(() => {
+    if (llmModelsLoading) return;
+    if (availableModelValues.length === 0) return;
+    if (selectedModel && availableModelValues.includes(selectedModel)) return;
+    // Prefer groq or openai as default
+    const preferred = availableModelValues.find((v) => v.startsWith('groq/')) 
+      ?? availableModelValues.find((v) => v.startsWith('openai/')) 
+      ?? availableModelValues[0];
+    setSelectedModel(preferred);
+  }, [llmModelsLoading, availableModelValues, selectedModel]);
+
+  const handleStartClick = () => {
+    if (!selectedModel) return;
+    const [provider, ...modelParts] = selectedModel.split('/');
+    const model = modelParts.join('/');
+    onStart(provider, model);
+  };
 
   const statusConfig = STATUS_CONFIG[state.status] || STATUS_CONFIG.idle;
   const StatusIcon = statusConfig.icon;
@@ -121,13 +165,61 @@ export default function AISessionPanel({
           </div>
         )}
 
+        {/* Model selector */}
+        {showModelSelector && !state.isActive && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Modelo LLM</label>
+            {llmModelsLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Cargando modelos...
+              </div>
+            ) : llmModelsError ? (
+              <div className="flex items-center gap-2 text-destructive text-sm">
+                <XCircle className="w-4 h-4" />
+                Error al cargar modelos
+                <Button variant="ghost" size="sm" onClick={() => refetchLLMModels()}>
+                  Reintentar
+                </Button>
+              </div>
+            ) : (
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona un modelo" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {Object.entries(modelsByProvider).map(([providerKey, providerData]) => (
+                    <SelectGroup key={providerKey}>
+                      <SelectLabel className="capitalize">{providerData.name}</SelectLabel>
+                      {providerData.models.map((model) => (
+                        <SelectItem
+                          key={`${providerKey}/${model.id}`}
+                          value={`${providerKey}/${model.id}`}
+                          className="py-2"
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium">{model.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {model.description} • ${model.cost_per_1m_tokens}/1M tokens
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
+
         {/* Action buttons */}
         <div className="flex items-center justify-between">
           <div className="flex gap-2">
             {!state.isActive ? (
               <Button
-                onClick={onStart}
-                disabled={isStarting}
+                onClick={handleStartClick}
+                disabled={isStarting || (showModelSelector && (!selectedModel || llmModelsLoading || llmModelsError))}
                 size="sm"
               >
                 {isStarting ? (

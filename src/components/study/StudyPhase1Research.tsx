@@ -97,11 +97,13 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
     relevance_score: 3,
   });
 
-  const handleStartAIResearch = () => {
+  const handleStartAIResearch = (provider: string, model: string) => {
     aiSession.startSession('research', {
       problem_statement: study.problem_statement,
       objectives: study.objectives,
       context: study.context,
+      provider,
+      model,
     });
   };
 

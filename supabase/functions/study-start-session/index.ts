@@ -200,6 +200,10 @@ serve(async (req) => {
       webhook_url: `${supabaseUrl}/functions/v1/study-webhook`,
       webhook_secret: webhookSecret || '',
 
+      // LLM configuration - from config
+      provider: (config as any)?.provider || undefined,
+      model: (config as any)?.model || undefined,
+
       // Optional fields
       objectives: objectivesArray.length > 0 ? objectivesArray : undefined,
       keywords: (config as any)?.keywords || undefined,
