@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useStudyResearch, useAddResearch, ScoutingStudy, StudyResearch } from '@/hooks/useScoutingStudies';
+import { useStudyResearch, useAddResearch, useDeleteResearch, ScoutingStudy, StudyResearch } from '@/hooks/useScoutingStudies';
 import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -39,6 +50,7 @@ import {
   Upload,
   Link,
   File,
+  Trash2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -65,6 +77,7 @@ const MAX_FILE_SIZE_MB = 50;
 export default function StudyPhase1Research({ studyId, study }: Props) {
   const { data: research, isLoading } = useStudyResearch(studyId);
   const addResearch = useAddResearch();
+  const deleteResearch = useDeleteResearch();
   const aiSession = useAIStudySession(studyId);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -560,17 +573,58 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
                     <span>
                       Añadido {format(new Date(item.created_at), "d MMM yyyy", { locale: es })}
                     </span>
-                    {item.source_url && (
-                      <a
-                        href={item.source_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={handleViewSource}
-                        className="flex items-center gap-1 text-primary hover:underline cursor-pointer"
-                      >
-                        Ver fuente <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {item.source_url && (
+                        <a
+                          href={item.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={handleViewSource}
+                          className="flex items-center gap-1 text-primary hover:underline cursor-pointer"
+                        >
+                          Ver fuente <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button className="flex items-center gap-1 text-destructive hover:underline cursor-pointer">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Eliminar fuente?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Se eliminará "{item.title}" y su documento asociado. Esta acción no se puede deshacer.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => {
+                                // Extract file path from source_url if it's a storage URL
+                                let filePath: string | null = null;
+                                if (item.source_url?.includes('supabase.co/storage')) {
+                                  const urlParts = item.source_url.split('/knowledge-documents/');
+                                  if (urlParts.length > 1) {
+                                    filePath = decodeURIComponent(urlParts[1]);
+                                  }
+                                }
+                                deleteResearch.mutate({
+                                  researchId: item.id,
+                                  studyId,
+                                  knowledgeDocId: item.knowledge_doc_id,
+                                  filePath,
+                                });
+                              }}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Eliminar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

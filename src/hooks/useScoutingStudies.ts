@@ -311,6 +311,58 @@ export function useAddResearch() {
   });
 }
 
+export function useDeleteResearch() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ researchId, studyId, knowledgeDocId, filePath }: { 
+      researchId: string; 
+      studyId: string; 
+      knowledgeDocId?: string | null;
+      filePath?: string | null;
+    }) => {
+      // Delete the research record
+      const { error: researchError } = await supabase
+        .from('study_research')
+        .delete()
+        .eq('id', researchId);
+      if (researchError) throw researchError;
+
+      // If there's an associated knowledge document, delete it and its chunks
+      if (knowledgeDocId) {
+        // Delete chunks first
+        await supabase
+          .from('knowledge_chunks')
+          .delete()
+          .eq('document_id', knowledgeDocId);
+
+        // Delete the document record
+        await supabase
+          .from('knowledge_documents')
+          .delete()
+          .eq('id', knowledgeDocId);
+      }
+
+      // If there's a file in storage, delete it
+      if (filePath) {
+        await supabase.storage
+          .from('knowledge-documents')
+          .remove([filePath]);
+      }
+
+      return { studyId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['study-research', data.studyId] });
+      toast({ title: 'Fuente eliminada' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error al eliminar', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Hooks for Solutions (Phase 2)
 export function useStudySolutions(studyId: string | undefined) {
   return useQuery({
