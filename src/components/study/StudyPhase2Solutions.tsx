@@ -566,7 +566,7 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
         'Grado de madurez (TRL)': tech.trl || 7,
         source: 'study_extraction',
         notes: `Extraída del estudio con ${Math.round((tech.confidence_score || 0.8) * 100)}% confianza`,
-        queue_status: 'pending',
+        queue_status: 'reviewing',
         priority: 'normal',
       });
       
