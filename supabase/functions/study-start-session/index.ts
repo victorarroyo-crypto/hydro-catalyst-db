@@ -116,6 +116,58 @@ serve(async (req) => {
       details: { config, user_id: userId }
     });
 
+    // Fetch study details for context
+    const { data: studyData } = await supabase
+      .from('scouting_studies')
+      .select('*')
+      .eq('id', study_id)
+      .single();
+
+    // Fetch knowledge documents linked to this study's research
+    const { data: researchDocs } = await supabase
+      .from('study_research')
+      .select(`
+        id,
+        title,
+        source_type,
+        source_url,
+        authors,
+        summary,
+        key_findings,
+        relevance_score,
+        knowledge_doc_id,
+        knowledge_documents:knowledge_doc_id (
+          id,
+          name,
+          file_path,
+          description,
+          status,
+          chunk_count
+        )
+      `)
+      .eq('study_id', study_id);
+
+    // Fetch knowledge chunks for processed documents (for RAG context)
+    const processedDocIds = researchDocs
+      ?.filter(r => {
+        const doc = r.knowledge_documents as any;
+        return doc?.status === 'processed';
+      })
+      .map(r => r.knowledge_doc_id)
+      .filter(Boolean) || [];
+
+    let knowledgeChunks: any[] = [];
+    if (processedDocIds.length > 0) {
+      const { data: chunks } = await supabase
+        .from('knowledge_chunks')
+        .select('document_id, chunk_index, content')
+        .in('document_id', processedDocIds)
+        .order('chunk_index', { ascending: true });
+      knowledgeChunks = chunks || [];
+    }
+
+    console.log(`Found ${researchDocs?.length || 0} research sources, ${knowledgeChunks.length} knowledge chunks`);
+
     // Call Railway backend to start the AI session
     const railwayPayload = {
       session_id: sessionData.id,
@@ -124,7 +176,34 @@ serve(async (req) => {
       phase: phase || session_type,
       config: config || {},
       webhook_url: `${supabaseUrl}/functions/v1/study-webhook`,
-      webhook_secret: webhookSecret
+      webhook_secret: webhookSecret,
+      // Study context for agents
+      study_context: {
+        name: studyData?.name,
+        problem_statement: studyData?.problem_statement,
+        context: studyData?.context,
+        objectives: studyData?.objectives,
+        constraints: studyData?.constraints,
+      },
+      // Research sources with their documents
+      research_sources: researchDocs?.map(r => {
+        const doc = r.knowledge_documents as any;
+        return {
+          id: r.id,
+          title: r.title,
+          source_type: r.source_type,
+          source_url: r.source_url,
+          authors: r.authors,
+          summary: r.summary,
+          key_findings: r.key_findings,
+          relevance_score: r.relevance_score,
+          has_document: !!doc,
+          document_status: doc?.status,
+          document_name: doc?.name,
+        };
+      }) || [],
+      // Knowledge chunks for RAG (text content from processed PDFs/docs)
+      knowledge_chunks: knowledgeChunks,
     };
 
     console.log('Calling Railway backend:', railwayApiUrl);
