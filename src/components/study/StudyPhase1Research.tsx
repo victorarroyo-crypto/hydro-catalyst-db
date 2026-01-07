@@ -60,6 +60,7 @@ const SOURCE_TYPES = [
 ];
 
 const ACCEPTED_FILE_TYPES = '.pdf,.doc,.docx,.txt,.rtf';
+const MAX_FILE_SIZE_MB = 50;
 
 export default function StudyPhase1Research({ studyId, study }: Props) {
   const { data: research, isLoading } = useStudyResearch(studyId);
@@ -94,6 +95,16 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file size
+      const sizeMB = file.size / 1024 / 1024;
+      if (sizeMB > MAX_FILE_SIZE_MB) {
+        toast({
+          title: 'Archivo demasiado grande',
+          description: `El archivo no puede superar ${MAX_FILE_SIZE_MB}MB. Tu archivo tiene ${sizeMB.toFixed(1)}MB.`,
+          variant: 'destructive',
+        });
+        return;
+      }
       setSelectedFile(file);
       // Auto-fill title from filename if empty
       if (!newResearch.title) {
@@ -351,7 +362,7 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
                             <>
                               <Upload className="w-5 h-5 text-muted-foreground" />
                               <span className="text-sm text-muted-foreground">
-                                PDF, Word, TXT (máx. 20MB)
+                                PDF, Word, TXT (máx. {MAX_FILE_SIZE_MB}MB)
                               </span>
                             </>
                           )}
