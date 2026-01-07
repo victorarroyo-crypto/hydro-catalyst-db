@@ -522,8 +522,10 @@ export function useRemoveFromLonglist() {
       return studyId;
     },
     onSuccess: (studyId) => {
+      // Invalidate both longlist and extracted technologies queries (same table, different filters)
       queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
-      toast({ title: 'Tecnología eliminada de lista larga' });
+      queryClient.invalidateQueries({ queryKey: ['study-extracted-technologies', studyId] });
+      toast({ title: 'Tecnología eliminada' });
     },
     onError: (error) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
