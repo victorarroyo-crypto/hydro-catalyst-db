@@ -114,8 +114,31 @@ const ScoutingNew = () => {
     onMutate: () => {
       toast.loading('Iniciando scouting...', { id: 'scouting-start' });
     },
-    onSuccess: (data) => {
-      toast.success(`Scouting iniciado (Job ID: ${data.job_id?.slice(0, 8)}...)`, { id: 'scouting-start' });
+    onSuccess: async (data) => {
+      const jobId = data.job_id;
+      toast.success(`Scouting iniciado (Job ID: ${jobId?.slice(0, 8)}...)`, { id: 'scouting-start' });
+
+      // Ensure it appears in the Monitor immediately (even if webhooks are delayed)
+      if (jobId) {
+        try {
+          await supabase.functions.invoke('scouting-start-session', {
+            body: {
+              session_id: jobId,
+              config: {
+                keywords: keywords.split(',').map(k => k.trim()).filter(Boolean),
+                tipo: tipo === 'all' ? '' : tipo,
+                trl_min: trlMin === 'none' ? null : parseInt(trlMin),
+                instructions: instructions || undefined,
+                provider: selectedModel.split('/')[0],
+                model: selectedModel.split('/').slice(1).join('/'),
+              },
+            },
+          });
+        } catch {
+          // Non-blocking: monitor can still work with webhooks
+        }
+      }
+
       setKeywords('');
       setTipo('all');
       setTrlMin('none');
@@ -123,9 +146,20 @@ const ScoutingNew = () => {
       // Navigate to monitor to see progress
       navigate('/scouting-monitor');
     },
-    onError: (error: Error & { details?: unknown }) => {
+    onError: async (error: Error & { details?: unknown }) => {
       const errorMessage = error.message || '';
       if (errorMessage.includes('409') || errorMessage.toLowerCase().includes('ya hay un scouting')) {
+        // Try to extract job_id from backend details and ensure it appears in Monitor
+        const detailsAny = (error as any)?.details;
+        const jobId = detailsAny?.job_id || detailsAny?.data?.job_id || detailsAny?.active_job_id;
+        if (jobId) {
+          try {
+            await supabase.functions.invoke('scouting-start-session', { body: { session_id: jobId } });
+          } catch {
+            // ignore
+          }
+        }
+
         toast.error('Ya hay un scouting en ejecución. Revisa el Monitor.', { id: 'scouting-start', duration: 8000 });
         navigate('/scouting-monitor');
       } else if (errorMessage.includes('429')) {
