@@ -311,6 +311,39 @@ export function useAddResearch() {
   });
 }
 
+export function useUpdateResearch() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, study_id, ...updates }: Partial<StudyResearch> & { id: string; study_id: string }) => {
+      const { data, error } = await supabase
+        .from('study_research')
+        .update({
+          title: updates.title,
+          source_type: updates.source_type,
+          source_url: updates.source_url,
+          authors: updates.authors,
+          summary: updates.summary,
+          key_findings: updates.key_findings,
+          relevance_score: updates.relevance_score,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return { ...data, study_id };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['study-research', data.study_id] });
+      toast({ title: 'Investigación actualizada' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 export function useDeleteResearch() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
