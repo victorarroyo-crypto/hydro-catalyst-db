@@ -215,7 +215,7 @@ serve(async (req) => {
 
     console.log('Calling Railway backend:', railwayApiUrl);
 
-    const railwayResponse = await fetch(`${railwayApiUrl}/api/study/start`, {
+    const railwayResponse = await fetch(`${railwayApiUrl}/api/study/${session_type}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
