@@ -299,9 +299,9 @@ serve(async (req) => {
       .update({ status: 'processing' })
       .eq('id', documentId);
 
-    // Download the PDF from storage
+    // Download the file from storage (use same bucket as frontend uploads)
     const { data: fileData, error: fileError } = await supabase.storage
-      .from('knowledge-docs')
+      .from('knowledge-documents')
       .download(document.file_path);
 
     if (fileError || !fileData) {
