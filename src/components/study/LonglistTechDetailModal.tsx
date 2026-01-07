@@ -129,7 +129,14 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
         applications: editData.applications,
         type_suggested: editData.type_suggested,
         subcategory_suggested: editData.subcategory_suggested,
-      })
+        // Extended fields for full parity with technologies table
+        paises_actua: editData.paises_actua,
+        sector: editData.sector,
+        ventaja_competitiva: editData.ventaja_competitiva,
+        innovacion: editData.innovacion,
+        casos_referencia: editData.casos_referencia,
+        email: editData.email,
+      } as any)
       .eq('id', item.id);
 
     setIsSaving(false);
@@ -162,19 +169,26 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
 
     setIsSendingToDB(true);
 
-    // Insert into technologies table with proper format
+    // Insert into technologies table with ALL fields for complete parity
+    const extendedItem = item as any;
     const { data: insertedTech, error } = await supabase
       .from('technologies')
       .insert({
         'Nombre de la tecnología': editData.technology_name || item.technology_name,
         'Proveedor / Empresa': editData.provider || item.provider,
         'País de origen': editData.country || item.country,
+        'Paises donde actua': editData.paises_actua || extendedItem.paises_actua || null,
+        'Web de la empresa': editData.web || item.web,
+        'Email de contacto': editData.email || extendedItem.email || null,
         'Grado de madurez (TRL)': editData.trl ?? item.trl,
         'Descripción técnica breve': editData.brief_description || item.brief_description,
         'Tipo de tecnología': editData.type_suggested || item.type_suggested || 'Por clasificar',
         'Subcategoría': editData.subcategory_suggested || item.subcategory_suggested,
-        'Web de la empresa': editData.web || item.web,
+        'Sector y subsector': editData.sector || extendedItem.sector || null,
         'Aplicación principal': (editData.applications || item.applications)?.join(', '),
+        'Ventaja competitiva clave': editData.ventaja_competitiva || extendedItem.ventaja_competitiva || null,
+        'Porque es innovadora': editData.innovacion || extendedItem.innovacion || null,
+        'Casos de referencia': editData.casos_referencia || extendedItem.casos_referencia || null,
         'Comentarios del analista': editData.inclusion_reason || item.inclusion_reason,
         status: 'en_revision',
         review_status: 'pending',
@@ -547,9 +561,9 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
                 <div className="bg-muted/30 rounded-lg p-4 space-y-1">
                   <InfoRow icon={Building2} label="Proveedor / Empresa" value={item.provider} />
                   <InfoRow icon={MapPin} label="País de origen" value={item.country} />
-                  <InfoRow icon={Globe} label="Países donde actúa" value={editData.paises_actua} />
+                  <InfoRow icon={Globe} label="Países donde actúa" value={(item as any).paises_actua || editData.paises_actua} />
                   <InfoRow icon={Globe} label="Web de la empresa" value={item.web} isLink />
-                  <InfoRow icon={Mail} label="Email de contacto" value={editData.email} />
+                  <InfoRow icon={Mail} label="Email de contacto" value={(item as any).email || editData.email} />
                 </div>
               </div>
 
@@ -564,7 +578,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
                 <div className="bg-muted/30 rounded-lg p-4 space-y-1">
                   <InfoRow icon={Tag} label="Tipo de tecnología" value={item.type_suggested} />
                   <InfoRow icon={Tag} label="Subcategoría" value={item.subcategory_suggested} />
-                  <InfoRow icon={Tag} label="Sector" value={editData.sector} />
+                  <InfoRow icon={Tag} label="Sector" value={(item as any).sector || editData.sector} />
                   {item.applications && item.applications.length > 0 && (
                     <div className="flex items-start gap-3 py-2">
                       <Lightbulb className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -601,8 +615,8 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
                   Diferenciación
                 </h3>
                 <div className="bg-muted/30 rounded-lg p-4 space-y-1">
-                  <InfoRow icon={Trophy} label="Ventaja competitiva clave" value={editData.ventaja_competitiva} />
-                  <InfoRow icon={Lightbulb} label="Por qué es innovadora" value={editData.innovacion} />
+                  <InfoRow icon={Trophy} label="Ventaja competitiva clave" value={(item as any).ventaja_competitiva || editData.ventaja_competitiva} />
+                  <InfoRow icon={Lightbulb} label="Por qué es innovadora" value={(item as any).innovacion || editData.innovacion} />
                 </div>
               </div>
 
@@ -614,7 +628,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
                   Referencias
                 </h3>
                 <div className="bg-muted/30 rounded-lg p-4 space-y-1">
-                  <InfoRow icon={Users} label="Casos de referencia" value={editData.casos_referencia} />
+                  <InfoRow icon={Users} label="Casos de referencia" value={(item as any).casos_referencia || editData.casos_referencia} />
                 </div>
               </div>
 
