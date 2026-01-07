@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TRLBadge } from '@/components/TRLBadge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
 import { 
   Dialog, 
   DialogContent, 
@@ -42,6 +43,7 @@ import {
   Trash2,
   AlertTriangle,
   Edit,
+  Search,
 } from 'lucide-react';
 
 // ============ TYPES ============
@@ -109,6 +111,7 @@ const QualityControl: React.FC = () => {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [activeTab, setActiveTab] = useState('approvals');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
   const canReview = profile?.role && ['admin', 'supervisor'].includes(profile.role);
@@ -472,12 +475,41 @@ const QualityControl: React.FC = () => {
 
   // ============ COMPUTED DATA ============
 
-  const pendingEdits = edits?.filter(e => e.status === 'pending' && (e.proposed_changes as any)?.action !== 'delete') || [];
+  const searchLower = searchTerm.toLowerCase().trim();
+
+  const pendingEdits = useMemo(() => {
+    const base = edits?.filter(e => e.status === 'pending' && (e.proposed_changes as any)?.action !== 'delete') || [];
+    if (!searchLower) return base;
+    return base.filter(e => {
+      const name = ((e.proposed_changes as any)["Nombre de la tecnología"] || '').toLowerCase();
+      const provider = ((e.proposed_changes as any)["Proveedor / Empresa"] || '').toLowerCase();
+      return name.includes(searchLower) || provider.includes(searchLower);
+    });
+  }, [edits, searchLower]);
+
   const approvedEdits = edits?.filter(e => e.status === 'approved') || [];
   const rejectedEdits = edits?.filter(e => e.status === 'rejected') || [];
 
-  const pendingTechs = technologies?.filter(t => t.review_status === 'pending') || [];
-  const inReviewTechs = technologies?.filter(t => t.review_status === 'in_review') || [];
+  const pendingTechs = useMemo(() => {
+    const base = technologies?.filter(t => t.review_status === 'pending') || [];
+    if (!searchLower) return base;
+    return base.filter(t => {
+      const name = (t["Nombre de la tecnología"] || '').toLowerCase();
+      const provider = (t["Proveedor / Empresa"] || '').toLowerCase();
+      return name.includes(searchLower) || provider.includes(searchLower);
+    });
+  }, [technologies, searchLower]);
+
+  const inReviewTechs = useMemo(() => {
+    const base = technologies?.filter(t => t.review_status === 'in_review') || [];
+    if (!searchLower) return base;
+    return base.filter(t => {
+      const name = (t["Nombre de la tecnología"] || '').toLowerCase();
+      const provider = (t["Proveedor / Empresa"] || '').toLowerCase();
+      return name.includes(searchLower) || provider.includes(searchLower);
+    });
+  }, [technologies, searchLower]);
+
   const completedTechs = technologies?.filter(t => t.review_status === 'completed') || [];
   const myReviews = inReviewTechs.filter(t => t.reviewer_id === user?.id);
 
@@ -681,17 +713,28 @@ const QualityControl: React.FC = () => {
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-2xl font-display font-bold text-foreground mb-2 flex items-center gap-2">
-          <ShieldCheck className="w-7 h-7" />
-          Centro de Supervisión
-        </h1>
-        <p className="text-muted-foreground">
-          {canReview 
-            ? 'Gestiona aprobaciones, revisiones de calidad y solicitudes de eliminación'
-            : 'Consulta el estado de tus propuestas y revisiones'
-          }
-        </p>
+      <div className="mb-6 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-display font-bold text-foreground mb-2 flex items-center gap-2">
+            <ShieldCheck className="w-7 h-7" />
+            Centro de Supervisión
+          </h1>
+          <p className="text-muted-foreground">
+            {canReview 
+              ? 'Gestiona aprobaciones, revisiones de calidad y solicitudes de eliminación'
+              : 'Consulta el estado de tus propuestas y revisiones'
+            }
+          </p>
+        </div>
+        <div className="relative w-full md:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre o proveedor..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9"
+          />
+        </div>
       </div>
 
       {/* Stats Summary */}
