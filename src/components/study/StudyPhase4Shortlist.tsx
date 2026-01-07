@@ -6,6 +6,7 @@ import {
   useRemoveFromShortlist,
   ScoutingStudy,
 } from '@/hooks/useScoutingStudies';
+import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,7 @@ import {
   Building2,
   GripVertical,
 } from 'lucide-react';
+import AISessionPanel from './AISessionPanel';
 
 interface Props {
   studyId: string;
@@ -40,6 +42,7 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
   const { data: shortlist, isLoading: loadingShortlist } = useStudyShortlist(studyId);
   const addToShortlist = useAddToShortlist();
   const removeFromShortlist = useRemoveFromShortlist();
+  const aiSession = useAIStudySession(studyId);
   
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [selectionReason, setSelectionReason] = useState('');
@@ -47,6 +50,16 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
 
   const shortlistIds = new Set(shortlist?.map(s => s.longlist_id));
   const availableLonglist = longlist?.filter(item => !shortlistIds.has(item.id)) ?? [];
+
+  const handleStartAIShortlist = () => {
+    aiSession.startSession('shortlist', {
+      problem_statement: study.problem_statement,
+      objectives: study.objectives,
+      context: study.context,
+      constraints: study.constraints,
+      longlist_ids: longlist?.map(l => l.id) || [],
+    });
+  };
 
   const handleAddToShortlist = async () => {
     if (!selectedItem) return;
@@ -78,6 +91,24 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* AI Session Panel */}
+      <AISessionPanel
+        state={{
+          isActive: aiSession.isActive,
+          isStarting: aiSession.isStarting,
+          currentPhase: aiSession.currentPhase,
+          progress: aiSession.progress,
+          status: aiSession.status,
+          error: aiSession.error,
+          logs: aiSession.logs,
+        }}
+        onStart={handleStartAIShortlist}
+        onCancel={aiSession.cancelSession}
+        isStarting={aiSession.isStarting}
+        title="Selección Automática"
+        description="La IA analiza y prioriza las tecnologías más relevantes para el problema"
+      />
+
       <div>
         <h2 className="text-lg font-semibold">Fase 4: Lista Corta</h2>
         <p className="text-sm text-muted-foreground">
