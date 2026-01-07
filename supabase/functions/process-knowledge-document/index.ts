@@ -300,12 +300,44 @@ serve(async (req) => {
       .eq('id', documentId);
 
     // Download the file from storage (use same bucket as frontend uploads)
-    const { data: fileData, error: fileError } = await supabase.storage
-      .from('knowledge-documents')
-      .download(document.file_path);
+    const bucketName = 'knowledge-documents';
 
+    let fileData: Blob | null = null;
+    let fileError: any = null;
+
+    {
+      const res = await supabase.storage
+        .from(bucketName)
+        .download(document.file_path);
+      fileData = (res.data as any) ?? null;
+      fileError = res.error;
+    }
+
+    // Fallback: sometimes download() returns an empty error object in edge runtime
     if (fileError || !fileData) {
-      throw new Error('Failed to download file: ' + fileError?.message);
+      console.error('Storage download() failed', {
+        bucketName,
+        filePath: document.file_path,
+        fileError,
+      });
+
+      const { data: signed, error: signedError } = await supabase.storage
+        .from(bucketName)
+        .createSignedUrl(document.file_path, 60);
+
+      if (signedError || !signed?.signedUrl) {
+        throw new Error(
+          'Failed to download file (download+signedUrl): ' +
+            JSON.stringify({ fileError, signedError })
+        );
+      }
+
+      const resp = await fetch(signed.signedUrl);
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch signed URL: ${resp.status}`);
+      }
+
+      fileData = await resp.blob();
     }
 
     console.log('File downloaded, size:', fileData.size);
