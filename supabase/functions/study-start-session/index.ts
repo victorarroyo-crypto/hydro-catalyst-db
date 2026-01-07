@@ -176,65 +176,52 @@ serve(async (req) => {
     console.log(`Found ${researchDocs?.length || 0} research sources, ${kbDocuments.length} kb_documents prepared`);
 
     // Call Railway backend to start the AI session
+    // Extract required fields from study_context
     const problemStatement =
       (config && typeof config === 'object' ? (config as any).problem_statement : undefined) ||
       studyData?.problem_statement ||
-      null;
+      '';
 
-    const railwayPayload = {
-      session_id: sessionData.id,
+    const contextStr =
+      (config && typeof config === 'object' ? (config as any).context : undefined) ||
+      studyData?.context ||
+      '';
+
+    // Extract objectives as array of strings
+    const objectivesArray: string[] = studyData?.objectives || [];
+
+    // Build payload exactly as Railway expects for /api/study/research
+    const railwayPayload: Record<string, unknown> = {
+      // Required fields
       study_id,
-      session_type,
-      phase: phase || session_type,
-
-      // Some Railway endpoints validate required fields at the top-level
+      session_id: sessionData.id,
       problem_statement: problemStatement,
-      objectives: studyData?.objectives ?? null,
-      context: studyData?.context ?? null,
-
-      config: config || {},
+      context: contextStr,
       webhook_url: `${supabaseUrl}/functions/v1/study-webhook`,
-      webhook_secret: webhookSecret,
+      webhook_secret: webhookSecret || '',
 
-      // Study context for agents
-      study_context: {
-        name: studyData?.name,
-        problem_statement: studyData?.problem_statement,
-        context: studyData?.context,
-        objectives: studyData?.objectives,
-        constraints: studyData?.constraints,
-      },
-      // Research sources with their documents
-      research_sources: researchDocs?.map(r => {
-        const doc = r.knowledge_documents as any;
-        return {
-          id: r.id,
-          title: r.title,
-          source_type: r.source_type,
-          source_url: r.source_url,
-          authors: r.authors,
-          summary: r.summary,
-          key_findings: r.key_findings,
-          relevance_score: r.relevance_score,
-          has_document: !!doc,
-          document_status: doc?.status,
-          document_name: doc?.name,
-        };
-      }) || [],
-      // Knowledge base documents (format Railway expects)
-      kb_documents: kbDocuments,
+      // Optional fields
+      objectives: objectivesArray.length > 0 ? objectivesArray : undefined,
+      keywords: (config as any)?.keywords || undefined,
+      kb_documents: kbDocuments.length > 0 ? kbDocuments : undefined,
+      sources: (config as any)?.sources || ['web', 'papers'],
+      depth: (config as any)?.depth || 'standard',
     };
 
-    console.log('Calling Railway backend:', railwayApiUrl);
+    // Remove undefined keys to keep payload clean
+    Object.keys(railwayPayload).forEach(key => {
+      if (railwayPayload[key] === undefined) {
+        delete railwayPayload[key];
+      }
+    });
+
+    console.log('Calling Railway backend:', railwayApiUrl, 'payload keys:', Object.keys(railwayPayload));
 
     const railwayResponse = await fetch(`${railwayApiUrl}/api/study/${session_type}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Railway expects this header name
         'x-study-secret': webhookSecret || '',
-        'X-Webhook-Secret': webhookSecret || '',
-        'X-User-Id': userId
       },
       body: JSON.stringify(railwayPayload)
     });
