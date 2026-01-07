@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { toast } from 'sonner';
 import { 
   Activity, 
   CheckCircle2, 
@@ -21,6 +22,7 @@ import {
   Eye,
   Bell,
   BellRing,
+  BellOff,
   Zap,
   Ban,
   Timer,
@@ -102,6 +104,69 @@ export default function ScoutingMonitor() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const previousSessionsRef = useRef<Map<string, string>>(new Map());
+
+  // Request notification permission
+  const requestNotificationPermission = useCallback(async () => {
+    if (!('Notification' in window)) {
+      toast.error('Tu navegador no soporta notificaciones');
+      return;
+    }
+    
+    if (Notification.permission === 'granted') {
+      setNotificationsEnabled(true);
+      toast.success('Notificaciones activadas');
+      return;
+    }
+    
+    if (Notification.permission !== 'denied') {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setNotificationsEnabled(true);
+        toast.success('Notificaciones activadas');
+      } else {
+        toast.error('Permiso de notificaciones denegado');
+      }
+    } else {
+      toast.error('Notificaciones bloqueadas. Actívalas en la configuración del navegador.');
+    }
+  }, []);
+
+  // Check initial notification status
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      setNotificationsEnabled(true);
+    }
+  }, []);
+
+  // Show browser notification
+  const showNotification = useCallback((title: string, body: string, isError: boolean = false) => {
+    if (!notificationsEnabled || Notification.permission !== 'granted') return;
+    
+    try {
+      const notification = new Notification(title, {
+        body,
+        icon: isError ? '/favicon.png' : '/favicon.png',
+        tag: 'scouting-session',
+        requireInteraction: true,
+      });
+      
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+      
+      // Also show toast for in-app notification
+      if (isError) {
+        toast.error(title, { description: body });
+      } else {
+        toast.success(title, { description: body });
+      }
+    } catch (e) {
+      console.error('Error showing notification:', e);
+    }
+  }, [notificationsEnabled]);
 
   // Update current time every 10 seconds for heartbeat checking
   useEffect(() => {
@@ -342,6 +407,39 @@ export default function ScoutingMonitor() {
     setDismissedAlerts(prev => new Set([...prev, alertId]));
   };
 
+  // Detect session status changes and show notifications
+  useEffect(() => {
+    if (!sessions) return;
+    
+    const prevMap = previousSessionsRef.current;
+    
+    for (const session of sessions) {
+      const prevStatus = prevMap.get(session.session_id);
+      const currentStatus = session.status;
+      
+      // Only notify if status changed from running to completed/failed
+      if (prevStatus === 'running' && (currentStatus === 'completed' || currentStatus === 'failed')) {
+        const sessionName = session.session_id.slice(0, 8);
+        
+        if (currentStatus === 'completed') {
+          showNotification(
+            '✅ Scouting Completado',
+            `Sesión ${sessionName}: ${session.technologies_found || 0} tecnologías encontradas`,
+            false
+          );
+        } else if (currentStatus === 'failed') {
+          showNotification(
+            '❌ Scouting Fallido',
+            `Sesión ${sessionName}: ${session.error_message || 'Error desconocido'}`,
+            true
+          );
+        }
+      }
+      
+      prevMap.set(session.session_id, currentStatus);
+    }
+  }, [sessions, showNotification]);
+
   // Real-time subscription for sessions
   useEffect(() => {
     const channel = supabase
@@ -404,6 +502,24 @@ export default function ScoutingMonitor() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            onClick={requestNotificationPermission}
+            variant={notificationsEnabled ? "outline" : "default"}
+            size="sm"
+            className={notificationsEnabled ? "text-green-600 border-green-600" : ""}
+          >
+            {notificationsEnabled ? (
+              <>
+                <Bell className="w-4 h-4 mr-2" />
+                Notificaciones ON
+              </>
+            ) : (
+              <>
+                <BellOff className="w-4 h-4 mr-2" />
+                Activar notificaciones
+              </>
+            )}
+          </Button>
           {activeSessions.length > 0 && (
             <Badge variant="default" className="gap-1 bg-blue-500">
               <Activity className="w-3 h-3 animate-pulse" />
