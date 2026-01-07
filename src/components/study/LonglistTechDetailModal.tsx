@@ -132,10 +132,19 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   };
 
   const handleSendToDatabase = async () => {
+    // Check if already in database
+    if (item.existing_technology_id) {
+      toast({
+        title: 'Ya existe en BD',
+        description: 'Esta tecnología ya está vinculada a la base de datos',
+      });
+      return;
+    }
+
     setIsSendingToDB(true);
 
     // Insert into technologies table with proper format
-    const { error } = await supabase
+    const { data: insertedTech, error } = await supabase
       .from('technologies')
       .insert({
         'Nombre de la tecnología': editData.technology_name || item.technology_name,
@@ -150,24 +159,42 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
         'Comentarios del analista': editData.inclusion_reason || item.inclusion_reason,
         status: 'en_revision',
         review_status: 'pending',
-      });
-
-    setIsSendingToDB(false);
+      })
+      .select('id')
+      .single();
 
     if (error) {
+      setIsSendingToDB(false);
       toast({
         title: 'Error',
         description: 'No se pudo enviar a la base de datos',
         variant: 'destructive',
       });
-    } else {
-      queryClient.invalidateQueries({ queryKey: ['technologies'] });
-      toast({
-        title: 'Enviado a BD',
-        description: 'La tecnología está pendiente de revisión en la base de datos',
-      });
-      onOpenChange(false);
+      return;
     }
+
+    // Update longlist item to link to the new technology
+    const { error: updateError } = await supabase
+      .from('study_longlist')
+      .update({
+        existing_technology_id: insertedTech.id,
+        already_in_db: true,
+      })
+      .eq('id', item.id);
+
+    setIsSendingToDB(false);
+
+    if (updateError) {
+      console.error('Error linking to longlist:', updateError);
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['technologies'] });
+    queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
+    toast({
+      title: 'Enviado a BD',
+      description: 'La tecnología está vinculada y pendiente de revisión',
+    });
+    onOpenChange(false);
   };
 
   // Convert longlist item to a technology-like object for the AIEnrichmentButton
@@ -478,7 +505,12 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cerrar
           </Button>
-          {!item.already_in_db && (
+          {item.existing_technology_id || item.already_in_db ? (
+            <Badge variant="secondary" className="h-9 px-4 flex items-center gap-2">
+              <Database className="w-4 h-4" />
+              Vinculada a BD
+            </Badge>
+          ) : (
             <Button 
               onClick={handleSendToDatabase}
               disabled={isSendingToDB}

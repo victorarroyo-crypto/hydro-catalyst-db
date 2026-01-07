@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStudySolutions, useAddSolution, ScoutingStudy, StudySolution } from '@/hooks/useScoutingStudies';
 import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { supabase } from '@/integrations/supabase/client';
@@ -177,8 +177,8 @@ function TechCard({
               className="flex-1"
               onClick={() => onSendToScoutingQueue(tech)}
             >
-              <Plus className="w-4 h-4 mr-1" />
-              Scouting Queue
+              <Database className="w-4 h-4 mr-1" />
+              Añadir a BD
             </Button>
           )}
           {tech.web && (
@@ -489,6 +489,7 @@ function SolutionCard({ solution }: { solution: ExtendedSolution }) {
 
 
 export default function StudyPhase2Solutions({ studyId, study }: Props) {
+  const queryClient = useQueryClient();
   const { data: solutions, isLoading } = useStudySolutions(studyId);
   const addSolution = useAddSolution();
   const aiSession = useAIStudySession(studyId);
@@ -555,11 +556,17 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
 
   const handleSendToScoutingQueue = async (tech: ExtractedTechnology) => {
     try {
+      // Check if already in database
+      if (tech.existing_technology_id || tech.already_in_db) {
+        toast.info('Esta tecnología ya está vinculada a la base de datos');
+        return;
+      }
+
       // Get current date for scouting date
       const today = new Date().toISOString().split('T')[0];
       
       // Insert directly into technologies with pending review status
-      const { error } = await supabase.from('technologies').insert({
+      const { data: insertedTech, error } = await supabase.from('technologies').insert({
         'Nombre de la tecnología': tech.technology_name,
         'Proveedor / Empresa': tech.provider || null,
         'País de origen': tech.country || null,
@@ -581,9 +588,24 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
         status: 'en_revision',
         review_status: 'pending',
         quality_score: 0,
-      });
+      }).select('id').single();
       
       if (error) throw error;
+
+      // Update the longlist item to link to the new technology
+      if (insertedTech?.id) {
+        await supabase
+          .from('study_longlist')
+          .update({
+            existing_technology_id: insertedTech.id,
+            already_in_db: true,
+          })
+          .eq('id', tech.id);
+      }
+
+      // Invalidate queries to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ['study-extracted-technologies', studyId] });
+      queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
       
       toast.success(`${tech.technology_name} añadida a la base de datos (pendiente de revisión)`);
     } catch (error) {
