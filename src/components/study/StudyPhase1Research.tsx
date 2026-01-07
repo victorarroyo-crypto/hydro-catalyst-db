@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStudyResearch, useAddResearch, ScoutingStudy, StudyResearch } from '@/hooks/useScoutingStudies';
+import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -36,6 +37,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import AISessionPanel from './AISessionPanel';
 
 interface Props {
   studyId: string;
@@ -54,6 +56,7 @@ const SOURCE_TYPES = [
 export default function StudyPhase1Research({ studyId, study }: Props) {
   const { data: research, isLoading } = useStudyResearch(studyId);
   const addResearch = useAddResearch();
+  const aiSession = useAIStudySession(studyId);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newResearch, setNewResearch] = useState({
     title: '',
@@ -64,6 +67,14 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
     key_findings: [''],
     relevance_score: 3,
   });
+
+  const handleStartAIResearch = () => {
+    aiSession.startSession('research', {
+      problem_statement: study.problem_statement,
+      objectives: study.objectives,
+      context: study.context,
+    });
+  };
 
   const handleAddResearch = async () => {
     if (!newResearch.title.trim()) return;
@@ -99,6 +110,24 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* AI Session Panel */}
+      <AISessionPanel
+        state={{
+          isActive: aiSession.isActive,
+          isStarting: aiSession.isStarting,
+          currentPhase: aiSession.currentPhase,
+          progress: aiSession.progress,
+          status: aiSession.status,
+          error: aiSession.error,
+          logs: aiSession.logs,
+        }}
+        onStart={handleStartAIResearch}
+        onCancel={aiSession.cancelSession}
+        isStarting={aiSession.isStarting}
+        title="Investigación Automática"
+        description="Busca papers, artículos e informes relevantes para el problema"
+      />
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Fase 1: Investigación Bibliográfica</h2>
@@ -107,10 +136,6 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" disabled>
-            <Sparkles className="w-4 h-4 mr-2" />
-            Buscar con IA
-          </Button>
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
               <Button>
