@@ -26,6 +26,7 @@ import {
   Rocket,
   Wrench,
   Tag,
+  GraduationCap,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -54,6 +55,7 @@ import { cn } from '@/lib/utils';
 const mainNavItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   { title: 'Consultar Tecnologías', url: '/technologies', icon: Search },
+  { title: 'Estudios', url: '/studies', icon: GraduationCap },
   { title: 'Mis Proyectos', url: '/projects', icon: FolderOpen },
   { title: 'Favoritos', url: '/favorites', icon: Star },
 ];
