@@ -566,21 +566,22 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
       const today = new Date().toISOString().split('T')[0];
       
       // Insert directly into technologies with pending review status
+      const extendedTech = tech as any;
       const { data: insertedTech, error } = await supabase.from('technologies').insert({
         'Nombre de la tecnología': tech.technology_name,
         'Proveedor / Empresa': tech.provider || null,
         'País de origen': tech.country || null,
+        'Paises donde actua': extendedTech.paises_actua || null,
         'Web de la empresa': tech.web || null,
-        'Email de contacto': null,
+        'Email de contacto': extendedTech.email || null,
         'Descripción técnica breve': tech.brief_description || null,
         'Tipo de tecnología': tech.type_suggested || 'Por clasificar',
         'Subcategoría': tech.subcategory_suggested || null,
-        'Sector y subsector': null,
+        'Sector y subsector': extendedTech.sector || null,
         'Aplicación principal': tech.applications?.length ? tech.applications.join(', ') : null,
-        'Ventaja competitiva clave': null,
-        'Porque es innovadora': null,
-        'Casos de referencia': null,
-        'Paises donde actua': null,
+        'Ventaja competitiva clave': extendedTech.ventaja_competitiva || null,
+        'Porque es innovadora': extendedTech.innovacion || null,
+        'Casos de referencia': extendedTech.casos_referencia || null,
         'Comentarios del analista': `Extraída del estudio con ${Math.round((tech.confidence_score || 0.8) * 100)}% confianza. Razón: ${tech.inclusion_reason || 'N/A'}`,
         'Fecha de scouting': today,
         'Estado del seguimiento': 'Pendiente',
