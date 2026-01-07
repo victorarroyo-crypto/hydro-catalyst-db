@@ -484,11 +484,19 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
             const SourceIcon = getSourceIcon(item.source_type);
             
             const handleViewSource = async (e: React.MouseEvent) => {
-              // If it's a storage URL, generate a signed URL
+              // For storage URLs on non-public buckets, generate a signed URL
+              // The knowledge-documents bucket is public, so we just open directly
+              // Only intercept if there's a specific issue with the URL
+              if (item.knowledge_doc_id && item.source_url?.includes('/object/public/')) {
+                // It's already a public URL, let it open directly
+                return;
+              }
+              
+              // For private bucket URLs, generate a signed URL
               if (item.knowledge_doc_id && item.source_url?.includes('supabase.co/storage')) {
                 e.preventDefault();
                 try {
-                  // Extract file path from the public URL
+                  // Extract file path from the URL
                   const urlParts = item.source_url.split('/knowledge-documents/');
                   if (urlParts.length > 1) {
                     const filePath = decodeURIComponent(urlParts[1]);
