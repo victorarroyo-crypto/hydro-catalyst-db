@@ -97,6 +97,7 @@ const ENRICHABLE_FIELDS = [
   { id: 'ventaja_competitiva', label: 'Ventaja competitiva clave' },
   { id: 'innovacion', label: 'Por qué es innovadora' },
   { id: 'casos_referencia', label: 'Casos de referencia' },
+  { id: 'paises_actua', label: 'Países donde actúa' },
   { id: 'comentarios_analista', label: 'Comentarios del analista' },
 ];
 

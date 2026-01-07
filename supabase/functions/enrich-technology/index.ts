@@ -46,6 +46,7 @@ const DEFAULT_FIELDS = [
   'ventaja_competitiva',
   'innovacion',
   'casos_referencia',
+  'paises_actua',
   'comentarios_analista'
 ];
 
