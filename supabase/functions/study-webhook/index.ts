@@ -44,13 +44,15 @@ serve(async (req) => {
     console.log('Received study webhook:', { event, session_id, study_id });
 
     switch (event) {
+      // Railway sends 'research_start' when beginning
+      case 'research_start':
       case 'session_start':
         await supabase
           .from('study_sessions')
           .update({ 
             status: 'running',
             started_at: new Date().toISOString(),
-            current_phase: data?.phase || 'starting'
+            current_phase: data?.phase || payload.phase || 'research'
           })
           .eq('id', session_id);
 
@@ -58,18 +60,25 @@ serve(async (req) => {
           session_id,
           study_id,
           level: 'info',
-          phase: data?.phase || 'starting',
-          message: 'Sesión de IA iniciada',
-          details: data
+          phase: data?.phase || payload.phase || 'research',
+          message: 'Sesión de IA iniciada - Investigación en progreso',
+          details: data || payload
         });
         break;
 
-      case 'progress':
+      // Railway sends 'research_progress' for progress updates
+      case 'research_progress':
+      case 'progress': {
+        const progressData = data || payload;
+        const progressValue = progressData?.progress ?? progressData?.percentage ?? 0;
+        const progressMessage = progressData?.message || progressData?.status || `Progreso: ${progressValue}%`;
+        
         await supabase
           .from('study_sessions')
           .update({ 
-            progress_percentage: data?.progress || 0,
-            current_phase: data?.phase || null,
+            status: 'running',
+            progress_percentage: progressValue,
+            current_phase: progressData?.phase || 'research',
             updated_at: new Date().toISOString()
           })
           .eq('id', session_id);
@@ -78,34 +87,50 @@ serve(async (req) => {
           session_id,
           study_id,
           level: 'info',
-          phase: data?.phase,
-          message: data?.message || `Progreso: ${data?.progress}%`,
-          details: data
+          phase: progressData?.phase || 'research',
+          message: progressMessage,
+          details: progressData
         });
         break;
+      }
 
-      case 'research_found':
-        // Insert research item found by AI
-        if (data?.research) {
+      // Railway sends 'research_finding' for each finding
+      case 'research_finding':
+      case 'research_found': {
+        // Railway may send data directly in payload or in data object
+        const findingData = data || payload;
+        const research = findingData?.research || findingData?.finding || findingData;
+        
+        // Extract research info - handle various formats from Railway
+        const title = research?.title || research?.name || 'Hallazgo de investigación';
+        const summary = research?.summary || research?.description || research?.content || '';
+        const sourceUrl = research?.source_url || research?.url || research?.link || '';
+        const sourceType = research?.source_type || research?.type || 'web';
+        const keyFindings = research?.key_findings || research?.findings || [];
+        const relevanceScore = research?.relevance_score || research?.relevance || research?.score || 3;
+        
+        if (title && title !== 'Hallazgo de investigación') {
           const { error } = await supabase
             .from('study_research')
             .insert({
               study_id,
               session_id,
-              title: data.research.title,
-              summary: data.research.summary,
-              source_url: data.research.source_url,
-              source_type: data.research.source_type || 'web',
-              key_findings: data.research.key_findings || [],
-              relevance_score: data.research.relevance_score,
+              title,
+              summary,
+              source_url: sourceUrl,
+              source_type: sourceType,
+              key_findings: Array.isArray(keyFindings) ? keyFindings : [],
+              relevance_score: typeof relevanceScore === 'number' ? relevanceScore : 3,
               ai_generated: true,
               ai_extracted: true,
-              authors: data.research.authors,
-              publication_date: data.research.publication_date
+              authors: research?.authors || '',
+              publication_date: research?.publication_date || null
             });
 
           if (error) {
             console.error('Error inserting research:', error);
+          } else {
+            console.log('Research inserted successfully:', title);
           }
         }
 
@@ -114,10 +139,70 @@ serve(async (req) => {
           study_id,
           level: 'info',
           phase: 'research',
-          message: `Investigación encontrada: ${data?.research?.title || 'Sin título'}`,
-          details: data
+          message: `Hallazgo: ${title}`,
+          details: findingData
         });
         break;
+      }
+
+      // Railway sends 'research_complete' when research phase ends
+      case 'research_complete':
+      case 'session_complete': {
+        const completeData = data || payload;
+        const findings = completeData?.findings || completeData?.results || [];
+        
+        // Insert any findings that came with the complete event
+        for (const finding of findings) {
+          const title = finding?.title || finding?.name || '';
+          if (title) {
+            const { error } = await supabase
+              .from('study_research')
+              .insert({
+                study_id,
+                session_id,
+                title,
+                summary: finding?.summary || finding?.description || '',
+                source_url: finding?.source_url || finding?.url || '',
+                source_type: finding?.source_type || 'web',
+                key_findings: finding?.key_findings || [],
+                relevance_score: finding?.relevance_score || 3,
+                ai_generated: true,
+                ai_extracted: true
+              });
+            if (error) {
+              console.error('Error inserting research finding:', error);
+            }
+          }
+        }
+        
+        await supabase
+          .from('study_sessions')
+          .update({ 
+            status: 'completed',
+            progress_percentage: 100,
+            completed_at: new Date().toISOString(),
+            summary: completeData?.summary || { findings_count: findings.length }
+          })
+          .eq('id', session_id);
+
+        // Update study phase if applicable
+        if (completeData?.next_phase) {
+          await supabase
+            .from('scouting_studies')
+            .update({ current_phase: completeData.next_phase })
+            .eq('id', study_id);
+        }
+
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: 'info',
+          phase: 'complete',
+          message: `Investigación completada - ${findings.length || 0} hallazgos encontrados`,
+          details: completeData
+        });
+        break;
+      }
 
       case 'solution_identified':
         // Insert solution identified by AI
@@ -257,34 +342,7 @@ serve(async (req) => {
         }
         break;
 
-      case 'session_complete':
-        await supabase
-          .from('study_sessions')
-          .update({ 
-            status: 'completed',
-            progress_percentage: 100,
-            completed_at: new Date().toISOString(),
-            summary: data?.summary || {}
-          })
-          .eq('id', session_id);
-
-        // Update study phase if applicable
-        if (data?.next_phase) {
-          await supabase
-            .from('scouting_studies')
-            .update({ current_phase: data.next_phase })
-            .eq('id', study_id);
-        }
-
-        await supabase.from('study_session_logs').insert({
-          session_id,
-          study_id,
-          level: 'info',
-          phase: 'complete',
-          message: 'Sesión de IA completada exitosamente',
-          details: data
-        });
-        break;
+      // session_complete is now handled above with research_complete
 
       case 'log':
         await supabase.from('study_session_logs').insert({
