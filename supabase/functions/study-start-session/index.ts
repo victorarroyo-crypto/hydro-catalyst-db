@@ -147,26 +147,33 @@ serve(async (req) => {
       `)
       .eq('study_id', study_id);
 
-    // Fetch knowledge chunks for processed documents (for RAG context)
-    const processedDocIds = researchDocs
-      ?.filter(r => {
-        const doc = r.knowledge_documents as any;
-        return doc?.status === 'processed';
-      })
-      .map(r => r.knowledge_doc_id)
-      .filter(Boolean) || [];
-
-    let knowledgeChunks: any[] = [];
-    if (processedDocIds.length > 0) {
-      const { data: chunks } = await supabase
-        .from('knowledge_chunks')
-        .select('document_id, chunk_index, content')
-        .in('document_id', processedDocIds)
-        .order('chunk_index', { ascending: true });
-      knowledgeChunks = chunks || [];
+    // Build kb_documents by grouping chunks per document (format Railway expects)
+    const kbDocuments: { id: string; title: string; content: string; relevance: number }[] = [];
+    
+    for (const research of researchDocs || []) {
+      const doc = research.knowledge_documents as any;
+      
+      if (doc?.status === 'processed' && research.knowledge_doc_id) {
+        // Fetch all chunks for this document
+        const { data: docChunks } = await supabase
+          .from('knowledge_chunks')
+          .select('content, chunk_index')
+          .eq('document_id', research.knowledge_doc_id)
+          .order('chunk_index', { ascending: true });
+        
+        // Concatenate all chunk contents
+        const fullContent = docChunks?.map(c => c.content).join('\n\n') || '';
+        
+        kbDocuments.push({
+          id: research.knowledge_doc_id,
+          title: research.title || doc.name,
+          content: fullContent,
+          relevance: research.relevance_score || 50
+        });
+      }
     }
 
-    console.log(`Found ${researchDocs?.length || 0} research sources, ${knowledgeChunks.length} knowledge chunks`);
+    console.log(`Found ${researchDocs?.length || 0} research sources, ${kbDocuments.length} kb_documents prepared`);
 
     // Call Railway backend to start the AI session
     const railwayPayload = {
@@ -202,8 +209,8 @@ serve(async (req) => {
           document_name: doc?.name,
         };
       }) || [],
-      // Knowledge chunks for RAG (text content from processed PDFs/docs)
-      knowledge_chunks: knowledgeChunks,
+      // Knowledge base documents (format Railway expects)
+      kb_documents: kbDocuments,
     };
 
     console.log('Calling Railway backend:', railwayApiUrl);
