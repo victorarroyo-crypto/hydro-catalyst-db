@@ -794,6 +794,488 @@ export type Database = {
         }
         Relationships: []
       }
+      scouting_studies: {
+        Row: {
+          assigned_to: string | null
+          completed_at: string | null
+          constraints: string[] | null
+          context: string | null
+          created_at: string
+          created_by: string | null
+          current_phase: number
+          description: string | null
+          id: string
+          name: string
+          objectives: string[] | null
+          problem_statement: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          constraints?: string[] | null
+          context?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_phase?: number
+          description?: string | null
+          id?: string
+          name: string
+          objectives?: string[] | null
+          problem_statement?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          constraints?: string[] | null
+          context?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_phase?: number
+          description?: string | null
+          id?: string
+          name?: string
+          objectives?: string[] | null
+          problem_statement?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      study_evaluations: {
+        Row: {
+          ai_analysis_json: Json | null
+          ai_analyzed_at: string | null
+          ai_external_data: Json | null
+          ai_kb_insights: Json | null
+          benchmark_notes: string | null
+          competitive_advantages: string[] | null
+          competitive_disadvantages: string[] | null
+          context_fit_score: number | null
+          context_notes: string | null
+          cost_notes: string | null
+          cost_score: number | null
+          evaluated_at: string
+          evaluated_by: string | null
+          id: string
+          implementation_barriers: string[] | null
+          innovation_potential_score: number | null
+          market_position: string | null
+          opportunities: string[] | null
+          overall_score: number | null
+          recommendation: string | null
+          recommendation_notes: string | null
+          requirements_met: string[] | null
+          requirements_unmet: string[] | null
+          scalability_notes: string | null
+          scalability_score: number | null
+          shortlist_id: string
+          strengths: string[] | null
+          study_id: string
+          threats: string[] | null
+          trl_notes: string | null
+          trl_score: number | null
+          weaknesses: string[] | null
+        }
+        Insert: {
+          ai_analysis_json?: Json | null
+          ai_analyzed_at?: string | null
+          ai_external_data?: Json | null
+          ai_kb_insights?: Json | null
+          benchmark_notes?: string | null
+          competitive_advantages?: string[] | null
+          competitive_disadvantages?: string[] | null
+          context_fit_score?: number | null
+          context_notes?: string | null
+          cost_notes?: string | null
+          cost_score?: number | null
+          evaluated_at?: string
+          evaluated_by?: string | null
+          id?: string
+          implementation_barriers?: string[] | null
+          innovation_potential_score?: number | null
+          market_position?: string | null
+          opportunities?: string[] | null
+          overall_score?: number | null
+          recommendation?: string | null
+          recommendation_notes?: string | null
+          requirements_met?: string[] | null
+          requirements_unmet?: string[] | null
+          scalability_notes?: string | null
+          scalability_score?: number | null
+          shortlist_id: string
+          strengths?: string[] | null
+          study_id: string
+          threats?: string[] | null
+          trl_notes?: string | null
+          trl_score?: number | null
+          weaknesses?: string[] | null
+        }
+        Update: {
+          ai_analysis_json?: Json | null
+          ai_analyzed_at?: string | null
+          ai_external_data?: Json | null
+          ai_kb_insights?: Json | null
+          benchmark_notes?: string | null
+          competitive_advantages?: string[] | null
+          competitive_disadvantages?: string[] | null
+          context_fit_score?: number | null
+          context_notes?: string | null
+          cost_notes?: string | null
+          cost_score?: number | null
+          evaluated_at?: string
+          evaluated_by?: string | null
+          id?: string
+          implementation_barriers?: string[] | null
+          innovation_potential_score?: number | null
+          market_position?: string | null
+          opportunities?: string[] | null
+          overall_score?: number | null
+          recommendation?: string | null
+          recommendation_notes?: string | null
+          requirements_met?: string[] | null
+          requirements_unmet?: string[] | null
+          scalability_notes?: string | null
+          scalability_score?: number | null
+          shortlist_id?: string
+          strengths?: string[] | null
+          study_id?: string
+          threats?: string[] | null
+          trl_notes?: string | null
+          trl_score?: number | null
+          weaknesses?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_evaluations_shortlist_id_fkey"
+            columns: ["shortlist_id"]
+            isOneToOne: false
+            referencedRelation: "study_shortlist"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_evaluations_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_longlist: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          brief_description: string | null
+          country: string | null
+          id: string
+          inclusion_reason: string | null
+          provider: string | null
+          solution_id: string | null
+          source: string | null
+          study_id: string
+          technology_id: string | null
+          technology_name: string
+          trl: number | null
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          brief_description?: string | null
+          country?: string | null
+          id?: string
+          inclusion_reason?: string | null
+          provider?: string | null
+          solution_id?: string | null
+          source?: string | null
+          study_id: string
+          technology_id?: string | null
+          technology_name: string
+          trl?: number | null
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          brief_description?: string | null
+          country?: string | null
+          id?: string
+          inclusion_reason?: string | null
+          provider?: string | null
+          solution_id?: string | null
+          source?: string | null
+          study_id?: string
+          technology_id?: string | null
+          technology_name?: string
+          trl?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_longlist_solution_id_fkey"
+            columns: ["solution_id"]
+            isOneToOne: false
+            referencedRelation: "study_solutions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_longlist_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_studies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_longlist_technology_id_fkey"
+            columns: ["technology_id"]
+            isOneToOne: false
+            referencedRelation: "technologies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_reports: {
+        Row: {
+          appendices: Json | null
+          conclusions: string | null
+          created_at: string
+          created_by: string | null
+          executive_summary: string | null
+          file_path: string | null
+          generated_by: string | null
+          id: string
+          methodology: string | null
+          problem_analysis: string | null
+          recommendations: string | null
+          solutions_overview: string | null
+          study_id: string
+          technology_comparison: string | null
+          title: string
+          version: number
+        }
+        Insert: {
+          appendices?: Json | null
+          conclusions?: string | null
+          created_at?: string
+          created_by?: string | null
+          executive_summary?: string | null
+          file_path?: string | null
+          generated_by?: string | null
+          id?: string
+          methodology?: string | null
+          problem_analysis?: string | null
+          recommendations?: string | null
+          solutions_overview?: string | null
+          study_id: string
+          technology_comparison?: string | null
+          title: string
+          version?: number
+        }
+        Update: {
+          appendices?: Json | null
+          conclusions?: string | null
+          created_at?: string
+          created_by?: string | null
+          executive_summary?: string | null
+          file_path?: string | null
+          generated_by?: string | null
+          id?: string
+          methodology?: string | null
+          problem_analysis?: string | null
+          recommendations?: string | null
+          solutions_overview?: string | null
+          study_id?: string
+          technology_comparison?: string | null
+          title?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_reports_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_research: {
+        Row: {
+          ai_extracted: boolean | null
+          authors: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          key_findings: string[] | null
+          knowledge_doc_id: string | null
+          publication_date: string | null
+          relevance_score: number | null
+          source_type: string | null
+          source_url: string | null
+          study_id: string
+          summary: string | null
+          title: string
+        }
+        Insert: {
+          ai_extracted?: boolean | null
+          authors?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_findings?: string[] | null
+          knowledge_doc_id?: string | null
+          publication_date?: string | null
+          relevance_score?: number | null
+          source_type?: string | null
+          source_url?: string | null
+          study_id: string
+          summary?: string | null
+          title: string
+        }
+        Update: {
+          ai_extracted?: boolean | null
+          authors?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_findings?: string[] | null
+          knowledge_doc_id?: string | null
+          publication_date?: string | null
+          relevance_score?: number | null
+          source_type?: string | null
+          source_url?: string | null
+          study_id?: string
+          summary?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_research_knowledge_doc_id_fkey"
+            columns: ["knowledge_doc_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_research_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_shortlist: {
+        Row: {
+          id: string
+          longlist_id: string
+          notes: string | null
+          priority: number | null
+          selected_at: string
+          selected_by: string | null
+          selection_reason: string | null
+          study_id: string
+        }
+        Insert: {
+          id?: string
+          longlist_id: string
+          notes?: string | null
+          priority?: number | null
+          selected_at?: string
+          selected_by?: string | null
+          selection_reason?: string | null
+          study_id: string
+        }
+        Update: {
+          id?: string
+          longlist_id?: string
+          notes?: string | null
+          priority?: number | null
+          selected_at?: string
+          selected_by?: string | null
+          selection_reason?: string | null
+          study_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_shortlist_longlist_id_fkey"
+            columns: ["longlist_id"]
+            isOneToOne: false
+            referencedRelation: "study_longlist"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_shortlist_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_solutions: {
+        Row: {
+          advantages: string[] | null
+          applicable_contexts: string[] | null
+          category: string
+          cost_range: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          disadvantages: string[] | null
+          estimated_trl_range: string | null
+          id: string
+          implementation_time: string | null
+          name: string
+          priority: number | null
+          study_id: string
+        }
+        Insert: {
+          advantages?: string[] | null
+          applicable_contexts?: string[] | null
+          category: string
+          cost_range?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          disadvantages?: string[] | null
+          estimated_trl_range?: string | null
+          id?: string
+          implementation_time?: string | null
+          name: string
+          priority?: number | null
+          study_id: string
+        }
+        Update: {
+          advantages?: string[] | null
+          applicable_contexts?: string[] | null
+          category?: string
+          cost_range?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          disadvantages?: string[] | null
+          estimated_trl_range?: string | null
+          id?: string
+          implementation_time?: string | null
+          name?: string
+          priority?: number | null
+          study_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_solutions_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       taxonomy_sectores: {
         Row: {
           descripcion: string | null
