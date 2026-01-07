@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useStudyResearch, useAddResearch, ScoutingStudy, StudyResearch } from '@/hooks/useScoutingStudies';
 import { useAIStudySession } from '@/hooks/useAIStudySession';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -34,9 +36,13 @@ import {
   Star,
   Loader2,
   Sparkles,
+  Upload,
+  Link,
+  File,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useToast } from '@/hooks/use-toast';
 import AISessionPanel from './AISessionPanel';
 
 interface Props {
@@ -53,11 +59,20 @@ const SOURCE_TYPES = [
   { value: 'other', label: 'Otro', icon: FileText },
 ];
 
+const ACCEPTED_FILE_TYPES = '.pdf,.doc,.docx,.txt,.rtf';
+
 export default function StudyPhase1Research({ studyId, study }: Props) {
   const { data: research, isLoading } = useStudyResearch(studyId);
   const addResearch = useAddResearch();
   const aiSession = useAIStudySession(studyId);
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [sourceMode, setSourceMode] = useState<'url' | 'file'>('url');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  
   const [newResearch, setNewResearch] = useState({
     title: '',
     source_type: 'paper' as StudyResearch['source_type'],
@@ -76,14 +91,97 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
     });
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      // Auto-fill title from filename if empty
+      if (!newResearch.title) {
+        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+        setNewResearch(prev => ({ ...prev, title: nameWithoutExt }));
+      }
+    }
+  };
+
   const handleAddResearch = async () => {
     if (!newResearch.title.trim()) return;
-    await addResearch.mutateAsync({
-      study_id: studyId,
-      ...newResearch,
-      key_findings: newResearch.key_findings.filter(f => f.trim()),
-    });
-    setIsAddOpen(false);
+    
+    try {
+      setIsUploading(true);
+      let knowledgeDocId: string | null = null;
+      let sourceUrl = newResearch.source_url;
+
+      // If file mode and file selected, upload it
+      if (sourceMode === 'file' && selectedFile) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Usuario no autenticado');
+
+        // Generate unique file path
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `${studyId}/${Date.now()}-${selectedFile.name}`;
+        
+        // Upload file to storage
+        const { error: uploadError } = await supabase.storage
+          .from('knowledge-documents')
+          .upload(fileName, selectedFile);
+        
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('knowledge-documents')
+          .getPublicUrl(fileName);
+
+        // Create knowledge document entry
+        const { data: docData, error: docError } = await supabase
+          .from('knowledge_documents')
+          .insert({
+            name: selectedFile.name,
+            file_path: fileName,
+            file_size: selectedFile.size,
+            mime_type: selectedFile.type,
+            status: 'pending',
+            uploaded_by: user.id,
+          })
+          .select()
+          .single();
+
+        if (docError) throw docError;
+        knowledgeDocId = docData.id;
+        sourceUrl = urlData.publicUrl;
+
+        // Trigger processing
+        supabase.functions.invoke('process-knowledge-document', {
+          body: { document_id: docData.id },
+        }).catch(console.error); // Fire and forget
+      }
+
+      await addResearch.mutateAsync({
+        study_id: studyId,
+        ...newResearch,
+        source_url: sourceUrl,
+        knowledge_doc_id: knowledgeDocId,
+        key_findings: newResearch.key_findings.filter(f => f.trim()),
+      });
+
+      setIsAddOpen(false);
+      resetForm();
+      toast({ 
+        title: 'Fuente añadida', 
+        description: selectedFile ? 'El documento se está procesando en segundo plano' : undefined 
+      });
+    } catch (error: any) {
+      toast({ 
+        title: 'Error', 
+        description: error.message, 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const resetForm = () => {
     setNewResearch({
       title: '',
       source_type: 'paper',
@@ -93,6 +191,11 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
       key_findings: [''],
       relevance_score: 3,
     });
+    setSelectedFile(null);
+    setSourceMode('url');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const getSourceIcon = (type: string | null) => {
@@ -200,14 +303,75 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
                     </Select>
                   </div>
                 </div>
+                {/* Source input - URL or File */}
                 <div className="space-y-2">
-                  <Label>URL de la Fuente</Label>
-                  <Input
-                    value={newResearch.source_url}
-                    onChange={(e) => setNewResearch({ ...newResearch, source_url: e.target.value })}
-                    placeholder="https://..."
-                    type="url"
-                  />
+                  <Label>Fuente</Label>
+                  <Tabs value={sourceMode} onValueChange={(v) => setSourceMode(v as 'url' | 'file')}>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="url" className="flex items-center gap-2">
+                        <Link className="w-4 h-4" />
+                        URL
+                      </TabsTrigger>
+                      <TabsTrigger value="file" className="flex items-center gap-2">
+                        <Upload className="w-4 h-4" />
+                        Archivo
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="url" className="mt-2">
+                      <Input
+                        value={newResearch.source_url}
+                        onChange={(e) => setNewResearch({ ...newResearch, source_url: e.target.value })}
+                        placeholder="https://..."
+                        type="url"
+                      />
+                    </TabsContent>
+                    <TabsContent value="file" className="mt-2">
+                      <div className="space-y-2">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept={ACCEPTED_FILE_TYPES}
+                          onChange={handleFileSelect}
+                          className="hidden"
+                          id="file-upload"
+                        />
+                        <label
+                          htmlFor="file-upload"
+                          className="flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                        >
+                          {selectedFile ? (
+                            <>
+                              <File className="w-5 h-5 text-primary" />
+                              <span className="text-sm font-medium">{selectedFile.name}</span>
+                              <Badge variant="secondary" className="ml-2">
+                                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                              </Badge>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-5 h-5 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">
+                                PDF, Word, TXT (máx. 20MB)
+                              </span>
+                            </>
+                          )}
+                        </label>
+                        {selectedFile && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedFile(null);
+                              if (fileInputRef.current) fileInputRef.current.value = '';
+                            }}
+                          >
+                            Quitar archivo
+                          </Button>
+                        )}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </div>
                 <div className="space-y-2">
                   <Label>Autores</Label>
@@ -262,10 +426,15 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
                 </Button>
                 <Button
                   onClick={handleAddResearch}
-                  disabled={!newResearch.title.trim() || addResearch.isPending}
+                  disabled={
+                    !newResearch.title.trim() || 
+                    addResearch.isPending || 
+                    isUploading ||
+                    (sourceMode === 'file' && !selectedFile && !newResearch.source_url)
+                  }
                 >
-                  {addResearch.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Añadir
+                  {(addResearch.isPending || isUploading) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {isUploading ? 'Subiendo...' : 'Añadir'}
                 </Button>
               </DialogFooter>
             </DialogContent>
