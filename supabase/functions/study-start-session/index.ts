@@ -176,14 +176,26 @@ serve(async (req) => {
     console.log(`Found ${researchDocs?.length || 0} research sources, ${kbDocuments.length} kb_documents prepared`);
 
     // Call Railway backend to start the AI session
+    const problemStatement =
+      (config && typeof config === 'object' ? (config as any).problem_statement : undefined) ||
+      studyData?.problem_statement ||
+      null;
+
     const railwayPayload = {
       session_id: sessionData.id,
       study_id,
       session_type,
       phase: phase || session_type,
+
+      // Some Railway endpoints validate required fields at the top-level
+      problem_statement: problemStatement,
+      objectives: studyData?.objectives ?? null,
+      context: studyData?.context ?? null,
+
       config: config || {},
       webhook_url: `${supabaseUrl}/functions/v1/study-webhook`,
       webhook_secret: webhookSecret,
+
       // Study context for agents
       study_context: {
         name: studyData?.name,
@@ -219,6 +231,8 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // Railway expects this header name
+        'x-study-secret': webhookSecret || '',
         'X-Webhook-Secret': webhookSecret || '',
         'X-User-Id': userId
       },
