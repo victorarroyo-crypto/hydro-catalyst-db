@@ -248,7 +248,7 @@ export default function ExtractedTechDetailModal({
 
         {/* Actions */}
         <div className="flex gap-2 pt-4 border-t">
-          {tech.already_in_db && tech.existing_technology_id ? (
+          {tech.already_in_db || tech.existing_technology_id ? (
             <Button 
               className="flex-1"
               onClick={() => window.open(`/technologies?id=${tech.existing_technology_id}`, '_blank')}
@@ -264,8 +264,8 @@ export default function ExtractedTechDetailModal({
                 onOpenChange(false);
               }}
             >
-              <Cpu className="w-4 h-4 mr-2" />
-              Enviar a Scouting Queue
+              <Database className="w-4 h-4 mr-2" />
+              Añadir a BD (Pendiente Revisión)
             </Button>
           )}
           
