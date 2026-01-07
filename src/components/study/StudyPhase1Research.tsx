@@ -152,7 +152,7 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
 
         // Trigger processing
         supabase.functions.invoke('process-knowledge-document', {
-          body: { document_id: docData.id },
+          body: { documentId: docData.id },
         }).catch(console.error); // Fire and forget
       }
 
