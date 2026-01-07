@@ -46,7 +46,9 @@ import {
   Target,
 } from 'lucide-react';
 import AISessionPanel from './AISessionPanel';
+import ExtractedTechDetailModal from './ExtractedTechDetailModal';
 import { toast } from 'sonner';
+import { Eye } from 'lucide-react';
 
 interface Props {
   studyId: string;
@@ -68,8 +70,137 @@ interface ExtractedTechnology {
   confidence_score: number | null;
   already_in_db: boolean | null;
   existing_technology_id: string | null;
+  inclusion_reason: string | null;
   source: string | null;
   added_at: string;
+}
+
+// Tech card with detail modal
+function TechCard({ 
+  tech, 
+  onSendToScoutingQueue 
+}: { 
+  tech: ExtractedTechnology; 
+  onSendToScoutingQueue: (tech: ExtractedTechnology) => void;
+}) {
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  
+  return (
+    <>
+      <Card className="flex flex-col hover:border-primary/50 transition-colors">
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <CardTitle className="text-base truncate">{tech.technology_name}</CardTitle>
+              <CardDescription className="truncate">
+                {tech.provider} {tech.country && `• ${tech.country}`}
+              </CardDescription>
+            </div>
+            <div className="flex flex-col gap-1 items-end">
+              <Badge variant={(tech.confidence_score || 0) > 0.8 ? "default" : "secondary"}>
+                {Math.round((tech.confidence_score || 0.8) * 100)}% conf
+              </Badge>
+              {tech.already_in_db && (
+                <Badge variant="outline" className="gap-1 text-green-600 border-green-600">
+                  <CheckCircle2 className="w-3 h-3" />
+                  En BD
+                </Badge>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-1 space-y-3">
+          {tech.brief_description && (
+            <p className="text-sm text-muted-foreground line-clamp-3">
+              {tech.brief_description}
+            </p>
+          )}
+          
+          <div className="flex flex-wrap gap-1.5">
+            {tech.trl && (
+              <Badge variant="outline">TRL {tech.trl}</Badge>
+            )}
+            {tech.type_suggested && (
+              <Badge variant="secondary" className="truncate max-w-[120px]">
+                {tech.type_suggested}
+              </Badge>
+            )}
+            {tech.subcategory_suggested && (
+              <Badge variant="secondary" className="truncate max-w-[120px]">
+                {tech.subcategory_suggested}
+              </Badge>
+            )}
+          </div>
+          
+          {tech.applications && tech.applications.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1">Aplicaciones:</p>
+              <div className="flex flex-wrap gap-1">
+                {tech.applications.slice(0, 3).map((app, i) => (
+                  <Badge key={i} variant="outline" className="text-xs">
+                    {app}
+                  </Badge>
+                ))}
+                {tech.applications.length > 3 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{tech.applications.length - 3}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+        
+        <div className="px-6 pb-4 pt-2 flex gap-2 mt-auto">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => setIsDetailOpen(true)}
+          >
+            <Eye className="w-4 h-4 mr-1" />
+            Ver ficha
+          </Button>
+          {tech.already_in_db && tech.existing_technology_id ? (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1"
+              onClick={() => window.open(`/technologies?id=${tech.existing_technology_id}`, '_blank')}
+            >
+              <Database className="w-4 h-4 mr-1" />
+              Ver en BD
+            </Button>
+          ) : (
+            <Button 
+              variant="default" 
+              size="sm" 
+              className="flex-1"
+              onClick={() => onSendToScoutingQueue(tech)}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Scouting Queue
+            </Button>
+          )}
+          {tech.web && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => window.open(tech.web!, '_blank')}
+            >
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </Card>
+      
+      <ExtractedTechDetailModal
+        technology={tech}
+        open={isDetailOpen}
+        onOpenChange={setIsDetailOpen}
+        onSendToScoutingQueue={onSendToScoutingQueue}
+      />
+    </>
+  );
 }
 
 // Extended solution type with new fields
@@ -732,103 +863,11 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {extractedTechnologies.map((tech) => (
-                <Card key={tech.id} className="flex flex-col">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base truncate">{tech.technology_name}</CardTitle>
-                        <CardDescription className="truncate">
-                          {tech.provider} {tech.country && `• ${tech.country}`}
-                        </CardDescription>
-                      </div>
-                      <div className="flex flex-col gap-1 items-end">
-                        <Badge variant={(tech.confidence_score || 0) > 0.8 ? "default" : "secondary"}>
-                          {Math.round((tech.confidence_score || 0.8) * 100)}% conf
-                        </Badge>
-                        {tech.already_in_db && (
-                          <Badge variant="outline" className="gap-1 text-green-600 border-green-600">
-                            <CheckCircle2 className="w-3 h-3" />
-                            En BD
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-1 space-y-3">
-                    {tech.brief_description && (
-                      <p className="text-sm text-muted-foreground line-clamp-3">
-                        {tech.brief_description}
-                      </p>
-                    )}
-                    
-                    <div className="flex flex-wrap gap-1.5">
-                      {tech.trl && (
-                        <Badge variant="outline">TRL {tech.trl}</Badge>
-                      )}
-                      {tech.type_suggested && (
-                        <Badge variant="secondary" className="truncate max-w-[120px]">
-                          {tech.type_suggested}
-                        </Badge>
-                      )}
-                      {tech.subcategory_suggested && (
-                        <Badge variant="secondary" className="truncate max-w-[120px]">
-                          {tech.subcategory_suggested}
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    {tech.applications && tech.applications.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1">Aplicaciones:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {tech.applications.slice(0, 3).map((app, i) => (
-                            <Badge key={i} variant="outline" className="text-xs">
-                              {app}
-                            </Badge>
-                          ))}
-                          {tech.applications.length > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{tech.applications.length - 3}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                  
-                  <div className="px-6 pb-4 pt-2 flex gap-2 mt-auto">
-                    {tech.already_in_db && tech.existing_technology_id ? (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1"
-                        onClick={() => window.open(`/technologies?id=${tech.existing_technology_id}`, '_blank')}
-                      >
-                        <Database className="w-4 h-4 mr-1" />
-                        Ver en BD
-                      </Button>
-                    ) : (
-                      <Button 
-                        variant="default" 
-                        size="sm" 
-                        className="flex-1"
-                        onClick={() => handleSendToScoutingQueue(tech)}
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Scouting Queue
-                      </Button>
-                    )}
-                    {tech.web && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => window.open(tech.web!, '_blank')}
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                </Card>
+                <TechCard 
+                  key={tech.id} 
+                  tech={tech} 
+                  onSendToScoutingQueue={handleSendToScoutingQueue}
+                />
               ))}
             </div>
           )}
