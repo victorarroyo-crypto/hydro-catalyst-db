@@ -173,7 +173,7 @@ export const useApproveExternalToTechnologies = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ scoutingId, approvedBy }: { scoutingId: string; approvedBy: string }) => {
+    mutationFn: async ({ scoutingId, approvedBy, approverId }: { scoutingId: string; approvedBy: string; approverId?: string }) => {
       // Step 1: Get the full record from external DB
       const scoutingRecord = await callExternalScoutingQueue<ScoutingQueueItem>({
         action: 'get',
@@ -181,7 +181,8 @@ export const useApproveExternalToTechnologies = () => {
       });
       
       // Step 2: Insert into LOCAL technologies table (Lovable Cloud)
-      const techData = {
+      const now = new Date().toISOString();
+      const techData: Record<string, unknown> = {
         "Nombre de la tecnología": scoutingRecord["Nombre de la tecnología"],
         "Tipo de tecnología": scoutingRecord["Tipo de tecnología"] || 'Sin clasificar',
         "Subcategoría": scoutingRecord["Subcategoría"],
@@ -197,7 +198,8 @@ export const useApproveExternalToTechnologies = () => {
         "Porque es innovadora": scoutingRecord["Porque es innovadora"],
         "Grado de madurez (TRL)": scoutingRecord["Grado de madurez (TRL)"],
         "Casos de referencia": scoutingRecord["Casos de referencia"],
-        "Comentarios del analista": scoutingRecord["Comentarios del analista"],
+        "Comentarios del analista": (scoutingRecord["Comentarios del analista"] || '') + 
+          `\n\n--- Aprobado por: ${approvedBy} (${now}) ---`,
         "Fecha de scouting": scoutingRecord["Fecha de scouting"],
         "Estado del seguimiento": scoutingRecord["Estado del seguimiento"],
         tipo_id: scoutingRecord.tipo_id,
@@ -205,8 +207,15 @@ export const useApproveExternalToTechnologies = () => {
         sector_id: scoutingRecord.sector_id,
         subsector_industrial: scoutingRecord.subsector_industrial,
         status: 'active',
-        review_status: 'none',
+        review_status: 'approved',
+        reviewed_at: now,
       };
+      
+      // Add reviewer_id if provided
+      if (approverId) {
+        techData.reviewer_id = approverId;
+        techData.updated_by = approverId;
+      }
       
       const { data: newTech, error: insertError } = await (supabase as any)
         .from('technologies')
@@ -225,8 +234,6 @@ export const useApproveExternalToTechnologies = () => {
         id: scoutingId,
         updates: {
           queue_status: 'approved',
-          reviewed_by: approvedBy,
-          reviewed_at: new Date().toISOString(),
         },
       });
       

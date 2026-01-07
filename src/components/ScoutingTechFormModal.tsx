@@ -421,6 +421,7 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
     approveToDbMutation.mutate({
       scoutingId: technology.id,
       approvedBy: userEmail,
+      approverId: user?.id,
     }, {
       onSuccess: () => {
         onSuccess?.();
