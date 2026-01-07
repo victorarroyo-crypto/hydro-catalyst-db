@@ -222,14 +222,53 @@ serve(async (req) => {
     console.log('Calling Railway backend:', railwayApiUrl, 'payload keys:', Object.keys(railwayPayload));
     console.log('LLM config sent to Railway:', { provider: railwayPayload.provider, model: railwayPayload.model });
 
-    const railwayResponse = await fetch(`${railwayApiUrl}/api/study/${session_type}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-study-secret': webhookSecret || '',
-      },
-      body: JSON.stringify(railwayPayload)
-    });
+    // Add timeout to prevent edge function from hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
+    let railwayResponse: Response;
+    try {
+      railwayResponse = await fetch(`${railwayApiUrl}/api/study/${session_type}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-study-secret': webhookSecret || '',
+        },
+        body: JSON.stringify(railwayPayload),
+        signal: controller.signal
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      const isTimeout = fetchError instanceof Error && fetchError.name === 'AbortError';
+      console.error('Railway fetch error:', fetchError);
+      
+      // Update session status to failed
+      await supabase
+        .from('study_sessions')
+        .update({ 
+          status: 'failed', 
+          error_message: isTimeout ? 'Backend timeout' : `Connection error: ${fetchError}` 
+        })
+        .eq('id', sessionData.id);
+
+      await supabase.from('study_session_logs').insert({
+        session_id: sessionData.id,
+        study_id,
+        level: 'error',
+        phase: session_type,
+        message: isTimeout ? 'Timeout al conectar con backend de IA' : 'Error de conexión con backend',
+        details: { error: String(fetchError) }
+      });
+
+      return new Response(JSON.stringify({ 
+        error: isTimeout ? 'Backend timeout' : 'Connection failed', 
+        session_id: sessionData.id
+      }), { 
+        status: 504, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+    clearTimeout(timeoutId);
 
     if (!railwayResponse.ok) {
       const errorText = await railwayResponse.text();
