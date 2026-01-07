@@ -32,6 +32,7 @@ import NotFound from "./pages/NotFound";
 import DatabaseAudit from "./pages/DatabaseAudit";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import ScoutingMonitor from "./pages/ScoutingMonitor";
+import AdminScoutingJobs from "./pages/AdminScoutingJobs";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -77,6 +78,7 @@ const App = () => (
               <Route path="/database-audit" element={<DatabaseAudit />} />
               <Route path="/admin/db-audit" element={<AdminDbAudit />} />
               <Route path="/scouting-monitor" element={<ScoutingMonitor />} />
+              <Route path="/admin/scouting-jobs" element={<AdminScoutingJobs />} />
             </Route>
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
