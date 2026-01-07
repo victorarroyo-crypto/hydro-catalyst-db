@@ -220,6 +220,7 @@ serve(async (req) => {
     });
 
     console.log('Calling Railway backend:', railwayApiUrl, 'payload keys:', Object.keys(railwayPayload));
+    console.log('LLM config sent to Railway:', { provider: railwayPayload.provider, model: railwayPayload.model });
 
     const railwayResponse = await fetch(`${railwayApiUrl}/api/study/${session_type}`, {
       method: 'POST',
