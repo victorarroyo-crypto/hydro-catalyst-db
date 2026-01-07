@@ -555,27 +555,40 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
 
   const handleSendToScoutingQueue = async (tech: ExtractedTechnology) => {
     try {
-      const { error } = await supabase.from('scouting_queue').insert({
+      // Get current date for scouting date
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Insert directly into technologies with pending review status
+      const { error } = await supabase.from('technologies').insert({
         'Nombre de la tecnología': tech.technology_name,
-        'Proveedor / Empresa': tech.provider || '',
-        'País de origen': tech.country || '',
-        'Web de la empresa': tech.web || '',
-        'Descripción técnica breve': tech.brief_description || '',
+        'Proveedor / Empresa': tech.provider || null,
+        'País de origen': tech.country || null,
+        'Web de la empresa': tech.web || null,
+        'Email de contacto': null,
+        'Descripción técnica breve': tech.brief_description || null,
         'Tipo de tecnología': tech.type_suggested || 'Por clasificar',
-        'Subcategoría': tech.subcategory_suggested || '',
-        'Grado de madurez (TRL)': tech.trl || 7,
-        source: 'study_extraction',
-        notes: `Extraída del estudio con ${Math.round((tech.confidence_score || 0.8) * 100)}% confianza`,
-        queue_status: 'reviewing',
-        priority: 'normal',
+        'Subcategoría': tech.subcategory_suggested || null,
+        'Sector y subsector': null,
+        'Aplicación principal': tech.applications?.length ? tech.applications.join(', ') : null,
+        'Ventaja competitiva clave': null,
+        'Porque es innovadora': null,
+        'Casos de referencia': null,
+        'Paises donde actua': null,
+        'Comentarios del analista': `Extraída del estudio con ${Math.round((tech.confidence_score || 0.8) * 100)}% confianza. Razón: ${tech.inclusion_reason || 'N/A'}`,
+        'Fecha de scouting': today,
+        'Estado del seguimiento': 'Pendiente',
+        'Grado de madurez (TRL)': tech.trl || null,
+        status: 'en_revision',
+        review_status: 'pending',
+        quality_score: 0,
       });
       
       if (error) throw error;
       
-      toast.success(`${tech.technology_name} enviada a Scouting Queue`);
+      toast.success(`${tech.technology_name} añadida a la base de datos (pendiente de revisión)`);
     } catch (error) {
-      console.error('Error sending to scouting queue:', error);
-      toast.error('Error al enviar a Scouting Queue');
+      console.error('Error adding to technologies:', error);
+      toast.error('Error al añadir a la base de datos');
     }
   };
 
