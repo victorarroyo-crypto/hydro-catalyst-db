@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { useStudyResearch, useAddResearch, useDeleteResearch, ScoutingStudy, StudyResearch } from '@/hooks/useScoutingStudies';
+import { useStudyResearch, useAddResearch, useUpdateResearch, useDeleteResearch, ScoutingStudy, StudyResearch } from '@/hooks/useScoutingStudies';
 import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,7 @@ import {
   Link,
   File,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -78,17 +79,30 @@ const MAX_FILE_SIZE_MB = 50;
 export default function StudyPhase1Research({ studyId, study }: Props) {
   const { data: research, isLoading } = useStudyResearch(studyId);
   const addResearch = useAddResearch();
+  const updateResearch = useUpdateResearch();
   const deleteResearch = useDeleteResearch();
   const aiSession = useAIStudySession(studyId);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<StudyResearch | null>(null);
   const [sourceMode, setSourceMode] = useState<'url' | 'file'>('url');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   
   const [newResearch, setNewResearch] = useState({
+    title: '',
+    source_type: 'paper' as StudyResearch['source_type'],
+    source_url: '',
+    authors: '',
+    summary: '',
+    key_findings: [''],
+    relevance_score: 3,
+  });
+
+  const [editForm, setEditForm] = useState({
     title: '',
     source_type: 'paper' as StudyResearch['source_type'],
     source_url: '',
@@ -222,6 +236,42 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
     setSourceMode('url');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const handleEditClick = (item: StudyResearch) => {
+    setEditingItem(item);
+    setEditForm({
+      title: item.title,
+      source_type: item.source_type || 'paper',
+      source_url: item.source_url || '',
+      authors: item.authors || '',
+      summary: item.summary || '',
+      key_findings: item.key_findings?.length ? item.key_findings : [''],
+      relevance_score: item.relevance_score || 3,
+    });
+    setIsEditOpen(true);
+  };
+
+  const handleUpdateResearch = async () => {
+    if (!editingItem || !editForm.title.trim()) return;
+    
+    try {
+      await updateResearch.mutateAsync({
+        id: editingItem.id,
+        study_id: studyId,
+        title: editForm.title,
+        source_type: editForm.source_type,
+        source_url: editForm.source_url,
+        authors: editForm.authors,
+        summary: editForm.summary,
+        key_findings: editForm.key_findings.filter(f => f.trim()),
+        relevance_score: editForm.relevance_score,
+      });
+      setIsEditOpen(false);
+      setEditingItem(null);
+    } catch (error) {
+      // Error handled by mutation
     }
   };
 
@@ -466,6 +516,136 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Edit Dialog */}
+          <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Editar Fuente de Investigación</DialogTitle>
+                <DialogDescription>
+                  Modifica los datos de la fuente
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+                <div className="space-y-2">
+                  <Label>Título *</Label>
+                  <Input
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    placeholder="Título del documento o artículo"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Tipo de Fuente</Label>
+                    <Select
+                      value={editForm.source_type ?? 'paper'}
+                      onValueChange={(value) => setEditForm({ ...editForm, source_type: value as any })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SOURCE_TYPES.map(type => (
+                          <SelectItem key={type.value} value={type.value}>
+                            <div className="flex items-center gap-2">
+                              <type.icon className="w-4 h-4" />
+                              {type.label}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Relevancia (1-5)</Label>
+                    <Select
+                      value={String(editForm.relevance_score)}
+                      onValueChange={(value) => setEditForm({ ...editForm, relevance_score: Number(value) })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5].map(n => (
+                          <SelectItem key={n} value={String(n)}>
+                            {n} - {n === 1 ? 'Baja' : n === 3 ? 'Media' : n === 5 ? 'Alta' : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>URL de la Fuente</Label>
+                  <Input
+                    value={editForm.source_url}
+                    onChange={(e) => setEditForm({ ...editForm, source_url: e.target.value })}
+                    placeholder="https://..."
+                    type="url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Autores</Label>
+                  <Input
+                    value={editForm.authors}
+                    onChange={(e) => setEditForm({ ...editForm, authors: e.target.value })}
+                    placeholder="Nombres de los autores"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Resumen</Label>
+                  <Textarea
+                    value={editForm.summary}
+                    onChange={(e) => setEditForm({ ...editForm, summary: e.target.value })}
+                    placeholder="Resumen del contenido relevante"
+                    rows={4}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Hallazgos Clave</Label>
+                  {editForm.key_findings.map((finding, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <Input
+                        value={finding}
+                        onChange={(e) => {
+                          const updated = [...editForm.key_findings];
+                          updated[idx] = e.target.value;
+                          setEditForm({ ...editForm, key_findings: updated });
+                        }}
+                        placeholder={`Hallazgo ${idx + 1}`}
+                      />
+                      {idx === editForm.key_findings.length - 1 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setEditForm({
+                            ...editForm,
+                            key_findings: [...editForm.key_findings, ''],
+                          })}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleUpdateResearch}
+                  disabled={!editForm.title.trim() || updateResearch.isPending}
+                >
+                  {updateResearch.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Guardar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -608,6 +788,12 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
                           Ver fuente <ExternalLink className="w-3 h-3" />
                         </a>
                       )}
+                      <button
+                        onClick={() => handleEditClick(item)}
+                        className="flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <button className="flex items-center gap-1 text-destructive hover:underline cursor-pointer">
