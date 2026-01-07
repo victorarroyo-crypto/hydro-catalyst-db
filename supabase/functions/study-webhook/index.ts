@@ -105,9 +105,42 @@ serve(async (req) => {
         const title = research?.title || research?.name || 'Hallazgo de investigación';
         const summary = research?.summary || research?.description || research?.content || '';
         const sourceUrl = research?.source_url || research?.url || research?.link || '';
-        const sourceType = research?.source_type || research?.type || 'web';
+        
+        // Normalize source_type to valid values: 'paper', 'report', 'article', 'patent', 'website', 'other'
+        const rawSourceType = research?.source_type || research?.type || 'website';
+        const validSourceTypes = ['paper', 'report', 'article', 'patent', 'website', 'other'];
+        const sourceTypeMap: Record<string, string> = {
+          'web': 'website',
+          'url': 'website',
+          'link': 'website',
+          'blog': 'article',
+          'news': 'article',
+          'journal': 'paper',
+          'study': 'paper',
+          'doc': 'report',
+          'document': 'report'
+        };
+        const sourceType = validSourceTypes.includes(rawSourceType) 
+          ? rawSourceType 
+          : (sourceTypeMap[rawSourceType.toLowerCase()] || 'other');
+        
         const keyFindings = research?.key_findings || research?.findings || [];
-        const relevanceScore = research?.relevance_score || research?.relevance || research?.score || 3;
+        
+        // Normalize relevance_score to 1-5 range (DB constraint)
+        const rawScore = research?.relevance_score || research?.relevance || research?.score || 3;
+        let relevanceScore: number;
+        if (typeof rawScore === 'number') {
+          if (rawScore > 5) {
+            // Railway sends 0-100, normalize to 1-5
+            relevanceScore = Math.max(1, Math.min(5, Math.round(rawScore / 20)));
+          } else if (rawScore < 1) {
+            relevanceScore = 1;
+          } else {
+            relevanceScore = Math.round(rawScore);
+          }
+        } else {
+          relevanceScore = 3;
+        }
         
         if (title && title !== 'Hallazgo de investigación') {
           const { error } = await supabase
@@ -120,7 +153,7 @@ serve(async (req) => {
               source_url: sourceUrl,
               source_type: sourceType,
               key_findings: Array.isArray(keyFindings) ? keyFindings : [],
-              relevance_score: typeof relevanceScore === 'number' ? relevanceScore : 3,
+              relevance_score: relevanceScore,
               ai_generated: true,
               ai_extracted: true,
               authors: research?.authors || '',
@@ -151,10 +184,36 @@ serve(async (req) => {
         const completeData = data || payload;
         const findings = completeData?.findings || completeData?.results || [];
         
+        // Valid source types for constraint
+        const validSourceTypes = ['paper', 'report', 'article', 'patent', 'website', 'other'];
+        const sourceTypeMap: Record<string, string> = {
+          'web': 'website', 'url': 'website', 'link': 'website',
+          'blog': 'article', 'news': 'article',
+          'journal': 'paper', 'study': 'paper',
+          'doc': 'report', 'document': 'report'
+        };
+        
         // Insert any findings that came with the complete event
         for (const finding of findings) {
           const title = finding?.title || finding?.name || '';
           if (title) {
+            // Normalize source_type
+            const rawType = finding?.source_type || finding?.type || 'website';
+            const sourceType = validSourceTypes.includes(rawType) 
+              ? rawType 
+              : (sourceTypeMap[rawType.toLowerCase()] || 'other');
+            
+            // Normalize relevance_score to 1-5
+            const rawScore = finding?.relevance_score || finding?.relevance || 3;
+            let relevanceScore = 3;
+            if (typeof rawScore === 'number') {
+              if (rawScore > 5) {
+                relevanceScore = Math.max(1, Math.min(5, Math.round(rawScore / 20)));
+              } else {
+                relevanceScore = Math.max(1, Math.min(5, Math.round(rawScore)));
+              }
+            }
+            
             const { error } = await supabase
               .from('study_research')
               .insert({
@@ -163,9 +222,9 @@ serve(async (req) => {
                 title,
                 summary: finding?.summary || finding?.description || '',
                 source_url: finding?.source_url || finding?.url || '',
-                source_type: finding?.source_type || 'web',
+                source_type: sourceType,
                 key_findings: finding?.key_findings || [],
-                relevance_score: finding?.relevance_score || 3,
+                relevance_score: relevanceScore,
                 ai_generated: true,
                 ai_extracted: true
               });
