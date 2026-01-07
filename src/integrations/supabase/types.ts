@@ -1425,49 +1425,67 @@ export type Database = {
         Row: {
           advantages: string[] | null
           applicable_contexts: string[] | null
+          applicable_sectors: string[] | null
+          case_studies: string[] | null
           category: string
           cost_range: string | null
           created_at: string
           created_by: string | null
           description: string | null
+          detailed_info: string | null
           disadvantages: string[] | null
           estimated_trl_range: string | null
           id: string
           implementation_time: string | null
+          key_providers: string[] | null
           name: string
           priority: number | null
+          source_title: string | null
+          source_url: string | null
           study_id: string
         }
         Insert: {
           advantages?: string[] | null
           applicable_contexts?: string[] | null
+          applicable_sectors?: string[] | null
+          case_studies?: string[] | null
           category: string
           cost_range?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
+          detailed_info?: string | null
           disadvantages?: string[] | null
           estimated_trl_range?: string | null
           id?: string
           implementation_time?: string | null
+          key_providers?: string[] | null
           name: string
           priority?: number | null
+          source_title?: string | null
+          source_url?: string | null
           study_id: string
         }
         Update: {
           advantages?: string[] | null
           applicable_contexts?: string[] | null
+          applicable_sectors?: string[] | null
+          case_studies?: string[] | null
           category?: string
           cost_range?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
+          detailed_info?: string | null
           disadvantages?: string[] | null
           estimated_trl_range?: string | null
           id?: string
           implementation_time?: string | null
+          key_providers?: string[] | null
           name?: string
           priority?: number | null
+          source_title?: string | null
+          source_url?: string | null
           study_id?: string
         }
         Relationships: [
