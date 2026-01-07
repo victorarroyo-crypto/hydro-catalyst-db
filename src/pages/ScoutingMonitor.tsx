@@ -109,8 +109,8 @@ export default function ScoutingMonitor() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch sessions
-  const { data: sessions, isLoading: loadingSessions, refetch: refetchSessions } = useQuery({
+  // Fetch sessions - auto-refresh every 10s when there are running sessions
+  const { data: sessions, isLoading: loadingSessions, refetch: refetchSessions, isFetching: isFetchingSessions } = useQuery({
     queryKey: ['scouting-sessions'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -121,6 +121,11 @@ export default function ScoutingMonitor() {
       
       if (error) throw error;
       return data as ScoutingSession[];
+    },
+    refetchInterval: (query) => {
+      // Auto-refresh every 10s if there are running sessions
+      const hasRunning = query.state.data?.some(s => s.status === 'running');
+      return hasRunning ? 10000 : false;
     },
   });
 
@@ -399,15 +404,26 @@ export default function ScoutingMonitor() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {activeSessions.length > 0 && (
+            <Badge variant="default" className="gap-1 bg-blue-500">
+              <Activity className="w-3 h-3 animate-pulse" />
+              {activeSessions.length} en ejecución
+            </Badge>
+          )}
           {systemAlerts.length > 0 && (
             <Badge variant={criticalAlerts.length > 0 ? "destructive" : "secondary"} className="gap-1">
               <BellRing className="w-3 h-3" />
               {systemAlerts.length} alerta{systemAlerts.length !== 1 ? 's' : ''}
             </Badge>
           )}
-          <Button onClick={() => refetchSessions()} variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Actualizar
+          <Button 
+            onClick={() => refetchSessions()} 
+            variant="outline" 
+            size="sm"
+            disabled={isFetchingSessions}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isFetchingSessions ? 'animate-spin' : ''}`} />
+            {isFetchingSessions ? 'Actualizando...' : 'Actualizar'}
           </Button>
         </div>
       </div>
