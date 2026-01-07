@@ -8,6 +8,7 @@ import {
   useStudySolutions,
   ScoutingStudy,
 } from '@/hooks/useScoutingStudies';
+import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,7 @@ import {
   MapPin,
   Building2,
 } from 'lucide-react';
+import AISessionPanel from './AISessionPanel';
 
 interface Props {
   studyId: string;
@@ -53,6 +55,7 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
   const { data: solutions } = useStudySolutions(studyId);
   const addToLonglist = useAddToLonglist();
   const removeFromLonglist = useRemoveFromLonglist();
+  const aiSession = useAIStudySession(studyId);
   
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [addMode, setAddMode] = useState<'database' | 'manual'>('database');
@@ -68,6 +71,16 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
     inclusion_reason: '',
     solution_id: null as string | null,
   });
+
+  const handleStartAILonglist = () => {
+    aiSession.startSession('longlist', {
+      problem_statement: study.problem_statement,
+      objectives: study.objectives,
+      context: study.context,
+      constraints: study.constraints,
+      solution_ids: solutions?.map(s => s.id) || [],
+    });
+  };
 
   // Search technologies from database
   const { data: searchResults, isLoading: searching } = useQuery({
@@ -140,6 +153,24 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* AI Session Panel */}
+      <AISessionPanel
+        state={{
+          isActive: aiSession.isActive,
+          isStarting: aiSession.isStarting,
+          currentPhase: aiSession.currentPhase,
+          progress: aiSession.progress,
+          status: aiSession.status,
+          error: aiSession.error,
+          logs: aiSession.logs,
+        }}
+        onStart={handleStartAILonglist}
+        onCancel={aiSession.cancelSession}
+        isStarting={aiSession.isStarting}
+        title="Búsqueda Automática de Tecnologías"
+        description="La IA busca tecnologías relevantes en la base de datos y fuentes externas"
+      />
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Fase 3: Lista Larga</h2>
