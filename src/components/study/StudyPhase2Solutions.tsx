@@ -194,17 +194,15 @@ function TechCard({
               <ExternalLink className="w-4 h-4" />
             </Button>
           )}
-          {/* Delete button - only if not linked to DB */}
-          {!isLinkedToDB && (
-            <Button 
-              variant="ghost" 
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => onDelete(tech)}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          )}
+          {/* Delete button - always visible */}
+          <Button 
+            variant="ghost" 
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => onDelete(tech)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
       </Card>
       
@@ -631,11 +629,6 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
   };
 
   const handleDeleteTechnology = async (tech: ExtractedTechnology) => {
-    if (tech.already_in_db || tech.existing_technology_id) {
-      toast.error('No se puede eliminar una tecnología vinculada a la base de datos');
-      return;
-    }
-
     try {
       const { error } = await supabase
         .from('study_longlist')
@@ -648,7 +641,7 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
       queryClient.invalidateQueries({ queryKey: ['study-extracted-technologies', studyId] });
       queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
       
-      toast.success(`${tech.technology_name} eliminada`);
+      toast.success(`${tech.technology_name} eliminada del estudio`);
     } catch (error) {
       console.error('Error deleting technology:', error);
       toast.error('Error al eliminar la tecnología');
