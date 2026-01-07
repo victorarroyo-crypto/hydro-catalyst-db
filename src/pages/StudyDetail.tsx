@@ -40,6 +40,7 @@ import StudyPhase2Solutions from '@/components/study/StudyPhase2Solutions';
 import StudyPhase3Longlist from '@/components/study/StudyPhase3Longlist';
 import StudyPhase4Shortlist from '@/components/study/StudyPhase4Shortlist';
 import StudyPhase5Evaluation from '@/components/study/StudyPhase5Evaluation';
+import StudyPhase6Report from '@/components/study/StudyPhase6Report';
 
 const PHASES = [
   { number: 1, name: 'Investigación', icon: BookOpen, description: 'Búsqueda bibliográfica y caracterización del problema' },
@@ -400,16 +401,7 @@ export default function StudyDetail() {
         </TabsContent>
 
         <TabsContent value="report">
-          <Card className="p-8 text-center">
-            <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">Generador de Informes</h3>
-            <p className="text-muted-foreground mb-4">
-              Genera el informe final con las recomendaciones técnicas y económicas
-            </p>
-            <Button disabled>
-              Próximamente
-            </Button>
-          </Card>
+          <StudyPhase6Report studyId={studyId!} study={study} />
         </TabsContent>
       </Tabs>
     </div>
