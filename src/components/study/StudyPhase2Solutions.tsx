@@ -44,6 +44,7 @@ import {
   Building2,
   FileText,
   Target,
+  Trash2,
 } from 'lucide-react';
 import AISessionPanel from './AISessionPanel';
 import ExtractedTechDetailModal from './ExtractedTechDetailModal';
@@ -78,12 +79,15 @@ interface ExtractedTechnology {
 // Tech card with detail modal
 function TechCard({ 
   tech, 
-  onSendToScoutingQueue 
+  onSendToScoutingQueue,
+  onDelete,
 }: { 
   tech: ExtractedTechnology; 
   onSendToScoutingQueue: (tech: ExtractedTechnology) => void;
+  onDelete: (tech: ExtractedTechnology) => void;
 }) {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const isLinkedToDB = tech.already_in_db || !!tech.existing_technology_id;
   
   return (
     <>
@@ -188,6 +192,17 @@ function TechCard({
               onClick={() => window.open(tech.web!, '_blank')}
             >
               <ExternalLink className="w-4 h-4" />
+            </Button>
+          )}
+          {/* Delete button - only if not linked to DB */}
+          {!isLinkedToDB && (
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => onDelete(tech)}
+            >
+              <Trash2 className="w-4 h-4" />
             </Button>
           )}
         </div>
@@ -615,6 +630,31 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
     }
   };
 
+  const handleDeleteTechnology = async (tech: ExtractedTechnology) => {
+    if (tech.already_in_db || tech.existing_technology_id) {
+      toast.error('No se puede eliminar una tecnología vinculada a la base de datos');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('study_longlist')
+        .delete()
+        .eq('id', tech.id);
+      
+      if (error) throw error;
+
+      // Invalidate both queries since they use the same table
+      queryClient.invalidateQueries({ queryKey: ['study-extracted-technologies', studyId] });
+      queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
+      
+      toast.success(`${tech.technology_name} eliminada`);
+    } catch (error) {
+      console.error('Error deleting technology:', error);
+      toast.error('Error al eliminar la tecnología');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -903,6 +943,7 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
                   key={tech.id} 
                   tech={tech} 
                   onSendToScoutingQueue={handleSendToScoutingQueue}
+                  onDelete={handleDeleteTechnology}
                 />
               ))}
             </div>
