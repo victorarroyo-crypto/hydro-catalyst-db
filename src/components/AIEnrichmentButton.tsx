@@ -70,9 +70,16 @@ const AVAILABLE_MODELS: AIModel[] = [
   },
   {
     id: 'google/gemini-2.5-pro',
-    name: 'Gemini Pro',
+    name: 'Gemini 2.5 Pro',
     description: 'Máxima calidad',
     icon: <Brain className="w-4 h-4" />,
+    tier: 'premium',
+  },
+  {
+    id: 'google/gemini-3-pro-preview',
+    name: 'Gemini 3 Pro (Preview)',
+    description: 'Próxima generación',
+    icon: <Rocket className="w-4 h-4" />,
     tier: 'premium',
   },
   {
@@ -88,6 +95,13 @@ const AVAILABLE_MODELS: AIModel[] = [
     description: 'Buen balance',
     icon: <Sparkles className="w-4 h-4" />,
     tier: 'balanced',
+  },
+  {
+    id: 'openai/gpt-5-nano',
+    name: 'GPT-5 Nano',
+    description: 'Más rápido OpenAI',
+    icon: <Zap className="w-4 h-4" />,
+    tier: 'fast',
   },
 ];
 

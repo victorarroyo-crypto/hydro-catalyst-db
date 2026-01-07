@@ -23,6 +23,7 @@ interface AIModel {
 }
 
 const AVAILABLE_MODELS: AIModel[] = [
+  // Google Gemini - Económicos
   {
     id: 'google/gemini-2.5-flash-lite',
     name: 'Gemini 2.5 Flash Lite',
@@ -37,6 +38,7 @@ const AVAILABLE_MODELS: AIModel[] = [
     icon: <Sparkles className="w-4 h-4" />,
     tier: 'balanced',
   },
+  // Google Gemini - Premium
   {
     id: 'google/gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
@@ -51,6 +53,14 @@ const AVAILABLE_MODELS: AIModel[] = [
     icon: <Rocket className="w-4 h-4" />,
     tier: 'premium',
   },
+  {
+    id: 'google/gemini-3-pro-image-preview',
+    name: 'Gemini 3 Pro Image (Preview)',
+    description: 'Generación de imágenes con IA.',
+    icon: <Rocket className="w-4 h-4" />,
+    tier: 'premium',
+  },
+  // OpenAI GPT
   {
     id: 'openai/gpt-5',
     name: 'GPT-5',
