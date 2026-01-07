@@ -198,34 +198,33 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   };
 
   // Convert longlist item to a technology-like object for the AIEnrichmentButton
+  // Uses the property names expected by AIEnrichmentButton interface
   const technologyLikeObject = {
     id: item.id,
-    'Nombre de la tecnología': item.technology_name,
-    'Proveedor / Empresa': item.provider,
-    'País de origen': item.country,
-    'Grado de madurez (TRL)': item.trl,
-    'Descripción técnica breve': item.brief_description,
-    'Tipo de tecnología': item.type_suggested || 'Por clasificar',
-    'Subcategoría': item.subcategory_suggested,
-    'Web de la empresa': item.web,
-    'Aplicación principal': item.applications?.join(', '),
-    created_at: item.added_at,
-    updated_at: item.added_at,
+    nombre: item.technology_name,
+    proveedor: item.provider || '',
+    pais: item.country || '',
+    trl_estimado: item.trl,
+    descripcion: item.brief_description || '',
+    tipo_sugerido: item.type_suggested || 'Por clasificar',
+    subcategoria: item.subcategory_suggested || '',
+    web: item.web || '',
+    aplicacion_principal: item.applications?.join(', ') || '',
+    sector: '',
+    ventaja_competitiva: '',
+    innovacion: '',
+    casos_referencia: '',
+    paises_actua: '',
+    comentarios_analista: item.inclusion_reason || '',
   };
 
   const handleEnrichmentComplete = (enrichedData: Record<string, any>) => {
     // Map enriched data back to our edit format
+    // The edge function returns fields like: descripcion, aplicacion_principal, etc.
     setEditData(prev => ({
       ...prev,
-      technology_name: enrichedData['Nombre de la tecnología'] || prev.technology_name,
-      provider: enrichedData['Proveedor / Empresa'] || prev.provider,
-      country: enrichedData['País de origen'] || prev.country,
-      trl: enrichedData['Grado de madurez (TRL)'] ?? prev.trl,
-      brief_description: enrichedData['Descripción técnica breve'] || prev.brief_description,
-      type_suggested: enrichedData['Tipo de tecnología'] || prev.type_suggested,
-      subcategory_suggested: enrichedData['Subcategoría'] || prev.subcategory_suggested,
-      web: enrichedData['Web de la empresa'] || prev.web,
-      inclusion_reason: enrichedData['Comentarios del analista'] || prev.inclusion_reason,
+      brief_description: enrichedData.descripcion || prev.brief_description,
+      inclusion_reason: enrichedData.comentarios_analista || prev.inclusion_reason,
     }));
     
     // Auto-save after enrichment
