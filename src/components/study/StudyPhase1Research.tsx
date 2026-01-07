@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useStudyResearch, useAddResearch, useDeleteResearch, ScoutingStudy, StudyResearch } from '@/hooks/useScoutingStudies';
 import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { supabase } from '@/integrations/supabase/client';
@@ -565,7 +566,9 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
                 </CardHeader>
                 <CardContent>
                   {item.summary && (
-                    <p className="text-sm text-muted-foreground mb-3">{item.summary}</p>
+                    <div className="text-sm text-muted-foreground mb-3 prose prose-sm max-w-none dark:prose-invert">
+                      <ReactMarkdown>{item.summary}</ReactMarkdown>
+                    </div>
                   )}
                   {item.key_findings && item.key_findings.length > 0 && (
                     <div className="mb-3">

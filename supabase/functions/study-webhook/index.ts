@@ -142,7 +142,55 @@ serve(async (req) => {
           relevanceScore = 3;
         }
         
-        if (title && title !== 'Hallazgo de investigación') {
+        // Detectar formato legacy de Railway (todo en un solo campo markdown)
+        if (title === 'Web Research Results' && summary && summary.includes('###')) {
+          console.log('[WEBHOOK] Detected legacy markdown format, parsing...');
+          
+          const sections = summary.split(/###\s*\d+\./);
+          let insertedCount = 0;
+          
+          for (const section of sections.slice(1)) {
+            const parsedTitle = section.match(/\*\*Title\*\*:\s*(.+?)(?:\n|$)/)?.[1]?.trim();
+            const parsedUrl = section.match(/\*\*(?:Source )?URL\*\*:\s*(https?:\/\/[^\s\n]+)/)?.[1]?.trim();
+            const parsedSummary = section.match(/\*\*Summary\*\*:\s*(.+?)(?:\n\n|\n-|$)/s)?.[1]?.trim();
+            const parsedType = parsedUrl?.includes('patent') ? 'patent' 
+              : parsedUrl?.includes('doi.org') ? 'paper' 
+              : 'website';
+            
+            if (parsedTitle) {
+              const { error } = await supabase.from('study_research').insert({
+                study_id,
+                session_id,
+                title: parsedTitle.substring(0, 200),
+                summary: parsedSummary?.substring(0, 1000) || '',
+                source_url: parsedUrl || '',
+                source_type: parsedType,
+                relevance_score: relevanceScore,
+                key_findings: [],
+                ai_generated: true,
+                ai_extracted: true
+              });
+              
+              if (!error) {
+                insertedCount++;
+                console.log(`[WEBHOOK] Parsed finding ${insertedCount}: ${parsedTitle.substring(0, 50)}...`);
+              } else {
+                console.error('[WEBHOOK] Error inserting parsed finding:', error);
+              }
+            }
+          }
+          
+          // Log del parsing
+          await supabase.from('study_session_logs').insert({
+            session_id,
+            study_id,
+            level: 'info',
+            phase: 'research',
+            message: `Parseados ${insertedCount} hallazgos de formato legacy`,
+            details: { original_title: title, sections_found: sections.length - 1, inserted: insertedCount }
+          });
+        } else if (title && title !== 'Hallazgo de investigación') {
+          // Comportamiento normal para formato correcto
           const { error } = await supabase
             .from('study_research')
             .insert({
