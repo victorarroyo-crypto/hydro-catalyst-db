@@ -796,6 +796,7 @@ export type Database = {
       }
       scouting_studies: {
         Row: {
+          ai_session_id: string | null
           assigned_to: string | null
           completed_at: string | null
           constraints: string[] | null
@@ -813,6 +814,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_session_id?: string | null
           assigned_to?: string | null
           completed_at?: string | null
           constraints?: string[] | null
@@ -830,6 +832,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_session_id?: string | null
           assigned_to?: string | null
           completed_at?: string | null
           constraints?: string[] | null
@@ -846,14 +849,26 @@ export type Database = {
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "scouting_studies_ai_session_id_fkey"
+            columns: ["ai_session_id"]
+            isOneToOne: false
+            referencedRelation: "study_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       study_evaluations: {
         Row: {
           ai_analysis_json: Json | null
           ai_analyzed_at: string | null
           ai_external_data: Json | null
+          ai_generated: boolean
           ai_kb_insights: Json | null
+          ai_recommendation: string | null
+          ai_scores: Json | null
+          ai_swot: Json | null
           benchmark_notes: string | null
           competitive_advantages: string[] | null
           competitive_disadvantages: string[] | null
@@ -875,6 +890,7 @@ export type Database = {
           requirements_unmet: string[] | null
           scalability_notes: string | null
           scalability_score: number | null
+          session_id: string | null
           shortlist_id: string
           strengths: string[] | null
           study_id: string
@@ -887,7 +903,11 @@ export type Database = {
           ai_analysis_json?: Json | null
           ai_analyzed_at?: string | null
           ai_external_data?: Json | null
+          ai_generated?: boolean
           ai_kb_insights?: Json | null
+          ai_recommendation?: string | null
+          ai_scores?: Json | null
+          ai_swot?: Json | null
           benchmark_notes?: string | null
           competitive_advantages?: string[] | null
           competitive_disadvantages?: string[] | null
@@ -909,6 +929,7 @@ export type Database = {
           requirements_unmet?: string[] | null
           scalability_notes?: string | null
           scalability_score?: number | null
+          session_id?: string | null
           shortlist_id: string
           strengths?: string[] | null
           study_id: string
@@ -921,7 +942,11 @@ export type Database = {
           ai_analysis_json?: Json | null
           ai_analyzed_at?: string | null
           ai_external_data?: Json | null
+          ai_generated?: boolean
           ai_kb_insights?: Json | null
+          ai_recommendation?: string | null
+          ai_scores?: Json | null
+          ai_swot?: Json | null
           benchmark_notes?: string | null
           competitive_advantages?: string[] | null
           competitive_disadvantages?: string[] | null
@@ -943,6 +968,7 @@ export type Database = {
           requirements_unmet?: string[] | null
           scalability_notes?: string | null
           scalability_score?: number | null
+          session_id?: string | null
           shortlist_id?: string
           strengths?: string[] | null
           study_id?: string
@@ -952,6 +978,13 @@ export type Database = {
           weaknesses?: string[] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "study_evaluations_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "study_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "study_evaluations_shortlist_id_fkey"
             columns: ["shortlist_id"]
@@ -1106,6 +1139,7 @@ export type Database = {
       study_research: {
         Row: {
           ai_extracted: boolean | null
+          ai_generated: boolean
           authors: string | null
           created_at: string
           created_by: string | null
@@ -1114,6 +1148,7 @@ export type Database = {
           knowledge_doc_id: string | null
           publication_date: string | null
           relevance_score: number | null
+          session_id: string | null
           source_type: string | null
           source_url: string | null
           study_id: string
@@ -1122,6 +1157,7 @@ export type Database = {
         }
         Insert: {
           ai_extracted?: boolean | null
+          ai_generated?: boolean
           authors?: string | null
           created_at?: string
           created_by?: string | null
@@ -1130,6 +1166,7 @@ export type Database = {
           knowledge_doc_id?: string | null
           publication_date?: string | null
           relevance_score?: number | null
+          session_id?: string | null
           source_type?: string | null
           source_url?: string | null
           study_id: string
@@ -1138,6 +1175,7 @@ export type Database = {
         }
         Update: {
           ai_extracted?: boolean | null
+          ai_generated?: boolean
           authors?: string | null
           created_at?: string
           created_by?: string | null
@@ -1146,6 +1184,7 @@ export type Database = {
           knowledge_doc_id?: string | null
           publication_date?: string | null
           relevance_score?: number | null
+          session_id?: string | null
           source_type?: string | null
           source_url?: string | null
           study_id?: string
@@ -1161,7 +1200,118 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "study_research_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "study_sessions"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "study_research_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_session_logs: {
+        Row: {
+          created_at: string
+          details: Json | null
+          id: string
+          level: string
+          message: string
+          phase: string | null
+          session_id: string
+          study_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          level?: string
+          message: string
+          phase?: string | null
+          session_id: string
+          study_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          level?: string
+          message?: string
+          phase?: string | null
+          session_id?: string
+          study_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_session_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "study_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_session_logs_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_sessions: {
+        Row: {
+          completed_at: string | null
+          config: Json | null
+          created_at: string
+          current_phase: string | null
+          error_message: string | null
+          id: string
+          progress_percentage: number | null
+          session_type: string
+          started_at: string | null
+          status: string
+          study_id: string
+          summary: Json | null
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          config?: Json | null
+          created_at?: string
+          current_phase?: string | null
+          error_message?: string | null
+          id?: string
+          progress_percentage?: number | null
+          session_type: string
+          started_at?: string | null
+          status?: string
+          study_id: string
+          summary?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          config?: Json | null
+          created_at?: string
+          current_phase?: string | null
+          error_message?: string | null
+          id?: string
+          progress_percentage?: number | null
+          session_type?: string
+          started_at?: string | null
+          status?: string
+          study_id?: string
+          summary?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_sessions_study_id_fkey"
             columns: ["study_id"]
             isOneToOne: false
             referencedRelation: "scouting_studies"
