@@ -104,10 +104,15 @@ function transformToLocal(record: Record<string, unknown>): Record<string, unkno
 
 // Fields that should NOT be sent to external DB (they don't exist or have different types)
 const EXCLUDED_EXTERNAL_FIELDS = [
-  'reviewed_by',     // External DB expects UUID, we have email
-  'reviewed_at',     // May not exist in external DB
-  'review_status',   // Local-only field
-  'reviewer_id',     // Local-only field
+  'reviewed_by',          // External DB expects UUID, we have email
+  'reviewed_at',          // May not exist in external DB
+  'review_status',        // Local-only field
+  'reviewer_id',          // Local-only field
+  'subsector_industrial', // Does not exist in external DB
+  'sector_id',            // Local taxonomy reference
+  'tipo_id',              // Local taxonomy reference
+  'subcategoria_id',      // Local taxonomy reference
+  'queue_status',         // Mapped to 'status' separately
 ];
 
 // Transform local updates to external format
