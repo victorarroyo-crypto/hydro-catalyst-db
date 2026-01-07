@@ -469,6 +469,37 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
         <div className="grid gap-4">
           {research?.map((item) => {
             const SourceIcon = getSourceIcon(item.source_type);
+            
+            const handleViewSource = async (e: React.MouseEvent) => {
+              // If it's a storage URL, generate a signed URL
+              if (item.knowledge_doc_id && item.source_url?.includes('supabase.co/storage')) {
+                e.preventDefault();
+                try {
+                  // Extract file path from the public URL
+                  const urlParts = item.source_url.split('/knowledge-documents/');
+                  if (urlParts.length > 1) {
+                    const filePath = decodeURIComponent(urlParts[1]);
+                    const { data, error } = await supabase.storage
+                      .from('knowledge-documents')
+                      .createSignedUrl(filePath, 3600); // 1 hour expiry
+                    
+                    if (data?.signedUrl) {
+                      window.open(data.signedUrl, '_blank');
+                    } else {
+                      console.error('Error getting signed URL:', error);
+                      toast({
+                        title: 'Error',
+                        description: 'No se pudo abrir el documento',
+                        variant: 'destructive',
+                      });
+                    }
+                  }
+                } catch (err) {
+                  console.error('Error opening document:', err);
+                }
+              }
+            };
+
             return (
               <Card key={item.id}>
                 <CardHeader className="pb-2">
@@ -534,7 +565,8 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
                         href={item.source_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-primary hover:underline"
+                        onClick={handleViewSource}
+                        className="flex items-center gap-1 text-primary hover:underline cursor-pointer"
                       >
                         Ver fuente <ExternalLink className="w-3 h-3" />
                       </a>
