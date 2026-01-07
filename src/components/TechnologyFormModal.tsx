@@ -19,7 +19,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { syncTechnologyUpdate, syncTechnologyInsert } from '@/lib/syncToExternal';
-import { Loader2, Save, AlertTriangle, X, Star } from 'lucide-react';
+import { Loader2, Save, AlertTriangle, X, Star, Sparkles } from 'lucide-react';
+import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
 import type { Technology } from '@/types/database';
 
 interface TechnologyFormModalProps {
@@ -827,6 +828,51 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               }
             </AlertDescription>
           </Alert>
+        )}
+
+        {/* AI Enrichment Button */}
+        {isEditing && technology && (
+          <div className="flex justify-end">
+            <AIEnrichmentButton
+              technology={{
+                id: technology.id,
+                nombre: formData["Nombre de la tecnología"],
+                proveedor: formData["Proveedor / Empresa"],
+                web: formData["Web de la empresa"],
+                pais: formData["País de origen"],
+                tipo_sugerido: formData["Tipo de tecnología"],
+                subcategoria: formData["Subcategoría"],
+                sector: formData["Sector y subsector"],
+                descripcion: formData["Descripción técnica breve"],
+                aplicacion_principal: formData["Aplicación principal"],
+                ventaja_competitiva: formData["Ventaja competitiva clave"],
+                innovacion: formData["Porque es innovadora"],
+                trl_estimado: formData["Grado de madurez (TRL)"],
+                casos_referencia: formData["Casos de referencia"],
+                paises_actua: formData["Paises donde actua"],
+                comentarios_analista: formData["Comentarios del analista"],
+              }}
+              onEnrichmentComplete={(enrichedData) => {
+                // Update form with enriched data
+                const fieldMapping: Record<string, keyof FormData> = {
+                  descripcion: "Descripción técnica breve",
+                  aplicacion_principal: "Aplicación principal",
+                  ventaja_competitiva: "Ventaja competitiva clave",
+                  innovacion: "Porque es innovadora",
+                  casos_referencia: "Casos de referencia",
+                  paises_actua: "Paises donde actua",
+                  comentarios_analista: "Comentarios del analista",
+                };
+                
+                Object.entries(enrichedData).forEach(([key, value]) => {
+                  const formField = fieldMapping[key];
+                  if (formField && value) {
+                    handleChange(formField, value as string);
+                  }
+                });
+              }}
+            />
+          </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6 pt-4">

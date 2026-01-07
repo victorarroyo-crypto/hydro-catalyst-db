@@ -42,10 +42,12 @@ import {
   ChevronRight,
   Rocket,
   ArrowLeft,
-  ArrowRight
+  ArrowRight,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { TRLBadge } from '@/components/TRLBadge';
+import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
 import { toast } from 'sonner';
 import { ScoutingTechFormModal } from './ScoutingTechFormModal';
 
@@ -448,15 +450,41 @@ export const ScoutingTechDetailModal = ({
             </div>
 
             <div className="flex flex-col sm:flex-row w-full gap-2 sm:items-center sm:justify-between">
-              {/* Edit button - opens full form modal */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFormModal(true)}
-              >
-                <Edit className="w-4 h-4 mr-1" />
-                Editar ficha
-              </Button>
+              {/* Edit and AI buttons */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFormModal(true)}
+                >
+                  <Edit className="w-4 h-4 mr-1" />
+                  Editar ficha
+                </Button>
+                <AIEnrichmentButton
+                  technology={{
+                    id: technology.id,
+                    nombre: technology.name,
+                    proveedor: technology.provider || '',
+                    web: technology.web || '',
+                    pais: technology.country || '',
+                    tipo_sugerido: technology.suggestedType || '',
+                    subcategoria: technology.suggestedSubcategory || '',
+                    sector: '',
+                    descripcion: technology.description || '',
+                    aplicacion_principal: '',
+                    ventaja_competitiva: technology.competitiveAdvantage || '',
+                    innovacion: '',
+                    trl_estimado: technology.trl,
+                    casos_referencia: '',
+                    paises_actua: '',
+                    comentarios_analista: technology.relevanceReason || '',
+                  }}
+                  onEnrichmentComplete={(enrichedData) => {
+                    queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+                    onClose();
+                  }}
+                />
+              </div>
 
               {/* Phase navigation */}
               <div className="flex flex-wrap items-center gap-2">

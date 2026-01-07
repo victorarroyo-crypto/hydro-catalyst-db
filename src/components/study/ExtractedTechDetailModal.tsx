@@ -25,6 +25,7 @@ import {
   Database,
 } from 'lucide-react';
 import { TRLBadge } from '@/components/TRLBadge';
+import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
 
 interface ExtractedTechnology {
   id: string;

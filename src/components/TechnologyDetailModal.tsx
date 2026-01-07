@@ -44,9 +44,11 @@ import {
   ClipboardList,
   TrendingUp,
   BookOpen,
-  Download
+  Download,
+  Sparkles
 } from 'lucide-react';
 import { DownloadTechnologyButton } from '@/components/DownloadTechnologyButton';
+import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
 import type { Technology } from '@/types/database';
 
 interface TechnologyDetailModalProps {
@@ -546,6 +548,33 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               </div>
             )}
             <DownloadTechnologyButton technology={technology} variant="full" />
+            {isInternalUser && (
+              <AIEnrichmentButton
+                technology={{
+                  id: technology.id,
+                  nombre: technology["Nombre de la tecnología"],
+                  proveedor: technology["Proveedor / Empresa"] || '',
+                  web: technology["Web de la empresa"] || '',
+                  pais: technology["País de origen"] || '',
+                  tipo_sugerido: technology["Tipo de tecnología"] || '',
+                  subcategoria: technology["Subcategoría"] || '',
+                  sector: technology["Sector y subsector"] || '',
+                  descripcion: technology["Descripción técnica breve"] || '',
+                  aplicacion_principal: technology["Aplicación principal"] || '',
+                  ventaja_competitiva: technology["Ventaja competitiva clave"] || '',
+                  innovacion: technology["Porque es innovadora"] || '',
+                  trl_estimado: technology["Grado de madurez (TRL)"],
+                  casos_referencia: technology["Casos de referencia"] || '',
+                  paises_actua: technology["Paises donde actua"] || '',
+                  comentarios_analista: technology["Comentarios del analista"] || '',
+                }}
+                onEnrichmentComplete={(enrichedData) => {
+                  // Refresh the technology data
+                  queryClient.invalidateQueries({ queryKey: ['technologies'] });
+                  onOpenChange(false);
+                }}
+              />
+            )}
             <Button 
               variant="outline" 
               size="sm" 
