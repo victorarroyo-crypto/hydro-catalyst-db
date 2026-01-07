@@ -608,10 +608,11 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
                   <Label htmlFor="email" className="text-sm">Email de contacto</Label>
                   <Input
                     id="email"
-                    type="email"
+                    type="text"
                     value={formData.email}
                     onChange={(e) => handleChange('email', e.target.value)}
                     className="mt-1"
+                    placeholder="ejemplo@empresa.com"
                   />
                 </div>
                 <div>

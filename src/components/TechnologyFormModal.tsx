@@ -876,7 +876,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               field="Email de contacto" 
               value={formData["Email de contacto"]}
               onChange={handleChange}
-              type="email" 
+              type="text" 
             />
           </FormSection>
 
