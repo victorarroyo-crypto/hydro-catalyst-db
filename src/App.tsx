@@ -34,6 +34,8 @@ import DatabaseAudit from "./pages/DatabaseAudit";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import ScoutingMonitor from "./pages/ScoutingMonitor";
 import AdminScoutingJobs from "./pages/AdminScoutingJobs";
+import Studies from "./pages/Studies";
+import StudyDetail from "./pages/StudyDetail";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,6 +66,8 @@ const App = () => (
               <Route path="/projects" element={<Projects />} />
               <Route path="/projects/:id" element={<ProjectDetail />} />
               <Route path="/favorites" element={<Favorites />} />
+              <Route path="/studies" element={<Studies />} />
+              <Route path="/studies/:studyId" element={<StudyDetail />} />
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/reviews" element={<QualityControl />} />
               <Route path="/trends" element={<Trends />} />
