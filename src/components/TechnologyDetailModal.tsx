@@ -131,6 +131,22 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     enabled: !!technology?.id && open,
   });
 
+  // Always fetch the latest technology row when modal is open (so enrichment updates show immediately)
+  const { data: freshTechnology } = useQuery({
+    queryKey: ['technology-detail', technology?.id],
+    queryFn: async () => {
+      if (!technology?.id) return null;
+      const { data, error } = await supabase
+        .from('technologies')
+        .select('*')
+        .eq('id', technology.id)
+        .single();
+      if (error) throw error;
+      return data as Technology;
+    },
+    enabled: !!technology?.id && open,
+  });
+
   if (!technology) return null;
 
   // Check if user has internal role (can see internal information)
@@ -455,36 +471,52 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   const reviewStatus = (technology as any).review_status;
   const isInReviewProcess = reviewStatus && reviewStatus !== 'none' && reviewStatus !== 'completed';
 
-  const InfoRow = ({ icon: Icon, label, value, isLink = false }: {
-    icon: React.ElementType; 
-    label: string; 
-    value: string | null; 
+  const InfoRow = ({
+    icon: Icon,
+    label,
+    value,
+    isLink = false,
+    showEmpty = false,
+  }: {
+    icon: React.ElementType;
+    label: string;
+    value: string | null;
     isLink?: boolean;
+    showEmpty?: boolean;
   }) => {
-    if (!value) return null;
-    
+    const displayValue = value && String(value).trim().length > 0 ? value : null;
+    if (!displayValue && !showEmpty) return null;
+
     return (
       <div className="flex items-start gap-3 py-2">
         <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
           {isLink ? (
-            <a 
-              href={value.startsWith('http') ? value : `https://${value}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-secondary hover:underline flex items-center gap-1"
-            >
-              {value}
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            displayValue ? (
+              <a
+                href={displayValue.startsWith('http') ? displayValue : `https://${displayValue}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-secondary hover:underline flex items-center gap-1"
+              >
+                {displayValue}
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            ) : (
+              <p className="text-sm text-muted-foreground">—</p>
+            )
           ) : (
-            <p className="text-sm text-foreground">{value}</p>
+            <p className={displayValue ? "text-sm text-foreground" : "text-sm text-muted-foreground"}>
+              {displayValue ?? '—'}
+            </p>
           )}
         </div>
       </div>
     );
   };
+
+  const t = freshTechnology ?? technology;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -493,15 +525,15 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <DialogTitle className="text-xl font-display mb-2">
-                {technology["Nombre de la tecnología"]}
+                {t["Nombre de la tecnología"]}
               </DialogTitle>
               <DialogDescription id="tech-detail-description" className="sr-only">
-                Detalles de la tecnología {technology["Nombre de la tecnología"]}
+                Detalles de la tecnología {t["Nombre de la tecnología"]}
               </DialogDescription>
               <div className="flex items-center gap-2 flex-wrap">
-                <TRLBadge trl={technology["Grado de madurez (TRL)"]} />
-                {technology.status && (
-                  <Badge variant="outline">{technology.status}</Badge>
+                <TRLBadge trl={t["Grado de madurez (TRL)"]} />
+                {t.status && (
+                  <Badge variant="outline">{t.status}</Badge>
                 )}
               </div>
             </div>
@@ -533,7 +565,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                     ))}
                   </SelectContent>
                 </Select>
-                <Button 
+                <Button
                   size="sm"
                   className="h-8"
                   onClick={handleAddToProject}
@@ -547,26 +579,26 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                 </Button>
               </div>
             )}
-            <DownloadTechnologyButton technology={technology} variant="full" />
+            <DownloadTechnologyButton technology={t} variant="full" />
             {isInternalUser && (
               <AIEnrichmentButton
                 technology={{
-                  id: technology.id,
-                  nombre: technology["Nombre de la tecnología"],
-                  proveedor: technology["Proveedor / Empresa"] || '',
-                  web: technology["Web de la empresa"] || '',
-                  pais: technology["País de origen"] || '',
-                  tipo_sugerido: technology["Tipo de tecnología"] || '',
-                  subcategoria: technology["Subcategoría"] || '',
-                  sector: technology["Sector y subsector"] || '',
-                  descripcion: technology["Descripción técnica breve"] || '',
-                  aplicacion_principal: technology["Aplicación principal"] || '',
-                  ventaja_competitiva: technology["Ventaja competitiva clave"] || '',
-                  innovacion: technology["Porque es innovadora"] || '',
-                  trl_estimado: technology["Grado de madurez (TRL)"],
-                  casos_referencia: technology["Casos de referencia"] || '',
-                  paises_actua: technology["Paises donde actua"] || '',
-                  comentarios_analista: technology["Comentarios del analista"] || '',
+                  id: t.id,
+                  nombre: t["Nombre de la tecnología"],
+                  proveedor: t["Proveedor / Empresa"] || '',
+                  web: t["Web de la empresa"] || '',
+                  pais: t["País de origen"] || '',
+                  tipo_sugerido: t["Tipo de tecnología"] || '',
+                  subcategoria: t["Subcategoría"] || '',
+                  sector: t["Sector y subsector"] || '',
+                  descripcion: t["Descripción técnica breve"] || '',
+                  aplicacion_principal: t["Aplicación principal"] || '',
+                  ventaja_competitiva: t["Ventaja competitiva clave"] || '',
+                  innovacion: t["Porque es innovadora"] || '',
+                  trl_estimado: t["Grado de madurez (TRL)"],
+                  casos_referencia: t["Casos de referencia"] || '',
+                  paises_actua: t["Paises donde actua"] || '',
+                  comentarios_analista: t["Comentarios del analista"] || '',
                 }}
                 onEnrichmentComplete={async (enrichedData) => {
                   const updates: Record<string, any> = {};
@@ -590,7 +622,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                   const { error } = await supabase
                     .from('technologies')
                     .update(updates)
-                    .eq('id', technology.id);
+                    .eq('id', t.id);
 
                   if (error) {
                     toast({
@@ -602,6 +634,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                   }
 
                   queryClient.invalidateQueries({ queryKey: ['technologies'] });
+                  queryClient.invalidateQueries({ queryKey: ['technology-detail', t.id] });
                   toast({
                     title: 'Ficha actualizada',
                     description: 'Se guardaron los campos enriquecidos',
@@ -609,9 +642,9 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                 }}
               />
             )}
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleAddFavorite}
               disabled={isFavoriting}
             >
@@ -619,9 +652,9 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               Favorito
             </Button>
             {isInternalUser && !isInReviewProcess && (
-              <Button 
-                variant="secondary" 
-                size="sm" 
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={handleSendToReview}
                 disabled={isSendingToReview}
               >
@@ -641,9 +674,9 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
             )}
             {isInternalUser && (
               <div className="flex gap-1">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setShowTrendsConfirm(true)}
                   disabled={isMovingToTrends}
                   className="text-orange-600 border-orange-300 hover:bg-orange-50 h-7 text-xs px-2"
@@ -651,9 +684,9 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                   <TrendingUp className="w-3 h-3 mr-1" />
                   Tendencias
                 </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setShowCaseStudyConfirm(true)}
                   disabled={isMovingToCaseStudy}
                   className="text-blue-600 border-blue-300 hover:bg-blue-50 h-7 text-xs px-2"
@@ -664,6 +697,234 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* General Info */}
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+              <Building2 className="w-4 h-4" />
+              Información General
+            </h3>
+            <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+              <InfoRow icon={Building2} label="Proveedor / Empresa" value={t["Proveedor / Empresa"]} showEmpty />
+              <InfoRow icon={MapPin} label="País de origen" value={t["País de origen"]} showEmpty />
+              <InfoRow icon={Globe} label="Web de la empresa" value={t["Web de la empresa"]} isLink showEmpty />
+              <InfoRow icon={Mail} label="Email de contacto" value={t["Email de contacto"]} showEmpty />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Classification */}
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+              <Tag className="w-4 h-4" />
+              Clasificación
+            </h3>
+            <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+              {/* Multiple tipos display */}
+              <div className="flex items-start gap-3 py-2">
+                <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground mb-1">Tipos de tecnología</p>
+                  <div className="flex flex-wrap gap-2">
+                    {technologyTipos && technologyTipos.length > 0 ? (
+                      [...technologyTipos]
+                        .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
+                        .map(tt => {
+                          const tipo = tipos?.find(x => x.id === tt.tipo_id);
+                          if (!tipo) return null;
+                          return (
+                            <Badge
+                              key={tt.tipo_id}
+                              variant={tt.is_primary ? "default" : "secondary"}
+                              className="flex items-center gap-1"
+                            >
+                              {tt.is_primary && technologyTipos.length > 1 && (
+                                <Star className="w-3 h-3 fill-current" />
+                              )}
+                              <span className="font-mono text-xs opacity-70">{tipo.codigo}</span>
+                              {tipo.nombre}
+                            </Badge>
+                          );
+                        })
+                    ) : t["Tipo de tecnología"] ? (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        {t["Tipo de tecnología"]}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <InfoRow icon={Tag} label="Subcategoría" value={t["Subcategoría"]} showEmpty />
+              <InfoRow icon={Tag} label="Sector y subsector" value={t["Sector y subsector"]} showEmpty />
+              <InfoRow icon={Tag} label="Aplicación principal" value={t["Aplicación principal"]} showEmpty />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Description */}
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Descripción Técnica
+            </h3>
+            <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
+              {t["Descripción técnica breve"] || '—'}
+            </p>
+          </div>
+
+          <Separator />
+
+          {/* Differentiation */}
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+              <Lightbulb className="w-4 h-4" />
+              Diferenciación
+            </h3>
+            <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+              <InfoRow icon={Trophy} label="Ventaja competitiva clave" value={t["Ventaja competitiva clave"]} showEmpty />
+              <InfoRow icon={Lightbulb} label="Por qué es innovadora" value={t["Porque es innovadora"]} showEmpty />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* References */}
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Referencias
+            </h3>
+            <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+              <InfoRow icon={Trophy} label="Casos de referencia" value={t["Casos de referencia"]} showEmpty />
+              <InfoRow icon={MapPin} label="Países donde actúa" value={t["Paises donde actua"]} showEmpty />
+            </div>
+          </div>
+
+          {/* Internal - Only visible to internal users */}
+          {isInternalUser && (
+            <>
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Información Interna
+                </h3>
+                <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+                  <InfoRow icon={MessageSquare} label="Comentarios del analista" value={t["Comentarios del analista"]} showEmpty />
+                  <InfoRow icon={Calendar} label="Fecha de scouting" value={t["Fecha de scouting"]} showEmpty />
+                  <InfoRow icon={Tag} label="Estado del seguimiento" value={t["Estado del seguimiento"]} showEmpty />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Metadata - Only visible to internal users */}
+          {isInternalUser && (
+            <div className="text-xs text-muted-foreground pt-4 border-t flex justify-between">
+              <span>Quality Score: {t.quality_score ?? '—'}</span>
+              <span>Actualizado: {new Date(t.updated_at).toLocaleDateString('es-ES')}</span>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+
+      {/* Confirm Move to Trends Dialog */}
+      <Dialog open={showTrendsConfirm} onOpenChange={setShowTrendsConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-orange-600" />
+              Mover a Tendencias
+            </DialogTitle>
+            <DialogDescription className="text-left pt-2 space-y-3">
+              <p>
+                Al confirmar, esta tecnología se convertirá en una <strong>tendencia tecnológica</strong> y:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Se eliminará del catálogo de tecnologías</li>
+                <li>Aparecerá en la sección de Tendencias</li>
+                <li>Todos los datos se guardarán y podrán recuperarse si la restauras como tecnología</li>
+              </ul>
+              <p className="text-sm font-medium">
+                Usa esta opción para tecnologías que representan categorías o tendencias generales, no productos específicos.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowTrendsConfirm(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowTrendsConfirm(false);
+                handleMoveToTrends();
+              }}
+              disabled={isMovingToTrends}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {isMovingToTrends ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <TrendingUp className="w-4 h-4 mr-2" />
+              )}
+              Confirmar y mover
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Move to Case Study Dialog */}
+      <Dialog open={showCaseStudyConfirm} onOpenChange={setShowCaseStudyConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-blue-600" />
+              Mover a Caso de Estudio
+            </DialogTitle>
+            <DialogDescription className="text-left pt-2 space-y-3">
+              <p>
+                Al confirmar, esta tecnología se convertirá en un <strong>caso de estudio</strong> y:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Se eliminará del catálogo de tecnologías</li>
+                <li>Aparecerá en la sección de Casos de Estudio</li>
+                <li>Todos los datos se guardarán y podrán recuperarse si la restauras como tecnología</li>
+              </ul>
+              <p className="text-sm font-medium">
+                Usa esta opción para tecnologías que representan implementaciones reales, proyectos municipales, u organizaciones.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowCaseStudyConfirm(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowCaseStudyConfirm(false);
+                handleMoveToCaseStudy();
+              }}
+              disabled={isMovingToCaseStudy}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isMovingToCaseStudy ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <BookOpen className="w-4 h-4 mr-2" />
+              )}
+              Confirmar y mover
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+  );
+};
+
 
           {/* General Info */}
           <div>
