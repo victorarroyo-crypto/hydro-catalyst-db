@@ -568,10 +568,44 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                   paises_actua: technology["Paises donde actua"] || '',
                   comentarios_analista: technology["Comentarios del analista"] || '',
                 }}
-                onEnrichmentComplete={(enrichedData) => {
-                  // Refresh the technology data
+                onEnrichmentComplete={async (enrichedData) => {
+                  const updates: Record<string, any> = {};
+                  if (typeof enrichedData.descripcion === 'string') updates['Descripción técnica breve'] = enrichedData.descripcion;
+                  if (typeof enrichedData.aplicacion_principal === 'string') updates['Aplicación principal'] = enrichedData.aplicacion_principal;
+                  if (typeof enrichedData.ventaja_competitiva === 'string') updates['Ventaja competitiva clave'] = enrichedData.ventaja_competitiva;
+                  if (typeof enrichedData.innovacion === 'string') updates['Porque es innovadora'] = enrichedData.innovacion;
+                  if (typeof enrichedData.casos_referencia === 'string') updates['Casos de referencia'] = enrichedData.casos_referencia;
+                  if (typeof enrichedData.paises_actua === 'string') updates['Paises donde actua'] = enrichedData.paises_actua;
+                  if (typeof enrichedData.comentarios_analista === 'string') updates['Comentarios del analista'] = enrichedData.comentarios_analista;
+                  if (typeof enrichedData.trl_estimado === 'number') updates['Grado de madurez (TRL)'] = enrichedData.trl_estimado;
+
+                  if (Object.keys(updates).length === 0) {
+                    toast({
+                      title: 'Sin cambios',
+                      description: 'La IA no devolvió campos actualizables',
+                    });
+                    return;
+                  }
+
+                  const { error } = await supabase
+                    .from('technologies')
+                    .update(updates)
+                    .eq('id', technology.id);
+
+                  if (error) {
+                    toast({
+                      title: 'Error',
+                      description: 'No se pudo guardar el enriquecimiento en la base de datos',
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+
                   queryClient.invalidateQueries({ queryKey: ['technologies'] });
-                  onOpenChange(false);
+                  toast({
+                    title: 'Ficha actualizada',
+                    description: 'Se guardaron los campos enriquecidos',
+                  });
                 }}
               />
             )}
