@@ -1005,54 +1005,102 @@ export type Database = {
         Row: {
           added_at: string
           added_by: string | null
+          already_in_db: boolean | null
+          applications: string[] | null
           brief_description: string | null
+          confidence_score: number | null
           country: string | null
+          existing_technology_id: string | null
           id: string
           inclusion_reason: string | null
           provider: string | null
+          session_id: string | null
           solution_id: string | null
           source: string | null
+          source_research_id: string | null
           study_id: string
+          subcategory_suggested: string | null
           technology_id: string | null
           technology_name: string
           trl: number | null
+          type_suggested: string | null
+          web: string | null
         }
         Insert: {
           added_at?: string
           added_by?: string | null
+          already_in_db?: boolean | null
+          applications?: string[] | null
           brief_description?: string | null
+          confidence_score?: number | null
           country?: string | null
+          existing_technology_id?: string | null
           id?: string
           inclusion_reason?: string | null
           provider?: string | null
+          session_id?: string | null
           solution_id?: string | null
           source?: string | null
+          source_research_id?: string | null
           study_id: string
+          subcategory_suggested?: string | null
           technology_id?: string | null
           technology_name: string
           trl?: number | null
+          type_suggested?: string | null
+          web?: string | null
         }
         Update: {
           added_at?: string
           added_by?: string | null
+          already_in_db?: boolean | null
+          applications?: string[] | null
           brief_description?: string | null
+          confidence_score?: number | null
           country?: string | null
+          existing_technology_id?: string | null
           id?: string
           inclusion_reason?: string | null
           provider?: string | null
+          session_id?: string | null
           solution_id?: string | null
           source?: string | null
+          source_research_id?: string | null
           study_id?: string
+          subcategory_suggested?: string | null
           technology_id?: string | null
           technology_name?: string
           trl?: number | null
+          type_suggested?: string | null
+          web?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "study_longlist_existing_technology_id_fkey"
+            columns: ["existing_technology_id"]
+            isOneToOne: false
+            referencedRelation: "technologies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_longlist_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "study_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "study_longlist_solution_id_fkey"
             columns: ["solution_id"]
             isOneToOne: false
             referencedRelation: "study_solutions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_longlist_source_research_id_fkey"
+            columns: ["source_research_id"]
+            isOneToOne: false
+            referencedRelation: "study_research"
             referencedColumns: ["id"]
           },
           {
@@ -1146,6 +1194,7 @@ export type Database = {
           id: string
           key_findings: string[] | null
           knowledge_doc_id: string | null
+          provider_mentioned: string | null
           publication_date: string | null
           relevance_score: number | null
           session_id: string | null
@@ -1153,6 +1202,7 @@ export type Database = {
           source_url: string | null
           study_id: string
           summary: string | null
+          technology_mentioned: string | null
           title: string
         }
         Insert: {
@@ -1164,6 +1214,7 @@ export type Database = {
           id?: string
           key_findings?: string[] | null
           knowledge_doc_id?: string | null
+          provider_mentioned?: string | null
           publication_date?: string | null
           relevance_score?: number | null
           session_id?: string | null
@@ -1171,6 +1222,7 @@ export type Database = {
           source_url?: string | null
           study_id: string
           summary?: string | null
+          technology_mentioned?: string | null
           title: string
         }
         Update: {
@@ -1182,6 +1234,7 @@ export type Database = {
           id?: string
           key_findings?: string[] | null
           knowledge_doc_id?: string | null
+          provider_mentioned?: string | null
           publication_date?: string | null
           relevance_score?: number | null
           session_id?: string | null
@@ -1189,6 +1242,7 @@ export type Database = {
           source_url?: string | null
           study_id?: string
           summary?: string | null
+          technology_mentioned?: string | null
           title?: string
         }
         Relationships: [

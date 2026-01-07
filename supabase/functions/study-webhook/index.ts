@@ -106,6 +106,10 @@ serve(async (req) => {
         const summary = research?.summary || research?.description || research?.content || '';
         const sourceUrl = research?.source_url || research?.url || research?.link || '';
         
+        // Extract technology and provider if present
+        const technologyMentioned = research?.technology || research?.technology_mentioned || '';
+        const providerMentioned = research?.provider || research?.provider_mentioned || '';
+        
         // Normalize source_type to valid values: 'paper', 'report', 'article', 'patent', 'website', 'other'
         const rawSourceType = research?.source_type || research?.type || 'website';
         const validSourceTypes = ['paper', 'report', 'article', 'patent', 'website', 'other'];
@@ -202,6 +206,8 @@ serve(async (req) => {
               source_type: sourceType,
               key_findings: Array.isArray(keyFindings) ? keyFindings : [],
               relevance_score: relevanceScore,
+              technology_mentioned: technologyMentioned,
+              provider_mentioned: providerMentioned,
               ai_generated: true,
               ai_extracted: true,
               authors: research?.authors || '',
@@ -211,7 +217,7 @@ serve(async (req) => {
           if (error) {
             console.error('Error inserting research:', error);
           } else {
-            console.log('Research inserted successfully:', title);
+            console.log('Research inserted successfully:', title, technologyMentioned ? `(Tech: ${technologyMentioned})` : '');
           }
         }
 
@@ -450,6 +456,61 @@ serve(async (req) => {
         break;
 
       // session_complete is now handled above with research_complete
+
+      // NEW: technology_extracted - Inserts extracted technologies directly into study_longlist
+      case 'technology_extracted': {
+        const tech = data?.technology || data;
+        
+        const { error } = await supabase.from('study_longlist').insert({
+          study_id,
+          session_id,
+          technology_name: tech?.name || 'Unknown Technology',
+          provider: tech?.provider || '',
+          country: tech?.country || '',
+          web: tech?.web || tech?.website || '',
+          trl: tech?.trl_estimated || tech?.trl || 7,
+          type_suggested: tech?.type_suggested || tech?.technology_type || '',
+          subcategory_suggested: tech?.subcategory_suggested || tech?.subcategory || '',
+          brief_description: tech?.description || '',
+          applications: Array.isArray(tech?.applications) ? tech.applications : [],
+          source: 'ai_extracted',
+          source_research_id: tech?.source_research_id || null,
+          confidence_score: tech?.confidence_score || 0.8,
+          already_in_db: tech?.already_in_db || false,
+          existing_technology_id: tech?.existing_technology_id || null,
+          inclusion_reason: `AI-extracted with ${Math.round((tech?.confidence_score || 0.8) * 100)}% confidence`,
+        });
+
+        if (error) {
+          console.error('Error inserting extracted technology:', error);
+        } else {
+          console.log(`[study-webhook] Technology extracted: ${tech?.name} by ${tech?.provider}`);
+        }
+
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: 'info',
+          phase: 'extraction',
+          message: `Tecnología extraída: ${tech?.name || 'Sin nombre'}`,
+          details: data
+        });
+        break;
+      }
+
+      // NEW: content_extracted - Informational logging only
+      case 'content_extracted':
+        console.log(`[study-webhook] Content extracted from ${data?.url}: ${data?.extraction_success ? 'success' : 'failed'}`);
+        
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: data?.extraction_success ? 'info' : 'warn',
+          phase: 'extraction',
+          message: `Contenido extraído de ${data?.url || 'URL desconocida'}: ${data?.extraction_success ? 'éxito' : 'fallido'}`,
+          details: data
+        });
+        break;
 
       case 'log':
         await supabase.from('study_session_logs').insert({
