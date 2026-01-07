@@ -20,6 +20,7 @@ import Trends from "./pages/Trends";
 import CaseStudies from "./pages/CaseStudies";
 import Statistics from "./pages/Statistics";
 import TaxonomyAdmin from "./pages/TaxonomyAdmin";
+import TaxonomyAudit from "./pages/TaxonomyAudit";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import AIClassification from "./pages/AIClassification";
 import AISearch from "./pages/AISearch";
@@ -75,6 +76,7 @@ const App = () => (
               <Route path="/ai-models" element={<AIModels />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/taxonomy-admin" element={<TaxonomyAdmin />} />
+              <Route path="/taxonomy-audit" element={<TaxonomyAudit />} />
               <Route path="/database-audit" element={<DatabaseAudit />} />
               <Route path="/admin/db-audit" element={<AdminDbAudit />} />
               <Route path="/scouting-monitor" element={<ScoutingMonitor />} />
