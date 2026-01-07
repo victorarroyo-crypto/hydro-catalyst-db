@@ -56,8 +56,11 @@ import {
   Loader2,
   Settings,
   ArrowLeft,
+  FileText,
+  Download,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { generateTaxonomyDocumentation } from '@/lib/generateTaxonomyDocumentation';
 
 interface TaxonomyTipo {
   id: number;
@@ -105,6 +108,7 @@ const TaxonomyAdmin: React.FC = () => {
   const [editingTipo, setEditingTipo] = useState<TaxonomyTipo | null>(null);
   const [editingSubcategoria, setEditingSubcategoria] = useState<TaxonomySubcategoria | null>(null);
   const [editingSector, setEditingSector] = useState<TaxonomySector | null>(null);
+  const [generatingDoc, setGeneratingDoc] = useState(false);
 
   // Fetch data
   const { data: tipos, isLoading: loadingTipos } = useQuery({
@@ -314,7 +318,18 @@ const TaxonomyAdmin: React.FC = () => {
     },
   });
 
-
+  // Download handlers
+  const handleDownloadWord = async () => {
+    setGeneratingDoc(true);
+    try {
+      await generateTaxonomyDocumentation();
+      toast({ title: 'Documento generado', description: 'Se ha descargado el documento Word de taxonomía' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudo generar el documento', variant: 'destructive' });
+    } finally {
+      setGeneratingDoc(false);
+    }
+  };
   if (!isAdmin) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -341,7 +356,25 @@ const TaxonomyAdmin: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleDownloadWord}
+            disabled={generatingDoc}
+          >
+            {generatingDoc ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Descargar Word
+          </Button>
           <Button asChild variant="outline">
+            <Link to="/taxonomy-audit" className="gap-2">
+              <FileText className="w-4 h-4" />
+              Auditoría
+            </Link>
+          </Button>
+          <Button asChild variant="ghost">
             <Link to="/settings" className="gap-2">
               <ArrowLeft className="w-4 h-4" />
               Volver

@@ -25,6 +25,7 @@ import {
   Database,
   Rocket,
   Wrench,
+  Tag,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -65,6 +66,7 @@ const scoutingSubItems = [
 
 const internalNavItems = [
   { title: 'Centro de Supervisión', url: '/quality-control', icon: ShieldCheck },
+  { title: 'Taxonomía', url: '/taxonomy-admin', icon: Tag },
 ];
 
 const knowledgeBaseItems = [
