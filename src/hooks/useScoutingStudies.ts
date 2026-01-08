@@ -61,6 +61,7 @@ export interface StudyLonglistItem {
   id: string;
   study_id: string;
   technology_id: string | null;
+  existing_technology_id: string | null;
   solution_id: string | null;
   technology_name: string;
   provider: string | null;
@@ -71,6 +72,9 @@ export interface StudyLonglistItem {
   source: string | null;
   added_by: string | null;
   added_at: string;
+  web: string | null;
+  confidence_score: number | null;
+  already_in_db: boolean | null;
 }
 
 export interface StudyShortlistItem {
