@@ -290,6 +290,7 @@ serve(async (req) => {
         .map((r: any) => {
           const ll = r.longlist;
           return {
+            evaluation_id: crypto.randomUUID(),
             shortlist_id: r.id,
             longlist_id: r.longlist_id,
             priority: r.priority,
