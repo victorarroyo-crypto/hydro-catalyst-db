@@ -295,38 +295,56 @@ serve(async (req) => {
     } catch (fetchError) {
       clearTimeout(timeoutId);
       const isTimeout = fetchError instanceof Error && fetchError.name === 'AbortError';
+      const errorStr = fetchError instanceof Error ? `${fetchError.name}: ${fetchError.message}` : String(fetchError);
+      const isTransientNetworkError = /connection reset|ECONNRESET|Connection reset/i.test(errorStr);
+
       console.error('Railway fetch error:', fetchError);
 
-      if (isTimeout) {
-        // Do NOT mark as failed: Railway might have accepted the request but responded slowly.
+      // Treat timeouts / transient connection resets as non-fatal.
+      // The backend may have started processing even if the connection dropped.
+      if (isTimeout || isTransientNetworkError) {
+        const reason = isTimeout ? 'timeout' : 'connection_reset';
+
         await supabase.from('study_session_logs').insert({
           session_id: sessionData.id,
           study_id,
           level: 'warn',
           phase: session_type,
-          message: `Timeout esperando respuesta del backend (>${Math.round(timeoutMs / 1000)}s). La sesión queda en "pending".`,
-          details: { timeout_ms: timeoutMs }
+          message:
+            reason === 'timeout'
+              ? `Timeout esperando respuesta del backend (>${Math.round(timeoutMs / 1000)}s). La sesión queda en "pending".`
+              : 'Conexión reiniciada por el backend (posible cold-start). La sesión queda en "pending".',
+          details: {
+            reason,
+            timeout_ms: timeoutMs,
+            error: errorStr,
+            endpoint: `/api/study/${railwayEndpoint}`,
+          },
         });
 
-        return new Response(JSON.stringify({
-          success: true,
-          session_id: sessionData.id,
-          study_id,
-          session_type,
-          status: 'pending',
-          backend_timeout: true
-        }), {
-          status: 202,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            session_id: sessionData.id,
+            study_id,
+            session_type,
+            status: 'pending',
+            backend_unreachable: true,
+            reason,
+          }),
+          {
+            status: 202,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        );
       }
 
-      // Non-timeout connection error: mark as failed
+      // Non-transient connection error: mark as failed
       await supabase
         .from('study_sessions')
         .update({
           status: 'failed',
-          error_message: `Connection error: ${String(fetchError)}`
+          error_message: `Connection error: ${errorStr}`,
         })
         .eq('id', sessionData.id);
 
@@ -336,16 +354,20 @@ serve(async (req) => {
         level: 'error',
         phase: session_type,
         message: 'Error de conexión con backend',
-        details: { error: String(fetchError) }
+        details: { error: errorStr },
       });
 
-      return new Response(JSON.stringify({
-        error: 'Connection failed',
-        session_id: sessionData.id
-      }), {
-        status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({
+          error: 'Connection failed',
+          session_id: sessionData.id,
+          details: errorStr,
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
     clearTimeout(timeoutId);
 
