@@ -323,15 +323,30 @@ serve(async (req) => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'X-Study-Secret': 'wt-study-2026-7f9a3b2c1d8e5f4a'
+                'X-Study-Secret': Deno.env.get('X_STUDY_SECRET') || 'wt-study-2026-7f9a3b2c1d8e5f4a',
               },
-              body: JSON.stringify(railwayPayload)
+              body: JSON.stringify(railwayPayload),
             });
+
+            let responseBody: string | null = null;
+            try {
+              responseBody = await response.text();
+            } catch {
+              responseBody = null;
+            }
+
+            if (!response.ok) {
+              console.error(
+                `[generate-longlist] Railway error ${response.status}:`,
+                responseBody
+              );
+            }
 
             railwayResponse = {
               triggered: response.ok,
               session_id: session.id,
-              status: response.status
+              status: response.status,
+              error_body: response.ok ? null : responseBody,
             };
 
             console.log(`[generate-longlist] Railway triggered:`, railwayResponse);
