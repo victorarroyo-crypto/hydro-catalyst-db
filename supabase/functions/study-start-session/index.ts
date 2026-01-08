@@ -242,7 +242,76 @@ serve(async (req) => {
     // Extract objectives as array of strings
     const objectivesArray: string[] = studyData?.objectives || [];
 
-    // Build payload exactly as Railway expects for /api/study/research
+    // For evaluation endpoint, Railway expects a "technologies" array.
+    // Build it from shortlist (+ joined longlist) so evaluation can run server-side.
+    let technologiesForEvaluation: Record<string, unknown>[] | undefined = undefined;
+
+    if (session_type === 'evaluation') {
+      const shortlistIds: string[] =
+        (config && typeof config === 'object' ? ((config as any).shortlist_ids as string[] | undefined) : undefined) || [];
+
+      const shortlistQuery = supabase
+        .from('study_shortlist')
+        .select(
+          `
+          id,
+          longlist_id,
+          priority,
+          selection_reason,
+          notes,
+          longlist:study_longlist (
+            id,
+            technology_name,
+            brief_description,
+            provider,
+            web,
+            country,
+            sector,
+            trl,
+            innovacion,
+            ventaja_competitiva,
+            casos_referencia,
+            applications
+          )
+        `,
+        )
+        .eq('study_id', study_id);
+
+      const { data: shortlistRows, error: shortlistError } = shortlistIds.length
+        ? await shortlistQuery.in('id', shortlistIds)
+        : await shortlistQuery;
+
+      if (shortlistError) {
+        console.warn('Failed to load shortlist for evaluation:', shortlistError);
+      }
+
+      const rows = shortlistRows || [];
+      technologiesForEvaluation = rows
+        .map((r: any) => {
+          const ll = r.longlist;
+          return {
+            shortlist_id: r.id,
+            longlist_id: r.longlist_id,
+            priority: r.priority,
+            selection_reason: r.selection_reason,
+            notes: r.notes,
+            name: ll?.technology_name,
+            description: ll?.brief_description,
+            provider: ll?.provider,
+            web: ll?.web,
+            country: ll?.country,
+            sector: ll?.sector,
+            trl: ll?.trl,
+            innovation: ll?.innovacion,
+            competitive_advantage: ll?.ventaja_competitiva,
+            reference_cases: ll?.casos_referencia,
+            applications: ll?.applications,
+          };
+        })
+        .filter((t: any) => !!t.name);
+    }
+
+    // Build payload. Different endpoints have different required fields.
     const railwayPayload: Record<string, unknown> = {
       // Required fields
       study_id,
@@ -262,6 +331,9 @@ serve(async (req) => {
       kb_documents: kbDocuments.length > 0 ? kbDocuments : undefined,
       sources: (config as any)?.sources || ['web', 'papers'],
       depth: (config as any)?.depth || 'standard',
+
+      // Evaluation-specific
+      technologies: technologiesForEvaluation,
     };
 
     // Remove undefined keys to keep payload clean
