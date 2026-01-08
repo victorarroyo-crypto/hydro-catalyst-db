@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
   useStudyLonglist,
@@ -56,6 +56,7 @@ interface Props {
 }
 
 export default function StudyPhase3Longlist({ studyId, study }: Props) {
+  const queryClient = useQueryClient();
   const { data: longlist, isLoading } = useStudyLonglist(studyId);
   const { data: solutions } = useStudySolutions(studyId);
   const addToLonglist = useAddToLonglist();
@@ -68,6 +69,31 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
   const [selectedTech, setSelectedTech] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<LonglistItem | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  // Realtime subscription for longlist updates
+  useEffect(() => {
+    if (!studyId) return;
+
+    const channel = supabase
+      .channel(`study_longlist_${studyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'study_longlist',
+          filter: `study_id=eq.${studyId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [studyId, queryClient]);
   
   const [manualEntry, setManualEntry] = useState({
     technology_name: '',
