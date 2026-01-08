@@ -468,6 +468,11 @@ export function useStudyLonglist(studyId: string | undefined) {
       return data as StudyLonglistItem[];
     },
     enabled: !!studyId,
+
+    // Fallback: if realtime misses an event, keep UI consistent without requiring manual refresh
+    refetchInterval: 3000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
