@@ -440,40 +440,90 @@ serve(async (req) => {
         });
         break;
 
-      case 'evaluation_completed':
-        // Insert or update evaluation
-        if (data?.evaluation) {
+      // Evaluation phase handlers
+      case 'evaluation_start': {
+        await supabase
+          .from('study_sessions')
+          .update({ 
+            status: 'running',
+            started_at: new Date().toISOString(),
+            current_phase: 'evaluation',
+            progress_percentage: 0
+          })
+          .eq('id', session_id);
+
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: 'info',
+          phase: 'evaluation',
+          message: 'Iniciando evaluación automática de tecnologías',
+          details: data || payload
+        });
+        break;
+      }
+
+      case 'evaluation_progress': {
+        const progressData = data || payload;
+        const progressValue = progressData?.progress ?? 0;
+        const phase = progressData?.phase || 'evaluating_technologies';
+        const message = progressData?.message || `Evaluando tecnologías: ${progressValue}%`;
+        
+        await supabase
+          .from('study_sessions')
+          .update({ 
+            status: 'running',
+            progress_percentage: progressValue,
+            current_phase: 'evaluation',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', session_id);
+
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: 'info',
+          phase: 'evaluation',
+          message: message,
+          details: progressData
+        });
+        break;
+      }
+
+      case 'technology_evaluated': {
+        const evalData = data || payload;
+        
+        if (evalData?.shortlist_id) {
           const { error } = await supabase
             .from('study_evaluations')
             .upsert({
               study_id,
-              shortlist_id: data.evaluation.shortlist_id,
+              shortlist_id: evalData.shortlist_id,
               session_id,
               ai_generated: true,
               ai_analyzed_at: new Date().toISOString(),
-              ai_scores: data.evaluation.scores,
-              ai_swot: data.evaluation.swot,
-              ai_recommendation: data.evaluation.recommendation,
-              ai_analysis_json: data.evaluation.full_analysis,
-              ai_external_data: data.evaluation.external_data,
-              ai_kb_insights: data.evaluation.kb_insights,
-              overall_score: data.evaluation.overall_score,
-              trl_score: data.evaluation.scores?.trl,
-              cost_score: data.evaluation.scores?.cost,
-              scalability_score: data.evaluation.scores?.scalability,
-              context_fit_score: data.evaluation.scores?.context_fit,
-              innovation_potential_score: data.evaluation.scores?.innovation,
-              strengths: data.evaluation.swot?.strengths || [],
-              weaknesses: data.evaluation.swot?.weaknesses || [],
-              opportunities: data.evaluation.swot?.opportunities || [],
-              threats: data.evaluation.swot?.threats || [],
-              recommendation: data.evaluation.recommendation
+              overall_score: evalData.overall_score,
+              trl_score: evalData.scores?.trl,
+              cost_score: evalData.scores?.cost,
+              scalability_score: evalData.scores?.scalability,
+              context_fit_score: evalData.scores?.context_fit,
+              innovation_potential_score: evalData.scores?.innovation,
+              strengths: evalData.swot?.strengths || [],
+              weaknesses: evalData.swot?.weaknesses || [],
+              opportunities: evalData.swot?.opportunities || [],
+              threats: evalData.swot?.threats || [],
+              recommendation: evalData.recommendation,
+              ai_scores: evalData.scores,
+              ai_swot: evalData.swot,
+              ai_recommendation: evalData.recommendation,
             }, {
               onConflict: 'shortlist_id,study_id'
             });
 
           if (error) {
-            console.error('Error inserting evaluation:', error);
+            console.error('Error inserting technology evaluation:', error);
+          } else {
+            console.log(`[study-webhook] Technology evaluated: ${evalData.name} - Score: ${evalData.overall_score}`);
           }
         }
 
@@ -482,10 +532,74 @@ serve(async (req) => {
           study_id,
           level: 'info',
           phase: 'evaluation',
-          message: 'Evaluación completada por IA',
-          details: data
+          message: `Tecnología evaluada: ${evalData?.name || 'Sin nombre'} - Puntuación: ${evalData?.overall_score || 'N/A'}`,
+          details: evalData
         });
         break;
+      }
+
+      // Railway sends 'evaluation_complete' (without 'd')
+      case 'evaluation_complete':
+      case 'evaluation_completed': {
+        const completeData = data || payload;
+        const evaluationsCount = completeData?.evaluations_count || completeData?.count || 0;
+        
+        // Handle legacy format with evaluation object
+        if (completeData?.evaluation) {
+          const { error } = await supabase
+            .from('study_evaluations')
+            .upsert({
+              study_id,
+              shortlist_id: completeData.evaluation.shortlist_id,
+              session_id,
+              ai_generated: true,
+              ai_analyzed_at: new Date().toISOString(),
+              ai_scores: completeData.evaluation.scores,
+              ai_swot: completeData.evaluation.swot,
+              ai_recommendation: completeData.evaluation.recommendation,
+              ai_analysis_json: completeData.evaluation.full_analysis,
+              ai_external_data: completeData.evaluation.external_data,
+              ai_kb_insights: completeData.evaluation.kb_insights,
+              overall_score: completeData.evaluation.overall_score,
+              trl_score: completeData.evaluation.scores?.trl,
+              cost_score: completeData.evaluation.scores?.cost,
+              scalability_score: completeData.evaluation.scores?.scalability,
+              context_fit_score: completeData.evaluation.scores?.context_fit,
+              innovation_potential_score: completeData.evaluation.scores?.innovation,
+              strengths: completeData.evaluation.swot?.strengths || [],
+              weaknesses: completeData.evaluation.swot?.weaknesses || [],
+              opportunities: completeData.evaluation.swot?.opportunities || [],
+              threats: completeData.evaluation.swot?.threats || [],
+              recommendation: completeData.evaluation.recommendation
+            }, {
+              onConflict: 'shortlist_id,study_id'
+            });
+
+          if (error) {
+            console.error('Error inserting evaluation:', error);
+          }
+        }
+        
+        await supabase
+          .from('study_sessions')
+          .update({ 
+            status: 'completed',
+            progress_percentage: 100,
+            completed_at: new Date().toISOString(),
+            summary: completeData?.summary || { evaluations_count: evaluationsCount }
+          })
+          .eq('id', session_id);
+
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: 'info',
+          phase: 'evaluation',
+          message: `Evaluación automática completada - ${evaluationsCount} tecnologías evaluadas`,
+          details: completeData
+        });
+        break;
+      }
 
       case 'error':
         const isCritical = data?.critical === true;

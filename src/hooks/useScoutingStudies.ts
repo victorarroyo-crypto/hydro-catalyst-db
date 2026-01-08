@@ -113,6 +113,7 @@ export interface StudyEvaluation {
   competitive_disadvantages: string[] | null;
   market_position: string | null;
   benchmark_notes: string | null;
+  ai_generated: boolean;
   ai_analysis_json: Record<string, unknown> | null;
   ai_external_data: Record<string, unknown> | null;
   ai_kb_insights: Record<string, unknown> | null;
