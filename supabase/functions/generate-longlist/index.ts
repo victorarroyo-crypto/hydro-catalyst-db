@@ -20,6 +20,25 @@ interface LonglistRequest {
   trigger_railway?: boolean; // Whether to also trigger Railway web search
 }
 
+// Response from search_technologies_by_keywords RPC
+interface TechnologySearchResult {
+  id: string;
+  nombre: string;
+  proveedor: string | null;
+  pais: string | null;
+  trl: number | null;
+  descripcion: string | null;
+  aplicacion: string | null;
+  tipo: string | null;
+  subcategoria: string | null;
+  web: string | null;
+  ventaja: string | null;
+  innovacion: string | null;
+  casos_referencia: string | null;
+  sector: string | null;
+  relevance_score: number;
+}
+
 // Extract keywords from problem statement using Lovable AI
 async function extractKeywords(problemStatement: string, context?: string, objectives?: string[]): Promise<string[]> {
   const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
@@ -103,41 +122,6 @@ Responde SOLO con un JSON array de strings, sin explicación:
       .filter(w => w.length > 3)
       .slice(0, 10);
   }
-}
-
-// Build PostgREST filter for searching technologies
-function buildSearchFilter(keywords: string[]): string {
-  // PostgREST .or() syntax:
-  //   col.ilike.%value%,othercol.ilike.%value%
-  // If column names contain spaces/special chars, wrap with double-quotes.
-  const columns = [
-    '"Descripción técnica breve"',
-    '"Aplicación principal"',
-    '"Nombre de la tecnología"',
-    '"Sector y subsector"',
-    '"Proveedor / Empresa"',
-    '"Tipo de tecnología"',
-  ];
-
-  const sanitize = (s: string) =>
-    s
-      .replace(/[,%]/g, " ") // avoid breaking PostgREST syntax
-      .replace(/[_]/g, " ") // '_' is a wildcard in LIKE
-      .replace(/[()]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-  const conditions: string[] = [];
-  for (const kw of keywords) {
-    const term = sanitize(kw);
-    if (!term) continue;
-
-    for (const col of columns) {
-      conditions.push(`${col}.ilike.%${term}%`);
-    }
-  }
-
-  return conditions.join(',');
 }
 
 serve(async (req) => {
@@ -224,30 +208,13 @@ serve(async (req) => {
     const keywords = await extractKeywords(problem_statement, context, objectives);
     console.log(`[generate-longlist] Extracted ${keywords.length} keywords:`, keywords);
 
-    // Step 2: Search technologies in database
-    const searchConditions = buildSearchFilter(keywords);
-    
+    // Step 2: Search technologies using RPC (handles special column names properly)
     const { data: technologies, error: searchError } = await supabase
-      .from('technologies')
-      .select(`
-        id,
-        "Nombre de la tecnología",
-        "Proveedor / Empresa",
-        "País de origen",
-        "Grado de madurez (TRL)",
-        "Descripción técnica breve",
-        "Aplicación principal",
-        "Tipo de tecnología",
-        "Subcategoría",
-        "Web de la empresa",
-        "Ventaja competitiva clave",
-        status
-      `)
-      .gte('"Grado de madurez (TRL)"', min_trl)
-      .eq('status', 'active')
-      .or(searchConditions)
-      .order('"Grado de madurez (TRL)"', { ascending: false })
-      .limit(max_results);
+      .rpc('search_technologies_by_keywords', {
+        p_keywords: keywords,
+        p_min_trl: min_trl,
+        p_max_results: max_results
+      });
 
     if (searchError) {
       console.error('[generate-longlist] Search error:', searchError);
@@ -265,44 +232,27 @@ serve(async (req) => {
     const existingIds = new Set(existingItems?.map(i => i.existing_technology_id).filter(Boolean));
     const existingNames = new Set(existingItems?.map(i => i.technology_name?.toLowerCase()).filter(Boolean));
 
-    // Step 4: Calculate relevance score for each technology
-    const scoredTechnologies = (technologies || [])
-      .filter(tech => !existingIds.has(tech.id) && !existingNames.has(tech["Nombre de la tecnología"]?.toLowerCase()))
-      .map(tech => {
-        let score = 50; // Base score
-        
-        // Score based on TRL
-        const trl = tech["Grado de madurez (TRL)"] || 5;
-        score += (trl - 5) * 5; // Higher TRL = higher score
-        
-        // Score based on keyword matches
-        const techText = [
-          tech["Nombre de la tecnología"],
-          tech["Descripción técnica breve"],
-          tech["Aplicación principal"],
-          tech["Tipo de tecnología"]
-        ].join(' ').toLowerCase();
-        
-        const matchedKeywords = keywords.filter(kw => techText.includes(kw.toLowerCase()));
-        score += matchedKeywords.length * 10;
-        
-        return { ...tech, relevance_score: Math.min(100, score) };
-      })
-      .sort((a, b) => b.relevance_score - a.relevance_score);
+    // Step 4: Filter duplicates (RPC already calculates relevance_score)
+    const techResults = (technologies || []) as TechnologySearchResult[];
+    const scoredTechnologies = techResults
+      .filter((tech: TechnologySearchResult) => !existingIds.has(tech.id) && !existingNames.has(tech.nombre?.toLowerCase()));
 
     // Step 5: Insert into study_longlist
-    const insertData = scoredTechnologies.map(tech => ({
+    const insertData = scoredTechnologies.map((tech: TechnologySearchResult) => ({
       study_id,
       existing_technology_id: tech.id,
-      technology_name: tech["Nombre de la tecnología"],
-      provider: tech["Proveedor / Empresa"],
-      country: tech["País de origen"],
-      trl: tech["Grado de madurez (TRL)"],
-      brief_description: tech["Descripción técnica breve"],
-      web: tech["Web de la empresa"],
-      type_suggested: tech["Tipo de tecnología"],
-      subcategory_suggested: tech["Subcategoría"],
-      ventaja_competitiva: tech["Ventaja competitiva clave"],
+      technology_name: tech.nombre,
+      provider: tech.proveedor,
+      country: tech.pais,
+      trl: tech.trl,
+      brief_description: tech.descripcion,
+      web: tech.web,
+      type_suggested: tech.tipo,
+      subcategory_suggested: tech.subcategoria,
+      ventaja_competitiva: tech.ventaja,
+      innovacion: tech.innovacion,
+      casos_referencia: tech.casos_referencia,
+      sector: tech.sector,
       source: 'database',
       confidence_score: tech.relevance_score / 100,
       inclusion_reason: `Coincidencia con keywords: ${keywords.slice(0, 3).join(', ')}`,

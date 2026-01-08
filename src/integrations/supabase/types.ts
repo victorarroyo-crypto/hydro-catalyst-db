@@ -1989,6 +1989,30 @@ export type Database = {
         Args: { category?: string; reason: string; scouting_id: string }
         Returns: string
       }
+      search_technologies_by_keywords: {
+        Args: {
+          p_keywords: string[]
+          p_max_results?: number
+          p_min_trl?: number
+        }
+        Returns: {
+          aplicacion: string
+          casos_referencia: string
+          descripcion: string
+          id: string
+          innovacion: string
+          nombre: string
+          pais: string
+          proveedor: string
+          relevance_score: number
+          sector: string
+          subcategoria: string
+          tipo: string
+          trl: number
+          ventaja: string
+          web: string
+        }[]
+      }
     }
     Enums: {
       app_role:
