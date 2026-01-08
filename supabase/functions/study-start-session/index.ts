@@ -69,6 +69,29 @@ serve(async (req) => {
       });
     }
 
+    // Map session_type to Railway endpoint
+    const endpointMap: Record<string, string> = {
+      'research': 'research',
+      'solutions': 'solutions',
+      'shortlist': 'web-scouting',  // Railway uses web-scouting for longlist
+      'evaluation': 'evaluate',      // Railway uses evaluate, not evaluation
+    };
+
+    const railwayEndpoint = endpointMap[session_type];
+
+    if (!railwayEndpoint) {
+      console.error(`No endpoint mapping for session_type: ${session_type}`);
+      return new Response(JSON.stringify({ 
+        error: `Unsupported session type: ${session_type}`,
+        valid_types: Object.keys(endpointMap)
+      }), { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
+    console.log(`Mapped session_type "${session_type}" to Railway endpoint: /api/study/${railwayEndpoint}`);
+
     // Prevent duplicate active sessions (e.g., Railway already running a job)
     const { data: existingSession, error: existingSessionError } = await supabase
       .from('study_sessions')
@@ -260,7 +283,7 @@ serve(async (req) => {
 
     let railwayResponse: Response;
     try {
-      railwayResponse = await fetch(`${railwayApiUrl}/api/study/${session_type}`, {
+      railwayResponse = await fetch(`${railwayApiUrl}/api/study/${railwayEndpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
