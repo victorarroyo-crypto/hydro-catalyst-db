@@ -457,43 +457,122 @@ serve(async (req) => {
 
       // session_complete is now handled above with research_complete
 
-      // NEW: technology_extracted - Inserts extracted technologies directly into study_longlist
-      case 'technology_extracted': {
+      // NEW: technology_extracted or technology_found - Inserts extracted technologies directly into study_longlist
+      case 'technology_extracted':
+      case 'technology_found': {
         const tech = data?.technology || data;
         
         const { error } = await supabase.from('study_longlist').insert({
           study_id,
           session_id,
-          technology_name: tech?.name || 'Unknown Technology',
+          technology_name: tech?.name || tech?.technology_name || 'Unknown Technology',
           provider: tech?.provider || '',
           country: tech?.country || '',
-          web: tech?.web || tech?.website || '',
+          web: tech?.web || tech?.website || tech?.source_url || '',
           trl: tech?.trl_estimated || tech?.trl || 7,
           type_suggested: tech?.type_suggested || tech?.technology_type || '',
           subcategory_suggested: tech?.subcategory_suggested || tech?.subcategory || '',
-          brief_description: tech?.description || '',
+          brief_description: tech?.description || tech?.brief_description || '',
           applications: Array.isArray(tech?.applications) ? tech.applications : [],
           source: 'ai_extracted',
           source_research_id: tech?.source_research_id || null,
           confidence_score: tech?.confidence_score || 0.8,
           already_in_db: tech?.already_in_db || false,
           existing_technology_id: tech?.existing_technology_id || null,
-          inclusion_reason: `AI-extracted with ${Math.round((tech?.confidence_score || 0.8) * 100)}% confidence`,
+          inclusion_reason: tech?.inclusion_reason || `AI-extracted with ${Math.round((tech?.confidence_score || 0.8) * 100)}% confidence`,
         });
 
         if (error) {
           console.error('Error inserting extracted technology:', error);
         } else {
-          console.log(`[study-webhook] Technology extracted: ${tech?.name} by ${tech?.provider}`);
+          console.log(`[study-webhook] Technology found/extracted: ${tech?.name || tech?.technology_name} by ${tech?.provider}`);
         }
 
         await supabase.from('study_session_logs').insert({
           session_id,
           study_id,
           level: 'info',
-          phase: 'extraction',
-          message: `Tecnología extraída: ${tech?.name || 'Sin nombre'}`,
+          phase: 'longlist',
+          message: `Tecnología encontrada: ${tech?.name || tech?.technology_name || 'Sin nombre'}`,
           details: data
+        });
+        break;
+      }
+
+      // Longlist progress and complete events
+      case 'longlist_progress': {
+        const progressData = data || payload;
+        const progressValue = progressData?.progress ?? progressData?.percentage ?? 0;
+        const progressMessage = progressData?.message || progressData?.status || `Progreso longlist: ${progressValue}%`;
+        
+        await supabase
+          .from('study_sessions')
+          .update({ 
+            status: 'running',
+            progress_percentage: progressValue,
+            current_phase: 'longlist',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', session_id);
+
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: 'info',
+          phase: 'longlist',
+          message: progressMessage,
+          details: progressData
+        });
+        break;
+      }
+
+      case 'longlist_complete': {
+        const completeData = data || payload;
+        const technologies = completeData?.technologies || completeData?.results || [];
+        
+        // Insert any technologies that came with the complete event
+        for (const tech of technologies) {
+          const name = tech?.name || tech?.technology_name || '';
+          if (name) {
+            const { error } = await supabase
+              .from('study_longlist')
+              .insert({
+                study_id,
+                session_id,
+                technology_name: name,
+                provider: tech?.provider || '',
+                country: tech?.country || '',
+                web: tech?.web || tech?.website || '',
+                trl: tech?.trl || 7,
+                brief_description: tech?.description || '',
+                applications: Array.isArray(tech?.applications) ? tech.applications : [],
+                source: 'ai_extracted',
+                confidence_score: tech?.confidence_score || 0.8,
+                inclusion_reason: tech?.inclusion_reason || 'Added from longlist complete'
+              });
+            if (error) {
+              console.error('Error inserting technology from longlist_complete:', error);
+            }
+          }
+        }
+        
+        await supabase
+          .from('study_sessions')
+          .update({ 
+            status: 'completed',
+            progress_percentage: 100,
+            completed_at: new Date().toISOString(),
+            summary: completeData?.summary || { technologies_count: technologies.length }
+          })
+          .eq('id', session_id);
+
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: 'info',
+          phase: 'longlist',
+          message: `Longlist completada - ${technologies.length || completeData?.count || 0} tecnologías encontradas`,
+          details: completeData
         });
         break;
       }
