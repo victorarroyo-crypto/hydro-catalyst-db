@@ -1,15 +1,12 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStudySolutions, useAddSolution, ScoutingStudy, StudySolution } from '@/hooks/useScoutingStudies';
 import { useAIStudySession } from '@/hooks/useAIStudySession';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
@@ -35,185 +32,18 @@ import {
   Clock,
   DollarSign,
   Loader2,
-  Cpu,
   ExternalLink,
-  Database,
-  CheckCircle2,
   Link2,
   Info,
   Building2,
   FileText,
   Target,
-  Trash2,
 } from 'lucide-react';
 import AISessionPanel from './AISessionPanel';
-import ExtractedTechDetailModal from './ExtractedTechDetailModal';
-import { toast } from 'sonner';
-import { Eye } from 'lucide-react';
 
 interface Props {
   studyId: string;
   study: ScoutingStudy;
-}
-
-interface ExtractedTechnology {
-  id: string;
-  study_id: string;
-  technology_name: string;
-  provider: string | null;
-  country: string | null;
-  web: string | null;
-  trl: number | null;
-  type_suggested: string | null;
-  subcategory_suggested: string | null;
-  brief_description: string | null;
-  applications: string[] | null;
-  confidence_score: number | null;
-  already_in_db: boolean | null;
-  existing_technology_id: string | null;
-  inclusion_reason: string | null;
-  source: string | null;
-  added_at: string;
-}
-
-// Tech card with detail modal
-function TechCard({ 
-  tech, 
-  onSendToScoutingQueue,
-  onDelete,
-}: { 
-  tech: ExtractedTechnology; 
-  onSendToScoutingQueue: (tech: ExtractedTechnology) => void;
-  onDelete: (tech: ExtractedTechnology) => void;
-}) {
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const isLinkedToDB = tech.already_in_db || !!tech.existing_technology_id;
-  
-  return (
-    <>
-      <Card className="flex flex-col hover:border-primary/50 transition-colors">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <CardTitle className="text-base truncate">{tech.technology_name}</CardTitle>
-              <CardDescription className="truncate">
-                {tech.provider} {tech.country && `• ${tech.country}`}
-              </CardDescription>
-            </div>
-            <div className="flex flex-col gap-1 items-end">
-              <Badge variant={(tech.confidence_score || 0) > 0.8 ? "default" : "secondary"}>
-                {Math.round((tech.confidence_score || 0.8) * 100)}% conf
-              </Badge>
-              {tech.already_in_db && (
-                <Badge variant="outline" className="gap-1 text-green-600 border-green-600">
-                  <CheckCircle2 className="w-3 h-3" />
-                  En BD
-                </Badge>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 space-y-3">
-          {tech.brief_description && (
-            <p className="text-sm text-muted-foreground line-clamp-3">
-              {tech.brief_description}
-            </p>
-          )}
-          
-          <div className="flex flex-wrap gap-1.5">
-            {tech.trl && (
-              <Badge variant="outline">TRL {tech.trl}</Badge>
-            )}
-            {tech.type_suggested && (
-              <Badge variant="secondary" className="truncate max-w-[120px]">
-                {tech.type_suggested}
-              </Badge>
-            )}
-            {tech.subcategory_suggested && (
-              <Badge variant="secondary" className="truncate max-w-[120px]">
-                {tech.subcategory_suggested}
-              </Badge>
-            )}
-          </div>
-          
-          {tech.applications && tech.applications.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1">Aplicaciones:</p>
-              <div className="flex flex-wrap gap-1">
-                {tech.applications.slice(0, 3).map((app, i) => (
-                  <Badge key={i} variant="outline" className="text-xs">
-                    {app}
-                  </Badge>
-                ))}
-                {tech.applications.length > 3 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{tech.applications.length - 3}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          )}
-        </CardContent>
-        
-        <div className="px-6 pb-4 pt-2 flex gap-2 mt-auto">
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => setIsDetailOpen(true)}
-          >
-            <Eye className="w-4 h-4 mr-1" />
-            Ver ficha
-          </Button>
-          {tech.already_in_db && tech.existing_technology_id ? (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="flex-1"
-              onClick={() => window.open(`/technologies?id=${tech.existing_technology_id}`, '_blank')}
-            >
-              <Database className="w-4 h-4 mr-1" />
-              Ver en BD
-            </Button>
-          ) : (
-            <Button 
-              variant="default" 
-              size="sm" 
-              className="flex-1"
-              onClick={() => onSendToScoutingQueue(tech)}
-            >
-              <Database className="w-4 h-4 mr-1" />
-              Añadir a BD
-            </Button>
-          )}
-          {tech.web && (
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => window.open(tech.web!, '_blank')}
-            >
-              <ExternalLink className="w-4 h-4" />
-            </Button>
-          )}
-          {/* Delete button - always visible */}
-          <Button 
-            variant="ghost" 
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={() => onDelete(tech)}
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      </Card>
-      
-      <ExtractedTechDetailModal
-        technology={tech}
-        open={isDetailOpen}
-        onOpenChange={setIsDetailOpen}
-        onSendToScoutingQueue={onSendToScoutingQueue}
-      />
-    </>
-  );
 }
 
 // Extended solution type with new fields
@@ -502,7 +332,6 @@ function SolutionCard({ solution }: { solution: ExtendedSolution }) {
 
 
 export default function StudyPhase2Solutions({ studyId, study }: Props) {
-  const queryClient = useQueryClient();
   const { data: solutions, isLoading } = useStudySolutions(studyId);
   const addSolution = useAddSolution();
   const aiSession = useAIStudySession(studyId);
@@ -519,22 +348,8 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
     priority: 0,
   });
 
-  // Query for extracted technologies from study_longlist
-  const { data: extractedTechnologies, isLoading: loadingTechs } = useQuery({
-    queryKey: ['study-extracted-technologies', studyId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('study_longlist')
-        .select('*')
-        .eq('study_id', studyId)
-        .eq('source', 'ai_extracted')
-        .order('added_at', { ascending: false });
-      
-      if (error) throw error;
-      return data as ExtractedTechnology[];
-    },
-    enabled: !!studyId,
-  });
+  // Technologies are now managed exclusively in Phase 3 (Longlist)
+  // Removed extracted technologies query from Phase 2 to avoid confusion
 
   const handleStartAISolutions = () => {
     aiSession.startSession('solutions', {
@@ -567,86 +382,7 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
     });
   };
 
-  const handleSendToScoutingQueue = async (tech: ExtractedTechnology) => {
-    try {
-      // Check if already in database
-      if (tech.existing_technology_id || tech.already_in_db) {
-        toast.info('Esta tecnología ya está vinculada a la base de datos');
-        return;
-      }
-
-      // Get current date for scouting date
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Insert directly into technologies with pending review status
-      const extendedTech = tech as any;
-      const { data: insertedTech, error } = await supabase.from('technologies').insert({
-        'Nombre de la tecnología': tech.technology_name,
-        'Proveedor / Empresa': tech.provider || null,
-        'País de origen': tech.country || null,
-        'Paises donde actua': extendedTech.paises_actua || null,
-        'Web de la empresa': tech.web || null,
-        'Email de contacto': extendedTech.email || null,
-        'Descripción técnica breve': tech.brief_description || null,
-        'Tipo de tecnología': tech.type_suggested || 'Por clasificar',
-        'Subcategoría': tech.subcategory_suggested || null,
-        'Sector y subsector': extendedTech.sector || null,
-        'Aplicación principal': tech.applications?.length ? tech.applications.join(', ') : null,
-        'Ventaja competitiva clave': extendedTech.ventaja_competitiva || null,
-        'Porque es innovadora': extendedTech.innovacion || null,
-        'Casos de referencia': extendedTech.casos_referencia || null,
-        'Comentarios del analista': `Extraída del estudio con ${Math.round((tech.confidence_score || 0.8) * 100)}% confianza. Razón: ${tech.inclusion_reason || 'N/A'}`,
-        'Fecha de scouting': today,
-        'Estado del seguimiento': 'Pendiente',
-        'Grado de madurez (TRL)': tech.trl || null,
-        status: 'en_revision',
-        review_status: 'pending',
-        quality_score: 0,
-      }).select('id').single();
-      
-      if (error) throw error;
-
-      // Update the longlist item to link to the new technology
-      if (insertedTech?.id) {
-        await supabase
-          .from('study_longlist')
-          .update({
-            existing_technology_id: insertedTech.id,
-            already_in_db: true,
-          })
-          .eq('id', tech.id);
-      }
-
-      // Invalidate queries to refresh the UI
-      queryClient.invalidateQueries({ queryKey: ['study-extracted-technologies', studyId] });
-      queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
-      
-      toast.success(`${tech.technology_name} añadida a la base de datos (pendiente de revisión)`);
-    } catch (error) {
-      console.error('Error adding to technologies:', error);
-      toast.error('Error al añadir a la base de datos');
-    }
-  };
-
-  const handleDeleteTechnology = async (tech: ExtractedTechnology) => {
-    try {
-      const { error } = await supabase
-        .from('study_longlist')
-        .delete()
-        .eq('id', tech.id);
-      
-      if (error) throw error;
-
-      // Invalidate both queries since they use the same table
-      queryClient.invalidateQueries({ queryKey: ['study-extracted-technologies', studyId] });
-      queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
-      
-      toast.success(`${tech.technology_name} eliminada del estudio`);
-    } catch (error) {
-      console.error('Error deleting technology:', error);
-      toast.error('Error al eliminar la tecnología');
-    }
-  };
+  // Technology management functions moved to Phase 3 (StudyPhase3Longlist)
 
   if (isLoading) {
     return (
@@ -684,19 +420,14 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
         description="La IA analiza el problema y sugiere categorías de soluciones"
       />
 
-      {/* Tabs for Solutions and Extracted Technologies */}
-      <Tabs defaultValue="solutions" className="w-full">
-        <div className="flex items-center justify-between mb-4">
-          <TabsList>
-            <TabsTrigger value="solutions" className="gap-2">
-              <Lightbulb className="w-4 h-4" />
-              Soluciones Genéricas ({solutions?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="technologies" className="gap-2">
-              <Cpu className="w-4 h-4" />
-              Tecnologías Identificadas ({extractedTechnologies?.length || 0})
-            </TabsTrigger>
-          </TabsList>
+      {/* Solutions Section - No tabs needed now */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold">Soluciones Genéricas</h2>
+          <p className="text-sm text-muted-foreground">
+            Categorías de soluciones potenciales para el problema
+          </p>
+        </div>
 
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
@@ -861,88 +592,43 @@ export default function StudyPhase2Solutions({ studyId, study }: Props) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+      </div>
+
+      {/* Solutions List */}
+      {solutions?.length === 0 ? (
+        <Card className="p-8 text-center">
+          <Lightbulb className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium mb-2">Sin soluciones definidas</h3>
+          <p className="text-muted-foreground mb-4">
+            Define categorías de soluciones genéricas basadas en la investigación
+          </p>
+          <Button onClick={() => setIsAddOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Añadir Primera Solución
+          </Button>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(solutionsByCategory).map(([category, categorySolutions]) => (
+            <div key={category}>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                {category}
+              </h3>
+              <div className="grid gap-4 md:grid-cols-2">
+                {categorySolutions.map((solution) => {
+                  const extSol = solution as ExtendedSolution;
+                  return (
+                    <SolutionCard 
+                      key={solution.id} 
+                      solution={extSol} 
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
-
-        {/* Tab: Generic Solutions */}
-        <TabsContent value="solutions" className="mt-0">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold">Soluciones Genéricas</h2>
-            <p className="text-sm text-muted-foreground">
-              Categorías de soluciones potenciales para el problema
-            </p>
-          </div>
-
-          {solutions?.length === 0 ? (
-            <Card className="p-8 text-center">
-              <Lightbulb className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">Sin soluciones definidas</h3>
-              <p className="text-muted-foreground mb-4">
-                Define categorías de soluciones genéricas basadas en la investigación
-              </p>
-              <Button onClick={() => setIsAddOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Añadir Primera Solución
-              </Button>
-            </Card>
-          ) : (
-            <div className="space-y-6">
-              {Object.entries(solutionsByCategory).map(([category, categorySolutions]) => (
-                <div key={category}>
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                    {category}
-                  </h3>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {categorySolutions.map((solution) => {
-                      const extSol = solution as ExtendedSolution;
-                      return (
-                        <SolutionCard 
-                          key={solution.id} 
-                          solution={extSol} 
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Tab: Extracted Technologies */}
-        <TabsContent value="technologies" className="mt-0">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold">Tecnologías Identificadas</h2>
-            <p className="text-sm text-muted-foreground">
-              Tecnologías específicas extraídas automáticamente por la IA durante la investigación
-            </p>
-          </div>
-
-          {loadingTechs ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : !extractedTechnologies || extractedTechnologies.length === 0 ? (
-            <Card className="p-8 text-center">
-              <Cpu className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No se han extraído tecnologías aún</h3>
-              <p className="text-muted-foreground">
-                Ejecuta la sesión de IA en Fase 1 para identificar tecnologías automáticamente
-              </p>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {extractedTechnologies.map((tech) => (
-                <TechCard 
-                  key={tech.id} 
-                  tech={tech} 
-                  onSendToScoutingQueue={handleSendToScoutingQueue}
-                  onDelete={handleDeleteTechnology}
-                />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+      )}
     </div>
   );
 }
