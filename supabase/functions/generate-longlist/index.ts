@@ -105,21 +105,29 @@ Responde SOLO con un JSON array de strings, sin explicación:
   }
 }
 
-// Build SQL query for searching technologies
-function buildSearchQuery(keywords: string[], minTrl: number = 7): string {
-  const conditions = keywords.map(kw => {
-    const escaped = kw.replace(/'/g, "''");
-    return `(
-      "Descripción técnica breve" ILIKE '%${escaped}%'
-      OR "Aplicación principal" ILIKE '%${escaped}%'
-      OR "Nombre de la tecnología" ILIKE '%${escaped}%'
-      OR "Sector y subsector" ILIKE '%${escaped}%'
-      OR "Proveedor / Empresa" ILIKE '%${escaped}%'
-      OR "Tipo de tecnología" ILIKE '%${escaped}%'
-    )`;
-  }).join(' OR ');
-
-  return conditions;
+// Build PostgREST filter for searching technologies
+function buildSearchFilter(keywords: string[]): string {
+  // PostgREST .or() syntax: column.ilike.%value%,column2.ilike.%value%
+  const columns = [
+    'Descripción técnica breve',
+    'Aplicación principal',
+    'Nombre de la tecnología',
+    'Sector y subsector',
+    'Proveedor / Empresa',
+    'Tipo de tecnología'
+  ];
+  
+  const conditions: string[] = [];
+  
+  for (const kw of keywords) {
+    for (const col of columns) {
+      // Escape special characters for PostgREST
+      const escaped = kw.replace(/[,()]/g, '');
+      conditions.push(`${col}.ilike.%${escaped}%`);
+    }
+  }
+  
+  return conditions.join(',');
 }
 
 serve(async (req) => {
@@ -207,7 +215,7 @@ serve(async (req) => {
     console.log(`[generate-longlist] Extracted ${keywords.length} keywords:`, keywords);
 
     // Step 2: Search technologies in database
-    const searchConditions = buildSearchQuery(keywords, min_trl);
+    const searchConditions = buildSearchFilter(keywords);
     
     const { data: technologies, error: searchError } = await supabase
       .from('technologies')
