@@ -493,29 +493,52 @@ serve(async (req) => {
       case 'technology_evaluated': {
         const evalData = data || payload;
         
-        if (evalData?.shortlist_id) {
+        // Railway puede enviar evaluation_id o shortlist_id
+        const shortlistId = evalData?.shortlist_id || evalData?.evaluation_id;
+        
+        // Los scores pueden venir directamente o dentro de evaluation
+        const evaluation = evalData?.evaluation || evalData;
+        const overallScore = evaluation?.overall_score || evalData?.overall_score;
+        
+        // Los scores individuales pueden estar en scores o criteria_scores
+        const scores = evaluation?.scores || evaluation?.criteria_scores || {};
+        const trlScore = scores?.trl?.score ?? scores?.trl;
+        const costScore = scores?.cost?.score ?? scores?.cost ?? scores?.cost_capex?.score;
+        const scalabilityScore = scores?.scalability?.score ?? scores?.scalability;
+        const contextFitScore = scores?.context_fit?.score ?? scores?.context_fit;
+        const innovationScore = scores?.innovation?.score ?? scores?.innovation;
+        
+        // SWOT puede venir en evaluation.swot o evalData.swot
+        const swot = evaluation?.swot || evalData?.swot || {};
+        
+        // Nombre de la tecnología
+        const techName = evalData?.technology_name || evalData?.name || 'Sin nombre';
+        
+        console.log(`[study-webhook] Processing technology_evaluated: ${techName}, shortlistId: ${shortlistId}`);
+        
+        if (shortlistId) {
           const { error } = await supabase
             .from('study_evaluations')
             .upsert({
               study_id,
-              shortlist_id: evalData.shortlist_id,
+              shortlist_id: shortlistId,
               session_id,
               ai_generated: true,
               ai_analyzed_at: new Date().toISOString(),
-              overall_score: evalData.overall_score,
-              trl_score: evalData.scores?.trl,
-              cost_score: evalData.scores?.cost,
-              scalability_score: evalData.scores?.scalability,
-              context_fit_score: evalData.scores?.context_fit,
-              innovation_potential_score: evalData.scores?.innovation,
-              strengths: evalData.swot?.strengths || [],
-              weaknesses: evalData.swot?.weaknesses || [],
-              opportunities: evalData.swot?.opportunities || [],
-              threats: evalData.swot?.threats || [],
-              recommendation: evalData.recommendation,
-              ai_scores: evalData.scores,
-              ai_swot: evalData.swot,
-              ai_recommendation: evalData.recommendation,
+              overall_score: overallScore,
+              trl_score: trlScore,
+              cost_score: costScore,
+              scalability_score: scalabilityScore,
+              context_fit_score: contextFitScore,
+              innovation_potential_score: innovationScore,
+              strengths: swot?.strengths || [],
+              weaknesses: swot?.weaknesses || [],
+              opportunities: swot?.opportunities || [],
+              threats: swot?.threats || [],
+              recommendation: evaluation?.recommendation || evalData?.recommendation,
+              ai_scores: scores,
+              ai_swot: swot,
+              ai_recommendation: evaluation?.recommendation || evalData?.recommendation,
             }, {
               onConflict: 'shortlist_id,study_id'
             });
@@ -523,8 +546,10 @@ serve(async (req) => {
           if (error) {
             console.error('Error inserting technology evaluation:', error);
           } else {
-            console.log(`[study-webhook] Technology evaluated: ${evalData.name} - Score: ${evalData.overall_score}`);
+            console.log(`[study-webhook] Technology evaluated successfully: ${techName} - Score: ${overallScore}`);
           }
+        } else {
+          console.warn(`[study-webhook] No shortlist_id found for technology: ${techName}`);
         }
 
         await supabase.from('study_session_logs').insert({
@@ -532,7 +557,7 @@ serve(async (req) => {
           study_id,
           level: 'info',
           phase: 'evaluation',
-          message: `Tecnología evaluada: ${evalData?.name || 'Sin nombre'} - Puntuación: ${evalData?.overall_score || 'N/A'}`,
+          message: `Tecnología evaluada: ${techName} - Puntuación: ${overallScore || 'N/A'}`,
           details: evalData
         });
         break;
@@ -542,7 +567,10 @@ serve(async (req) => {
       case 'evaluation_complete':
       case 'evaluation_completed': {
         const completeData = data || payload;
-        const evaluationsCount = completeData?.evaluations_count || completeData?.count || 0;
+        const summary = completeData?.summary || {};
+        const evaluationsCount = completeData?.evaluations_count || completeData?.count || summary?.evaluations_count || 0;
+        
+        console.log(`[study-webhook] Processing evaluation_complete, summary:`, JSON.stringify(summary).substring(0, 500));
         
         // Handle legacy format with evaluation object
         if (completeData?.evaluation) {
@@ -580,13 +608,40 @@ serve(async (req) => {
           }
         }
         
+        // Si hay un informe en el summary, guardarlo en study_reports
+        if (summary?.report_summary || summary?.executive_summary) {
+          const reportTitle = `Informe de Evaluación IA - ${new Date().toLocaleDateString('es-ES')}`;
+          const ranking = summary?.ranking || [];
+          
+          const { error: reportError } = await supabase
+            .from('study_reports')
+            .insert({
+              study_id,
+              title: reportTitle,
+              generated_by: 'ai',
+              executive_summary: summary.report_summary || summary.executive_summary || '',
+              recommendations: summary.primary_recommendation || 
+                (Array.isArray(summary.alternative_options) ? summary.alternative_options.join('\n\n') : summary.alternative_options) || '',
+              technology_comparison: ranking.length > 0 ? 
+                ranking.map((r: any, i: number) => `${i+1}. ${r.name || r.technology_name} - Puntuación: ${r.overall_score || r.score}`).join('\n') : '',
+              conclusions: summary.conclusions || '',
+              methodology: 'Evaluación automatizada mediante IA con análisis multi-criterio',
+            });
+          
+          if (reportError) {
+            console.error('Error creating evaluation report:', reportError);
+          } else {
+            console.log('[study-webhook] Evaluation report saved to study_reports');
+          }
+        }
+        
         await supabase
           .from('study_sessions')
           .update({ 
             status: 'completed',
             progress_percentage: 100,
             completed_at: new Date().toISOString(),
-            summary: completeData?.summary || { evaluations_count: evaluationsCount }
+            summary: summary || { evaluations_count: evaluationsCount }
           })
           .eq('id', session_id);
 
