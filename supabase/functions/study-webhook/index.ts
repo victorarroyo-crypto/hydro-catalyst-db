@@ -94,6 +94,59 @@ serve(async (req) => {
         break;
       }
 
+      // Railway sends 'solutions_progress' for solutions phase progress
+      case 'solutions_progress': {
+        const progressData = data || payload;
+        const progressValue = progressData?.progress ?? progressData?.percentage ?? 0;
+        const progressMessage = progressData?.message || progressData?.status || `Identificando soluciones: ${progressValue}%`;
+        
+        await supabase
+          .from('study_sessions')
+          .update({ 
+            status: 'running',
+            progress_percentage: progressValue,
+            current_phase: 'solutions',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', session_id);
+
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: 'info',
+          phase: 'solutions',
+          message: progressMessage,
+          details: progressData
+        });
+        break;
+      }
+
+      // Railway sends 'solutions_complete' when solutions phase ends
+      case 'solutions_complete': {
+        const completeData = data || payload;
+        const solutions = completeData?.solutions || [];
+        
+        await supabase
+          .from('study_sessions')
+          .update({ 
+            status: 'completed',
+            progress_percentage: 100,
+            completed_at: new Date().toISOString(),
+            summary: completeData?.summary || { solutions_count: solutions.length }
+          })
+          .eq('id', session_id);
+
+        await supabase.from('study_session_logs').insert({
+          session_id,
+          study_id,
+          level: 'info',
+          phase: 'solutions',
+          message: `Fase de soluciones completada - ${solutions.length || 'varias'} soluciones identificadas`,
+          details: completeData
+        });
+        break;
+      }
+
       // Railway sends 'research_finding' for each finding
       case 'research_finding':
       case 'research_found': {
@@ -318,26 +371,29 @@ serve(async (req) => {
       }
 
       case 'solution_identified':
-        // Insert solution identified by AI
-        if (data?.solution) {
+        // Railway sends data.name directly, not data.solution.name
+        if (data?.name) {
           const { error } = await supabase
             .from('study_solutions')
             .insert({
               study_id,
-              name: data.solution.name,
-              category: data.solution.category,
-              description: data.solution.description,
-              advantages: data.solution.advantages || [],
-              disadvantages: data.solution.disadvantages || [],
-              applicable_contexts: data.solution.applicable_contexts || [],
-              estimated_trl_range: data.solution.trl_range,
-              cost_range: data.solution.cost_range,
-              implementation_time: data.solution.implementation_time,
-              priority: data.solution.priority
+              name: data.name,
+              category: data.category || 'general',
+              description: data.description,
+              advantages: data.advantages || [],
+              disadvantages: data.disadvantages || [],
+              applicable_contexts: data.applicable_contexts || [],
+              estimated_trl_range: data.trl_range || data.estimated_trl_range,
+              key_providers: data.key_providers || [],
+              cost_range: data.cost_range,
+              implementation_time: data.implementation_time,
+              priority: data.priority
             });
 
           if (error) {
             console.error('Error inserting solution:', error);
+          } else {
+            console.log('Solution inserted successfully:', data.name);
           }
         }
 
@@ -346,7 +402,7 @@ serve(async (req) => {
           study_id,
           level: 'info',
           phase: 'solutions',
-          message: `Solución identificada: ${data?.solution?.name || 'Sin nombre'}`,
+          message: `Solución identificada: ${data?.name || 'Sin nombre'}`,
           details: data
         });
         break;
