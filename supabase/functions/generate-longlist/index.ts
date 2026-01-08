@@ -107,26 +107,36 @@ Responde SOLO con un JSON array de strings, sin explicación:
 
 // Build PostgREST filter for searching technologies
 function buildSearchFilter(keywords: string[]): string {
-  // PostgREST .or() syntax: column.ilike.%value%,column2.ilike.%value%
+  // PostgREST .or() syntax:
+  //   col.ilike.%value%,othercol.ilike.%value%
+  // If column names contain spaces/special chars, wrap with double-quotes.
   const columns = [
-    'Descripción técnica breve',
-    'Aplicación principal',
-    'Nombre de la tecnología',
-    'Sector y subsector',
-    'Proveedor / Empresa',
-    'Tipo de tecnología'
+    '"Descripción técnica breve"',
+    '"Aplicación principal"',
+    '"Nombre de la tecnología"',
+    '"Sector y subsector"',
+    '"Proveedor / Empresa"',
+    '"Tipo de tecnología"',
   ];
-  
+
+  const sanitize = (s: string) =>
+    s
+      .replace(/[,%]/g, " ") // avoid breaking PostgREST syntax
+      .replace(/[_]/g, " ") // '_' is a wildcard in LIKE
+      .replace(/[()]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
   const conditions: string[] = [];
-  
   for (const kw of keywords) {
+    const term = sanitize(kw);
+    if (!term) continue;
+
     for (const col of columns) {
-      // Escape special characters for PostgREST
-      const escaped = kw.replace(/[,()]/g, '');
-      conditions.push(`${col}.ilike.%${escaped}%`);
+      conditions.push(`${col}.ilike.%${term}%`);
     }
   }
-  
+
   return conditions.join(',');
 }
 
