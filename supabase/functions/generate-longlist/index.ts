@@ -306,25 +306,24 @@ serve(async (req) => {
             .single();
 
           if (!sessionError && session) {
+            // Build webhook URL for Railway to send results back
+            const webhookUrl = `${supabaseUrl}/functions/v1/study-webhook`;
+            
             const railwayPayload = {
               study_id,
               session_id: session.id,
               problem_statement,
-              context,
-              objectives,
-              constraints,
-              search_focus: keywords.slice(0, 5),
-              min_trl,
-              max_technologies: 20
+              webhook_url: webhookUrl,
+              webhook_secret: webhookSecret
             };
 
-            const response = await fetch(`${railwayApiUrl}/api/study/longlist`, {
+            console.log(`[generate-longlist] Calling Railway at ${railwayApiUrl}/api/study/web-scouting`);
+
+            const response = await fetch(`${railwayApiUrl}/api/study/web-scouting`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'X-Webhook-Secret': webhookSecret,
-                'X-User-Id': userId,
-                'X-User-Roles': userRoles.join(',')
+                'X-Study-Secret': 'wt-study-2026-7f9a3b2c1d8e5f4a'
               },
               body: JSON.stringify(railwayPayload)
             });
