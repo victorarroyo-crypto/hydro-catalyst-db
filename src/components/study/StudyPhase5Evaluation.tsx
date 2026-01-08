@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
+import { Progress } from '@/components/ui/progress';
 import {
   Dialog,
   DialogContent,
@@ -175,6 +176,29 @@ export default function StudyPhase5Evaluation({ studyId, study }: Props) {
         description="Evalúa cada tecnología de la shortlist con análisis SWOT y puntuaciones"
       />
 
+      {/* Detailed Progress Indicator during AI evaluation */}
+      {aiSession.isActive && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+              <div className="flex-1">
+                <p className="font-medium text-blue-900">
+                  Evaluando tecnologías automáticamente...
+                </p>
+                <p className="text-sm text-blue-700">
+                  {aiSession.status || `Progreso: ${aiSession.progress}%`}
+                </p>
+              </div>
+              <Badge variant="outline" className="text-blue-700 border-blue-300">
+                {aiSession.progress}%
+              </Badge>
+            </div>
+            <Progress value={aiSession.progress} className="mt-3 h-2" />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Fase 5: Evaluación Comparativa</h2>
@@ -225,6 +249,12 @@ export default function StudyPhase5Evaluation({ studyId, study }: Props) {
                               <p className="text-2xl font-bold">{evaluation.overall_score?.toFixed(1)}</p>
                               <p className="text-xs text-muted-foreground">Puntuación</p>
                             </div>
+                            {evaluation.ai_generated && (
+                              <Badge variant="secondary" className="gap-1">
+                                <Sparkles className="w-3 h-3" />
+                                IA
+                              </Badge>
+                            )}
                             {recConfig && (
                               <Badge className={`${recConfig.color} text-white`}>
                                 {recConfig.label}
@@ -238,6 +268,7 @@ export default function StudyPhase5Evaluation({ studyId, study }: Props) {
                           variant={evaluation ? 'outline' : 'default'}
                           size="sm"
                           onClick={() => handleOpenEvaluation(item.id)}
+                          disabled={aiSession.isActive}
                         >
                           {evaluation ? 'Editar' : 'Evaluar'}
                         </Button>
