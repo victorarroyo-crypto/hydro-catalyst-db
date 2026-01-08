@@ -6,6 +6,7 @@ import { InviteUsersSection } from '@/components/settings/InviteUsersSection';
 import { AuditLogSection } from '@/components/settings/AuditLogSection';
 import { ExportDataSection } from '@/components/settings/ExportDataSection';
 import { AIModelSettings } from '@/components/settings/AIModelSettings';
+import { DownloadChromeExtension } from '@/components/settings/DownloadChromeExtension';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -1183,6 +1184,9 @@ const Settings: React.FC = () => {
                 </p>
               </CardContent>
             </Card>
+            
+            {/* Chrome Extension Download */}
+            <DownloadChromeExtension />
           </>
         )}
 
