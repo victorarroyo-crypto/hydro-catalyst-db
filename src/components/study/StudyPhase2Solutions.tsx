@@ -334,7 +334,7 @@ function SolutionCard({ solution }: { solution: ExtendedSolution }) {
 export default function StudyPhase2Solutions({ studyId, study }: Props) {
   const { data: solutions, isLoading } = useStudySolutions(studyId);
   const addSolution = useAddSolution();
-  const aiSession = useAIStudySession(studyId);
+  const aiSession = useAIStudySession(studyId, 'solutions');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newSolution, setNewSolution] = useState({
     category: '',

@@ -48,17 +48,24 @@ export function useStudySessions(studyId: string | undefined) {
   });
 }
 
-export function useActiveStudySession(studyId: string | undefined) {
+export function useActiveStudySession(studyId: string | undefined, sessionType?: string) {
   return useQuery({
-    queryKey: ['study-session-active', studyId],
+    queryKey: ['study-session-active', studyId, sessionType],
     queryFn: async () => {
       if (!studyId) return null;
       
-      const { data, error } = await supabase
+      let query = supabase
         .from('study_sessions')
         .select('*')
         .eq('study_id', studyId)
-        .in('status', ['pending', 'running'])
+        .in('status', ['pending', 'running']);
+      
+      // Filter by session type if provided
+      if (sessionType) {
+        query = query.eq('session_type', sessionType);
+      }
+      
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();

@@ -60,7 +60,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
   const { data: evaluations } = useStudyEvaluations(studyId);
   const stats = useStudyStats(studyId);
   const createReport = useCreateReport();
-  const aiSession = useAIStudySession(studyId);
+  const aiSession = useAIStudySession(studyId, 'report');
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<StudyReport | null>(null);

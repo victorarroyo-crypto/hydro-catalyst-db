@@ -29,9 +29,9 @@ export interface AIStudySessionState {
   }>;
 }
 
-export function useAIStudySession(studyId: string | undefined) {
+export function useAIStudySession(studyId: string | undefined, sessionType?: AISessionPhase) {
   const queryClient = useQueryClient();
-  const { data: activeSession, isLoading: isLoadingSession } = useActiveStudySession(studyId);
+  const { data: activeSession, isLoading: isLoadingSession } = useActiveStudySession(studyId, sessionType);
   const { data: logs = [] } = useStudySessionLogs(activeSession?.id);
   const startSessionMutation = useStartStudySession();
   
