@@ -105,8 +105,8 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
         onStart={handleStartAIShortlist}
         onCancel={aiSession.cancelSession}
         isStarting={aiSession.isStarting}
-        title="Selección Automática"
-        description="La IA analiza y prioriza las tecnologías más relevantes para el problema"
+        title="Enriquecer Lista"
+        description="Busca más tecnologías en la web para ampliar las opciones disponibles"
       />
 
       <div>
