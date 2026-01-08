@@ -42,7 +42,7 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
   const { data: shortlist, isLoading: loadingShortlist } = useStudyShortlist(studyId);
   const addToShortlist = useAddToShortlist();
   const removeFromShortlist = useRemoveFromShortlist();
-  const aiSession = useAIStudySession(studyId);
+  const aiSession = useAIStudySession(studyId, 'shortlist');
   
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [selectionReason, setSelectionReason] = useState('');

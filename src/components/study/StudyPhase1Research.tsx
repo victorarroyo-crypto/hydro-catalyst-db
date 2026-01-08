@@ -81,7 +81,7 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
   const addResearch = useAddResearch();
   const updateResearch = useUpdateResearch();
   const deleteResearch = useDeleteResearch();
-  const aiSession = useAIStudySession(studyId);
+  const aiSession = useAIStudySession(studyId, 'research');
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   

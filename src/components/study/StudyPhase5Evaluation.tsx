@@ -59,7 +59,7 @@ export default function StudyPhase5Evaluation({ studyId, study }: Props) {
   const { data: shortlist, isLoading: loadingShortlist } = useStudyShortlist(studyId);
   const { data: evaluations, isLoading: loadingEvaluations } = useStudyEvaluations(studyId);
   const upsertEvaluation = useUpsertEvaluation();
-  const aiSession = useAIStudySession(studyId);
+  const aiSession = useAIStudySession(studyId, 'evaluation');
   
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [evalForm, setEvalForm] = useState<Partial<StudyEvaluation>>({});
