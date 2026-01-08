@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.generate-longlist]
 verify_jwt = false
+
+[functions.chrome-extension-webhook]
+verify_jwt = false
