@@ -206,11 +206,9 @@ async function fetchTableCounts(): Promise<Record<string, number>> {
   return counts;
 }
 
-// Fetch foreign keys
+// Fetch foreign keys - always use hardcoded list (RPC doesn't exist)
 async function fetchForeignKeys(): Promise<ForeignKey[]> {
-  const { data } = await supabase.rpc('get_foreign_keys' as any).select('*');
-  
-  // Fallback to hardcoded relationships if RPC not available
+  // Using hardcoded relationships since get_foreign_keys RPC is not available
   return [
     { table_name: 'advisor_callback_requests', column_name: 'user_id', foreign_table_name: 'advisor_users', foreign_column_name: 'id' },
     { table_name: 'advisor_chats', column_name: 'user_id', foreign_table_name: 'advisor_users', foreign_column_name: 'id' },
@@ -365,15 +363,23 @@ function createPageBreakParagraph(): Paragraph {
 
 // Main export function
 export async function generateComprehensiveAuditDocument(): Promise<void> {
-  const generatedAt = new Date().toLocaleString('es-ES', { 
-    dateStyle: 'full', 
-    timeStyle: 'short' 
-  });
+  let currentStage = 'inicialización';
+  
+  try {
+    const generatedAt = new Date().toLocaleString('es-ES', { 
+      dateStyle: 'full', 
+      timeStyle: 'short' 
+    });
 
-  // Fetch data
-  const tableCounts = await fetchTableCounts();
-  const foreignKeys = await fetchForeignKeys();
-  const syncStatus = await fetchSyncStatus();
+    // Fetch data with stage tracking
+    currentStage = 'contando registros de tablas';
+    const tableCounts = await fetchTableCounts();
+    
+    currentStage = 'obteniendo foreign keys';
+    const foreignKeys = await fetchForeignKeys();
+    
+    currentStage = 'verificando estado de sincronización';
+    const syncStatus = await fetchSyncStatus();
 
   // Build tables array with stats
   const tables: TableStats[] = Object.entries(TABLE_DESCRIPTIONS).map(([name, info]) => ({
@@ -390,8 +396,9 @@ export async function generateComprehensiveAuditDocument(): Promise<void> {
   const syncedTables = tables.filter(t => t.synced).length;
   const modules = [...new Set(tables.map(t => t.module))];
 
-  // Build document
-  const doc = new Document({
+    currentStage = 'construyendo documento';
+    // Build document
+    const doc = new Document({
     styles: {
       default: {
         document: {
@@ -690,8 +697,32 @@ export async function generateComprehensiveAuditDocument(): Promise<void> {
     }],
   });
 
-  // Generate and download
-  const blob = await Packer.toBlob(doc);
-  const date = new Date().toISOString().split('T')[0];
-  saveAs(blob, `Vandarum_Auditoria_Arquitectura_${date}.docx`);
+    currentStage = 'empaquetando documento DOCX';
+    const blob = await Packer.toBlob(doc);
+    
+    currentStage = 'iniciando descarga';
+    const date = new Date().toISOString().split('T')[0];
+    const fileName = `Vandarum_Auditoria_Arquitectura_${date}.docx`;
+    
+    // Try saveAs first, fallback to manual download if it fails
+    try {
+      saveAs(blob, fileName);
+    } catch (saveError) {
+      console.warn('saveAs failed, using fallback download:', saveError);
+      // Fallback: create object URL and trigger download manually
+      const url = URL.createObjectURL(new Blob([blob], { 
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  } catch (error) {
+    console.error(`Error en auditoría (etapa: ${currentStage}):`, error);
+    throw new Error(`Falló en: ${currentStage}. ${error instanceof Error ? error.message : 'Error desconocido'}`);
+  }
 }
