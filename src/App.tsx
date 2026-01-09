@@ -95,7 +95,11 @@ const App = () => (
             </Route>
             {/* AI Advisor Routes - Public */}
             <Route path="/advisor" element={<AdvisorLanding />} />
-            <Route path="/advisor/auth" element={<AdvisorAuth />} />
+            <Route path="/advisor/auth" element={
+              <AdvisorAuthProvider>
+                <AdvisorAuth />
+              </AdvisorAuthProvider>
+            } />
             <Route path="/advisor/pricing" element={<AdvisorPricing />} />
             
             {/* AI Advisor Routes - Protected with AdvisorAuthProvider */}
