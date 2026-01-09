@@ -628,9 +628,12 @@ export function createVandarumTechSeparator(): Paragraph {
 }
 
 /**
- * Crea índice/tabla de contenidos profesional
+ * Crea índice/tabla de contenidos profesional - compacto en una página
  */
 export function createVandarumTableOfContents(items: { title: string; isAnnex?: boolean }[]): Paragraph[] {
+  // Numerador para items que no son anexo
+  let sectionNumber = 0;
+  
   const paragraphs: Paragraph[] = [
     new Paragraph({
       children: [
@@ -642,7 +645,7 @@ export function createVandarumTableOfContents(items: { title: string; isAnnex?: 
           font: VANDARUM_FONTS.titulo,
         })
       ],
-      spacing: { before: 400, after: 300 },
+      spacing: { before: 200, after: 200 },
       border: {
         bottom: {
           color: VANDARUM_COLORS.verdeOscuro,
@@ -654,8 +657,8 @@ export function createVandarumTableOfContents(items: { title: string; isAnnex?: 
     }),
   ];
 
-  for (const [index, item] of items.entries()) {
-    const number = item.isAnnex ? '' : `${index + 1}. `;
+  for (const item of items) {
+    const number = item.isAnnex ? '' : `${++sectionNumber}. `;
     paragraphs.push(new Paragraph({
       children: [
         new TextRun({
@@ -666,13 +669,13 @@ export function createVandarumTableOfContents(items: { title: string; isAnnex?: 
           bold: item.isAnnex,
         }),
       ],
-      spacing: { after: 120 },
+      spacing: { after: 80 },  // Más compacto
       indent: { left: item.isAnnex ? 0 : 200 },
     }));
   }
 
-  // Espacio después del índice
-  paragraphs.push(new Paragraph({ children: [], spacing: { after: 400 } }));
+  // Salto de página después del índice
+  paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
 
   return paragraphs;
 }
@@ -719,13 +722,15 @@ export function createVandarumFooter(date: string): Paragraph[] {
   ];
 }
 
-// Crear portada del documento
-export function createVandarumCover(title: string, subtitle: string, date: string): Paragraph[] {
-  return [
+// Crear portada del documento con logo
+export function createVandarumCover(title: string, subtitle: string, date: string, logoBase64?: string): Paragraph[] {
+  const coverParagraphs: Paragraph[] = [
     // Espaciado superior
-    new Paragraph({ children: [], spacing: { before: 2000 } }),
-    
-    // Título principal
+    new Paragraph({ children: [], spacing: { before: 1500 } }),
+  ];
+  
+  // Título VANDARUM (el logo se añadirá externamente si hay imagen)
+  coverParagraphs.push(
     new Paragraph({
       children: [
         new TextRun({ 
@@ -780,7 +785,7 @@ export function createVandarumCover(title: string, subtitle: string, date: strin
         })
       ],
       alignment: AlignmentType.CENTER,
-      spacing: { after: 800 },
+      spacing: { after: 600 },
     }),
     
     // Fecha
@@ -798,7 +803,110 @@ export function createVandarumCover(title: string, subtitle: string, date: strin
     }),
     
     // Espacio antes del pie
-    new Paragraph({ children: [], spacing: { before: 2000 } }),
+    new Paragraph({ children: [], spacing: { before: 1500 } }),
+    
+    // Tagline
+    new Paragraph({
+      children: [
+        new TextRun({ 
+          text: 'Innovación aplicada, red global de resultados sostenibles', 
+          italics: true, 
+          size: VANDARUM_SIZES.pequeno,
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.texto,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+    }),
+    
+    // Salto de página
+    new Paragraph({
+      children: [new PageBreak()],
+    }),
+  );
+  
+  return coverParagraphs;
+}
+
+/**
+ * Crea portada con logo como imagen
+ */
+export function createVandarumCoverWithLogo(
+  title: string, 
+  subtitle: string, 
+  date: string,
+  logoImageRun: any // ImageRun from docx
+): Paragraph[] {
+  return [
+    // Espaciado superior reducido para hacer espacio para el logo
+    new Paragraph({ children: [], spacing: { before: 800 } }),
+    
+    // Logo
+    new Paragraph({
+      children: [logoImageRun],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    }),
+    
+    // Línea decorativa sutil
+    new Paragraph({
+      children: [
+        new TextRun({ 
+          text: '━━━━━━━━━━━━━━━━━━━━', 
+          color: VANDARUM_COLORS.grisClaro,
+          size: 24,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    }),
+    
+    // Título del documento
+    new Paragraph({
+      children: [
+        new TextRun({ 
+          text: title, 
+          bold: true, 
+          size: VANDARUM_SIZES.titulo,
+          color: VANDARUM_COLORS.grisTexto,
+          font: VANDARUM_FONTS.titulo,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    }),
+    
+    // Subtítulo
+    new Paragraph({
+      children: [
+        new TextRun({ 
+          text: subtitle, 
+          italics: true, 
+          size: VANDARUM_SIZES.subtitulo,
+          color: VANDARUM_COLORS.grisClaro,
+          font: VANDARUM_FONTS.texto,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    }),
+    
+    // Fecha
+    new Paragraph({
+      children: [
+        new TextRun({ 
+          text: date, 
+          size: VANDARUM_SIZES.texto,
+          color: VANDARUM_COLORS.grisClaro,
+          font: VANDARUM_FONTS.texto,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    }),
+    
+    // Espacio antes del tagline
+    new Paragraph({ children: [], spacing: { before: 1200 } }),
     
     // Tagline
     new Paragraph({
