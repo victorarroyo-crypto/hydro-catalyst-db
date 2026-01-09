@@ -494,7 +494,7 @@ serve(async (req) => {
         const evalData = data || payload;
         
         // Railway puede enviar evaluation_id o shortlist_id
-        const shortlistId = evalData?.shortlist_id || evalData?.evaluation_id;
+        let shortlistId = evalData?.shortlist_id || evalData?.evaluation_id;
         
         // Los scores pueden venir directamente o dentro de evaluation
         const evaluation = evalData?.evaluation || evalData;
@@ -514,7 +514,36 @@ serve(async (req) => {
         // Nombre de la tecnología
         const techName = evalData?.technology_name || evalData?.name || 'Sin nombre';
         
-        console.log(`[study-webhook] Processing technology_evaluated: ${techName}, shortlistId: ${shortlistId}`);
+        console.log(`[study-webhook] Processing technology_evaluated: ${techName}, initial shortlistId: ${shortlistId}`);
+        
+        // Si no hay shortlist_id, buscar por nombre de tecnología
+        if (!shortlistId && techName && study_id) {
+          console.log(`[study-webhook] Searching shortlist by technology name: ${techName}`);
+          
+          // Primero buscar en study_shortlist con join a study_longlist
+          const { data: shortlistMatch, error: searchError } = await supabase
+            .from('study_shortlist')
+            .select('id, longlist_id, study_longlist!inner(technology_name)')
+            .eq('study_id', study_id);
+          
+          if (!searchError && shortlistMatch && shortlistMatch.length > 0) {
+            // Buscar coincidencia por nombre (case insensitive)
+            const match = shortlistMatch.find((s: any) => {
+              const longlistName = s.study_longlist?.technology_name?.toLowerCase() || '';
+              const searchName = techName.toLowerCase();
+              return longlistName.includes(searchName) || searchName.includes(longlistName);
+            });
+            
+            if (match) {
+              shortlistId = match.id;
+              console.log(`[study-webhook] Found shortlist_id by name match: ${shortlistId}`);
+            }
+          }
+          
+          if (!shortlistId && searchError) {
+            console.error('[study-webhook] Error searching shortlist:', searchError);
+          }
+        }
         
         if (shortlistId) {
           const { error } = await supabase
@@ -549,16 +578,18 @@ serve(async (req) => {
             console.log(`[study-webhook] Technology evaluated successfully: ${techName} - Score: ${overallScore}`);
           }
         } else {
-          console.warn(`[study-webhook] No shortlist_id found for technology: ${techName}`);
+          console.warn(`[study-webhook] No shortlist_id found for technology: ${techName} - evaluation not saved`);
         }
 
         await supabase.from('study_session_logs').insert({
           session_id,
           study_id,
-          level: 'info',
+          level: shortlistId ? 'info' : 'warning',
           phase: 'evaluation',
-          message: `Tecnología evaluada: ${techName} - Puntuación: ${overallScore || 'N/A'}`,
-          details: evalData
+          message: shortlistId 
+            ? `Tecnología evaluada: ${techName} - Puntuación: ${overallScore || 'N/A'}`
+            : `⚠️ Tecnología no vinculada: ${techName} - No se encontró en shortlist`,
+          details: { ...evalData, resolved_shortlist_id: shortlistId }
         });
         break;
       }
@@ -613,6 +644,60 @@ serve(async (req) => {
           const reportTitle = `Informe de Evaluación IA - ${new Date().toLocaleDateString('es-ES')}`;
           const ranking = summary?.ranking || [];
           
+          // Obtener datos del estudio para problem_analysis
+          let problemAnalysis = '';
+          let solutionsOverview = '';
+          
+          const { data: studyData } = await supabase
+            .from('scouting_studies')
+            .select('problem_statement, objectives, context')
+            .eq('id', study_id)
+            .single();
+          
+          if (studyData) {
+            problemAnalysis = studyData.problem_statement || '';
+            if (studyData.objectives && Array.isArray(studyData.objectives)) {
+              problemAnalysis += '\n\nObjetivos:\n' + studyData.objectives.map((o: string) => `• ${o}`).join('\n');
+            }
+          }
+          
+          // Generar solutions_overview desde las tecnologías evaluadas
+          if (ranking.length > 0) {
+            solutionsOverview = `Se evaluaron ${ranking.length} tecnologías candidatas.\n\n`;
+            solutionsOverview += ranking.map((r: any, i: number) => {
+              const score = r.overall_score || r.score || 'N/A';
+              const recommendation = r.recommendation || '';
+              return `${i+1}. **${r.name || r.technology_name}**: Puntuación ${score}/10${recommendation ? ` - ${recommendation}` : ''}`;
+            }).join('\n');
+          }
+          
+          // Formatear recommendations correctamente (evitar [object Object])
+          let recommendationsText = '';
+          if (typeof summary.primary_recommendation === 'string') {
+            recommendationsText = summary.primary_recommendation;
+          } else if (summary.top_recommendation) {
+            const top = summary.top_recommendation;
+            recommendationsText = typeof top === 'string' ? top : `${top.name || 'Recomendación principal'}: ${top.reason || top.description || ''}`;
+          }
+          
+          // Añadir alternativas
+          if (Array.isArray(summary.alternative_options)) {
+            const alternatives = summary.alternative_options.map((opt: any) => {
+              if (typeof opt === 'string') return opt;
+              return `• ${opt.name || 'Alternativa'}: Puntuación ${opt.score || opt.overall_score || 'N/A'}${opt.reason ? ` - ${opt.reason}` : ''}`;
+            }).join('\n');
+            if (alternatives) {
+              recommendationsText += '\n\nAlternativas:\n' + alternatives;
+            }
+          }
+          
+          // Conclusiones
+          let conclusionsText = summary.conclusions || '';
+          if (!conclusionsText && ranking.length > 0) {
+            const topTech = ranking[0];
+            conclusionsText = `Basado en el análisis, la tecnología más recomendada es ${topTech.name || topTech.technology_name} con una puntuación de ${topTech.overall_score || topTech.score}/10.`;
+          }
+          
           const { error: reportError } = await supabase
             .from('study_reports')
             .insert({
@@ -620,18 +705,25 @@ serve(async (req) => {
               title: reportTitle,
               generated_by: 'ai',
               executive_summary: summary.report_summary || summary.executive_summary || '',
-              recommendations: summary.primary_recommendation || 
-                (Array.isArray(summary.alternative_options) ? summary.alternative_options.join('\n\n') : summary.alternative_options) || '',
+              problem_analysis: problemAnalysis,
+              solutions_overview: solutionsOverview,
+              recommendations: recommendationsText || 'Ver ranking de tecnologías',
               technology_comparison: ranking.length > 0 ? 
-                ranking.map((r: any, i: number) => `${i+1}. ${r.name || r.technology_name} - Puntuación: ${r.overall_score || r.score}`).join('\n') : '',
-              conclusions: summary.conclusions || '',
+                ranking.map((r: any, i: number) => {
+                  const name = r.name || r.technology_name;
+                  const score = r.overall_score || r.score;
+                  const provider = r.provider ? ` (${r.provider})` : '';
+                  const trl = r.trl ? ` | TRL: ${r.trl}` : '';
+                  return `${i+1}. ${name}${provider} - Puntuación: ${score}${trl}`;
+                }).join('\n') : '',
+              conclusions: conclusionsText,
               methodology: 'Evaluación automatizada mediante IA con análisis multi-criterio',
             });
           
           if (reportError) {
             console.error('Error creating evaluation report:', reportError);
           } else {
-            console.log('[study-webhook] Evaluation report saved to study_reports');
+            console.log('[study-webhook] Evaluation report saved to study_reports with full content');
           }
         }
         

@@ -2,8 +2,10 @@ import { useState } from 'react';
 import {
   useStudyReports,
   useCreateReport,
+  useUpdateReport,
   useStudyStats,
   useStudyEvaluations,
+  useStudyShortlist,
   ScoutingStudy,
   StudyReport,
 } from '@/hooks/useScoutingStudies';
@@ -16,12 +18,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
 import {
   Dialog,
   DialogContent,
@@ -37,7 +33,6 @@ import {
   Download,
   Eye,
   Sparkles,
-  Clock,
   BookOpen,
   Target,
   Lightbulb,
@@ -45,6 +40,13 @@ import {
   CheckCircle2,
   FileCheck,
   History,
+  Edit,
+  Save,
+  X,
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  Zap,
 } from 'lucide-react';
 import AISessionPanel from './AISessionPanel';
 import { format } from 'date-fns';
@@ -58,14 +60,17 @@ interface Props {
 export default function StudyPhase6Report({ studyId, study }: Props) {
   const { data: reports, isLoading: loadingReports } = useStudyReports(studyId);
   const { data: evaluations } = useStudyEvaluations(studyId);
+  const { data: shortlist } = useStudyShortlist(studyId);
   const stats = useStudyStats(studyId);
   const createReport = useCreateReport();
+  const updateReport = useUpdateReport();
   const aiSession = useAIStudySession(studyId, 'report');
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<StudyReport | null>(null);
   const [newReportTitle, setNewReportTitle] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'preview'>('list');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<StudyReport>>({});
 
   const handleStartAIReport = () => {
     aiSession.startSession('report', {
@@ -91,10 +96,47 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
     setIsCreateOpen(false);
   };
 
+  const handleStartEditing = () => {
+    if (selectedReport) {
+      setEditForm({
+        executive_summary: selectedReport.executive_summary || '',
+        methodology: selectedReport.methodology || '',
+        problem_analysis: selectedReport.problem_analysis || '',
+        solutions_overview: selectedReport.solutions_overview || '',
+        technology_comparison: selectedReport.technology_comparison || '',
+        recommendations: selectedReport.recommendations || '',
+        conclusions: selectedReport.conclusions || '',
+      });
+      setIsEditing(true);
+    }
+  };
+
+  const handleSaveEdits = async () => {
+    if (!selectedReport) return;
+    
+    await updateReport.mutateAsync({
+      id: selectedReport.id,
+      study_id: studyId,
+      ...editForm,
+    });
+    
+    setSelectedReport({ ...selectedReport, ...editForm });
+    setIsEditing(false);
+  };
+
+  const handleCancelEditing = () => {
+    setIsEditing(false);
+    setEditForm({});
+  };
+
+  // Helper para obtener nombre de tecnología desde shortlist
+  const getTechName = (shortlistId: string) => {
+    const shortlistItem = shortlist?.find(s => s.id === shortlistId);
+    return shortlistItem?.longlist?.technology_name || 'Tecnología';
+  };
+
   const completedEvaluations = evaluations?.filter(e => e.recommendation) ?? [];
   const hasEnoughData = stats.shortlistCount >= 1 && completedEvaluations.length >= 1;
-
-  const latestReport = reports?.[0];
 
   return (
     <div className="space-y-6">
@@ -234,7 +276,10 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
                     {reports.map((report) => (
                       <button
                         key={report.id}
-                        onClick={() => setSelectedReport(report)}
+                        onClick={() => {
+                          setSelectedReport(report);
+                          setIsEditing(false);
+                        }}
                         className={`w-full text-left p-3 rounded-lg border transition-colors hover:bg-muted/50 ${
                           selectedReport?.id === report.id ? 'border-primary bg-primary/5' : ''
                         }`}
@@ -281,10 +326,45 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
                 </CardTitle>
                 {selectedReport && (
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm">
-                      <Download className="w-4 h-4 mr-1" />
-                      Exportar
-                    </Button>
+                    {isEditing ? (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleCancelEditing}
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Cancelar
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          onClick={handleSaveEdits}
+                          disabled={updateReport.isPending}
+                        >
+                          {updateReport.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          ) : (
+                            <Save className="w-4 h-4 mr-1" />
+                          )}
+                          Guardar
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleStartEditing}
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          Editar
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Download className="w-4 h-4 mr-1" />
+                          Exportar
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -303,66 +383,265 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             <CardContent>
               {selectedReport ? (
                 <Tabs defaultValue="summary" className="h-full">
-                  <TabsList className="grid w-full grid-cols-4">
+                  <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="summary">Resumen</TabsTrigger>
                     <TabsTrigger value="analysis">Análisis</TabsTrigger>
                     <TabsTrigger value="comparison">Comparativa</TabsTrigger>
                     <TabsTrigger value="recommendations">Recomendaciones</TabsTrigger>
+                    <TabsTrigger value="evaluations">Evaluaciones</TabsTrigger>
                   </TabsList>
                   
                   <ScrollArea className="h-[400px] mt-4">
                     <TabsContent value="summary" className="space-y-4 m-0">
                       <div>
                         <h4 className="font-semibold mb-2">Resumen Ejecutivo</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {selectedReport.executive_summary || 'No disponible'}
-                        </p>
+                        {isEditing ? (
+                          <Textarea
+                            value={editForm.executive_summary || ''}
+                            onChange={(e) => setEditForm({...editForm, executive_summary: e.target.value})}
+                            rows={6}
+                            placeholder="Resumen ejecutivo del estudio..."
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {selectedReport.executive_summary || 'No disponible'}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <h4 className="font-semibold mb-2">Metodología</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {selectedReport.methodology || 'No disponible'}
-                        </p>
+                        {isEditing ? (
+                          <Textarea
+                            value={editForm.methodology || ''}
+                            onChange={(e) => setEditForm({...editForm, methodology: e.target.value})}
+                            rows={4}
+                            placeholder="Metodología utilizada..."
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {selectedReport.methodology || 'No disponible'}
+                          </p>
+                        )}
                       </div>
                     </TabsContent>
                     
                     <TabsContent value="analysis" className="space-y-4 m-0">
                       <div>
                         <h4 className="font-semibold mb-2">Análisis del Problema</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {selectedReport.problem_analysis || 'No disponible'}
-                        </p>
+                        {isEditing ? (
+                          <Textarea
+                            value={editForm.problem_analysis || ''}
+                            onChange={(e) => setEditForm({...editForm, problem_analysis: e.target.value})}
+                            rows={6}
+                            placeholder="Análisis detallado del problema..."
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {selectedReport.problem_analysis || 'No disponible'}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <h4 className="font-semibold mb-2">Panorama de Soluciones</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {selectedReport.solutions_overview || 'No disponible'}
-                        </p>
+                        {isEditing ? (
+                          <Textarea
+                            value={editForm.solutions_overview || ''}
+                            onChange={(e) => setEditForm({...editForm, solutions_overview: e.target.value})}
+                            rows={6}
+                            placeholder="Panorama de las soluciones identificadas..."
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {selectedReport.solutions_overview || 'No disponible'}
+                          </p>
+                        )}
                       </div>
                     </TabsContent>
                     
                     <TabsContent value="comparison" className="m-0">
                       <div>
                         <h4 className="font-semibold mb-2">Comparativa de Tecnologías</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {selectedReport.technology_comparison || 'No disponible'}
-                        </p>
+                        {isEditing ? (
+                          <Textarea
+                            value={editForm.technology_comparison || ''}
+                            onChange={(e) => setEditForm({...editForm, technology_comparison: e.target.value})}
+                            rows={10}
+                            placeholder="Comparativa detallada de tecnologías..."
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {selectedReport.technology_comparison || 'No disponible'}
+                          </p>
+                        )}
                       </div>
                     </TabsContent>
                     
                     <TabsContent value="recommendations" className="space-y-4 m-0">
                       <div>
                         <h4 className="font-semibold mb-2">Recomendaciones</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {selectedReport.recommendations || 'No disponible'}
-                        </p>
+                        {isEditing ? (
+                          <Textarea
+                            value={editForm.recommendations || ''}
+                            onChange={(e) => setEditForm({...editForm, recommendations: e.target.value})}
+                            rows={6}
+                            placeholder="Recomendaciones del estudio..."
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {selectedReport.recommendations || 'No disponible'}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <h4 className="font-semibold mb-2">Conclusiones</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {selectedReport.conclusions || 'No disponible'}
-                        </p>
+                        {isEditing ? (
+                          <Textarea
+                            value={editForm.conclusions || ''}
+                            onChange={(e) => setEditForm({...editForm, conclusions: e.target.value})}
+                            rows={4}
+                            placeholder="Conclusiones finales..."
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {selectedReport.conclusions || 'No disponible'}
+                          </p>
+                        )}
                       </div>
+                    </TabsContent>
+
+                    <TabsContent value="evaluations" className="m-0">
+                      {evaluations && evaluations.length > 0 ? (
+                        <div className="space-y-4">
+                          {evaluations.map((evaluation) => (
+                            <Card key={evaluation.id} className="border">
+                              <CardHeader className="pb-2">
+                                <div className="flex items-center justify-between">
+                                  <CardTitle className="text-base">
+                                    {getTechName(evaluation.shortlist_id)}
+                                  </CardTitle>
+                                  <div className="flex items-center gap-2">
+                                    {evaluation.overall_score && (
+                                      <Badge variant="outline" className="text-lg">
+                                        {evaluation.overall_score}/10
+                                      </Badge>
+                                    )}
+                                    {evaluation.recommendation && (
+                                      <Badge 
+                                        variant={
+                                          evaluation.recommendation === 'highly_recommended' ? 'default' :
+                                          evaluation.recommendation === 'recommended' ? 'secondary' :
+                                          evaluation.recommendation === 'conditional' ? 'outline' : 'destructive'
+                                        }
+                                      >
+                                        {evaluation.recommendation === 'highly_recommended' ? 'Muy recomendada' :
+                                         evaluation.recommendation === 'recommended' ? 'Recomendada' :
+                                         evaluation.recommendation === 'conditional' ? 'Condicional' : 'No recomendada'}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="pt-2">
+                                {/* Scores */}
+                                <div className="grid grid-cols-5 gap-2 mb-4">
+                                  {evaluation.trl_score && (
+                                    <div className="text-center p-2 bg-muted rounded">
+                                      <p className="text-xs text-muted-foreground">TRL</p>
+                                      <p className="font-bold">{evaluation.trl_score}</p>
+                                    </div>
+                                  )}
+                                  {evaluation.cost_score && (
+                                    <div className="text-center p-2 bg-muted rounded">
+                                      <p className="text-xs text-muted-foreground">Coste</p>
+                                      <p className="font-bold">{evaluation.cost_score}</p>
+                                    </div>
+                                  )}
+                                  {evaluation.scalability_score && (
+                                    <div className="text-center p-2 bg-muted rounded">
+                                      <p className="text-xs text-muted-foreground">Escala</p>
+                                      <p className="font-bold">{evaluation.scalability_score}</p>
+                                    </div>
+                                  )}
+                                  {evaluation.context_fit_score && (
+                                    <div className="text-center p-2 bg-muted rounded">
+                                      <p className="text-xs text-muted-foreground">Contexto</p>
+                                      <p className="font-bold">{evaluation.context_fit_score}</p>
+                                    </div>
+                                  )}
+                                  {evaluation.innovation_potential_score && (
+                                    <div className="text-center p-2 bg-muted rounded">
+                                      <p className="text-xs text-muted-foreground">Innovación</p>
+                                      <p className="font-bold">{evaluation.innovation_potential_score}</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* SWOT */}
+                                <div className="grid grid-cols-2 gap-4">
+                                  {evaluation.strengths && evaluation.strengths.length > 0 && (
+                                    <div>
+                                      <h5 className="font-medium text-sm flex items-center gap-1 text-green-600 dark:text-green-400 mb-1">
+                                        <TrendingUp className="w-3 h-3" />
+                                        Fortalezas
+                                      </h5>
+                                      <ul className="text-xs text-muted-foreground space-y-1">
+                                        {evaluation.strengths.map((s, i) => (
+                                          <li key={i}>• {s}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {evaluation.weaknesses && evaluation.weaknesses.length > 0 && (
+                                    <div>
+                                      <h5 className="font-medium text-sm flex items-center gap-1 text-red-600 dark:text-red-400 mb-1">
+                                        <TrendingDown className="w-3 h-3" />
+                                        Debilidades
+                                      </h5>
+                                      <ul className="text-xs text-muted-foreground space-y-1">
+                                        {evaluation.weaknesses.map((w, i) => (
+                                          <li key={i}>• {w}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {evaluation.opportunities && evaluation.opportunities.length > 0 && (
+                                    <div>
+                                      <h5 className="font-medium text-sm flex items-center gap-1 text-blue-600 dark:text-blue-400 mb-1">
+                                        <Zap className="w-3 h-3" />
+                                        Oportunidades
+                                      </h5>
+                                      <ul className="text-xs text-muted-foreground space-y-1">
+                                        {evaluation.opportunities.map((o, i) => (
+                                          <li key={i}>• {o}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {evaluation.threats && evaluation.threats.length > 0 && (
+                                    <div>
+                                      <h5 className="font-medium text-sm flex items-center gap-1 text-amber-600 dark:text-amber-400 mb-1">
+                                        <AlertCircle className="w-3 h-3" />
+                                        Amenazas
+                                      </h5>
+                                      <ul className="text-xs text-muted-foreground space-y-1">
+                                        {evaluation.threats.map((t, i) => (
+                                          <li key={i}>• {t}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                          <p className="text-sm">No hay evaluaciones disponibles</p>
+                          <p className="text-xs mt-1">Completa las evaluaciones en la Fase 5</p>
+                        </div>
+                      )}
                     </TabsContent>
                   </ScrollArea>
                 </Tabs>
