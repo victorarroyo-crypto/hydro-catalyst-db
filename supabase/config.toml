@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.generate-comprehensive-report]
 verify_jwt = false
+
+[functions.translate-swot]
+verify_jwt = false

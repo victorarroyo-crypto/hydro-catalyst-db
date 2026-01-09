@@ -55,6 +55,8 @@ import {
   createVandarumFooter,
   createVandarumHighlight,
   createVandarumSeparator,
+  createVandarumDocumentFooter,
+  createVandarumDocumentHeader,
 } from '@/lib/vandarumDocStyles';
 import { saveAs } from 'file-saver';
 import { useToast } from '@/hooks/use-toast';
@@ -236,7 +238,16 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
       sections.push(...createVandarumFooter(format(new Date(), "d 'de' MMMM yyyy", { locale: es })));
 
       const doc = new Document({
-        sections: [{ children: sections }],
+        sections: [{
+          properties: {},
+          headers: {
+            default: createVandarumDocumentHeader(study.name),
+          },
+          footers: {
+            default: createVandarumDocumentFooter(),
+          },
+          children: sections,
+        }],
       });
 
       const blob = await Packer.toBlob(doc);
@@ -259,11 +270,78 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
     }
   };
 
+  // Interface for translated evaluation data
+  interface TranslatedEvaluation {
+    id: string;
+    strengths?: string[];
+    weaknesses?: string[];
+    opportunities?: string[];
+    threats?: string[];
+    competitive_advantages?: string[];
+    implementation_barriers?: string[];
+    was_translated: boolean;
+  }
+
   const handleExportEvaluationsOnly = async () => {
     setIsExportingEvaluations(true);
     try {
       const dateStr = format(new Date(), "d 'de' MMMM yyyy", { locale: es });
       
+      // Show initial toast
+      toast({
+        title: 'Preparando fichas...',
+        description: 'Verificando idioma del contenido...',
+      });
+
+      // Prepare evaluations data for translation check
+      const evalsWithContent = evaluations?.filter(e => 
+        (e.strengths && e.strengths.length > 0) ||
+        (e.weaknesses && e.weaknesses.length > 0) ||
+        (e.opportunities && e.opportunities.length > 0) ||
+        (e.threats && e.threats.length > 0)
+      ) || [];
+
+      // Create translation map
+      let translationsMap = new Map<string, TranslatedEvaluation>();
+
+      // If there are evaluations with content, check if translation is needed
+      if (evalsWithContent.length > 0) {
+        try {
+          const evalData = evalsWithContent.map(e => ({
+            id: e.id,
+            strengths: e.strengths || [],
+            weaknesses: e.weaknesses || [],
+            opportunities: e.opportunities || [],
+            threats: e.threats || [],
+            competitive_advantages: e.competitive_advantages || [],
+            implementation_barriers: e.implementation_barriers || [],
+          }));
+
+          const { data: translationResult, error: translationError } = await supabase.functions.invoke('translate-swot', {
+            body: { evaluations: evalData }
+          });
+
+          if (!translationError && translationResult?.translations) {
+            // Check if translation was applied
+            const wasTranslated = translationResult.translations.some((t: TranslatedEvaluation) => t.was_translated);
+            
+            if (wasTranslated) {
+              toast({
+                title: 'Contenido traducido',
+                description: 'El análisis SWOT ha sido traducido al español',
+              });
+            }
+
+            // Create map from translations
+            for (const t of translationResult.translations) {
+              translationsMap.set(t.id, t);
+            }
+          }
+        } catch (translateError) {
+          console.warn('Translation check failed, using original content:', translateError);
+        }
+      }
+
       const sections: Paragraph[] = [
         ...createVandarumCover(
           'Fichas de Evaluación de Tecnologías',
@@ -278,6 +356,9 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         for (const item of shortlist) {
           const evaluation = evaluations?.find(e => e.shortlist_id === item.id);
           const techName = item.longlist?.technology_name || 'Tecnología';
+          
+          // Get translated content if available
+          const translation = evaluation ? translationsMap.get(evaluation.id) : undefined;
           
           sections.push(createVandarumHeading2(techName));
 
@@ -297,44 +378,52 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
               sections.push(createVandarumHighlight('Recomendación', recText));
             }
 
-            if (evaluation.strengths && evaluation.strengths.length > 0) {
+            // Use translated content if available, otherwise use original
+            const strengths = translation?.strengths || evaluation.strengths;
+            const weaknesses = translation?.weaknesses || evaluation.weaknesses;
+            const opportunities = translation?.opportunities || evaluation.opportunities;
+            const threats = translation?.threats || evaluation.threats;
+            const competitiveAdvantages = translation?.competitive_advantages || evaluation.competitive_advantages;
+            const implementationBarriers = translation?.implementation_barriers || evaluation.implementation_barriers;
+
+            if (strengths && strengths.length > 0) {
               sections.push(createSwotLabel('strength'));
-              for (const s of evaluation.strengths) {
+              for (const s of strengths) {
                 sections.push(createVandarumBullet(s));
               }
             }
 
-            if (evaluation.weaknesses && evaluation.weaknesses.length > 0) {
+            if (weaknesses && weaknesses.length > 0) {
               sections.push(createSwotLabel('weakness'));
-              for (const w of evaluation.weaknesses) {
+              for (const w of weaknesses) {
                 sections.push(createVandarumBullet(w));
               }
             }
 
-            if (evaluation.opportunities && evaluation.opportunities.length > 0) {
+            if (opportunities && opportunities.length > 0) {
               sections.push(createSwotLabel('opportunity'));
-              for (const o of evaluation.opportunities) {
+              for (const o of opportunities) {
                 sections.push(createVandarumBullet(o));
               }
             }
 
-            if (evaluation.threats && evaluation.threats.length > 0) {
+            if (threats && threats.length > 0) {
               sections.push(createSwotLabel('threat'));
-              for (const t of evaluation.threats) {
+              for (const t of threats) {
                 sections.push(createVandarumBullet(t));
               }
             }
 
-            if (evaluation.competitive_advantages && evaluation.competitive_advantages.length > 0) {
+            if (competitiveAdvantages && competitiveAdvantages.length > 0) {
               sections.push(createVandarumHeading2('Ventajas Competitivas'));
-              for (const a of evaluation.competitive_advantages) {
+              for (const a of competitiveAdvantages) {
                 sections.push(createVandarumBullet(a));
               }
             }
 
-            if (evaluation.implementation_barriers && evaluation.implementation_barriers.length > 0) {
+            if (implementationBarriers && implementationBarriers.length > 0) {
               sections.push(createVandarumHeading2('Barreras de Implementación'));
-              for (const b of evaluation.implementation_barriers) {
+              for (const b of implementationBarriers) {
                 sections.push(createVandarumBullet(b));
               }
             }
@@ -349,7 +438,16 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
       sections.push(...createVandarumFooter(dateStr));
 
       const doc = new Document({
-        sections: [{ children: sections }],
+        sections: [{
+          properties: {},
+          headers: {
+            default: createVandarumDocumentHeader(study.name),
+          },
+          footers: {
+            default: createVandarumDocumentFooter(),
+          },
+          children: sections,
+        }],
       });
 
       const blob = await Packer.toBlob(doc);
