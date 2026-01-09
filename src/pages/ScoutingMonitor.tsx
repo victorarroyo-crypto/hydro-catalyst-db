@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import ScoutingActivityPanel from '@/components/scouting/ScoutingActivityPanel';
 import { toast } from 'sonner';
 import { 
   Activity, 
@@ -36,6 +37,14 @@ import { es } from 'date-fns/locale';
 const HEARTBEAT_WARNING_MS = 2 * 60 * 1000; // 2 minutes
 const HEARTBEAT_CRITICAL_MS = 4 * 60 * 1000; // 4 minutes
 
+interface ActivityTimelineItem {
+  timestamp: string;
+  message: string;
+  type?: string;
+  site?: string;
+  tech_name?: string;
+}
+
 interface ScoutingSession {
   id: string;
   session_id: string;
@@ -43,6 +52,10 @@ interface ScoutingSession {
   started_at: string;
   completed_at: string | null;
   current_phase: string | null;
+  current_activity?: string | null;
+  current_site?: string | null;
+  phase_details?: Record<string, unknown> | null;
+  activity_timeline?: ActivityTimelineItem[] | null;
   progress_percentage: number;
   sites_examined: number;
   technologies_found: number;
@@ -185,7 +198,7 @@ export default function ScoutingMonitor() {
         .limit(50);
       
       if (error) throw error;
-      return data as ScoutingSession[];
+      return data as unknown as ScoutingSession[];
     },
     refetchInterval: (query) => {
       // Auto-refresh every 10s if there are running sessions
@@ -815,63 +828,19 @@ export default function ScoutingMonitor() {
             ) : (
               <Tabs defaultValue="logs" className="w-full">
                 <TabsList className="mb-4">
-                  <TabsTrigger value="logs">Logs en Vivo</TabsTrigger>
+                  <TabsTrigger value="activity">Actividad</TabsTrigger>
                   <TabsTrigger value="metrics">Métricas</TabsTrigger>
                   <TabsTrigger value="summary">Resumen</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="logs">
-                  <ScrollArea className="h-[400px] border rounded-lg">
-                    {loadingLogs ? (
-                      <div className="p-4 text-center text-muted-foreground">
-                        Cargando logs...
-                      </div>
-                    ) : logs?.length === 0 ? (
-                      <div className="p-8 text-center text-muted-foreground">
-                        No hay logs para esta sesión
-                      </div>
-                    ) : (
-                      <div className="divide-y">
-                        {logs?.map((log) => {
-                          const levelConfig = logLevelConfig[log.level as keyof typeof logLevelConfig] || logLevelConfig.info;
-                          
-                          return (
-                            <div key={log.id} className={`p-3 ${levelConfig.bg}`}>
-                              <div className="flex items-start gap-3">
-                                <div className="flex-shrink-0">
-                                  {log.level === 'error' ? (
-                                    <AlertTriangle className="w-4 h-4 text-red-500" />
-                                  ) : log.level === 'warning' ? (
-                                    <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                                  ) : (
-                                    <Activity className="w-4 h-4 text-blue-500" />
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <Badge variant="outline" className="text-xs">
-                                      {log.phase || 'general'}
-                                    </Badge>
-                                    <span className="text-xs text-muted-foreground">
-                                      {format(new Date(log.timestamp), 'HH:mm:ss')}
-                                    </span>
-                                  </div>
-                                  <p className={`text-sm ${levelConfig.color}`}>
-                                    {log.message}
-                                  </p>
-                                  {log.details && Object.keys(log.details).length > 0 && (
-                                    <pre className="mt-2 text-xs bg-black/5 p-2 rounded overflow-x-auto">
-                                      {JSON.stringify(log.details, null, 2)}
-                                    </pre>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </ScrollArea>
+                <TabsContent value="activity">
+                  {selectedSessionData && (
+                    <ScoutingActivityPanel 
+                      session={selectedSessionData}
+                      logs={logs || []}
+                      showLogs={true}
+                    />
+                  )}
                 </TabsContent>
 
                 <TabsContent value="metrics">

@@ -56,6 +56,8 @@ serve(async (req) => {
             current_phase: data?.phase || 'initialization',
             progress_percentage: 0,
             config: data?.config || {},
+            current_activity: 'Iniciando sesión de scouting...',
+            activity_timeline: [],
           }, { onConflict: 'session_id' });
 
         // Log session start
@@ -64,6 +66,192 @@ serve(async (req) => {
           level: 'info',
           phase: 'initialization',
           message: 'Sesión de scouting iniciada',
+          details: data,
+        });
+        break;
+
+      case 'activity':
+        // New event: structured activity update for UI
+        console.log('Processing activity event:', data);
+        
+        // Get current timeline
+        const { data: currentSessionData } = await supabase
+          .from('scouting_sessions')
+          .select('activity_timeline')
+          .eq('session_id', session_id)
+          .single();
+        
+        // Prepare new timeline entry
+        const newTimelineEntry = {
+          timestamp: data?.timestamp || new Date().toISOString(),
+          message: data?.message || 'Actividad sin descripción',
+          type: data?.type,
+          site: data?.site,
+          tech_name: data?.tech_name,
+        };
+        
+        // Keep last 20 entries
+        const currentTimeline = (currentSessionData?.activity_timeline as unknown[]) || [];
+        const updatedTimeline = [newTimelineEntry, ...currentTimeline].slice(0, 20);
+        
+        // Update session with activity info
+        const activityUpdate: Record<string, unknown> = {
+          current_activity: data?.message,
+          activity_timeline: updatedTimeline,
+          updated_at: new Date().toISOString(),
+        };
+        
+        if (data?.site) {
+          activityUpdate.current_site = data.site;
+        }
+        if (data?.phase) {
+          activityUpdate.current_phase = data.phase;
+        }
+        if (data?.phase_details) {
+          activityUpdate.phase_details = data.phase_details;
+        }
+        if (data?.progress_percentage !== undefined) {
+          activityUpdate.progress_percentage = data.progress_percentage;
+        }
+        if (data?.sites_examined !== undefined) {
+          activityUpdate.sites_examined = data.sites_examined;
+        }
+        if (data?.technologies_found !== undefined) {
+          activityUpdate.technologies_found = data.technologies_found;
+        }
+        if (data?.technologies_discarded !== undefined) {
+          activityUpdate.technologies_discarded = data.technologies_discarded;
+        }
+        
+        result = await supabase
+          .from('scouting_sessions')
+          .update(activityUpdate)
+          .eq('session_id', session_id);
+
+        // Also log to session_logs
+        await supabase.from('scouting_session_logs').insert({
+          session_id,
+          level: data?.level || 'info',
+          phase: data?.phase || data?.type,
+          message: data?.message || 'Activity update',
+          details: data?.details || { site: data?.site, tech_name: data?.tech_name },
+        });
+        break;
+
+      case 'site_start':
+        // New event: starting to analyze a site
+        result = await supabase
+          .from('scouting_sessions')
+          .update({
+            current_activity: `📄 Analizando: ${data?.site || 'sitio desconocido'}`,
+            current_site: data?.site,
+            current_phase: 'analyzing',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('session_id', session_id);
+
+        await supabase.from('scouting_session_logs').insert({
+          session_id,
+          level: 'info',
+          phase: 'analyzing',
+          message: `Iniciando análisis de sitio: ${data?.site}`,
+          details: data,
+        });
+        break;
+
+      case 'site_complete':
+        // New event: finished analyzing a site
+        const siteCompleteUpdate: Record<string, unknown> = {
+          current_activity: `✅ Completado: ${data?.site || 'sitio'}`,
+          updated_at: new Date().toISOString(),
+        };
+        
+        if (data?.sites_examined !== undefined) {
+          siteCompleteUpdate.sites_examined = data.sites_examined;
+        }
+        if (data?.technologies_found !== undefined) {
+          siteCompleteUpdate.technologies_found = data.technologies_found;
+        }
+        
+        result = await supabase
+          .from('scouting_sessions')
+          .update(siteCompleteUpdate)
+          .eq('session_id', session_id);
+
+        await supabase.from('scouting_session_logs').insert({
+          session_id,
+          level: 'info',
+          phase: 'site_complete',
+          message: `Sitio analizado: ${data?.site} - ${data?.techs_found || 0} tecnologías encontradas`,
+          details: data,
+        });
+        break;
+
+      case 'tech_analyzing':
+        // New event: analyzing a specific technology
+        result = await supabase
+          .from('scouting_sessions')
+          .update({
+            current_activity: `🔍 Analizando tecnología: ${data?.tech_name || 'desconocida'}`,
+            phase_details: { current_tech: data?.tech_name, provider: data?.provider },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('session_id', session_id);
+
+        await supabase.from('scouting_session_logs').insert({
+          session_id,
+          level: 'info',
+          phase: 'tech_analyzing',
+          message: `Analizando: ${data?.tech_name} (${data?.provider || 'proveedor desconocido'})`,
+          details: data,
+        });
+        break;
+
+      case 'tech_decision':
+        // New event: decision made about a technology
+        const isApproved = data?.decision === 'approved';
+        const decisionEmoji = isApproved ? '✅' : '❌';
+        const decisionMsg = isApproved 
+          ? `${decisionEmoji} Tecnología guardada: ${data?.tech_name}`
+          : `${decisionEmoji} Descartada: ${data?.tech_name} - ${data?.reason || 'sin razón'}`;
+
+        // Update activity timeline
+        const { data: sessionForDecision } = await supabase
+          .from('scouting_sessions')
+          .select('activity_timeline, technologies_found, technologies_discarded')
+          .eq('session_id', session_id)
+          .single();
+        
+        const decisionTimeline = (sessionForDecision?.activity_timeline as unknown[]) || [];
+        const decisionEntry = {
+          timestamp: new Date().toISOString(),
+          message: decisionMsg,
+          type: isApproved ? 'approved' : 'discarded',
+          tech_name: data?.tech_name,
+        };
+        
+        const decisionUpdate: Record<string, unknown> = {
+          current_activity: decisionMsg,
+          activity_timeline: [decisionEntry, ...decisionTimeline].slice(0, 20),
+          updated_at: new Date().toISOString(),
+        };
+        
+        if (isApproved) {
+          decisionUpdate.technologies_found = (sessionForDecision?.technologies_found || 0) + 1;
+        } else {
+          decisionUpdate.technologies_discarded = (sessionForDecision?.technologies_discarded || 0) + 1;
+        }
+        
+        result = await supabase
+          .from('scouting_sessions')
+          .update(decisionUpdate)
+          .eq('session_id', session_id);
+
+        await supabase.from('scouting_session_logs').insert({
+          session_id,
+          level: 'info',
+          phase: isApproved ? 'technology_found' : 'technology_discarded',
+          message: decisionMsg,
           details: data,
         });
         break;
@@ -84,6 +272,9 @@ serve(async (req) => {
         }
         if (data?.technologies_discarded !== undefined) {
           progressUpdate.technologies_discarded = data.technologies_discarded;
+        }
+        if (data?.message) {
+          progressUpdate.current_activity = data.message;
         }
 
         result = await supabase
@@ -107,21 +298,34 @@ serve(async (req) => {
           session_id,
           level: 'info',
           phase: data?.phase || 'analysis',
-          message: `Tecnología encontrada: ${data?.technology_name || 'Sin nombre'}`,
+          message: `✅ Tecnología encontrada: ${data?.technology_name || 'Sin nombre'}`,
           details: data,
         });
 
-        // Update technologies_found count (increment manually)
-        const { data: currentSession } = await supabase
+        // Update technologies_found count and activity
+        const { data: currentSessionForFound } = await supabase
           .from('scouting_sessions')
-          .select('technologies_found')
+          .select('technologies_found, activity_timeline')
           .eq('session_id', session_id)
           .single();
         
-        if (currentSession) {
+        if (currentSessionForFound) {
+          const foundTimeline = (currentSessionForFound.activity_timeline as unknown[]) || [];
+          const foundEntry = {
+            timestamp: new Date().toISOString(),
+            message: `✅ Tecnología encontrada: ${data?.technology_name || 'Sin nombre'}`,
+            type: 'technology_found',
+            tech_name: data?.technology_name,
+          };
+          
           await supabase
             .from('scouting_sessions')
-            .update({ technologies_found: (currentSession.technologies_found || 0) + 1 })
+            .update({ 
+              technologies_found: (currentSessionForFound.technologies_found || 0) + 1,
+              current_activity: `✅ Encontrada: ${data?.technology_name}`,
+              activity_timeline: [foundEntry, ...foundTimeline].slice(0, 20),
+              updated_at: new Date().toISOString(),
+            })
             .eq('session_id', session_id);
         }
         break;
@@ -132,9 +336,36 @@ serve(async (req) => {
           session_id,
           level: 'info',
           phase: data?.phase || 'filtering',
-          message: `Tecnología descartada: ${data?.technology_name || 'Sin nombre'} - ${data?.reason || 'Sin razón'}`,
+          message: `❌ Descartada: ${data?.technology_name || 'Sin nombre'} - ${data?.reason || 'Sin razón'}`,
           details: data,
         });
+        
+        // Update activity
+        const { data: currentSessionForDiscard } = await supabase
+          .from('scouting_sessions')
+          .select('technologies_discarded, activity_timeline')
+          .eq('session_id', session_id)
+          .single();
+        
+        if (currentSessionForDiscard) {
+          const discardTimeline = (currentSessionForDiscard.activity_timeline as unknown[]) || [];
+          const discardEntry = {
+            timestamp: new Date().toISOString(),
+            message: `❌ Descartada: ${data?.technology_name} - ${data?.reason || ''}`,
+            type: 'technology_discarded',
+            tech_name: data?.technology_name,
+          };
+          
+          await supabase
+            .from('scouting_sessions')
+            .update({
+              technologies_discarded: (currentSessionForDiscard.technologies_discarded || 0) + 1,
+              current_activity: `❌ Descartada: ${data?.technology_name}`,
+              activity_timeline: [discardEntry, ...discardTimeline].slice(0, 20),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('session_id', session_id);
+        }
         break;
 
       case 'error':
@@ -155,6 +386,7 @@ serve(async (req) => {
               status: 'failed',
               error_message: data?.message,
               completed_at: new Date().toISOString(),
+              current_activity: `⚠️ Error: ${data?.message}`,
             })
             .eq('session_id', session_id);
         }
@@ -169,6 +401,7 @@ serve(async (req) => {
             completed_at: data?.completed_at || new Date().toISOString(),
             progress_percentage: 100,
             current_phase: 'completed',
+            current_activity: '🎉 Scouting completado',
             sites_examined: data?.sites_examined,
             technologies_found: data?.technologies_found,
             technologies_discarded: data?.technologies_discarded,
@@ -182,7 +415,7 @@ serve(async (req) => {
           session_id,
           level: 'info',
           phase: 'completed',
-          message: 'Sesión de scouting completada',
+          message: '🎉 Sesión de scouting completada',
           details: data,
         });
         break;

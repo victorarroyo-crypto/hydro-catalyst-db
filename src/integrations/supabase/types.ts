@@ -900,13 +900,17 @@ export type Database = {
       }
       scouting_sessions: {
         Row: {
+          activity_timeline: Json | null
           completed_at: string | null
           config: Json | null
           created_at: string
+          current_activity: string | null
           current_phase: string | null
+          current_site: string | null
           error_message: string | null
           id: string
           last_heartbeat: string | null
+          phase_details: Json | null
           progress_percentage: number | null
           session_id: string
           sites_examined: number | null
@@ -919,13 +923,17 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          activity_timeline?: Json | null
           completed_at?: string | null
           config?: Json | null
           created_at?: string
+          current_activity?: string | null
           current_phase?: string | null
+          current_site?: string | null
           error_message?: string | null
           id?: string
           last_heartbeat?: string | null
+          phase_details?: Json | null
           progress_percentage?: number | null
           session_id: string
           sites_examined?: number | null
@@ -938,13 +946,17 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          activity_timeline?: Json | null
           completed_at?: string | null
           config?: Json | null
           created_at?: string
+          current_activity?: string | null
           current_phase?: string | null
+          current_site?: string | null
           error_message?: string | null
           id?: string
           last_heartbeat?: string | null
+          phase_details?: Json | null
           progress_percentage?: number | null
           session_id?: string
           sites_examined?: number | null
