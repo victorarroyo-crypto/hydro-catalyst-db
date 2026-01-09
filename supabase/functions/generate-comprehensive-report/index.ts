@@ -136,9 +136,17 @@ Deno.serve(async (req) => {
     const systemPrompt = `Eres un experto consultor en vigilancia tecnológica y scouting de innovación. 
 Tu tarea es generar informes ejecutivos profesionales EN ESPAÑOL.
 
-REGLAS OBLIGATORIAS:
+REGLAS OBLIGATORIAS DE FORMATO:
+- NO uses asteriscos (**) para negritas - el texto se formateará automáticamente
+- NO uses markdown en las respuestas (ni *, ni **, ni _, ni __)
+- NO uses tablas markdown (| columna | valor |)
+- Usa texto plano estructurado con listas numeradas y viñetas simples
+- Los nombres de tecnologías van en texto normal, el sistema los destacará
+- Para SWOT, usa: "Fortalezas:", "Debilidades:", "Oportunidades:", "Amenazas:" sin asteriscos
+
+REGLAS DE CONTENIDO:
 - TODO el contenido DEBE estar en ESPAÑOL profesional
-- Si algún dato viene en inglés (nombres de tecnologías pueden mantenerse, pero descripciones, fortalezas, debilidades, etc. deben traducirse)
+- Si algún dato viene en inglés, tradúcelo (nombres de tecnologías pueden mantenerse)
 - Sé específico y utiliza los datos proporcionados
 - Las recomendaciones deben ser accionables y priorizadas
 - El tono debe ser ejecutivo y profesional`;
@@ -215,7 +223,7 @@ Usa la función generate_report para generar el informe completo EN ESPAÑOL.`;
                   },
                   technology_comparison: {
                     type: 'string',
-                    description: 'Comparativa detallada de las tecnologías en la lista corta, incluyendo análisis SWOT (Fortalezas, Debilidades, Oportunidades, Amenazas), puntuaciones y recomendaciones. EN ESPAÑOL.'
+                    description: 'Comparativa de tecnologías en TEXTO PLANO (sin markdown ni asteriscos). Para cada tecnología: nombre, proveedor, puntuación, y análisis SWOT con formato "Fortalezas: descripción" (sin asteriscos). EN ESPAÑOL.'
                   },
                   recommendations: {
                     type: 'string',
