@@ -138,7 +138,7 @@ Por favor, genera el contenido enriquecido para los campos solicitados. Si ya ex
 
 Responde SOLO con el JSON, sin markdown ni explicaciones.`;
 
-    // Call the AI API
+    // Call the AI API with higher max_tokens to avoid truncation
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -152,7 +152,7 @@ Responde SOLO con el JSON, sin markdown ni explicaciones.`;
           { role: "user", content: userPrompt }
         ],
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: 8000, // Increased to prevent truncation
       }),
     });
 
@@ -172,14 +172,22 @@ Responde SOLO con el JSON, sin markdown ni explicaciones.`;
 
     const aiResponse = await response.json();
     const responseContent = aiResponse.choices?.[0]?.message?.content;
+    const finishReason = aiResponse.choices?.[0]?.finish_reason;
 
     if (!responseContent) {
       throw new Error("No content in AI response");
     }
 
-    console.log("Raw AI response:", responseContent.substring(0, 500));
+    console.log("Raw AI response length:", responseContent.length);
+    console.log("Finish reason:", finishReason);
+    console.log("Raw AI response (first 500 chars):", responseContent.substring(0, 500));
 
-    // Parse the JSON response
+    // Check if response was truncated
+    if (finishReason === 'length') {
+      console.warn("AI response was truncated due to max_tokens limit");
+    }
+
+    // Parse the JSON response with robust error handling
     let enrichedData: EnrichmentResult;
     try {
       // Clean the response (remove markdown code blocks if present)
@@ -193,11 +201,85 @@ Responde SOLO con el JSON, sin markdown ni explicaciones.`;
       if (cleanedResponse.endsWith('```')) {
         cleanedResponse = cleanedResponse.slice(0, -3);
       }
+      cleanedResponse = cleanedResponse.trim();
       
-      enrichedData = JSON.parse(cleanedResponse.trim());
+      // Try to parse as-is first
+      try {
+        enrichedData = JSON.parse(cleanedResponse);
+      } catch (firstParseError) {
+        console.warn("First parse attempt failed, trying to repair JSON...");
+        
+        // Try to repair truncated JSON by closing open structures
+        let repairedJson = cleanedResponse;
+        
+        // Count open braces/brackets
+        const openBraces = (repairedJson.match(/{/g) || []).length;
+        const closeBraces = (repairedJson.match(/}/g) || []).length;
+        
+        // If we have unclosed braces, try to close them
+        if (openBraces > closeBraces) {
+          // Find the last complete key-value pair
+          const lastCompleteValue = repairedJson.lastIndexOf('",');
+          const lastCompleteNumber = repairedJson.lastIndexOf(',\n');
+          const lastComplete = Math.max(lastCompleteValue, lastCompleteNumber);
+          
+          if (lastComplete > 0) {
+            // Truncate at last complete value and close the JSON
+            repairedJson = repairedJson.substring(0, lastComplete + 1);
+            // Remove trailing comma if present
+            repairedJson = repairedJson.replace(/,\s*$/, '');
+            // Close remaining braces
+            for (let i = 0; i < openBraces - closeBraces; i++) {
+              repairedJson += '}';
+            }
+          } else {
+            // Last resort: just close all braces
+            for (let i = 0; i < openBraces - closeBraces; i++) {
+              repairedJson += '"}';
+            }
+          }
+        }
+        
+        console.log("Repaired JSON (last 200 chars):", repairedJson.slice(-200));
+        
+        try {
+          enrichedData = JSON.parse(repairedJson);
+          console.log("Successfully parsed repaired JSON");
+        } catch (repairError) {
+          // If repair failed, try extracting just the valid fields we can find
+          console.error("Repair failed, attempting field extraction...");
+          
+          enrichedData = {};
+          const fieldPatterns = [
+            { key: 'descripcion', regex: /"descripcion"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'aplicacion_principal', regex: /"aplicacion_principal"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'ventaja_competitiva', regex: /"ventaja_competitiva"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'innovacion', regex: /"innovacion"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'casos_referencia', regex: /"casos_referencia"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'paises_actua', regex: /"paises_actua"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'comentarios_analista', regex: /"comentarios_analista"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'trl_estimado', regex: /"trl_estimado"\s*:\s*(\d+)/s },
+          ];
+          
+          for (const { key, regex } of fieldPatterns) {
+            const match = cleanedResponse.match(regex);
+            if (match) {
+              enrichedData[key as keyof EnrichmentResult] = key === 'trl_estimado' 
+                ? parseInt(match[1]) 
+                : match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+            }
+          }
+          
+          if (Object.keys(enrichedData).length === 0) {
+            throw new Error("Could not extract any valid fields from AI response");
+          }
+          
+          console.log(`Extracted ${Object.keys(enrichedData).length} fields from partial response`);
+        }
+      }
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
-      console.error("Response content:", responseContent);
+      console.error("Response content (last 500 chars):", responseContent.slice(-500));
       throw new Error("Failed to parse AI response as JSON");
     }
 
