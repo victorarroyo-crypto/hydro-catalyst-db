@@ -192,13 +192,14 @@ export function createDatabaseActions(isInternalUser: boolean): TechActions {
 
 /**
  * Creates actions for a longlist item
+ * All items can be edited and enriched - linked items sync changes to main DB
  */
 export function createLonglistActions(isLinkedToDB: boolean): TechActions {
   return {
-    canEdit: !isLinkedToDB,
-    canEnrich: !isLinkedToDB,
+    canEdit: true,              // Always allow editing
+    canEnrich: true,            // Always allow AI enrichment
     canDownload: true,
-    canSendToDB: !isLinkedToDB,
+    canSendToDB: !isLinkedToDB, // Only if not already linked
     canAddToProject: false,
     canFavorite: false,
     canSendToReview: false,
