@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { 
+import {
   Building2, 
   MapPin, 
   Globe, 
@@ -44,8 +44,10 @@ import {
   ExternalLink,
   Lock,
   CheckCircle2,
+  Download,
 } from 'lucide-react';
 import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
+import { generateLonglistWordDocument } from '@/lib/generateLonglistWordDocument';
 import type { Tables } from '@/integrations/supabase/types';
 
 type LonglistItem = Tables<'study_longlist'>;
@@ -55,6 +57,7 @@ interface LonglistTechDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   studyId: string;
+  studyName?: string;
 }
 
 export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = ({
@@ -62,6 +65,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   open,
   onOpenChange,
   studyId,
+  studyName = 'Estudio',
 }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -400,32 +404,51 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Action Buttons - Only show if NOT linked to DB */}
-            {!isLinkedToDB && (
-              <div className="flex gap-2 flex-wrap">
-                {isEditing ? (
-                  <>
-                    <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
-                      <X className="w-4 h-4 mr-2" />
-                      Cancelar
+            {/* Action Buttons */}
+            <div className="flex gap-2 flex-wrap">
+              {/* Download Word Button - Always visible */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  generateLonglistWordDocument(displayData as any, studyName);
+                  toast({
+                    title: 'Generando documento',
+                    description: 'La ficha Word se está generando...',
+                  });
+                }}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Descargar Word
+              </Button>
+              
+              {/* Edit buttons - Only show if NOT linked to DB */}
+              {!isLinkedToDB && (
+                <>
+                  {isEditing ? (
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+                        <X className="w-4 h-4 mr-2" />
+                        Cancelar
+                      </Button>
+                      <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                        Guardar
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                      <Edit className="w-4 h-4 mr-2" />
+                      Editar
                     </Button>
-                    <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                      {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                      Guardar
-                    </Button>
-                  </>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Editar
-                  </Button>
-                )}
-                <AIEnrichmentButton 
-                  technology={technologyLikeObject as any}
-                  onEnrichmentComplete={handleEnrichmentComplete}
-                />
-              </div>
-            )}
+                  )}
+                  <AIEnrichmentButton 
+                    technology={technologyLikeObject as any}
+                    onEnrichmentComplete={handleEnrichmentComplete}
+                  />
+                </>
+              )}
+            </div>
 
             {/* Read-only notice when linked to DB */}
             {isLinkedToDB && (
