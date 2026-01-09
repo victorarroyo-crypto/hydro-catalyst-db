@@ -51,6 +51,9 @@ import {
 import AISessionPanel from './AISessionPanel';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
+import { saveAs } from 'file-saver';
+import { useToast } from '@/hooks/use-toast';
 
 interface Props {
   studyId: string;
@@ -65,12 +68,14 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
   const createReport = useCreateReport();
   const updateReport = useUpdateReport();
   const aiSession = useAIStudySession(studyId, 'report');
+  const { toast } = useToast();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<StudyReport | null>(null);
   const [newReportTitle, setNewReportTitle] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<StudyReport>>({});
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleStartAIReport = () => {
     aiSession.startSession('report', {
@@ -133,6 +138,111 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
   const getTechName = (shortlistId: string) => {
     const shortlistItem = shortlist?.find(s => s.id === shortlistId);
     return shortlistItem?.longlist?.technology_name || 'Tecnología';
+  };
+
+  const handleExportReport = async () => {
+    if (!selectedReport) return;
+    
+    setIsExporting(true);
+    try {
+      const sections: Paragraph[] = [
+        // Título
+        new Paragraph({
+          children: [new TextRun({ text: selectedReport.title, bold: true, size: 32 })],
+          heading: HeadingLevel.TITLE,
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: `Estudio: ${study.name}`, italics: true })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: `Generado: ${format(new Date(selectedReport.created_at), "d 'de' MMMM yyyy", { locale: es })}` })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 600 },
+        }),
+      ];
+
+      // Resumen Ejecutivo
+      if (selectedReport.executive_summary) {
+        sections.push(
+          new Paragraph({ children: [new TextRun({ text: 'Resumen Ejecutivo', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
+          new Paragraph({ children: [new TextRun({ text: selectedReport.executive_summary })], spacing: { after: 200 } })
+        );
+      }
+
+      // Metodología
+      if (selectedReport.methodology) {
+        sections.push(
+          new Paragraph({ children: [new TextRun({ text: 'Metodología', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
+          new Paragraph({ children: [new TextRun({ text: selectedReport.methodology })], spacing: { after: 200 } })
+        );
+      }
+
+      // Análisis del Problema
+      if (selectedReport.problem_analysis) {
+        sections.push(
+          new Paragraph({ children: [new TextRun({ text: 'Análisis del Problema', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
+          new Paragraph({ children: [new TextRun({ text: selectedReport.problem_analysis })], spacing: { after: 200 } })
+        );
+      }
+
+      // Panorama de Soluciones
+      if (selectedReport.solutions_overview) {
+        sections.push(
+          new Paragraph({ children: [new TextRun({ text: 'Panorama de Soluciones', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
+          new Paragraph({ children: [new TextRun({ text: selectedReport.solutions_overview })], spacing: { after: 200 } })
+        );
+      }
+
+      // Comparativa Tecnológica
+      if (selectedReport.technology_comparison) {
+        sections.push(
+          new Paragraph({ children: [new TextRun({ text: 'Comparativa Tecnológica', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
+          new Paragraph({ children: [new TextRun({ text: selectedReport.technology_comparison })], spacing: { after: 200 } })
+        );
+      }
+
+      // Recomendaciones
+      if (selectedReport.recommendations) {
+        sections.push(
+          new Paragraph({ children: [new TextRun({ text: 'Recomendaciones', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
+          new Paragraph({ children: [new TextRun({ text: selectedReport.recommendations })], spacing: { after: 200 } })
+        );
+      }
+
+      // Conclusiones
+      if (selectedReport.conclusions) {
+        sections.push(
+          new Paragraph({ children: [new TextRun({ text: 'Conclusiones', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
+          new Paragraph({ children: [new TextRun({ text: selectedReport.conclusions })], spacing: { after: 200 } })
+        );
+      }
+
+      const doc = new Document({
+        sections: [{ children: sections }],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const fileName = `${selectedReport.title.replace(/[^a-zA-Z0-9]/g, '_')}_v${selectedReport.version}.docx`;
+      saveAs(blob, fileName);
+
+      toast({
+        title: 'Informe exportado',
+        description: `El archivo ${fileName} se ha descargado correctamente`,
+      });
+    } catch (error) {
+      console.error('Error exporting report:', error);
+      toast({
+        title: 'Error al exportar',
+        description: 'No se pudo generar el archivo Word',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const completedEvaluations = evaluations?.filter(e => e.recommendation) ?? [];
@@ -359,8 +469,17 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
                           <Edit className="w-4 h-4 mr-1" />
                           Editar
                         </Button>
-                        <Button variant="outline" size="sm">
-                          <Download className="w-4 h-4 mr-1" />
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={handleExportReport}
+                          disabled={isExporting}
+                        >
+                          {isExporting ? (
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4 mr-1" />
+                          )}
                           Exportar
                         </Button>
                       </>
