@@ -13,8 +13,80 @@ import {
   Header,
   Footer,
   PageNumber,
-  NumberFormat
+  NumberFormat,
+  LevelFormat,
+  convertInchesToTwip,
 } from 'docx';
+
+// Interface for text run base styles
+interface TextRunBaseStyles {
+  size: number;
+  color: string;
+  font: string;
+}
+
+/**
+ * Convierte texto con **negritas** en array de TextRun formateados
+ * Elimina los asteriscos y aplica negrita real de Word
+ */
+export function parseMarkdownToTextRuns(
+  text: string, 
+  baseStyles: TextRunBaseStyles
+): TextRun[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.filter(Boolean).map(part => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return new TextRun({
+        text: part.slice(2, -2),
+        bold: true,
+        size: baseStyles.size,
+        color: baseStyles.color,
+        font: baseStyles.font,
+      });
+    }
+    return new TextRun({ 
+      text: part, 
+      size: baseStyles.size,
+      color: baseStyles.color,
+      font: baseStyles.font,
+    });
+  });
+}
+
+/**
+ * Configuración de numeración para listas numeradas nativas de Word
+ */
+export const VANDARUM_NUMBERING_CONFIG = {
+  config: [
+    {
+      reference: "vandarum-numbering",
+      levels: [
+        {
+          level: 0,
+          format: LevelFormat.DECIMAL,
+          text: "%1.",
+          alignment: AlignmentType.START,
+          style: {
+            paragraph: {
+              indent: { left: convertInchesToTwip(0.5), hanging: convertInchesToTwip(0.25) },
+            },
+          },
+        },
+        {
+          level: 1,
+          format: LevelFormat.LOWER_LETTER,
+          text: "%2)",
+          alignment: AlignmentType.START,
+          style: {
+            paragraph: {
+              indent: { left: convertInchesToTwip(0.75), hanging: convertInchesToTwip(0.25) },
+            },
+          },
+        },
+      ],
+    },
+  ],
+};
 
 // Colores de marca Vandarum - uso limitado para profesionalismo
 export const VANDARUM_COLORS = {
@@ -133,42 +205,161 @@ export function createVandarumParagraph(text: string): Paragraph {
   });
 }
 
-// Crear bullet point - siempre en gris para profesionalismo
+/**
+ * Crea bullet con viñeta nativa de Word y soporte para **negritas**
+ */
 export function createVandarumBullet(text: string): Paragraph {
+  const textRuns = parseMarkdownToTextRuns(text, {
+    size: VANDARUM_SIZES.texto,
+    color: VANDARUM_COLORS.grisTexto,
+    font: VANDARUM_FONTS.texto,
+  });
+  
   return new Paragraph({
-    children: [
-      new TextRun({ 
-        text: `• ${text}`, 
-        size: VANDARUM_SIZES.texto,
-        color: VANDARUM_COLORS.grisTexto,
-        font: VANDARUM_FONTS.texto,
-      })
-    ],
-    spacing: { after: 50 },
-    indent: { left: 360 },
+    children: textRuns,
+    bullet: { level: 0 },
+    spacing: { 
+      after: 120,
+      line: 280,
+    },
+    indent: { left: convertInchesToTwip(0.5), hanging: convertInchesToTwip(0.25) },
   });
 }
 
-// Crear etiqueta de sección SWOT - todas en gris oscuro para profesionalismo
+/**
+ * Crea item de lista numerada nativa de Word con soporte para **negritas**
+ */
+export function createVandarumNumberedItem(text: string): Paragraph {
+  const textRuns = parseMarkdownToTextRuns(text, {
+    size: VANDARUM_SIZES.texto,
+    color: VANDARUM_COLORS.grisTexto,
+    font: VANDARUM_FONTS.texto,
+  });
+  
+  return new Paragraph({
+    children: textRuns,
+    numbering: { reference: "vandarum-numbering", level: 0 },
+    spacing: { after: 120, line: 280 },
+    indent: { left: convertInchesToTwip(0.5), hanging: convertInchesToTwip(0.25) },
+  });
+}
+
+/**
+ * Crea párrafo formateado procesando **negritas**
+ */
+export function createVandarumFormattedParagraph(text: string): Paragraph {
+  const textRuns = parseMarkdownToTextRuns(text, {
+    size: VANDARUM_SIZES.texto,
+    color: VANDARUM_COLORS.grisTexto,
+    font: VANDARUM_FONTS.texto,
+  });
+  
+  return new Paragraph({
+    children: textRuns,
+    spacing: { after: 180, line: 280 },
+  });
+}
+
+/**
+ * Procesa texto largo detectando párrafos, listas numeradas y bullets
+ * Convierte texto plano en estructura profesional de Word
+ */
+export function createVandarumRichContent(text: string): Paragraph[] {
+  if (!text) return [];
+  
+  const paragraphs: Paragraph[] = [];
+  
+  // Dividir por doble salto de línea para crear párrafos separados
+  const blocks = text.split(/\n\n+/);
+  
+  for (const block of blocks) {
+    const trimmedBlock = block.trim();
+    if (!trimmedBlock) continue;
+    
+    // Detectar si es una lista numerada (1., 2., etc.)
+    if (/^\d+\.\s/.test(trimmedBlock)) {
+      const items = trimmedBlock.split(/\n(?=\d+\.)/);
+      for (const item of items) {
+        const match = item.match(/^\d+\.\s*(.*)$/s);
+        if (match) {
+          // Separar título y descripción si hay dos puntos
+          const content = match[1].trim();
+          const colonIndex = content.indexOf(':');
+          if (colonIndex > 0 && colonIndex < 50) {
+            const title = content.substring(0, colonIndex + 1);
+            const description = content.substring(colonIndex + 1).trim();
+            paragraphs.push(createVandarumNumberedItem(`**${title}** ${description}`));
+          } else {
+            paragraphs.push(createVandarumNumberedItem(content));
+          }
+        }
+      }
+    }
+    // Detectar si es una lista de bullets (- o •)
+    else if (/^[-•]\s/.test(trimmedBlock)) {
+      const items = trimmedBlock.split(/\n(?=[-•]\s)/);
+      for (const item of items) {
+        const content = item.replace(/^[-•]\s*/, '').trim();
+        paragraphs.push(createVandarumBullet(content));
+      }
+    }
+    // Párrafo normal - dividir por saltos de línea simples
+    else {
+      const lines = trimmedBlock.split(/\n/);
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (trimmedLine) {
+          paragraphs.push(createVandarumFormattedParagraph(trimmedLine));
+        }
+      }
+    }
+  }
+  
+  return paragraphs;
+}
+
+/**
+ * Crea etiqueta SWOT con color distintivo y borde izquierdo
+ */
 export function createSwotLabel(type: 'strength' | 'weakness' | 'opportunity' | 'threat'): Paragraph {
-  const labels = {
-    strength: 'Fortalezas',
-    weakness: 'Debilidades',
-    opportunity: 'Oportunidades',
-    threat: 'Amenazas',
+  const config = {
+    strength: { label: 'Fortalezas', color: '307177' },      // Verde Vandarum
+    weakness: { label: 'Debilidades', color: 'B91C1C' },     // Rojo oscuro
+    opportunity: { label: 'Oportunidades', color: '1D4ED8' }, // Azul
+    threat: { label: 'Amenazas', color: 'B45309' },          // Naranja oscuro
   };
+  
+  const { label, color } = config[type];
 
   return new Paragraph({
     children: [
       new TextRun({ 
-        text: labels[type], 
+        text: label, 
         bold: true, 
         size: VANDARUM_SIZES.heading2,
-        color: VANDARUM_COLORS.grisTexto,
+        color: color,
         font: VANDARUM_FONTS.titulo,
       })
     ],
-    spacing: { before: 200, after: 100 },
+    spacing: { before: 280, after: 120 },
+    border: {
+      left: {
+        color: color,
+        size: 24,
+        style: BorderStyle.SINGLE,
+        space: 8,
+      },
+    },
+    indent: { left: 180 },
+  });
+}
+
+/**
+ * Separador profesional entre tecnologías (salto de página)
+ */
+export function createVandarumTechSeparator(): Paragraph {
+  return new Paragraph({
+    children: [new PageBreak()],
   });
 }
 
