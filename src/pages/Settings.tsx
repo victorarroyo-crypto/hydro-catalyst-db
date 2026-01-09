@@ -18,6 +18,7 @@ import { generateScoutingWebhookDocumentation } from '@/lib/generateScoutingWebh
 import { generateTaxonomyDocumentation } from '@/lib/generateTaxonomyDocumentation';
 import { generateModulesDocumentation } from '@/lib/generateModulesDocumentation';
 import { generateStudyArchitectureDoc } from '@/lib/generateStudyArchitectureDoc';
+import { generateComprehensiveAuditDocument } from '@/lib/generateComprehensiveAuditDoc';
 import { 
   User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, 
   CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle,
@@ -1181,6 +1182,38 @@ const Settings: React.FC = () => {
                 </Button>
                 <p className="text-xs text-muted-foreground">
                   Incluye: schema de tablas, flujo de datos, webhook events, componentes React y hooks
+                </p>
+                <Button 
+                  onClick={async () => {
+                    toast({
+                      title: 'Generando auditoría completa...',
+                      description: 'Recopilando datos de todas las tablas y relaciones',
+                    });
+                    try {
+                      await generateComprehensiveAuditDocument();
+                      toast({
+                        title: 'Auditoría generada',
+                        description: 'El documento completo de auditoría se ha descargado',
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: 'Error al generar auditoría',
+                        description: error.message,
+                        variant: 'destructive',
+                      });
+                    }
+                  }}
+                  variant="outline" 
+                  className="w-full justify-between bg-primary/5 border-primary/20 hover:bg-primary/10"
+                >
+                  <span className="flex items-center gap-2">
+                    <Database className="w-4 h-4 text-primary" />
+                    <span className="font-medium">Auditoría Completa de Arquitectura</span>
+                  </span>
+                  <FileText className="w-4 h-4" />
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Incluye: 40 tablas, foreign keys, funciones DB, edge functions, estado de sincronización, roles y workflows
                 </p>
               </CardContent>
             </Card>
