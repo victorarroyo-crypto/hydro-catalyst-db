@@ -26,6 +26,14 @@ interface TextRunBaseStyles {
 }
 
 /**
+ * Elimina asteriscos markdown de cualquier texto
+ * "**Texto**" -> "Texto"
+ */
+export function cleanMarkdownFromText(text: string): string {
+  return text.replace(/\*\*/g, '');
+}
+
+/**
  * Convierte texto con **negritas** en array de TextRun formateados
  * Elimina los asteriscos y aplica negrita real de Word
  */
@@ -173,12 +181,13 @@ export function createVandarumHeading1(text: string): Paragraph {
   });
 }
 
-// Crear heading 2
+// Crear heading 2 - Limpia asteriscos automáticamente
 export function createVandarumHeading2(text: string): Paragraph {
+  const cleanText = cleanMarkdownFromText(text);
   return new Paragraph({
     children: [
       new TextRun({ 
-        text, 
+        text: cleanText, 
         bold: true, 
         size: VANDARUM_SIZES.heading2,
         color: VANDARUM_COLORS.grisTexto,
@@ -188,6 +197,123 @@ export function createVandarumHeading2(text: string): Paragraph {
     heading: HeadingLevel.HEADING_2,
     spacing: { before: 300, after: 150 },
   });
+}
+
+/**
+ * Crea título de tecnología destacado con borde verde y puntuación normalizada
+ */
+export function createVandarumTechTitle(
+  name: string, 
+  score?: number | null, 
+  priority?: number
+): Paragraph[] {
+  const cleanName = cleanMarkdownFromText(name);
+  const normalizedScore = score && score > 10 ? score / 10 : score;
+  
+  const paragraphs: Paragraph[] = [
+    // Título de la tecnología en verde Vandarum con borde izquierdo
+    new Paragraph({
+      children: [
+        new TextRun({ 
+          text: cleanName, 
+          bold: true, 
+          size: VANDARUM_SIZES.heading2,
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
+        })
+      ],
+      spacing: { before: 400, after: 100 },
+      border: {
+        left: {
+          color: VANDARUM_COLORS.verdeOscuro,
+          size: 24,
+          style: BorderStyle.SINGLE,
+          space: 8,
+        },
+      },
+      indent: { left: 180 },
+    }),
+  ];
+  
+  // Línea de info: Puntuación y Prioridad
+  if (normalizedScore || priority) {
+    const infoChildren: TextRun[] = [];
+    if (normalizedScore) {
+      infoChildren.push(new TextRun({ 
+        text: `Puntuación: ${normalizedScore.toFixed(1)}/10`, 
+        bold: true,
+        size: VANDARUM_SIZES.texto,
+        color: VANDARUM_COLORS.grisTexto,
+        font: VANDARUM_FONTS.texto,
+      }));
+    }
+    if (normalizedScore && priority) {
+      infoChildren.push(new TextRun({ 
+        text: '  |  ',
+        size: VANDARUM_SIZES.texto,
+        color: VANDARUM_COLORS.grisClaro,
+        font: VANDARUM_FONTS.texto,
+      }));
+    }
+    if (priority) {
+      infoChildren.push(new TextRun({ 
+        text: `Prioridad: ${priority}`,
+        size: VANDARUM_SIZES.texto,
+        color: VANDARUM_COLORS.grisTexto,
+        font: VANDARUM_FONTS.texto,
+      }));
+    }
+    
+    paragraphs.push(new Paragraph({
+      children: infoChildren,
+      spacing: { after: 150 },
+      indent: { left: 180 },
+    }));
+  }
+  
+  return paragraphs;
+}
+
+/**
+ * Crea bloque SWOT completo formateado profesionalmente
+ */
+export function createVandarumSwotBlock(
+  strengths: string[],
+  weaknesses: string[],
+  opportunities: string[],
+  threats: string[]
+): Paragraph[] {
+  const paragraphs: Paragraph[] = [];
+  
+  if (strengths && strengths.length > 0) {
+    paragraphs.push(createSwotLabel('strength'));
+    for (const s of strengths) {
+      paragraphs.push(createVandarumBullet(s));
+    }
+  }
+  
+  if (weaknesses && weaknesses.length > 0) {
+    paragraphs.push(createSwotLabel('weakness'));
+    for (const w of weaknesses) {
+      paragraphs.push(createVandarumBullet(w));
+    }
+  }
+  
+  if (opportunities && opportunities.length > 0) {
+    paragraphs.push(createSwotLabel('opportunity'));
+    for (const o of opportunities) {
+      paragraphs.push(createVandarumBullet(o));
+    }
+  }
+  
+  if (threats && threats.length > 0) {
+    paragraphs.push(createSwotLabel('threat'));
+    for (const t of threats) {
+      paragraphs.push(createVandarumBullet(t));
+    }
+  }
+  
+  return paragraphs;
 }
 
 // Crear párrafo de texto normal

@@ -58,6 +58,9 @@ import {
   createVandarumDocumentFooter,
   createVandarumDocumentHeader,
   createVandarumRichContent,
+  createVandarumTechTitle,
+  createVandarumSwotBlock,
+  createVandarumSeparator,
   VANDARUM_NUMBERING_CONFIG,
 } from '@/lib/vandarumDocStyles';
 import { saveAs } from 'file-saver';
@@ -180,12 +183,60 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
     return `${normalizedScore.toFixed(1)}/10`;
   };
 
+  // Interface for translated evaluation data
+  interface TranslatedEvaluation {
+    id: string;
+    strengths?: string[];
+    weaknesses?: string[];
+    opportunities?: string[];
+    threats?: string[];
+    competitive_advantages?: string[];
+    implementation_barriers?: string[];
+    was_translated: boolean;
+  }
+
   const handleExportReport = async () => {
     if (!selectedReport) return;
     
     setIsExporting(true);
     try {
       const dateStr = format(new Date(selectedReport.created_at), "d 'de' MMMM yyyy", { locale: es });
+      
+      // Prepare evaluations for translation (same as handleExportEvaluationsOnly)
+      const evalsWithContent = evaluations?.filter(e => 
+        (e.strengths && e.strengths.length > 0) ||
+        (e.weaknesses && e.weaknesses.length > 0) ||
+        (e.opportunities && e.opportunities.length > 0) ||
+        (e.threats && e.threats.length > 0)
+      ) || [];
+
+      let translationsMap = new Map<string, TranslatedEvaluation>();
+
+      if (evalsWithContent.length > 0) {
+        try {
+          const evalData = evalsWithContent.map(e => ({
+            id: e.id,
+            strengths: e.strengths || [],
+            weaknesses: e.weaknesses || [],
+            opportunities: e.opportunities || [],
+            threats: e.threats || [],
+            competitive_advantages: e.competitive_advantages || [],
+            implementation_barriers: e.implementation_barriers || [],
+          }));
+
+          const { data: translationResult, error: translationError } = await supabase.functions.invoke('translate-swot', {
+            body: { evaluations: evalData }
+          });
+
+          if (!translationError && translationResult?.translations) {
+            for (const t of translationResult.translations) {
+              translationsMap.set(t.id, t);
+            }
+          }
+        } catch (translateError) {
+          console.warn('Translation check failed, using original content:', translateError);
+        }
+      }
       
       const sections: Paragraph[] = [
         ...createVandarumCover(
@@ -216,7 +267,55 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         sections.push(...createVandarumRichContent(selectedReport.solutions_overview));
       }
 
-      if (selectedReport.technology_comparison) {
+      // SECCIÓN COMPARATIVA TECNOLÓGICA - Usar datos estructurados en lugar de texto raw
+      if (shortlist && shortlist.length > 0) {
+        sections.push(createVandarumHeading1('Comparativa Tecnológica'));
+        
+        for (const [index, item] of shortlist.entries()) {
+          const evaluation = evaluations?.find(e => e.shortlist_id === item.id);
+          const techName = item.longlist?.technology_name || 'Tecnología';
+          const provider = item.longlist?.provider || '';
+          
+          // Get translated content if available
+          const translation = evaluation ? translationsMap.get(evaluation.id) : undefined;
+          
+          // Título de tecnología profesional con puntuación y prioridad
+          sections.push(...createVandarumTechTitle(
+            `${index + 1}. ${techName}`,
+            evaluation?.overall_score,
+            index + 1
+          ));
+          
+          // Proveedor
+          if (provider) {
+            sections.push(createVandarumHighlight('Proveedor', provider));
+          }
+          
+          // Recomendación
+          if (evaluation?.recommendation) {
+            const recText = evaluation.recommendation === 'highly_recommended' ? 'Muy recomendada' :
+                            evaluation.recommendation === 'recommended' ? 'Recomendada' :
+                            evaluation.recommendation === 'conditional' ? 'Condicional' : 'No recomendada';
+            sections.push(createVandarumHighlight('Recomendación', recText));
+          }
+          
+          // Use translated content if available, otherwise use original
+          const strengths = translation?.strengths || evaluation?.strengths || [];
+          const weaknesses = translation?.weaknesses || evaluation?.weaknesses || [];
+          const opportunities = translation?.opportunities || evaluation?.opportunities || [];
+          const threats = translation?.threats || evaluation?.threats || [];
+          
+          // Bloque SWOT profesional
+          sections.push(...createVandarumSwotBlock(strengths, weaknesses, opportunities, threats));
+          
+          // Separador entre tecnologías (excepto última)
+          if (index < shortlist.length - 1) {
+            sections.push(new Paragraph({ children: [], spacing: { before: 200 } }));
+            sections.push(createVandarumSeparator());
+          }
+        }
+      } else if (selectedReport.technology_comparison) {
+        // Fallback: usar texto raw si no hay shortlist
         sections.push(createVandarumHeading1('Comparativa Tecnológica'));
         sections.push(...createVandarumRichContent(selectedReport.technology_comparison));
       }
@@ -266,18 +365,6 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
       setIsExporting(false);
     }
   };
-
-  // Interface for translated evaluation data
-  interface TranslatedEvaluation {
-    id: string;
-    strengths?: string[];
-    weaknesses?: string[];
-    opportunities?: string[];
-    threats?: string[];
-    competitive_advantages?: string[];
-    implementation_barriers?: string[];
-    was_translated: boolean;
-  }
 
   const handleExportEvaluationsOnly = async () => {
     setIsExportingEvaluations(true);
