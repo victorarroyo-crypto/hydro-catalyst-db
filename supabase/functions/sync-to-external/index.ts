@@ -23,6 +23,7 @@ const FIELDS_TO_EXCLUDE: Record<string, string[]> = {
     'approved_by',
     'approved_at',
     'version',
+    'reviewed_at',
   ],
   project_technologies: [
     'added_by',
