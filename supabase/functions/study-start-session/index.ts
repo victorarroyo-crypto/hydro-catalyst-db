@@ -75,6 +75,7 @@ serve(async (req) => {
       'solutions': 'solutions',
       'shortlist': 'web-scouting',  // Railway uses web-scouting for longlist
       'evaluation': 'evaluate',      // Railway uses evaluate, not evaluation
+      'report': 'report',            // Report generation endpoint
     };
 
     const railwayEndpoint = endpointMap[session_type];
