@@ -25,10 +25,10 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const AI_MODELS = [
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', price: 0.15, credits: 0.33, freeAllowed: true },
-  { id: 'gpt-4o', name: 'GPT-4o', price: 0.45, credits: 1.0, freeAllowed: false },
-  { id: 'claude-sonnet', name: 'Claude Sonnet', price: 0.60, credits: 1.33, freeAllowed: false },
-  { id: 'claude-opus', name: 'Claude Opus', price: 1.50, credits: 3.33, freeAllowed: false },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', price: 0.75, credits: 1.65, freeAllowed: true },
+  { id: 'gpt-4o', name: 'GPT-4o', price: 2.25, credits: 5.0, freeAllowed: false },
+  { id: 'claude-sonnet', name: 'Claude Sonnet', price: 3.00, credits: 6.65, freeAllowed: false },
+  { id: 'claude-opus', name: 'Claude Opus', price: 7.50, credits: 16.65, freeAllowed: false },
 ];
 
 const WELCOME_MESSAGE = `¡Hola! 👋 Soy tu asistente experto en tratamiento de aguas industriales.
@@ -172,7 +172,7 @@ export default function AdvisorChat() {
 
       {/* Messages Area */}
       <ScrollArea className="flex-1 px-4" ref={scrollRef}>
-        <div className="max-w-3xl mx-auto py-6 space-y-6">
+        <div className="max-w-5xl mx-auto py-6 space-y-6">
           {/* Welcome Message */}
           {messages.length === 0 && (
             <div className="flex gap-3">
@@ -258,7 +258,7 @@ export default function AdvisorChat() {
 
       {/* Input Area */}
       <div className="border-t bg-background p-4">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <div className="flex gap-2">
             <Input
               value={inputValue}
