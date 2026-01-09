@@ -233,6 +233,9 @@ export function createScoutingActions(status: string): TechActions {
  * Converts UnifiedTechData to edit data format
  */
 export function toEditData(data: UnifiedTechData): UnifiedTechEditData {
+  // Extended data for accessing taxonomy IDs
+  const extData = data as any;
+  
   return {
     technology_name: data.technology_name || '',
     provider: data.provider || '',
@@ -250,6 +253,13 @@ export function toEditData(data: UnifiedTechData): UnifiedTechEditData {
     innovacion: data.innovacion || '',
     casos_referencia: data.casos_referencia || '',
     comentarios_analista: data.comentarios_analista || '',
+    // Taxonomy IDs
+    status: data.status || 'active',
+    tipo_id: extData.tipo_id || null,
+    subcategoria_id: extData.subcategoria_id || null,
+    sector_id: extData.sector_id || null,
+    subsector_industrial: extData.subsector_industrial || '',
+    estado_seguimiento: data.estado_seguimiento || '',
   };
 }
 
