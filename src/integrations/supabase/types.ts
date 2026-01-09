@@ -2248,6 +2248,25 @@ export type Database = {
         Args: { scouting_id: string }
         Returns: string
       }
+      check_scouting_duplicate: {
+        Args: { p_exclude_id?: string; p_name: string; p_provider: string }
+        Returns: {
+          existing_scouting_id: string
+          existing_tech_id: string
+          in_scouting: boolean
+          in_technologies: boolean
+          message: string
+        }[]
+      }
+      check_technology_duplicate: {
+        Args: { p_exclude_id?: string; p_name: string; p_provider: string }
+        Returns: {
+          existing_id: string
+          existing_name: string
+          existing_provider: string
+          is_duplicate: boolean
+        }[]
+      }
       close_zombie_jobs: { Args: { max_age_minutes?: number }; Returns: number }
       deduct_advisor_credits: {
         Args: {
@@ -2269,6 +2288,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      normalize_tech_name: { Args: { input_text: string }; Returns: string }
       reject_scouting_to_rejected: {
         Args: { category?: string; reason: string; scouting_id: string }
         Returns: string
