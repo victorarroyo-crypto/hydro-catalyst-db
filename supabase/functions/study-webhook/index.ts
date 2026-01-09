@@ -500,6 +500,23 @@ serve(async (req) => {
       case 'technology_evaluated': {
         const evalData = data || payload;
         
+        // Helper: Normalizar puntuaciones de 0-100 a 1-10 (DB usa escala 1-10)
+        const normalizeScore = (score: number | null | undefined): number | null => {
+          if (score === null || score === undefined) return null;
+          // Si el score ya está en rango 1-10, dejarlo como está
+          if (score <= 10) return Math.max(1, Math.min(10, Math.round(score)));
+          // Si está en rango 0-100, convertir a 1-10
+          return Math.max(1, Math.min(10, Math.round(score / 10)));
+        };
+        
+        // Helper: Normalizar recommendation a valores válidos
+        const normalizeRecommendation = (rec: string | null | undefined): string | null => {
+          if (!rec) return null;
+          const normalized = rec.toLowerCase().replace(/ /g, '_');
+          const validValues = ['highly_recommended', 'recommended', 'conditional', 'not_recommended'];
+          return validValues.includes(normalized) ? normalized : 'conditional';
+        };
+        
         // Railway puede enviar evaluation_id o shortlist_id
         let shortlistId = evalData?.shortlist_id || evalData?.evaluation_id;
         
@@ -509,11 +526,20 @@ serve(async (req) => {
         
         // Los scores individuales pueden estar en scores o criteria_scores
         const scores = evaluation?.scores || evaluation?.criteria_scores || {};
-        const trlScore = scores?.trl?.score ?? scores?.trl;
-        const costScore = scores?.cost?.score ?? scores?.cost ?? scores?.cost_capex?.score;
-        const scalabilityScore = scores?.scalability?.score ?? scores?.scalability;
-        const contextFitScore = scores?.context_fit?.score ?? scores?.context_fit;
-        const innovationScore = scores?.innovation?.score ?? scores?.innovation;
+        const rawTrlScore = scores?.trl?.score ?? scores?.trl;
+        const rawCostScore = scores?.cost?.score ?? scores?.cost ?? scores?.cost_capex?.score;
+        const rawScalabilityScore = scores?.scalability?.score ?? scores?.scalability;
+        const rawContextFitScore = scores?.context_fit?.score ?? scores?.context_fit;
+        const rawInnovationScore = scores?.innovation?.score ?? scores?.innovation;
+        
+        // Normalizar a escala 1-10
+        const trlScore = normalizeScore(rawTrlScore);
+        const costScore = normalizeScore(rawCostScore);
+        const scalabilityScore = normalizeScore(rawScalabilityScore);
+        const contextFitScore = normalizeScore(rawContextFitScore);
+        const innovationScore = normalizeScore(rawInnovationScore);
+        
+        console.log(`[study-webhook] Normalized scores: trl=${trlScore}, cost=${costScore}, scalability=${scalabilityScore}, context_fit=${contextFitScore}, innovation=${innovationScore} (raw: ${rawTrlScore}, ${rawCostScore}, ${rawScalabilityScore}, ${rawContextFitScore}, ${rawInnovationScore})`);
         
         // SWOT puede venir en evaluation.swot o evalData.swot
         const swot = evaluation?.swot || evalData?.swot || {};
@@ -521,7 +547,11 @@ serve(async (req) => {
         // Nombre de la tecnología
         const techName = evalData?.technology_name || evalData?.name || 'Sin nombre';
         
-        console.log(`[study-webhook] Processing technology_evaluated: ${techName}, initial shortlistId: ${shortlistId}`);
+        // Normalizar recommendation
+        const rawRecommendation = evaluation?.recommendation || evalData?.recommendation;
+        const recommendation = normalizeRecommendation(rawRecommendation);
+        
+        console.log(`[study-webhook] Processing technology_evaluated: ${techName}, initial shortlistId: ${shortlistId}, recommendation: ${recommendation} (raw: ${rawRecommendation})`);
         
         // Si no hay shortlist_id, buscar por nombre de tecnología
         if (!shortlistId && techName && study_id) {
@@ -571,10 +601,10 @@ serve(async (req) => {
               weaknesses: swot?.weaknesses || [],
               opportunities: swot?.opportunities || [],
               threats: swot?.threats || [],
-              recommendation: evaluation?.recommendation || evalData?.recommendation,
+              recommendation: recommendation,
               ai_scores: scores,
               ai_swot: swot,
-              ai_recommendation: evaluation?.recommendation || evalData?.recommendation,
+              ai_recommendation: rawRecommendation,
             }, {
               onConflict: 'shortlist_id,study_id'
             });
@@ -596,7 +626,7 @@ serve(async (req) => {
           message: shortlistId 
             ? `Tecnología evaluada: ${techName} - Puntuación: ${overallScore || 'N/A'}`
             : `⚠️ Tecnología no vinculada: ${techName} - No se encontró en shortlist`,
-          details: { ...evalData, resolved_shortlist_id: shortlistId }
+          details: { ...evalData, resolved_shortlist_id: shortlistId, normalized_scores: { trl: trlScore, cost: costScore, scalability: scalabilityScore, context_fit: contextFitScore, innovation: innovationScore } }
         });
         break;
       }
