@@ -27,6 +27,9 @@ import {
   Wrench,
   Tag,
   GraduationCap,
+  Bot,
+  MessageSquare,
+  History,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -64,6 +67,12 @@ const scoutingSubItems = [
   { title: 'Cola de Revisión', url: '/scouting', icon: Radar },
   { title: 'Nuevo Scouting', url: '/scouting/new', icon: Rocket },
   { title: 'Monitor', url: '/scouting-monitor', icon: Radio },
+];
+
+const advisorSubItems = [
+  { title: 'Chat', url: '/advisor/chat', icon: MessageSquare },
+  { title: 'Mi Dashboard', url: '/advisor/dashboard', icon: LayoutDashboard },
+  { title: 'Historial', url: '/advisor/history', icon: History },
 ];
 
 const internalNavItems = [

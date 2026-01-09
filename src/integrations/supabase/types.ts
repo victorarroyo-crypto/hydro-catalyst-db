@@ -14,6 +14,233 @@ export type Database = {
   }
   public: {
     Tables: {
+      advisor_callback_requests: {
+        Row: {
+          company: string | null
+          created_at: string | null
+          description: string | null
+          email: string
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          preferred_time: string | null
+          status: string | null
+          type: string | null
+          user_id: string | null
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string | null
+          description?: string | null
+          email: string
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          preferred_time?: string | null
+          status?: string | null
+          type?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          company?: string | null
+          created_at?: string | null
+          description?: string | null
+          email?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          preferred_time?: string | null
+          status?: string | null
+          type?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "advisor_callback_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "advisor_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      advisor_chats: {
+        Row: {
+          created_at: string | null
+          id: string
+          message_count: number | null
+          model_used: string | null
+          title: string | null
+          total_credits_used: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message_count?: number | null
+          model_used?: string | null
+          title?: string | null
+          total_credits_used?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message_count?: number | null
+          model_used?: string | null
+          title?: string | null
+          total_credits_used?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "advisor_chats_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "advisor_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      advisor_credits: {
+        Row: {
+          amount: number
+          balance_after: number
+          created_at: string | null
+          description: string | null
+          id: string
+          model_used: string | null
+          stripe_payment_id: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          model_used?: string | null
+          stripe_payment_id?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          model_used?: string | null
+          stripe_payment_id?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "advisor_credits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "advisor_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      advisor_messages: {
+        Row: {
+          chat_id: string
+          content: string
+          created_at: string | null
+          credits_used: number | null
+          id: string
+          role: string
+          sources: Json | null
+          tokens_input: number | null
+          tokens_output: number | null
+        }
+        Insert: {
+          chat_id: string
+          content: string
+          created_at?: string | null
+          credits_used?: number | null
+          id?: string
+          role: string
+          sources?: Json | null
+          tokens_input?: number | null
+          tokens_output?: number | null
+        }
+        Update: {
+          chat_id?: string
+          content?: string
+          created_at?: string | null
+          credits_used?: number | null
+          id?: string
+          role?: string
+          sources?: Json | null
+          tokens_input?: number | null
+          tokens_output?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "advisor_messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "advisor_chats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      advisor_users: {
+        Row: {
+          company: string | null
+          created_at: string | null
+          credits_balance: number | null
+          email: string
+          free_queries_reset_at: string | null
+          free_queries_used: number | null
+          id: string
+          name: string | null
+          password_hash: string
+          role: string | null
+          sector: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string | null
+          credits_balance?: number | null
+          email: string
+          free_queries_reset_at?: string | null
+          free_queries_used?: number | null
+          id?: string
+          name?: string | null
+          password_hash: string
+          role?: string | null
+          sector?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company?: string | null
+          created_at?: string | null
+          credits_balance?: number | null
+          email?: string
+          free_queries_reset_at?: string | null
+          free_queries_used?: number | null
+          id?: string
+          name?: string | null
+          password_hash?: string
+          role?: string | null
+          sector?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       ai_model_settings: {
         Row: {
           action_type: string
