@@ -29,6 +29,7 @@ import { generateLonglistWordDocument } from '@/lib/generateLonglistWordDocument
 import type { Tables } from '@/integrations/supabase/types';
 import type { UnifiedTechEditData } from '@/types/unifiedTech';
 import type { Technology } from '@/types/database';
+import type { SelectedTipo, SelectedSubcategoria } from '@/components/taxonomy';
 
 type LonglistItem = Tables<'study_longlist'>;
 
@@ -52,6 +53,11 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingToDB, setIsSendingToDB] = useState(false);
+  
+  // Taxonomy state for checkboxes
+  const [selectedTipos, setSelectedTipos] = useState<SelectedTipo[]>([]);
+  const [selectedSubcategorias, setSelectedSubcategorias] = useState<SelectedSubcategoria[]>([]);
+  
   // Determine if already linked to database
   const isLinkedToDB = item?.already_in_db || !!item?.existing_technology_id;
 
@@ -79,17 +85,69 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     enabled: !!item?.existing_technology_id && open,
   });
 
-  // Update editData when item changes - always initialize for all items
+  // Fetch technology tipos when linked to DB
+  const { data: technologyTipos } = useQuery({
+    queryKey: ['technology-tipos', item?.existing_technology_id],
+    queryFn: async () => {
+      if (!item?.existing_technology_id) return [];
+      const { data, error } = await supabase
+        .from('technology_tipos')
+        .select('tipo_id, is_primary')
+        .eq('technology_id', item.existing_technology_id);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!item?.existing_technology_id && open,
+  });
+
+  // Fetch technology subcategorias when linked to DB
+  const { data: technologySubcategorias } = useQuery({
+    queryKey: ['technology-subcategorias', item?.existing_technology_id],
+    queryFn: async () => {
+      if (!item?.existing_technology_id) return [];
+      const { data, error } = await supabase
+        .from('technology_subcategorias')
+        .select('subcategoria_id, is_primary')
+        .eq('technology_id', item.existing_technology_id);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!item?.existing_technology_id && open,
+  });
+
+  // Update editData and taxonomy state when item/linkedTechnology changes
   useEffect(() => {
     if (item) {
       // For linked items, prefer linkedTechnology data if available
       if (isLinkedToDB && linkedTechnology) {
         setEditData(toEditData(mapFromLonglist(item, linkedTechnology)));
+        // Use tipos/subcategorias from technology_tipos/technology_subcategorias tables
+        if (technologyTipos && technologyTipos.length > 0) {
+          setSelectedTipos(technologyTipos);
+        } else if ((linkedTechnology as any).tipo_id) {
+          setSelectedTipos([{ tipo_id: (linkedTechnology as any).tipo_id, is_primary: true }]);
+        }
+        if (technologySubcategorias && technologySubcategorias.length > 0) {
+          setSelectedSubcategorias(technologySubcategorias);
+        } else if ((linkedTechnology as any).subcategoria_id) {
+          setSelectedSubcategorias([{ subcategoria_id: (linkedTechnology as any).subcategoria_id, is_primary: true }]);
+        }
       } else {
         setEditData(toEditData(mapFromLonglist(item, null)));
+        // Initialize from longlist item's tipo_id/subcategoria_id
+        if (item.tipo_id) {
+          setSelectedTipos([{ tipo_id: item.tipo_id, is_primary: true }]);
+        } else {
+          setSelectedTipos([]);
+        }
+        if (item.subcategoria_id) {
+          setSelectedSubcategorias([{ subcategoria_id: item.subcategoria_id, is_primary: true }]);
+        } else {
+          setSelectedSubcategorias([]);
+        }
       }
     }
-  }, [item?.id, isLinkedToDB, linkedTechnology]);
+  }, [item?.id, isLinkedToDB, linkedTechnology, technologyTipos, technologySubcategorias]);
 
   if (!item) return null;
 
@@ -97,6 +155,23 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   const unifiedData = mapFromLonglist(item, linkedTechnology);
   const metadata = createLonglistMetadata(studyId, studyName, item, isLinkedToDB);
   const actions = createLonglistActions(isLinkedToDB);
+
+  // Taxonomy handlers
+  const handleTiposChange = (tipos: SelectedTipo[]) => {
+    setSelectedTipos(tipos);
+    const primaryTipo = tipos.find(t => t.is_primary);
+    if (editData) {
+      setEditData({ ...editData, tipo_id: primaryTipo?.tipo_id || null });
+    }
+  };
+
+  const handleSubcategoriasChange = (subcategorias: SelectedSubcategoria[]) => {
+    setSelectedSubcategorias(subcategorias);
+    const primarySub = subcategorias.find(s => s.is_primary);
+    if (editData) {
+      setEditData({ ...editData, subcategoria_id: primarySub?.subcategoria_id || null });
+    }
+  };
 
   const handleEditChange = (field: keyof UnifiedTechEditData, value: string | number | null) => {
     if (!editData) return;
@@ -108,7 +183,11 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     
     setIsSaving(true);
     
-    // Always save to study_longlist
+    // Get primary tipo/subcategoria IDs
+    const primaryTipoId = selectedTipos.find(t => t.is_primary)?.tipo_id || null;
+    const primarySubcategoriaId = selectedSubcategorias.find(s => s.is_primary)?.subcategoria_id || null;
+    
+    // Always save to study_longlist with taxonomy IDs
     const { error: longlistError } = await supabase
       .from('study_longlist')
       .update({
@@ -128,7 +207,13 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
         innovacion: editData.innovacion,
         casos_referencia: editData.casos_referencia,
         email: editData.email,
-      } as any)
+        // Taxonomy IDs
+        tipo_id: primaryTipoId,
+        subcategoria_id: primarySubcategoriaId,
+        sector_id: editData.sector_id,
+        subsector_industrial: editData.subsector_industrial,
+        status: editData.status,
+      })
       .eq('id', item.id);
 
     // If linked to DB, also sync changes to technologies table
@@ -143,6 +228,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
           'Web de la empresa': editData.web || null,
           'Email de contacto': editData.email || null,
           'Grado de madurez (TRL)': editData.trl,
+          'Estado del seguimiento': editData.estado_seguimiento || null,
           'Descripción técnica breve': editData.description || null,
           'Tipo de tecnología': editData.type || 'Por clasificar',
           'Subcategoría': editData.subcategory || null,
@@ -152,11 +238,39 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
           'Porque es innovadora': editData.innovacion || null,
           'Casos de referencia': editData.casos_referencia || null,
           'Comentarios del analista': editData.comentarios_analista || null,
+          tipo_id: primaryTipoId,
+          subcategoria_id: primarySubcategoriaId,
+          sector_id: editData.sector_id,
+          subsector_industrial: editData.subsector_industrial,
         })
         .eq('id', item.existing_technology_id);
 
       if (techError) {
         console.error('Error syncing to technologies:', techError);
+      }
+
+      // Sync many-to-many relationships for tipos
+      if (selectedTipos.length > 0) {
+        await supabase.from('technology_tipos').delete().eq('technology_id', item.existing_technology_id);
+        await supabase.from('technology_tipos').insert(
+          selectedTipos.map(t => ({
+            technology_id: item.existing_technology_id,
+            tipo_id: t.tipo_id,
+            is_primary: t.is_primary,
+          }))
+        );
+      }
+
+      // Sync many-to-many relationships for subcategorias
+      if (selectedSubcategorias.length > 0) {
+        await supabase.from('technology_subcategorias').delete().eq('technology_id', item.existing_technology_id);
+        await supabase.from('technology_subcategorias').insert(
+          selectedSubcategorias.map(s => ({
+            technology_id: item.existing_technology_id,
+            subcategoria_id: s.subcategoria_id,
+            is_primary: s.is_primary,
+          }))
+        );
       }
     }
 
@@ -173,6 +287,8 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
       if (isLinkedToDB) {
         queryClient.invalidateQueries({ queryKey: ['technologies'] });
         queryClient.invalidateQueries({ queryKey: ['linked-technology', item.existing_technology_id] });
+        queryClient.invalidateQueries({ queryKey: ['technology-tipos', item.existing_technology_id] });
+        queryClient.invalidateQueries({ queryKey: ['technology-subcategorias', item.existing_technology_id] });
       }
       toast({
         title: 'Guardado',
@@ -193,9 +309,26 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
       return;
     }
 
+    // Validation for required fields
+    const errors: string[] = [];
+    if (!editData?.country) errors.push('País de origen');
+    if (selectedTipos.length === 0) errors.push('Tipo de tecnología');
+    if (!editData?.sector_id) errors.push('Sector');
+    
+    if (errors.length > 0) {
+      toast({
+        title: 'Campos requeridos',
+        description: `Por favor completa: ${errors.join(', ')}`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSendingToDB(true);
 
     const dataToSend = editData || toEditData(unifiedData);
+    const primaryTipoId = selectedTipos.find(t => t.is_primary)?.tipo_id || null;
+    const primarySubcategoriaId = selectedSubcategorias.find(s => s.is_primary)?.subcategoria_id || null;
     
     const { data: insertedTech, error } = await supabase
       .from('technologies')
@@ -207,6 +340,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
         'Web de la empresa': dataToSend.web || null,
         'Email de contacto': dataToSend.email || null,
         'Grado de madurez (TRL)': dataToSend.trl,
+        'Estado del seguimiento': dataToSend.estado_seguimiento || null,
         'Descripción técnica breve': dataToSend.description || null,
         'Tipo de tecnología': dataToSend.type || 'Por clasificar',
         'Subcategoría': dataToSend.subcategory || null,
@@ -218,6 +352,10 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
         'Comentarios del analista': dataToSend.comentarios_analista || null,
         status: 'en_revision',
         review_status: 'pending',
+        tipo_id: primaryTipoId,
+        subcategoria_id: primarySubcategoriaId,
+        sector_id: dataToSend.sector_id,
+        subsector_industrial: dataToSend.subsector_industrial,
       })
       .select('id')
       .single();
@@ -232,11 +370,37 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
       return;
     }
 
+    // Create many-to-many relationships for tipos
+    if (selectedTipos.length > 0) {
+      await supabase.from('technology_tipos').insert(
+        selectedTipos.map(t => ({
+          technology_id: insertedTech.id,
+          tipo_id: t.tipo_id,
+          is_primary: t.is_primary,
+        }))
+      );
+    }
+
+    // Create many-to-many relationships for subcategorias
+    if (selectedSubcategorias.length > 0) {
+      await supabase.from('technology_subcategorias').insert(
+        selectedSubcategorias.map(s => ({
+          technology_id: insertedTech.id,
+          subcategoria_id: s.subcategoria_id,
+          is_primary: s.is_primary,
+        }))
+      );
+    }
+
     const { error: updateError } = await supabase
       .from('study_longlist')
       .update({
         existing_technology_id: insertedTech.id,
         already_in_db: true,
+        tipo_id: primaryTipoId,
+        subcategoria_id: primarySubcategoriaId,
+        sector_id: dataToSend.sector_id,
+        subsector_industrial: dataToSend.subsector_industrial,
       })
       .eq('id', item.id);
 
@@ -392,6 +556,10 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
             editData={editData || undefined}
             isSaving={isSaving}
             isSendingToDB={isSendingToDB}
+            selectedTipos={selectedTipos}
+            selectedSubcategorias={selectedSubcategorias}
+            onTiposChange={handleTiposChange}
+            onSubcategoriasChange={handleSubcategoriasChange}
             onEditChange={handleEditChange}
             onStartEdit={() => setIsEditing(true)}
             onCancelEdit={() => setIsEditing(false)}
