@@ -16,6 +16,13 @@ import {
   NumberFormat,
   LevelFormat,
   convertInchesToTwip,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  ShadingType,
+  VerticalAlign,
+  TableLayoutType,
 } from 'docx';
 
 // Interface for text run base styles
@@ -467,10 +474,10 @@ export function createVandarumSubItem(label: string, content: string): Paragraph
 }
 
 /**
- * Procesa texto largo detectando párrafos, listas numeradas, bullets y tablas
+ * Procesa texto largo detectando párrafos y listas
  * Convierte texto plano en estructura profesional de Word
  * ELIMINA todos los asteriscos y formateo markdown
- * ESPECIAL: Detecta patrones "- Acción:" y "- Justificación:" para formateo con salto de línea
+ * FUERZA BULLETS en lugar de números para consistencia
  */
 export function createVandarumRichContent(text: string): Paragraph[] {
   if (!text) return [];
@@ -479,10 +486,8 @@ export function createVandarumRichContent(text: string): Paragraph[] {
   
   // PRIMERO: Detectar si contiene tablas markdown
   if (text.includes('|') && text.split('|').length > 4) {
-    // Procesar como contenido con tablas
     const cleanLines = processMarkdownTable(text);
     for (const line of cleanLines) {
-      // Detectar encabezados markdown (#, ##, etc.)
       if (/^#+\s/.test(line)) {
         const headingText = cleanMarkdownFromText(line.replace(/^#+\s*/, ''));
         paragraphs.push(createVandarumHeading2(headingText));
@@ -507,18 +512,16 @@ export function createVandarumRichContent(text: string): Paragraph[] {
       continue;
     }
     
-    // Detectar si es una lista numerada (1., 2., etc.)
+    // Detectar si es una lista numerada (1., 2., etc.) - CONVERTIR A BULLETS
     if (/^\d+\.\s/.test(trimmedBlock)) {
-      // Dividir por items numerados pero mantener sub-items juntos
       const numberedItems = trimmedBlock.split(/\n(?=\d+\.)/);
       
       for (const item of numberedItems) {
-        // Separar la línea principal de los sub-items (- Acción:, - Justificación:)
         const lines = item.split('\n');
         const mainLine = lines[0];
         const subLines = lines.slice(1);
         
-        // Procesar línea principal
+        // Procesar línea principal como BULLET (no número)
         const mainMatch = mainLine.match(/^\d+\.\s*(.*)$/s);
         if (mainMatch) {
           const content = cleanMarkdownFromText(mainMatch[1].trim());
@@ -526,24 +529,22 @@ export function createVandarumRichContent(text: string): Paragraph[] {
           if (colonIndex > 0 && colonIndex < 80) {
             const title = content.substring(0, colonIndex + 1);
             const description = content.substring(colonIndex + 1).trim();
-            paragraphs.push(createVandarumNumberedItem(`**${title}** ${description}`));
+            paragraphs.push(createVandarumBullet(`**${title}** ${description}`));
           } else {
-            paragraphs.push(createVandarumNumberedItem(content));
+            paragraphs.push(createVandarumBullet(content));
           }
         }
         
-        // Procesar sub-items con formato especial
+        // Procesar sub-items
         for (const subLine of subLines) {
           const trimmedSub = subLine.trim();
           if (!trimmedSub) continue;
           
-          // Detectar "- Acción:" o "- Justificación:" u otros patrones similares
           const subItemMatch = trimmedSub.match(/^[-•]\s*(Acción|Justificación|Notas?|Observación|Comentario):\s*(.*)$/i);
           if (subItemMatch) {
             paragraphs.push(createVandarumSubItem(subItemMatch[1], subItemMatch[2]));
           } else {
-            // Es un bullet normal
-            const content = cleanMarkdownFromText(trimmedSub.replace(/^[-•]\s*/, ''));
+            const content = cleanMarkdownFromText(trimmedSub.replace(/^[-•\d.]\s*/, ''));
             paragraphs.push(createVandarumBullet(content));
           }
         }
@@ -557,7 +558,6 @@ export function createVandarumRichContent(text: string): Paragraph[] {
       for (const item of items) {
         const trimmedItem = item.trim();
         
-        // Detectar patrón especial "- Acción:" o "- Justificación:"
         const specialMatch = trimmedItem.match(/^[-•]\s*(Acción|Justificación|Notas?|Observación|Comentario):\s*(.*)$/i);
         if (specialMatch) {
           paragraphs.push(createVandarumSubItem(specialMatch[1], specialMatch[2]));
@@ -677,6 +677,117 @@ export function createVandarumTableOfContents(items: { title: string; isAnnex?: 
 
   // NO incluye PageBreak - lo maneja cada sección
   return paragraphs;
+}
+
+/**
+ * Crea una tabla profesional con filas etiqueta-valor para fichas de tecnología
+ * Diseño: primera columna 35% con fondo gris, segunda 65% con fondo blanco
+ * Padding interno, bordes suaves, tipografía consistente
+ */
+export function createVandarumInfoTable(rows: { label: string; value: string }[]): Table {
+  const tableRows = rows.map(row => new TableRow({
+    children: [
+      // Columna etiqueta (35%)
+      new TableCell({
+        width: { size: 35, type: WidthType.PERCENTAGE },
+        shading: { type: ShadingType.SOLID, color: 'F3F4F6' },
+        verticalAlign: VerticalAlign.CENTER,
+        margins: {
+          top: 100,
+          bottom: 100,
+          left: 150,
+          right: 100,
+        },
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: row.label,
+                bold: true,
+                size: VANDARUM_SIZES.texto,
+                font: VANDARUM_FONTS.titulo,
+                color: VANDARUM_COLORS.grisTexto,
+              }),
+            ],
+            spacing: { after: 0, line: 260 },
+          }),
+        ],
+      }),
+      // Columna valor (65%)
+      new TableCell({
+        width: { size: 65, type: WidthType.PERCENTAGE },
+        verticalAlign: VerticalAlign.CENTER,
+        margins: {
+          top: 100,
+          bottom: 100,
+          left: 150,
+          right: 150,
+        },
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: row.value || 'No especificado',
+                size: VANDARUM_SIZES.texto,
+                font: VANDARUM_FONTS.texto,
+                color: row.value ? VANDARUM_COLORS.grisTexto : 'A0A0A0',
+                italics: !row.value,
+              }),
+            ],
+            spacing: { after: 0, line: 260 },
+          }),
+        ],
+      }),
+    ],
+  }));
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    layout: TableLayoutType.FIXED,
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 4, color: 'E5E7EB' },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: 'E5E7EB' },
+      left: { style: BorderStyle.SINGLE, size: 4, color: 'E5E7EB' },
+      right: { style: BorderStyle.SINGLE, size: 4, color: 'E5E7EB' },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: 'E5E7EB' },
+      insideVertical: { style: BorderStyle.SINGLE, size: 2, color: 'E5E7EB' },
+    },
+    rows: tableRows,
+  });
+}
+
+/**
+ * Crea un bloque de texto descriptivo con título para las fichas
+ * Formato: encabezado en negrita seguido de contenido con espaciado profesional
+ */
+export function createVandarumDescriptionBlock(title: string, content: string): Paragraph[] {
+  if (!content) return [];
+  
+  return [
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: title,
+          bold: true,
+          size: VANDARUM_SIZES.texto,
+          font: VANDARUM_FONTS.titulo,
+          color: VANDARUM_COLORS.verdeOscuro,
+        }),
+      ],
+      spacing: { before: 250, after: 80 },
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: content,
+          size: VANDARUM_SIZES.texto,
+          font: VANDARUM_FONTS.texto,
+          color: VANDARUM_COLORS.grisTexto,
+        }),
+      ],
+      spacing: { after: 180, line: 280 },
+    }),
+  ];
 }
 
 // Crear pie de página con copyright Vandarum
