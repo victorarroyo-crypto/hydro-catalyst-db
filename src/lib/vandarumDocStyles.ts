@@ -1,5 +1,5 @@
 // Vandarum Brand Manual - Document Styles
-// Based on Manual de la Marca Vandarum
+// Based on Manual de la Marca Vandarum - Professional minimal styling
 
 import { 
   Document, 
@@ -16,26 +16,21 @@ import {
   NumberFormat
 } from 'docx';
 
-// Colores de marca Vandarum
+// Colores de marca Vandarum - uso limitado para profesionalismo
 export const VANDARUM_COLORS = {
-  verdeOscuro: '307177',  // #307177 - Principal
-  azul: '32b4cd',         // #32b4cd
-  verdeClaro: '8cb63c',   // #8cb63c
-  naranja: 'ffa720',      // #ffa720
-  blanco: 'FFFFFF',
+  verdeOscuro: '307177',  // #307177 - Solo para títulos principales y acentos
   negro: '000000',
-  grisClaro: 'F5F5F5',
-  grisTexto: '333333',
+  grisTexto: '333333',    // Color principal del texto
+  grisClaro: '666666',    // Para texto secundario
 };
 
-// Tipografía: Helvetica Neue LT Pro (usamos Arial como fallback en Word)
+// Tipografía
 export const VANDARUM_FONTS = {
-  titulo: 'Arial',      // Fallback para Helvetica Neue LT Pro 77 Bold
-  texto: 'Arial',       // Fallback para Helvetica Neue LT Pro 55 Roman
-  alternativa: 'Arial', // Fallback para Proxima Nova
+  titulo: 'Arial',
+  texto: 'Arial',
 };
 
-// Tamaños de fuente (en half-points, Word usa half-points)
+// Tamaños de fuente (en half-points)
 export const VANDARUM_SIZES = {
   titulo: 48,      // 24pt
   subtitulo: 36,   // 18pt
@@ -46,7 +41,7 @@ export const VANDARUM_SIZES = {
   footer: 16,      // 8pt
 };
 
-// Crear párrafo de título principal con estilo Vandarum
+// Crear párrafo de título principal
 export function createVandarumTitle(text: string): Paragraph {
   return new Paragraph({
     children: [
@@ -64,7 +59,7 @@ export function createVandarumTitle(text: string): Paragraph {
   });
 }
 
-// Crear subtítulo con estilo Vandarum
+// Crear subtítulo
 export function createVandarumSubtitle(text: string): Paragraph {
   return new Paragraph({
     children: [
@@ -81,7 +76,7 @@ export function createVandarumSubtitle(text: string): Paragraph {
   });
 }
 
-// Crear heading 1 con estilo Vandarum
+// Crear heading 1
 export function createVandarumHeading1(text: string): Paragraph {
   return new Paragraph({
     children: [
@@ -106,7 +101,7 @@ export function createVandarumHeading1(text: string): Paragraph {
   });
 }
 
-// Crear heading 2 con estilo Vandarum
+// Crear heading 2
 export function createVandarumHeading2(text: string): Paragraph {
   return new Paragraph({
     children: [
@@ -114,7 +109,7 @@ export function createVandarumHeading2(text: string): Paragraph {
         text, 
         bold: true, 
         size: VANDARUM_SIZES.heading2,
-        color: VANDARUM_COLORS.azul,
+        color: VANDARUM_COLORS.grisTexto,
         font: VANDARUM_FONTS.titulo,
       })
     ],
@@ -138,14 +133,14 @@ export function createVandarumParagraph(text: string): Paragraph {
   });
 }
 
-// Crear bullet point
-export function createVandarumBullet(text: string, color?: string): Paragraph {
+// Crear bullet point - siempre en gris para profesionalismo
+export function createVandarumBullet(text: string): Paragraph {
   return new Paragraph({
     children: [
       new TextRun({ 
         text: `• ${text}`, 
         size: VANDARUM_SIZES.texto,
-        color: color || VANDARUM_COLORS.grisTexto,
+        color: VANDARUM_COLORS.grisTexto,
         font: VANDARUM_FONTS.texto,
       })
     ],
@@ -154,24 +149,22 @@ export function createVandarumBullet(text: string, color?: string): Paragraph {
   });
 }
 
-// Crear etiqueta de sección SWOT
+// Crear etiqueta de sección SWOT - todas en gris oscuro para profesionalismo
 export function createSwotLabel(type: 'strength' | 'weakness' | 'opportunity' | 'threat'): Paragraph {
   const labels = {
-    strength: { text: 'Fortalezas', color: VANDARUM_COLORS.verdeClaro },
-    weakness: { text: 'Debilidades', color: 'cb2431' },
-    opportunity: { text: 'Oportunidades', color: VANDARUM_COLORS.azul },
-    threat: { text: 'Amenazas', color: VANDARUM_COLORS.naranja },
+    strength: 'Fortalezas',
+    weakness: 'Debilidades',
+    opportunity: 'Oportunidades',
+    threat: 'Amenazas',
   };
 
-  const config = labels[type];
-  
   return new Paragraph({
     children: [
       new TextRun({ 
-        text: config.text, 
+        text: labels[type], 
         bold: true, 
         size: VANDARUM_SIZES.heading2,
-        color: config.color,
+        color: VANDARUM_COLORS.grisTexto,
         font: VANDARUM_FONTS.titulo,
       })
     ],
@@ -187,7 +180,7 @@ export function createVandarumFooter(date: string): Paragraph[] {
       children: [
         new TextRun({ 
           text: '─'.repeat(60), 
-          color: VANDARUM_COLORS.verdeOscuro,
+          color: VANDARUM_COLORS.grisClaro,
           size: VANDARUM_SIZES.footer,
         })
       ],
@@ -210,21 +203,9 @@ export function createVandarumFooter(date: string): Paragraph[] {
     new Paragraph({
       children: [
         new TextRun({ 
-          text: 'Todos los derechos reservados', 
+          text: `Documento generado el ${date} • Todos los derechos reservados`, 
           size: VANDARUM_SIZES.footer,
-          color: VANDARUM_COLORS.grisTexto,
-          font: VANDARUM_FONTS.texto,
-        })
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 50 },
-    }),
-    new Paragraph({
-      children: [
-        new TextRun({ 
-          text: `Documento generado el ${date}`, 
-          size: VANDARUM_SIZES.footer,
-          color: VANDARUM_COLORS.grisTexto,
+          color: VANDARUM_COLORS.grisClaro,
           font: VANDARUM_FONTS.texto,
         })
       ],
@@ -254,12 +235,12 @@ export function createVandarumCover(title: string, subtitle: string, date: strin
       spacing: { after: 100 },
     }),
     
-    // Línea decorativa
+    // Línea decorativa sutil
     new Paragraph({
       children: [
         new TextRun({ 
           text: '━━━━━━━━━━━━━━━━━━━━', 
-          color: VANDARUM_COLORS.naranja,
+          color: VANDARUM_COLORS.grisClaro,
           size: 24,
         })
       ],
@@ -289,7 +270,7 @@ export function createVandarumCover(title: string, subtitle: string, date: strin
           text: subtitle, 
           italics: true, 
           size: VANDARUM_SIZES.subtitulo,
-          color: VANDARUM_COLORS.grisTexto,
+          color: VANDARUM_COLORS.grisClaro,
           font: VANDARUM_FONTS.texto,
         })
       ],
@@ -303,7 +284,7 @@ export function createVandarumCover(title: string, subtitle: string, date: strin
         new TextRun({ 
           text: date, 
           size: VANDARUM_SIZES.texto,
-          color: VANDARUM_COLORS.grisTexto,
+          color: VANDARUM_COLORS.grisClaro,
           font: VANDARUM_FONTS.texto,
         })
       ],
@@ -341,7 +322,7 @@ export function createVandarumSeparator(): Paragraph {
     children: [
       new TextRun({ 
         text: '• • •', 
-        color: VANDARUM_COLORS.verdeOscuro,
+        color: VANDARUM_COLORS.grisClaro,
         size: VANDARUM_SIZES.texto,
       })
     ],
@@ -350,7 +331,7 @@ export function createVandarumSeparator(): Paragraph {
   });
 }
 
-// Crear texto destacado (para puntuaciones, recomendaciones)
+// Crear texto destacado
 export function createVandarumHighlight(label: string, value: string): Paragraph {
   return new Paragraph({
     children: [
@@ -358,7 +339,7 @@ export function createVandarumHighlight(label: string, value: string): Paragraph
         text: `${label}: `, 
         bold: true, 
         size: VANDARUM_SIZES.texto,
-        color: VANDARUM_COLORS.verdeOscuro,
+        color: VANDARUM_COLORS.grisTexto,
         font: VANDARUM_FONTS.titulo,
       }),
       new TextRun({ 

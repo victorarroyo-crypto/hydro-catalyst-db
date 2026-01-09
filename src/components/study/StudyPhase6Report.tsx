@@ -279,7 +279,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
           if (evaluation.strengths && evaluation.strengths.length > 0) {
             sections.push(createSwotLabel('strength'));
             for (const s of evaluation.strengths) {
-              sections.push(createVandarumBullet(s, VANDARUM_COLORS.verdeClaro));
+              sections.push(createVandarumBullet(s));
             }
           }
 
@@ -287,7 +287,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
           if (evaluation.weaknesses && evaluation.weaknesses.length > 0) {
             sections.push(createSwotLabel('weakness'));
             for (const w of evaluation.weaknesses) {
-              sections.push(createVandarumBullet(w, 'cb2431'));
+              sections.push(createVandarumBullet(w));
             }
           }
 
@@ -295,7 +295,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
           if (evaluation.opportunities && evaluation.opportunities.length > 0) {
             sections.push(createSwotLabel('opportunity'));
             for (const o of evaluation.opportunities) {
-              sections.push(createVandarumBullet(o, VANDARUM_COLORS.azul));
+              sections.push(createVandarumBullet(o));
             }
           }
 
@@ -303,7 +303,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
           if (evaluation.threats && evaluation.threats.length > 0) {
             sections.push(createSwotLabel('threat'));
             for (const t of evaluation.threats) {
-              sections.push(createVandarumBullet(t, VANDARUM_COLORS.naranja));
+              sections.push(createVandarumBullet(t));
             }
           }
 
@@ -395,32 +395,32 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
               sections.push(createVandarumHighlight('Recomendación', recText));
             }
 
-            // SWOT con colores de marca
+            // SWOT
             if (evaluation.strengths && evaluation.strengths.length > 0) {
               sections.push(createSwotLabel('strength'));
               for (const s of evaluation.strengths) {
-                sections.push(createVandarumBullet(s, VANDARUM_COLORS.verdeClaro));
+                sections.push(createVandarumBullet(s));
               }
             }
 
             if (evaluation.weaknesses && evaluation.weaknesses.length > 0) {
               sections.push(createSwotLabel('weakness'));
               for (const w of evaluation.weaknesses) {
-                sections.push(createVandarumBullet(w, 'cb2431'));
+                sections.push(createVandarumBullet(w));
               }
             }
 
             if (evaluation.opportunities && evaluation.opportunities.length > 0) {
               sections.push(createSwotLabel('opportunity'));
               for (const o of evaluation.opportunities) {
-                sections.push(createVandarumBullet(o, VANDARUM_COLORS.azul));
+                sections.push(createVandarumBullet(o));
               }
             }
 
             if (evaluation.threats && evaluation.threats.length > 0) {
               sections.push(createSwotLabel('threat'));
               for (const t of evaluation.threats) {
-                sections.push(createVandarumBullet(t, VANDARUM_COLORS.naranja));
+                sections.push(createVandarumBullet(t));
               }
             }
           }
