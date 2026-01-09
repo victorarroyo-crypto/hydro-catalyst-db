@@ -704,58 +704,6 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
                   <Eye className="w-5 h-5" />
                   {selectedReport ? selectedReport.title : 'Vista Previa del Informe'}
                 </CardTitle>
-                {selectedReport && (
-                  <div className="flex gap-2">
-                    {isEditing ? (
-                      <>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={handleCancelEditing}
-                        >
-                          <X className="w-4 h-4 mr-1" />
-                          Cancelar
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          onClick={handleSaveEdits}
-                          disabled={updateReport.isPending}
-                        >
-                          {updateReport.isPending ? (
-                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                          ) : (
-                            <Save className="w-4 h-4 mr-1" />
-                          )}
-                          Guardar
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={handleStartEditing}
-                        >
-                          <Edit className="w-4 h-4 mr-1" />
-                          Editar
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={handleExportReport}
-                          disabled={isExporting}
-                        >
-                          {isExporting ? (
-                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                          ) : (
-                            <Download className="w-4 h-4 mr-1" />
-                          )}
-                          Exportar
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                )}
               </div>
               {selectedReport && (
                 <CardDescription>
