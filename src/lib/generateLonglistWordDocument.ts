@@ -40,6 +40,9 @@ interface LonglistTechData {
   inclusion_reason?: string | null;
   source?: string | null;
   added_at?: string | null;
+  // New fields for full parity with technologies table
+  estado_seguimiento?: string | null;
+  fecha_scouting?: string | null;
 }
 
 /**
@@ -150,6 +153,8 @@ export async function generateLonglistWordDocument(
     { label: 'Web', value: tech.web },
     { label: 'Email de contacto', value: tech.email },
     { label: 'Grado de madurez (TRL)', value: tech.trl?.toString() },
+    { label: 'Estado del seguimiento', value: tech.estado_seguimiento },
+    { label: 'Fecha de scouting', value: tech.fecha_scouting ? new Date(tech.fecha_scouting).toLocaleDateString('es-ES') : null },
   ]));
   
   // 4. Clasificación
@@ -200,13 +205,14 @@ export async function generateLonglistWordDocument(
     }));
   }
   
-  // 9. Metadatos
-  sections.push(createVandarumHeading1('METADATOS'));
+  // 9. Información de Registro
+  sections.push(createVandarumHeading1('INFORMACIÓN DE REGISTRO'));
   sections.push(createVandarumHighlight('Estudio', studyName));
-  sections.push(createVandarumHighlight('Fuente', 
-    tech.source === 'database' ? 'Base de datos' : 
+  sections.push(createVandarumHighlight('Procedencia', 
+    tech.source === 'database' ? 'Base de Datos' : 
     tech.source === 'ai_session' || tech.source === 'ai_extracted' ? 'Búsqueda Web (IA)' : 
-    tech.source === 'manual' ? 'Entrada manual' : 'No especificada'
+    tech.source === 'manual' ? 'Entrada Manual' : 
+    tech.source === 'chrome_extension' ? 'Extensión Chrome' : 'No especificada'
   ));
   if (tech.added_at) {
     sections.push(createVandarumHighlight('Fecha de adición', 
