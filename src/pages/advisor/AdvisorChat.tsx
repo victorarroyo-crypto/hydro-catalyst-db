@@ -201,7 +201,7 @@ export default function AdvisorChat() {
               )}
             >
               {message.role === 'assistant' && (
-                <img src={vandarumSymbolBlue} alt="Vandarum" className="w-8 h-8 flex-shrink-0" />
+                <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
               )}
               <div
                 className={cn(
@@ -247,7 +247,7 @@ export default function AdvisorChat() {
           {/* Loading indicator */}
           {isLoading && (
             <div className="flex gap-3">
-              <img src={vandarumSymbolBlue} alt="Vandarum" className="w-8 h-8 flex-shrink-0" />
+              <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
               <div className="bg-muted/50 rounded-2xl rounded-tl-none p-4">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
