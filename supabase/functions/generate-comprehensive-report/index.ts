@@ -96,31 +96,20 @@ Deno.serve(async (req) => {
       restricciones: study.constraints || [],
     };
 
-    const researchSummary = research?.map(r => ({
+    const researchSummary = research?.slice(0, 20).map(r => ({
       titulo: r.title,
-      resumen: r.summary,
-      hallazgos: r.key_findings,
+      resumen: r.summary?.substring(0, 200),
+      hallazgos: r.key_findings?.slice(0, 3),
       tipo: r.source_type,
     })) || [];
 
-    const solutionsSummary = solutions?.map(s => ({
+    const solutionsSummary = solutions?.slice(0, 10).map(s => ({
       nombre: s.name,
       categoria: s.category,
-      descripcion: s.description,
-      ventajas: s.advantages,
-      desventajas: s.disadvantages,
-      proveedores: s.key_providers,
-      trl: s.estimated_trl_range,
-      costo: s.cost_range,
-    })) || [];
-
-    const longlistSummary = longlist?.map(l => ({
-      tecnologia: l.technology_name,
-      proveedor: l.provider,
-      pais: l.country,
-      descripcion: l.brief_description,
-      trl: l.trl,
-      aplicaciones: l.applications,
+      descripcion: s.description?.substring(0, 150),
+      ventajas: s.advantages?.slice(0, 3),
+      desventajas: s.disadvantages?.slice(0, 3),
+      proveedores: s.key_providers?.slice(0, 3),
     })) || [];
 
     const shortlistWithEvals = shortlist?.map(s => {
@@ -128,23 +117,33 @@ Deno.serve(async (req) => {
       return {
         tecnologia: s.longlist?.technology_name,
         proveedor: s.longlist?.provider,
+        pais: s.longlist?.country,
+        descripcion: s.longlist?.brief_description?.substring(0, 150),
         razon_seleccion: s.selection_reason,
         prioridad: s.priority,
         puntuacion: eval_?.overall_score,
         recomendacion: eval_?.recommendation,
-        fortalezas: eval_?.strengths,
-        debilidades: eval_?.weaknesses,
-        oportunidades: eval_?.opportunities,
-        amenazas: eval_?.threats,
-        ventajas_competitivas: eval_?.competitive_advantages,
-        barreras: eval_?.implementation_barriers,
+        fortalezas: eval_?.strengths?.slice(0, 3),
+        debilidades: eval_?.weaknesses?.slice(0, 3),
+        oportunidades: eval_?.opportunities?.slice(0, 3),
+        amenazas: eval_?.threats?.slice(0, 3),
+        ventajas_competitivas: eval_?.competitive_advantages?.slice(0, 3),
+        barreras: eval_?.implementation_barriers?.slice(0, 3),
       };
     }) || [];
 
     // Construir el prompt para generar el informe
-    const prompt = `Eres un experto en scouting tecnológico. Genera un informe ejecutivo completo para el siguiente estudio.
+    const systemPrompt = `Eres un experto consultor en vigilancia tecnológica y scouting de innovación. 
+Tu tarea es generar informes ejecutivos profesionales EN ESPAÑOL.
 
-IMPORTANTE: TODO EL CONTENIDO DEBE ESTAR EN ESPAÑOL. Si algún dato viene en inglés (como fortalezas, debilidades, oportunidades, amenazas), TRADÚCELO al español profesional.
+REGLAS OBLIGATORIAS:
+- TODO el contenido DEBE estar en ESPAÑOL profesional
+- Si algún dato viene en inglés (nombres de tecnologías pueden mantenerse, pero descripciones, fortalezas, debilidades, etc. deben traducirse)
+- Sé específico y utiliza los datos proporcionados
+- Las recomendaciones deben ser accionables y priorizadas
+- El tono debe ser ejecutivo y profesional`;
+
+    const userPrompt = `Genera un informe ejecutivo completo para el siguiente estudio de vigilancia tecnológica.
 
 ## DATOS DEL ESTUDIO
 
@@ -155,41 +154,18 @@ IMPORTANTE: TODO EL CONTENIDO DEBE ESTAR EN ESPAÑOL. Si algún dato viene en in
 **Objetivos:** ${studyContext.objetivos?.join(', ') || 'No especificados'}
 **Restricciones:** ${studyContext.restricciones?.join(', ') || 'No especificadas'}
 
-## INVESTIGACIÓN REALIZADA (${researchSummary.length} fuentes)
+## INVESTIGACIÓN REALIZADA (${researchSummary.length} fuentes analizadas)
 ${JSON.stringify(researchSummary, null, 2)}
 
 ## CATEGORÍAS DE SOLUCIONES IDENTIFICADAS (${solutionsSummary.length})
 ${JSON.stringify(solutionsSummary, null, 2)}
 
-## LISTA LARGA DE TECNOLOGÍAS (${longlistSummary.length})
-${JSON.stringify(longlistSummary, null, 2)}
-
-## LISTA CORTA CON EVALUACIONES (${shortlistWithEvals.length})
-(Nota: Los campos fortalezas, debilidades, oportunidades, amenazas pueden estar en inglés - tradúcelos al español)
+## LISTA CORTA DE TECNOLOGÍAS CON EVALUACIONES (${shortlistWithEvals.length})
 ${JSON.stringify(shortlistWithEvals, null, 2)}
 
----
+Usa la función generate_report para generar el informe completo EN ESPAÑOL.`;
 
-Genera un informe estructurado en formato JSON con las siguientes secciones:
-
-{
-  "executive_summary": "Resumen ejecutivo de 2-3 párrafos que sintetice el estudio, principales hallazgos y recomendaciones clave",
-  "methodology": "Descripción de la metodología de 6 fases utilizada: investigación, identificación de soluciones, lista larga, lista corta, evaluación y generación de informe",
-  "problem_analysis": "Análisis profundo del problema, contexto y necesidades identificadas",
-  "solutions_overview": "Panorama de las categorías de soluciones tecnológicas identificadas, con sus características principales",
-  "technology_comparison": "Comparativa detallada de las tecnologías en la lista corta, incluyendo análisis SWOT (Fortalezas, Debilidades, Oportunidades, Amenazas) EN ESPAÑOL, puntuaciones y recomendaciones",
-  "recommendations": "Recomendaciones estratégicas priorizadas basadas en las evaluaciones realizadas",
-  "conclusions": "Conclusiones finales y próximos pasos sugeridos"
-}
-
-REGLAS OBLIGATORIAS:
-- TODO el contenido debe estar en español profesional
-- Si los datos del SWOT están en inglés, tradúcelos al español
-- Sé específico y utiliza los datos proporcionados
-- Si faltan datos en alguna sección, menciona que no hay información disponible
-- Las recomendaciones deben ser accionables`;
-
-    console.log('[generate-comprehensive-report] Llamando a Lovable AI...');
+    console.log('[generate-comprehensive-report] Llamando a Lovable AI con tool calling...');
 
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
     if (!lovableApiKey) {
@@ -199,7 +175,7 @@ REGLAS OBLIGATORIAS:
       );
     }
 
-    // Llamar a Lovable AI (gemini-2.5-flash)
+    // Usar tool calling para output estructurado
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -209,13 +185,54 @@ REGLAS OBLIGATORIAS:
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
         ],
-        temperature: 0.7,
-        max_tokens: 4000,
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'generate_report',
+              description: 'Genera un informe ejecutivo estructurado en español',
+              parameters: {
+                type: 'object',
+                properties: {
+                  executive_summary: {
+                    type: 'string',
+                    description: 'Resumen ejecutivo de 2-3 párrafos que sintetice el estudio, principales hallazgos y recomendaciones clave. EN ESPAÑOL.'
+                  },
+                  methodology: {
+                    type: 'string',
+                    description: 'Descripción de la metodología de 6 fases utilizada: investigación, identificación de soluciones, lista larga, lista corta, evaluación y generación de informe. EN ESPAÑOL.'
+                  },
+                  problem_analysis: {
+                    type: 'string',
+                    description: 'Análisis profundo del problema, contexto y necesidades identificadas. EN ESPAÑOL.'
+                  },
+                  solutions_overview: {
+                    type: 'string',
+                    description: 'Panorama de las categorías de soluciones tecnológicas identificadas, con sus características principales. EN ESPAÑOL.'
+                  },
+                  technology_comparison: {
+                    type: 'string',
+                    description: 'Comparativa detallada de las tecnologías en la lista corta, incluyendo análisis SWOT (Fortalezas, Debilidades, Oportunidades, Amenazas), puntuaciones y recomendaciones. EN ESPAÑOL.'
+                  },
+                  recommendations: {
+                    type: 'string',
+                    description: 'Recomendaciones estratégicas priorizadas basadas en las evaluaciones realizadas. EN ESPAÑOL.'
+                  },
+                  conclusions: {
+                    type: 'string',
+                    description: 'Conclusiones finales y próximos pasos sugeridos. EN ESPAÑOL.'
+                  }
+                },
+                required: ['executive_summary', 'methodology', 'problem_analysis', 'solutions_overview', 'technology_comparison', 'recommendations', 'conclusions'],
+                additionalProperties: false
+              }
+            }
+          }
+        ],
+        tool_choice: { type: 'function', function: { name: 'generate_report' } },
       }),
     });
 
@@ -229,31 +246,43 @@ REGLAS OBLIGATORIAS:
     }
 
     const aiData = await aiResponse.json();
-    const aiContent = aiData.choices?.[0]?.message?.content;
-
     console.log('[generate-comprehensive-report] Respuesta de IA recibida');
 
-    // Parsear el JSON de la respuesta
+    // Extraer el contenido del tool call
     let reportContent;
     try {
-      // Extraer JSON del contenido (puede venir con markdown)
-      const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        reportContent = JSON.parse(jsonMatch[0]);
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (toolCall && toolCall.function?.arguments) {
+        reportContent = JSON.parse(toolCall.function.arguments);
+        console.log('[generate-comprehensive-report] Tool call parseado correctamente');
       } else {
-        throw new Error('No se encontró JSON en la respuesta');
+        // Fallback: intentar parsear content como JSON
+        const content = aiData.choices?.[0]?.message?.content;
+        if (content) {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            reportContent = JSON.parse(jsonMatch[0]);
+            console.log('[generate-comprehensive-report] JSON extraído del content');
+          } else {
+            throw new Error('No se encontró tool call ni JSON en la respuesta');
+          }
+        } else {
+          throw new Error('Respuesta vacía de la IA');
+        }
       }
     } catch (parseError) {
       console.error('[generate-comprehensive-report] Error parseando respuesta:', parseError);
-      // Usar contenido como texto plano si no es JSON
+      console.error('[generate-comprehensive-report] aiData:', JSON.stringify(aiData, null, 2).substring(0, 1000));
+      
+      // Fallback con mensaje de error claro
       reportContent = {
-        executive_summary: aiContent,
-        methodology: '',
-        problem_analysis: '',
-        solutions_overview: '',
-        technology_comparison: '',
-        recommendations: '',
-        conclusions: '',
+        executive_summary: 'Error al generar el informe. Por favor, inténtelo de nuevo.',
+        methodology: 'No se pudo generar la metodología.',
+        problem_analysis: 'No se pudo generar el análisis del problema.',
+        solutions_overview: 'No se pudo generar el panorama de soluciones.',
+        technology_comparison: 'No se pudo generar la comparativa tecnológica.',
+        recommendations: 'No se pudieron generar las recomendaciones.',
+        conclusions: 'No se pudieron generar las conclusiones.',
       };
     }
 
@@ -275,13 +304,13 @@ REGLAS OBLIGATORIAS:
         title: `Informe Final - ${study.name}`,
         version: nextVersion,
         generated_by: 'ai',
-        executive_summary: reportContent.executive_summary,
-        methodology: reportContent.methodology,
-        problem_analysis: reportContent.problem_analysis,
-        solutions_overview: reportContent.solutions_overview,
-        technology_comparison: reportContent.technology_comparison,
-        recommendations: reportContent.recommendations,
-        conclusions: reportContent.conclusions,
+        executive_summary: reportContent.executive_summary || '',
+        methodology: reportContent.methodology || '',
+        problem_analysis: reportContent.problem_analysis || '',
+        solutions_overview: reportContent.solutions_overview || '',
+        technology_comparison: reportContent.technology_comparison || '',
+        recommendations: reportContent.recommendations || '',
+        conclusions: reportContent.conclusions || '',
       })
       .select()
       .single();
