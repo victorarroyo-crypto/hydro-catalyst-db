@@ -420,200 +420,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
   return (
     <div className="space-y-8">
       {/* ============================================== */}
-      {/* SECCIÓN 1: FICHAS DE EVALUACIÓN DE TECNOLOGÍAS */}
-      {/* ============================================== */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <ClipboardList className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold">Fichas de Evaluación</h2>
-              <p className="text-sm text-muted-foreground">
-                Resumen SWOT y puntuaciones de las tecnologías del shortlist
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            onClick={handleExportEvaluationsOnly}
-            disabled={isExportingEvaluations || completedEvaluations.length === 0}
-          >
-            {isExportingEvaluations ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4 mr-2" />
-            )}
-            Exportar Fichas
-          </Button>
-        </div>
-
-        {completedEvaluations.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {evaluations?.map((evaluation) => {
-              const techName = getTechName(evaluation.shortlist_id);
-              const provider = getProviderName(evaluation.shortlist_id);
-              
-              return (
-                <Card key={evaluation.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base truncate">{techName}</CardTitle>
-                        {provider && (
-                          <CardDescription className="flex items-center gap-1 mt-1">
-                            <Building2 className="w-3 h-3" />
-                            {provider}
-                          </CardDescription>
-                        )}
-                      </div>
-                      {evaluation.overall_score && (
-                        <div className="flex flex-col items-center bg-primary/10 px-3 py-1 rounded-lg">
-                          <span className="text-2xl font-bold text-primary">{evaluation.overall_score}</span>
-                          <span className="text-[10px] text-muted-foreground">/10</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-2">
-                      {getRecommendationBadge(evaluation.recommendation)}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <Accordion type="single" collapsible className="w-full">
-                      <AccordionItem value="swot" className="border-none">
-                        <AccordionTrigger className="py-2 text-sm hover:no-underline">
-                          <span className="flex items-center gap-2">
-                            <BarChart3 className="w-4 h-4" />
-                            Ver análisis SWOT
-                          </span>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <div className="grid grid-cols-2 gap-3 pt-2">
-                            {evaluation.strengths && evaluation.strengths.length > 0 && (
-                              <div className="space-y-1">
-                                <h5 className="font-medium text-xs flex items-center gap-1 text-green-600 dark:text-green-400">
-                                  <TrendingUp className="w-3 h-3" />
-                                  Fortalezas
-                                </h5>
-                                <ul className="text-xs text-muted-foreground space-y-0.5">
-                                  {evaluation.strengths.slice(0, 3).map((s, i) => (
-                                    <li key={i} className="truncate">• {s}</li>
-                                  ))}
-                                  {evaluation.strengths.length > 3 && (
-                                    <li className="text-primary">+{evaluation.strengths.length - 3} más</li>
-                                  )}
-                                </ul>
-                              </div>
-                            )}
-                            {evaluation.weaknesses && evaluation.weaknesses.length > 0 && (
-                              <div className="space-y-1">
-                                <h5 className="font-medium text-xs flex items-center gap-1 text-red-600 dark:text-red-400">
-                                  <TrendingDown className="w-3 h-3" />
-                                  Debilidades
-                                </h5>
-                                <ul className="text-xs text-muted-foreground space-y-0.5">
-                                  {evaluation.weaknesses.slice(0, 3).map((w, i) => (
-                                    <li key={i} className="truncate">• {w}</li>
-                                  ))}
-                                  {evaluation.weaknesses.length > 3 && (
-                                    <li className="text-primary">+{evaluation.weaknesses.length - 3} más</li>
-                                  )}
-                                </ul>
-                              </div>
-                            )}
-                            {evaluation.opportunities && evaluation.opportunities.length > 0 && (
-                              <div className="space-y-1">
-                                <h5 className="font-medium text-xs flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                                  <Zap className="w-3 h-3" />
-                                  Oportunidades
-                                </h5>
-                                <ul className="text-xs text-muted-foreground space-y-0.5">
-                                  {evaluation.opportunities.slice(0, 3).map((o, i) => (
-                                    <li key={i} className="truncate">• {o}</li>
-                                  ))}
-                                  {evaluation.opportunities.length > 3 && (
-                                    <li className="text-primary">+{evaluation.opportunities.length - 3} más</li>
-                                  )}
-                                </ul>
-                              </div>
-                            )}
-                            {evaluation.threats && evaluation.threats.length > 0 && (
-                              <div className="space-y-1">
-                                <h5 className="font-medium text-xs flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                                  <AlertCircle className="w-3 h-3" />
-                                  Amenazas
-                                </h5>
-                                <ul className="text-xs text-muted-foreground space-y-0.5">
-                                  {evaluation.threats.slice(0, 3).map((t, i) => (
-                                    <li key={i} className="truncate">• {t}</li>
-                                  ))}
-                                  {evaluation.threats.length > 3 && (
-                                    <li className="text-primary">+{evaluation.threats.length - 3} más</li>
-                                  )}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Puntuaciones detalladas */}
-                          <div className="grid grid-cols-5 gap-1 mt-3 pt-3 border-t">
-                            {evaluation.trl_score && (
-                              <div className="text-center p-1.5 bg-muted rounded">
-                                <p className="text-[10px] text-muted-foreground">TRL</p>
-                                <p className="font-bold text-sm">{evaluation.trl_score}</p>
-                              </div>
-                            )}
-                            {evaluation.cost_score && (
-                              <div className="text-center p-1.5 bg-muted rounded">
-                                <p className="text-[10px] text-muted-foreground">Coste</p>
-                                <p className="font-bold text-sm">{evaluation.cost_score}</p>
-                              </div>
-                            )}
-                            {evaluation.scalability_score && (
-                              <div className="text-center p-1.5 bg-muted rounded">
-                                <p className="text-[10px] text-muted-foreground">Escala</p>
-                                <p className="font-bold text-sm">{evaluation.scalability_score}</p>
-                              </div>
-                            )}
-                            {evaluation.context_fit_score && (
-                              <div className="text-center p-1.5 bg-muted rounded">
-                                <p className="text-[10px] text-muted-foreground">Contexto</p>
-                                <p className="font-bold text-sm">{evaluation.context_fit_score}</p>
-                              </div>
-                            )}
-                            {evaluation.innovation_potential_score && (
-                              <div className="text-center p-1.5 bg-muted rounded">
-                                <p className="text-[10px] text-muted-foreground">Innovación</p>
-                                <p className="font-bold text-sm">{evaluation.innovation_potential_score}</p>
-                              </div>
-                            )}
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        ) : (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <BarChart3 className="w-12 h-12 mb-3 opacity-30" />
-              <p className="text-lg font-medium mb-1">No hay evaluaciones completadas</p>
-              <p className="text-sm text-center max-w-md">
-                Completa las evaluaciones SWOT en la Fase 5 para ver las fichas aquí
-              </p>
-            </CardContent>
-          </Card>
-        )}
-      </section>
-
-      <Separator />
-
-      {/* ============================================== */}
-      {/* SECCIÓN 2: INFORMES COMPREHENSIVOS */}
+      {/* SECCIÓN 1: INFORME COMPREHENSIVO */}
       {/* ============================================== */}
       <section>
         <div className="flex items-center gap-3 mb-4">
@@ -1011,6 +818,199 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             </Card>
           </div>
         </div>
+      </section>
+
+      <Separator />
+
+      {/* ============================================== */}
+      {/* SECCIÓN 2: FICHAS DE EVALUACIÓN DE TECNOLOGÍAS */}
+      {/* ============================================== */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <ClipboardList className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">Fichas de Evaluación</h2>
+              <p className="text-sm text-muted-foreground">
+                Resumen SWOT y puntuaciones de las tecnologías del shortlist
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={handleExportEvaluationsOnly}
+            disabled={isExportingEvaluations || completedEvaluations.length === 0}
+          >
+            {isExportingEvaluations ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Exportar Fichas
+          </Button>
+        </div>
+
+        {completedEvaluations.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {evaluations?.map((evaluation) => {
+              const techName = getTechName(evaluation.shortlist_id);
+              const provider = getProviderName(evaluation.shortlist_id);
+              
+              return (
+                <Card key={evaluation.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base truncate">{techName}</CardTitle>
+                        {provider && (
+                          <CardDescription className="flex items-center gap-1 mt-1">
+                            <Building2 className="w-3 h-3" />
+                            {provider}
+                          </CardDescription>
+                        )}
+                      </div>
+                      {evaluation.overall_score && (
+                        <div className="flex flex-col items-center bg-primary/10 px-3 py-1 rounded-lg">
+                          <span className="text-2xl font-bold text-primary">{evaluation.overall_score}</span>
+                          <span className="text-[10px] text-muted-foreground">/10</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-2">
+                      {getRecommendationBadge(evaluation.recommendation)}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="swot" className="border-none">
+                        <AccordionTrigger className="py-2 text-sm hover:no-underline">
+                          <span className="flex items-center gap-2">
+                            <BarChart3 className="w-4 h-4" />
+                            Ver análisis SWOT
+                          </span>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="grid grid-cols-2 gap-3 pt-2">
+                            {evaluation.strengths && evaluation.strengths.length > 0 && (
+                              <div className="space-y-1">
+                                <h5 className="font-medium text-xs flex items-center gap-1 text-green-600 dark:text-green-400">
+                                  <TrendingUp className="w-3 h-3" />
+                                  Fortalezas
+                                </h5>
+                                <ul className="text-xs text-muted-foreground space-y-0.5">
+                                  {evaluation.strengths.slice(0, 3).map((s, i) => (
+                                    <li key={i} className="truncate">• {s}</li>
+                                  ))}
+                                  {evaluation.strengths.length > 3 && (
+                                    <li className="text-primary">+{evaluation.strengths.length - 3} más</li>
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+                            {evaluation.weaknesses && evaluation.weaknesses.length > 0 && (
+                              <div className="space-y-1">
+                                <h5 className="font-medium text-xs flex items-center gap-1 text-red-600 dark:text-red-400">
+                                  <TrendingDown className="w-3 h-3" />
+                                  Debilidades
+                                </h5>
+                                <ul className="text-xs text-muted-foreground space-y-0.5">
+                                  {evaluation.weaknesses.slice(0, 3).map((w, i) => (
+                                    <li key={i} className="truncate">• {w}</li>
+                                  ))}
+                                  {evaluation.weaknesses.length > 3 && (
+                                    <li className="text-primary">+{evaluation.weaknesses.length - 3} más</li>
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+                            {evaluation.opportunities && evaluation.opportunities.length > 0 && (
+                              <div className="space-y-1">
+                                <h5 className="font-medium text-xs flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                  <Zap className="w-3 h-3" />
+                                  Oportunidades
+                                </h5>
+                                <ul className="text-xs text-muted-foreground space-y-0.5">
+                                  {evaluation.opportunities.slice(0, 3).map((o, i) => (
+                                    <li key={i} className="truncate">• {o}</li>
+                                  ))}
+                                  {evaluation.opportunities.length > 3 && (
+                                    <li className="text-primary">+{evaluation.opportunities.length - 3} más</li>
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+                            {evaluation.threats && evaluation.threats.length > 0 && (
+                              <div className="space-y-1">
+                                <h5 className="font-medium text-xs flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                  <AlertCircle className="w-3 h-3" />
+                                  Amenazas
+                                </h5>
+                                <ul className="text-xs text-muted-foreground space-y-0.5">
+                                  {evaluation.threats.slice(0, 3).map((t, i) => (
+                                    <li key={i} className="truncate">• {t}</li>
+                                  ))}
+                                  {evaluation.threats.length > 3 && (
+                                    <li className="text-primary">+{evaluation.threats.length - 3} más</li>
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Puntuaciones detalladas */}
+                          <div className="grid grid-cols-5 gap-1 mt-3 pt-3 border-t">
+                            {evaluation.trl_score && (
+                              <div className="text-center p-1.5 bg-muted rounded">
+                                <p className="text-[10px] text-muted-foreground">TRL</p>
+                                <p className="font-bold text-sm">{evaluation.trl_score}</p>
+                              </div>
+                            )}
+                            {evaluation.cost_score && (
+                              <div className="text-center p-1.5 bg-muted rounded">
+                                <p className="text-[10px] text-muted-foreground">Coste</p>
+                                <p className="font-bold text-sm">{evaluation.cost_score}</p>
+                              </div>
+                            )}
+                            {evaluation.scalability_score && (
+                              <div className="text-center p-1.5 bg-muted rounded">
+                                <p className="text-[10px] text-muted-foreground">Escala</p>
+                                <p className="font-bold text-sm">{evaluation.scalability_score}</p>
+                              </div>
+                            )}
+                            {evaluation.context_fit_score && (
+                              <div className="text-center p-1.5 bg-muted rounded">
+                                <p className="text-[10px] text-muted-foreground">Contexto</p>
+                                <p className="font-bold text-sm">{evaluation.context_fit_score}</p>
+                              </div>
+                            )}
+                            {evaluation.innovation_potential_score && (
+                              <div className="text-center p-1.5 bg-muted rounded">
+                                <p className="text-[10px] text-muted-foreground">Innovación</p>
+                                <p className="font-bold text-sm">{evaluation.innovation_potential_score}</p>
+                              </div>
+                            )}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <BarChart3 className="w-12 h-12 mb-3 opacity-30" />
+              <p className="text-lg font-medium mb-1">No hay evaluaciones completadas</p>
+              <p className="text-sm text-center max-w-md">
+                Completa las evaluaciones SWOT en la Fase 5 para ver las fichas aquí
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </section>
     </div>
   );
