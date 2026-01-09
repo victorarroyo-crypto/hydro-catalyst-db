@@ -221,6 +221,126 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         );
       }
 
+      // Análisis SWOT por Tecnología (desde evaluaciones)
+      if (evaluations && evaluations.length > 0) {
+        sections.push(
+          new Paragraph({ children: [new TextRun({ text: 'Análisis SWOT por Tecnología', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } })
+        );
+
+        for (const evaluation of evaluations) {
+          const techName = getTechName(evaluation.shortlist_id);
+          
+          // Nombre de la tecnología
+          sections.push(
+            new Paragraph({ 
+              children: [new TextRun({ text: techName, bold: true, size: 24 })], 
+              heading: HeadingLevel.HEADING_2, 
+              spacing: { before: 300, after: 150 } 
+            })
+          );
+
+          // Puntuación general
+          if (evaluation.overall_score) {
+            sections.push(
+              new Paragraph({ 
+                children: [new TextRun({ text: `Puntuación General: ${evaluation.overall_score}/100`, bold: true })], 
+                spacing: { after: 100 } 
+              })
+            );
+          }
+
+          // Recomendación
+          if (evaluation.recommendation) {
+            sections.push(
+              new Paragraph({ 
+                children: [
+                  new TextRun({ text: 'Recomendación: ', bold: true }),
+                  new TextRun({ text: evaluation.recommendation })
+                ], 
+                spacing: { after: 100 } 
+              })
+            );
+          }
+
+          // Fortalezas
+          if (evaluation.strengths && evaluation.strengths.length > 0) {
+            sections.push(
+              new Paragraph({ children: [new TextRun({ text: 'Fortalezas:', bold: true, color: '22863a' })], spacing: { before: 150, after: 50 } })
+            );
+            for (const strength of evaluation.strengths) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: `• ${strength}` })], spacing: { after: 50 } })
+              );
+            }
+          }
+
+          // Debilidades
+          if (evaluation.weaknesses && evaluation.weaknesses.length > 0) {
+            sections.push(
+              new Paragraph({ children: [new TextRun({ text: 'Debilidades:', bold: true, color: 'cb2431' })], spacing: { before: 150, after: 50 } })
+            );
+            for (const weakness of evaluation.weaknesses) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: `• ${weakness}` })], spacing: { after: 50 } })
+              );
+            }
+          }
+
+          // Oportunidades
+          if (evaluation.opportunities && evaluation.opportunities.length > 0) {
+            sections.push(
+              new Paragraph({ children: [new TextRun({ text: 'Oportunidades:', bold: true, color: '0366d6' })], spacing: { before: 150, after: 50 } })
+            );
+            for (const opportunity of evaluation.opportunities) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: `• ${opportunity}` })], spacing: { after: 50 } })
+              );
+            }
+          }
+
+          // Amenazas
+          if (evaluation.threats && evaluation.threats.length > 0) {
+            sections.push(
+              new Paragraph({ children: [new TextRun({ text: 'Amenazas:', bold: true, color: 'e36209' })], spacing: { before: 150, after: 50 } })
+            );
+            for (const threat of evaluation.threats) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: `• ${threat}` })], spacing: { after: 50 } })
+              );
+            }
+          }
+
+          // Ventajas competitivas
+          if (evaluation.competitive_advantages && evaluation.competitive_advantages.length > 0) {
+            sections.push(
+              new Paragraph({ children: [new TextRun({ text: 'Ventajas Competitivas:', bold: true })], spacing: { before: 150, after: 50 } })
+            );
+            for (const advantage of evaluation.competitive_advantages) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: `• ${advantage}` })], spacing: { after: 50 } })
+              );
+            }
+          }
+
+          // Barreras de implementación
+          if (evaluation.implementation_barriers && evaluation.implementation_barriers.length > 0) {
+            sections.push(
+              new Paragraph({ children: [new TextRun({ text: 'Barreras de Implementación:', bold: true })], spacing: { before: 150, after: 50 } })
+            );
+            for (const barrier of evaluation.implementation_barriers) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: `• ${barrier}` })], spacing: { after: 50 } })
+              );
+            }
+          }
+
+          // Separador entre tecnologías
+          sections.push(
+            new Paragraph({ children: [], spacing: { after: 200 } })
+          );
+        }
+      }
+
       const doc = new Document({
         sections: [{ children: sections }],
       });
