@@ -759,6 +759,39 @@ export function useCreateReport() {
   });
 }
 
+export function useUpdateReport() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, study_id, ...updates }: Partial<StudyReport> & { id: string; study_id: string }) => {
+      const { data, error } = await supabase
+        .from('study_reports')
+        .update({
+          executive_summary: updates.executive_summary,
+          methodology: updates.methodology,
+          problem_analysis: updates.problem_analysis,
+          solutions_overview: updates.solutions_overview,
+          technology_comparison: updates.technology_comparison,
+          recommendations: updates.recommendations,
+          conclusions: updates.conclusions,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return { ...data, study_id };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['study-reports', data.study_id] });
+      toast({ title: 'Informe actualizado' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Helper to get study stats
 export function useStudyStats(studyId: string | undefined) {
   const { data: research } = useStudyResearch(studyId);
