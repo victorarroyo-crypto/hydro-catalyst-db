@@ -142,7 +142,9 @@ Deno.serve(async (req) => {
     }) || [];
 
     // Construir el prompt para generar el informe
-    const prompt = `Eres un experto en scouting tecnológico. Genera un informe ejecutivo completo para el siguiente estudio:
+    const prompt = `Eres un experto en scouting tecnológico. Genera un informe ejecutivo completo para el siguiente estudio.
+
+IMPORTANTE: TODO EL CONTENIDO DEBE ESTAR EN ESPAÑOL. Si algún dato viene en inglés (como fortalezas, debilidades, oportunidades, amenazas), TRADÚCELO al español profesional.
 
 ## DATOS DEL ESTUDIO
 
@@ -163,6 +165,7 @@ ${JSON.stringify(solutionsSummary, null, 2)}
 ${JSON.stringify(longlistSummary, null, 2)}
 
 ## LISTA CORTA CON EVALUACIONES (${shortlistWithEvals.length})
+(Nota: Los campos fortalezas, debilidades, oportunidades, amenazas pueden estar en inglés - tradúcelos al español)
 ${JSON.stringify(shortlistWithEvals, null, 2)}
 
 ---
@@ -174,13 +177,14 @@ Genera un informe estructurado en formato JSON con las siguientes secciones:
   "methodology": "Descripción de la metodología de 6 fases utilizada: investigación, identificación de soluciones, lista larga, lista corta, evaluación y generación de informe",
   "problem_analysis": "Análisis profundo del problema, contexto y necesidades identificadas",
   "solutions_overview": "Panorama de las categorías de soluciones tecnológicas identificadas, con sus características principales",
-  "technology_comparison": "Comparativa detallada de las tecnologías en la lista corta, incluyendo puntuaciones, fortalezas y debilidades",
+  "technology_comparison": "Comparativa detallada de las tecnologías en la lista corta, incluyendo análisis SWOT (Fortalezas, Debilidades, Oportunidades, Amenazas) EN ESPAÑOL, puntuaciones y recomendaciones",
   "recommendations": "Recomendaciones estratégicas priorizadas basadas en las evaluaciones realizadas",
   "conclusions": "Conclusiones finales y próximos pasos sugeridos"
 }
 
-IMPORTANTE:
-- Escribe en español profesional
+REGLAS OBLIGATORIAS:
+- TODO el contenido debe estar en español profesional
+- Si los datos del SWOT están en inglés, tradúcelos al español
 - Sé específico y utiliza los datos proporcionados
 - Si faltan datos en alguna sección, menciona que no hay información disponible
 - Las recomendaciones deben ser accionables`;
