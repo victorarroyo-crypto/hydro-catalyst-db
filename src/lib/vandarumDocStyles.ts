@@ -440,9 +440,37 @@ export function createVandarumFormattedParagraph(text: string): Paragraph {
 }
 
 /**
+ * Crea un sub-item formateado con etiqueta en negrita (Acción, Justificación)
+ */
+export function createVandarumSubItem(label: string, content: string): Paragraph {
+  const cleanContent = cleanMarkdownFromText(content);
+  
+  return new Paragraph({
+    children: [
+      new TextRun({ 
+        text: `${label}: `, 
+        bold: true, 
+        size: VANDARUM_SIZES.texto,
+        color: VANDARUM_COLORS.verdeOscuro,
+        font: VANDARUM_FONTS.titulo,
+      }),
+      new TextRun({ 
+        text: cleanContent, 
+        size: VANDARUM_SIZES.texto,
+        color: VANDARUM_COLORS.grisTexto,
+        font: VANDARUM_FONTS.texto,
+      })
+    ],
+    spacing: { before: 120, after: 180, line: 280 },
+    indent: { left: convertInchesToTwip(0.75) },
+  });
+}
+
+/**
  * Procesa texto largo detectando párrafos, listas numeradas, bullets y tablas
  * Convierte texto plano en estructura profesional de Word
  * ELIMINA todos los asteriscos y formateo markdown
+ * ESPECIAL: Detecta patrones "- Acción:" y "- Justificación:" para formateo con salto de línea
  */
 export function createVandarumRichContent(text: string): Paragraph[] {
   if (!text) return [];
@@ -481,14 +509,21 @@ export function createVandarumRichContent(text: string): Paragraph[] {
     
     // Detectar si es una lista numerada (1., 2., etc.)
     if (/^\d+\.\s/.test(trimmedBlock)) {
-      const items = trimmedBlock.split(/\n(?=\d+\.)/);
-      for (const item of items) {
-        const match = item.match(/^\d+\.\s*(.*)$/s);
-        if (match) {
-          // Separar título y descripción si hay dos puntos
-          const content = cleanMarkdownFromText(match[1].trim());
+      // Dividir por items numerados pero mantener sub-items juntos
+      const numberedItems = trimmedBlock.split(/\n(?=\d+\.)/);
+      
+      for (const item of numberedItems) {
+        // Separar la línea principal de los sub-items (- Acción:, - Justificación:)
+        const lines = item.split('\n');
+        const mainLine = lines[0];
+        const subLines = lines.slice(1);
+        
+        // Procesar línea principal
+        const mainMatch = mainLine.match(/^\d+\.\s*(.*)$/s);
+        if (mainMatch) {
+          const content = cleanMarkdownFromText(mainMatch[1].trim());
           const colonIndex = content.indexOf(':');
-          if (colonIndex > 0 && colonIndex < 50) {
+          if (colonIndex > 0 && colonIndex < 80) {
             const title = content.substring(0, colonIndex + 1);
             const description = content.substring(colonIndex + 1).trim();
             paragraphs.push(createVandarumNumberedItem(`**${title}** ${description}`));
@@ -496,24 +531,50 @@ export function createVandarumRichContent(text: string): Paragraph[] {
             paragraphs.push(createVandarumNumberedItem(content));
           }
         }
+        
+        // Procesar sub-items con formato especial
+        for (const subLine of subLines) {
+          const trimmedSub = subLine.trim();
+          if (!trimmedSub) continue;
+          
+          // Detectar "- Acción:" o "- Justificación:" u otros patrones similares
+          const subItemMatch = trimmedSub.match(/^[-•]\s*(Acción|Justificación|Notas?|Observación|Comentario):\s*(.*)$/i);
+          if (subItemMatch) {
+            paragraphs.push(createVandarumSubItem(subItemMatch[1], subItemMatch[2]));
+          } else {
+            // Es un bullet normal
+            const content = cleanMarkdownFromText(trimmedSub.replace(/^[-•]\s*/, ''));
+            paragraphs.push(createVandarumBullet(content));
+          }
+        }
       }
+      continue;
     }
+    
     // Detectar si es una lista de bullets (- o •)
-    else if (/^[-•]\s/.test(trimmedBlock)) {
+    if (/^[-•]\s/.test(trimmedBlock)) {
       const items = trimmedBlock.split(/\n(?=[-•]\s)/);
       for (const item of items) {
-        const content = cleanMarkdownFromText(item.replace(/^[-•]\s*/, '').trim());
-        paragraphs.push(createVandarumBullet(content));
-      }
-    }
-    // Párrafo normal - dividir por saltos de línea simples
-    else {
-      const lines = trimmedBlock.split(/\n/);
-      for (const line of lines) {
-        const cleanLine = cleanMarkdownFromText(line.trim());
-        if (cleanLine) {
-          paragraphs.push(createVandarumFormattedParagraph(cleanLine));
+        const trimmedItem = item.trim();
+        
+        // Detectar patrón especial "- Acción:" o "- Justificación:"
+        const specialMatch = trimmedItem.match(/^[-•]\s*(Acción|Justificación|Notas?|Observación|Comentario):\s*(.*)$/i);
+        if (specialMatch) {
+          paragraphs.push(createVandarumSubItem(specialMatch[1], specialMatch[2]));
+        } else {
+          const content = cleanMarkdownFromText(trimmedItem.replace(/^[-•]\s*/, ''));
+          paragraphs.push(createVandarumBullet(content));
         }
+      }
+      continue;
+    }
+    
+    // Párrafo normal - dividir por saltos de línea simples
+    const lines = trimmedBlock.split(/\n/);
+    for (const line of lines) {
+      const cleanLine = cleanMarkdownFromText(line.trim());
+      if (cleanLine) {
+        paragraphs.push(createVandarumFormattedParagraph(cleanLine));
       }
     }
   }
