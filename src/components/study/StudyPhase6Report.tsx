@@ -518,8 +518,8 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             }));
           }
 
-          // ===== INFORMACIÓN GENERAL - Tabla profesional =====
-          sections.push(createVandarumHeading1('INFORMACIÓN GENERAL'));
+          // ===== Información general - Tabla profesional =====
+          sections.push(createVandarumHeading1('Información general'));
           
           const generalInfoRows: { label: string; value: string }[] = [
             { label: 'Proveedor / Empresa', value: tech.provider || '' },
@@ -544,7 +544,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
           ].filter(row => row.value);
           
           if (classificationRows.length > 0) {
-            sections.push(createVandarumHeading1('CLASIFICACIÓN'));
+            sections.push(createVandarumHeading1('Clasificación'));
             sections.push(createVandarumInfoTable(classificationRows));
             sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
           }
@@ -565,9 +565,9 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             }));
           }
 
-          // ===== DESCRIPCIÓN TÉCNICA =====
+          // ===== Descripción técnica =====
           if (tech.brief_description) {
-            sections.push(createVandarumHeading1('DESCRIPCIÓN TÉCNICA'));
+            sections.push(createVandarumHeading1('Descripción técnica'));
             sections.push(new Paragraph({
               children: [
                 new TextRun({
@@ -581,9 +581,9 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             }));
           }
 
-          // ===== INNOVACIÓN Y VENTAJAS =====
+          // ===== Innovación y ventajas =====
           if (tech.ventaja_competitiva || tech.innovacion) {
-            sections.push(createVandarumHeading1('INNOVACIÓN Y VENTAJAS'));
+            sections.push(createVandarumHeading1('Innovación y ventajas'));
             
             if (tech.ventaja_competitiva) {
               sections.push(new Paragraph({
@@ -628,9 +628,9 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             }
           }
 
-          // ===== REFERENCIAS =====
+          // ===== Referencias =====
           if (tech.casos_referencia) {
-            sections.push(createVandarumHeading1('REFERENCIAS'));
+            sections.push(createVandarumHeading1('Referencias'));
             sections.push(new Paragraph({
               children: [
                 new TextRun({
@@ -644,9 +644,9 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             }));
           }
 
-          // ===== NOTAS DEL ANALISTA =====
+          // ===== Notas del analista =====
           if (tech.inclusion_reason) {
-            sections.push(createVandarumHeading1('NOTAS DEL ANALISTA'));
+            sections.push(createVandarumHeading1('Notas del analista'));
             sections.push(new Paragraph({
               children: [
                 new TextRun({
@@ -676,7 +676,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             registroRows.push({ label: 'Razón de selección', value: item.selection_reason });
           }
           
-          sections.push(createVandarumHeading1('INFORMACIÓN DE REGISTRO'));
+          sections.push(createVandarumHeading1('Información de registro'));
           sections.push(createVandarumInfoTable(registroRows));
         }
       }
