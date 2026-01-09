@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Document, Packer, Paragraph, PageBreak, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle as DocxBorderStyle, ShadingType } from 'docx';
+import { Document, Packer, Paragraph, PageBreak, TextRun, ImageRun, Table } from 'docx';
 import {
   createVandarumCover,
   createVandarumCoverWithLogo,
@@ -62,6 +62,8 @@ import {
   createVandarumSwotBlock,
   createVandarumSeparator,
   createVandarumTableOfContents,
+  createVandarumInfoTable,
+  createVandarumDescriptionBlock,
   VANDARUM_NUMBERING_CONFIG,
   VANDARUM_COLORS,
   VANDARUM_FONTS,
@@ -478,179 +480,81 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
               })
             ],
             alignment: 'center' as any,
-            spacing: { after: 300 },
+            spacing: { after: 400 },
           }));
 
-          // ===== INFORMACIÓN GENERAL =====
+          // ===== INFORMACIÓN GENERAL - Tabla profesional =====
           sections.push(createVandarumHeading2('Información General'));
-          const mainInfoRows: TableRow[] = [];
           
-          const addTableRow = (label: string, value: string) => {
-            mainInfoRows.push(new TableRow({
-              children: [
-                new TableCell({
-                  width: { size: 30, type: WidthType.PERCENTAGE },
-                  shading: { type: ShadingType.SOLID, color: 'E8E8E8' },
-                  children: [
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: label,
-                          bold: true,
-                          size: VANDARUM_SIZES.texto,
-                          font: VANDARUM_FONTS.texto,
-                        }),
-                      ],
-                    }),
-                  ],
-                }),
-                new TableCell({
-                  width: { size: 70, type: WidthType.PERCENTAGE },
-                  children: [
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: value || 'N/A',
-                          size: VANDARUM_SIZES.texto,
-                          font: VANDARUM_FONTS.texto,
-                        }),
-                      ],
-                    }),
-                  ],
-                }),
-              ],
-            }));
-          };
+          const generalInfoRows: { label: string; value: string }[] = [];
+          generalInfoRows.push({ label: 'Proveedor / Empresa', value: tech.provider || '' });
+          generalInfoRows.push({ label: 'País de origen', value: tech.country || '' });
+          if (tech.paises_actua) generalInfoRows.push({ label: 'Países donde actúa', value: tech.paises_actua });
+          generalInfoRows.push({ label: 'Web de la empresa', value: tech.web || '' });
+          if (tech.email) generalInfoRows.push({ label: 'Email de contacto', value: tech.email });
+          generalInfoRows.push({ label: 'Grado de madurez (TRL)', value: tech.trl ? `TRL ${tech.trl}` : '' });
+          
+          sections.push(createVandarumInfoTable(generalInfoRows));
+          sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
 
-          if (tech.provider) addTableRow('Proveedor / Empresa', tech.provider);
-          if (tech.country) addTableRow('País de origen', tech.country);
-          if (tech.paises_actua) addTableRow('Países donde actúa', tech.paises_actua);
-          if (tech.web) addTableRow('Web de la empresa', tech.web);
-          if (tech.email) addTableRow('Email de contacto', tech.email);
-          if (tech.trl) addTableRow('Grado de madurez (TRL)', `TRL ${tech.trl}`);
-
-          if (mainInfoRows.length > 0) {
-            sections.push(new Table({
-              width: { size: 100, type: WidthType.PERCENTAGE },
-              borders: {
-                top: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                bottom: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                left: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                right: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                insideHorizontal: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                insideVertical: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-              },
-              rows: mainInfoRows,
-            }));
-          }
-
-          // ===== CLASIFICACIÓN =====
+          // ===== CLASIFICACIÓN - Tabla profesional =====
           const hasClassification = tech.type_suggested || tech.subcategory_suggested || tech.sector;
           if (hasClassification) {
             sections.push(createVandarumHeading2('Clasificación'));
-            const classRows: TableRow[] = [];
-            if (tech.type_suggested) {
-              classRows.push(new TableRow({
-                children: [
-                  new TableCell({
-                    width: { size: 30, type: WidthType.PERCENTAGE },
-                    shading: { type: ShadingType.SOLID, color: 'E8E8E8' },
-                    children: [new Paragraph({ children: [new TextRun({ text: 'Tipo de tecnología', bold: true, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
-                  }),
-                  new TableCell({
-                    width: { size: 70, type: WidthType.PERCENTAGE },
-                    children: [new Paragraph({ children: [new TextRun({ text: tech.type_suggested, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
-                  }),
-                ],
-              }));
-            }
-            if (tech.subcategory_suggested) {
-              classRows.push(new TableRow({
-                children: [
-                  new TableCell({
-                    width: { size: 30, type: WidthType.PERCENTAGE },
-                    shading: { type: ShadingType.SOLID, color: 'E8E8E8' },
-                    children: [new Paragraph({ children: [new TextRun({ text: 'Subcategoría', bold: true, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
-                  }),
-                  new TableCell({
-                    width: { size: 70, type: WidthType.PERCENTAGE },
-                    children: [new Paragraph({ children: [new TextRun({ text: tech.subcategory_suggested, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
-                  }),
-                ],
-              }));
-            }
-            if (tech.sector) {
-              classRows.push(new TableRow({
-                children: [
-                  new TableCell({
-                    width: { size: 30, type: WidthType.PERCENTAGE },
-                    shading: { type: ShadingType.SOLID, color: 'E8E8E8' },
-                    children: [new Paragraph({ children: [new TextRun({ text: 'Sector', bold: true, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
-                  }),
-                  new TableCell({
-                    width: { size: 70, type: WidthType.PERCENTAGE },
-                    children: [new Paragraph({ children: [new TextRun({ text: tech.sector, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
-                  }),
-                ],
-              }));
-            }
+            
+            const classRows: { label: string; value: string }[] = [];
+            if (tech.type_suggested) classRows.push({ label: 'Tipo de tecnología', value: tech.type_suggested });
+            if (tech.subcategory_suggested) classRows.push({ label: 'Subcategoría', value: tech.subcategory_suggested });
+            if (tech.sector) classRows.push({ label: 'Sector', value: tech.sector });
+            if (tech.subsector_industrial) classRows.push({ label: 'Subsector industrial', value: tech.subsector_industrial });
+            
             if (classRows.length > 0) {
-              sections.push(new Table({
-                width: { size: 100, type: WidthType.PERCENTAGE },
-                borders: {
-                  top: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                  bottom: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                  left: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                  right: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                  insideHorizontal: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                  insideVertical: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-                },
-                rows: classRows,
-              }));
+              sections.push(createVandarumInfoTable(classRows));
+              sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
             }
           }
 
-          // ===== DESCRIPCIÓN TÉCNICA =====
+          // ===== DESCRIPCIÓN TÉCNICA - Con espaciado profesional =====
           if (tech.brief_description) {
-            sections.push(createVandarumHeading2('Descripción Técnica'));
-            sections.push(...createVandarumRichContent(tech.brief_description));
+            sections.push(...createVandarumDescriptionBlock('Descripción Técnica', tech.brief_description));
           }
 
           // ===== INNOVACIÓN Y VENTAJAS =====
-          const hasInnovation = tech.ventaja_competitiva || tech.innovacion;
-          if (hasInnovation) {
-            sections.push(createVandarumHeading2('Innovación y Ventajas'));
-            if (tech.ventaja_competitiva) {
-              sections.push(createVandarumHighlight('Ventaja competitiva', tech.ventaja_competitiva));
-            }
-            if (tech.innovacion) {
-              sections.push(createVandarumHighlight('Por qué es innovadora', tech.innovacion));
-            }
+          if (tech.ventaja_competitiva) {
+            sections.push(...createVandarumDescriptionBlock('Ventaja Competitiva', tech.ventaja_competitiva));
+          }
+          if (tech.innovacion) {
+            sections.push(...createVandarumDescriptionBlock('Por qué es Innovadora', tech.innovacion));
           }
 
           // ===== REFERENCIAS =====
           if (tech.casos_referencia) {
-            sections.push(createVandarumHeading2('Referencias'));
-            sections.push(...createVandarumRichContent(tech.casos_referencia));
+            sections.push(...createVandarumDescriptionBlock('Casos de Referencia', tech.casos_referencia));
           }
 
           // ===== NOTAS DEL ANALISTA =====
           if (tech.inclusion_reason) {
-            sections.push(createVandarumHeading2('Notas del Analista'));
-            sections.push(createVandarumParagraph(tech.inclusion_reason));
+            sections.push(...createVandarumDescriptionBlock('Notas del Analista', tech.inclusion_reason));
           }
 
-          // ===== INFORMACIÓN DE REGISTRO =====
+          // ===== INFORMACIÓN DE REGISTRO - Tabla profesional =====
           sections.push(createVandarumHeading2('Información de Registro'));
-          sections.push(createVandarumHighlight('Estudio', study.name));
+          
           const sourceLabel = tech.source === 'database' ? 'Base de Datos' : 
             tech.source === 'ai_session' || tech.source === 'ai_extracted' ? 'Búsqueda Web (IA)' : 
             tech.source === 'manual' ? 'Entrada Manual' : 
             tech.source === 'chrome_extension' ? 'Extensión Chrome' : 'No especificada';
-          sections.push(createVandarumHighlight('Procedencia', sourceLabel));
-          if (tech.added_at) {
-            sections.push(createVandarumHighlight('Fecha de adición', new Date(tech.added_at).toLocaleDateString('es-ES')));
+          
+          const registroRows: { label: string; value: string }[] = [
+            { label: 'Estudio', value: study.name },
+            { label: 'Procedencia', value: sourceLabel },
+            { label: 'Fecha de adición', value: tech.added_at ? new Date(tech.added_at).toLocaleDateString('es-ES') : '' },
+          ];
+          if (item.selection_reason) {
+            registroRows.push({ label: 'Razón de selección', value: item.selection_reason });
           }
+          
+          sections.push(createVandarumInfoTable(registroRows));
           
           // NO incluir SWOT aquí - ya está en la Comparativa Tecnológica
         }

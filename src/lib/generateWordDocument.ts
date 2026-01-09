@@ -9,11 +9,6 @@ import {
   Paragraph,
   TextRun,
   Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  BorderStyle,
-  ShadingType,
 } from "docx";
 import { saveAs } from "file-saver";
 import type { Technology } from "@/types/database";
@@ -30,6 +25,8 @@ import {
   createVandarumHighlight,
   createVandarumRichContent,
   createVandarumFooter,
+  createVandarumInfoTable,
+  createVandarumDescriptionBlock,
   cleanMarkdownFromText,
 } from './vandarumDocStyles';
 
@@ -53,65 +50,17 @@ const formatDate = (dateStr: string | null) => {
   }
 };
 
-// Create a styled table row for Vandarum format
-const createTableRow = (label: string, value: string) => {
-  return new TableRow({
-    children: [
-      new TableCell({
-        width: { size: 30, type: WidthType.PERCENTAGE },
-        shading: { type: ShadingType.SOLID, color: "E8E8E8" },
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: label,
-                bold: true,
-                size: VANDARUM_SIZES.texto,
-                font: VANDARUM_FONTS.texto,
-              }),
-            ],
-          }),
-        ],
-      }),
-      new TableCell({
-        width: { size: 70, type: WidthType.PERCENTAGE },
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: value || "N/A",
-                size: VANDARUM_SIZES.texto,
-                font: VANDARUM_FONTS.texto,
-              }),
-            ],
-          }),
-        ],
-      }),
-    ],
-  });
-};
-
-// Create info section with table
+// Create info section with professional table
 function createInfoSection(title: string, fields: { label: string; value: string | null | undefined }[]): (Paragraph | Table)[] {
   const result: (Paragraph | Table)[] = [createVandarumHeading1(title)];
   
-  const rows = fields
+  const validFields = fields
     .filter(f => f.value)
-    .map(f => createTableRow(f.label, cleanMarkdownFromText(f.value!)));
+    .map(f => ({ label: f.label, value: cleanMarkdownFromText(f.value!) }));
   
-  if (rows.length > 0) {
-    result.push(new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: {
-        top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-        bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-        left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-        right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-        insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-      },
-      rows,
-    }));
+  if (validFields.length > 0) {
+    result.push(createVandarumInfoTable(validFields));
+    result.push(new Paragraph({ children: [], spacing: { after: 200 } }));
   } else {
     result.push(new Paragraph({
       children: [
@@ -130,7 +79,7 @@ function createInfoSection(title: string, fields: { label: string; value: string
   return result;
 }
 
-// Create text section
+// Create text section with professional formatting
 function createTextSection(title: string, content: string | null | undefined): Paragraph[] {
   if (!content) return [];
   
