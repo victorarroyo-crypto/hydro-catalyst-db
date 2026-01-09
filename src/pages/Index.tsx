@@ -153,10 +153,10 @@ const Index = () => {
                   <ArrowRight className="w-4 h-4" />
                 </Button>
                 <Link to="/advisor">
-                  <Button 
-                    size="lg"
-                    variant="outline"
-                    className="border-white/30 text-white hover:bg-white/10 font-medium px-8 gap-2"
+              <Button 
+                size="lg"
+                variant="outline"
+                className="bg-transparent border-white/30 text-white hover:bg-white/10 font-medium px-8 gap-2"
                   >
                     <Sparkles className="w-4 h-4" />
                     Consultar AI Advisor
