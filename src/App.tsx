@@ -36,6 +36,13 @@ import ScoutingMonitor from "./pages/ScoutingMonitor";
 import AdminScoutingJobs from "./pages/AdminScoutingJobs";
 import Studies from "./pages/Studies";
 import StudyDetail from "./pages/StudyDetail";
+import AdvisorLanding from "./pages/advisor/AdvisorLanding";
+import AdvisorAuth from "./pages/advisor/AdvisorAuth";
+import AdvisorChat from "./pages/advisor/AdvisorChat";
+import AdvisorDashboard from "./pages/advisor/AdvisorDashboard";
+import AdvisorHistory from "./pages/advisor/AdvisorHistory";
+import AdvisorPricing from "./pages/advisor/AdvisorPricing";
+import { AdvisorAuthProvider } from "./contexts/AdvisorAuthContext";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -86,6 +93,28 @@ const App = () => (
               <Route path="/scouting-monitor" element={<ScoutingMonitor />} />
               <Route path="/admin/scouting-jobs" element={<AdminScoutingJobs />} />
             </Route>
+            {/* AI Advisor Routes - Public */}
+            <Route path="/advisor" element={<AdvisorLanding />} />
+            <Route path="/advisor/auth" element={<AdvisorAuth />} />
+            <Route path="/advisor/pricing" element={<AdvisorPricing />} />
+            
+            {/* AI Advisor Routes - Protected with AdvisorAuthProvider */}
+            <Route path="/advisor/chat" element={
+              <AdvisorAuthProvider>
+                <AdvisorChat />
+              </AdvisorAuthProvider>
+            } />
+            <Route path="/advisor/dashboard" element={
+              <AdvisorAuthProvider>
+                <AdvisorDashboard />
+              </AdvisorAuthProvider>
+            } />
+            <Route path="/advisor/history" element={
+              <AdvisorAuthProvider>
+                <AdvisorHistory />
+              </AdvisorAuthProvider>
+            } />
+            
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/cookies" element={<Cookies />} />
