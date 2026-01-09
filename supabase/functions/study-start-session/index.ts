@@ -290,7 +290,9 @@ serve(async (req) => {
         .map((r: any) => {
           const ll = r.longlist;
           return {
-            // Use shortlist_id as primary identifier - Railway must return this ID
+            // Use shortlist_id as evaluation_id - Railway requires this field
+            // This ensures Railway returns the correct ID in technology_evaluated
+            evaluation_id: r.id,
             shortlist_id: r.id,
             longlist_id: r.longlist_id,
             priority: r.priority,
