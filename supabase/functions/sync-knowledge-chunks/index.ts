@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
       }))
 
       const { error: insertError } = await externa
-        .from('kb_chunks')
+        .from('knowledge_chunks')
         .upsert(inserts, { onConflict: 'lovable_id' })
 
       if (insertError) {
