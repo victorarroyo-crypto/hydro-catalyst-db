@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.chrome-extension-webhook]
 verify_jwt = false
+
+[functions.generate-comprehensive-report]
+verify_jwt = false
