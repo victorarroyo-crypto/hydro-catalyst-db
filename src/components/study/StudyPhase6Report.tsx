@@ -511,25 +511,6 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             )}
           </div>
           
-          <Button
-            variant="secondary"
-            onClick={handleExportEvaluationsOnly}
-            disabled={isExportingEvaluations || !hasEnoughData}
-            className="w-full"
-          >
-            {isExportingEvaluations ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Exportando evaluaciones...
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4 mr-2" />
-                Descargar Evaluaciones Rápidas
-              </>
-            )}
-          </Button>
-          
           {!hasEnoughData && (
             <p className="text-sm text-muted-foreground text-center">
               Se requiere al menos 1 tecnología en shortlist y 1 evaluación completa
