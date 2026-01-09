@@ -290,7 +290,7 @@ serve(async (req) => {
         .map((r: any) => {
           const ll = r.longlist;
           return {
-            evaluation_id: crypto.randomUUID(),
+            // Use shortlist_id as primary identifier - Railway must return this ID
             shortlist_id: r.id,
             longlist_id: r.longlist_id,
             priority: r.priority,
@@ -310,6 +310,14 @@ serve(async (req) => {
           };
         })
         .filter((t: any) => !!t.name);
+
+      // Log shortlist_ids being sent to Railway for debugging
+      console.log(`[study-start-session] Sending ${technologiesForEvaluation.length} technologies to Railway:`, 
+        technologiesForEvaluation.map((t: any) => ({ 
+          name: t.name, 
+          shortlist_id: t.shortlist_id 
+        }))
+      );
     }
 
     // Build payload. Different endpoints have different required fields.

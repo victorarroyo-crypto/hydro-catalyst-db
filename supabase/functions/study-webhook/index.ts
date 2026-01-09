@@ -553,7 +553,23 @@ serve(async (req) => {
         
         console.log(`[study-webhook] Processing technology_evaluated: ${techName}, initial shortlistId: ${shortlistId}, recommendation: ${recommendation} (raw: ${rawRecommendation})`);
         
-        // Si no hay shortlist_id, buscar por nombre de tecnología
+        // Verify if shortlist_id exists in DB
+        if (shortlistId) {
+          const { data: shortlistCheck } = await supabase
+            .from('study_shortlist')
+            .select('id')
+            .eq('id', shortlistId)
+            .maybeSingle();
+          
+          if (shortlistCheck) {
+            console.log(`[study-webhook] ✅ shortlist_id ${shortlistId} verified in DB`);
+          } else {
+            console.warn(`[study-webhook] ⚠️ shortlist_id ${shortlistId} NOT FOUND in DB - will search by name`);
+            shortlistId = null; // Reset to trigger name search
+          }
+        }
+        
+        // If no valid shortlist_id, search by technology name
         if (!shortlistId && techName && study_id) {
           console.log(`[study-webhook] Searching shortlist by technology name: ${techName}`);
           
