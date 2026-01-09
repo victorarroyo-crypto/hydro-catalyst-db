@@ -115,11 +115,11 @@ function createVandarumFichaCover(techName: string, date: string): Paragraph[] {
       spacing: { after: 300 },
     }),
     
-    // FICHA DE TECNOLOGÍA
+    // Ficha de Tecnología
     new Paragraph({
       children: [
         new TextRun({
-          text: 'FICHA DE TECNOLOGÍA',
+          text: 'Ficha de Tecnología',
           bold: true,
           size: VANDARUM_SIZES.titulo,
           color: VANDARUM_COLORS.grisTexto,
@@ -306,7 +306,7 @@ function createInnovationSection(ventaja?: string | null, innovacion?: string | 
   if (!ventaja && !innovacion) return [];
   
   const paragraphs: Paragraph[] = [
-    createVandarumHeading1('INNOVACIÓN Y VENTAJAS'),
+    createVandarumHeading1('Innovación y ventajas'),
   ];
   
   if (ventaja) {
@@ -378,8 +378,8 @@ export async function generateLonglistWordDocument(
     tech.trl
   ));
   
-  // 3. INFORMACIÓN GENERAL - Tabla profesional
-  sections.push(createVandarumHeading1('INFORMACIÓN GENERAL'));
+  // 3. Información general - Tabla profesional
+  sections.push(createVandarumHeading1('Información general'));
   
   const generalInfoRows: { label: string; value: string }[] = [
     { label: 'Proveedor / Empresa', value: tech.provider || '' },
@@ -402,7 +402,7 @@ export async function generateLonglistWordDocument(
   ].filter(row => row.value);
   
   if (classificationRows.length > 0) {
-    sections.push(createVandarumHeading1('CLASIFICACIÓN'));
+    sections.push(createVandarumHeading1('Clasificación'));
     sections.push(createVandarumInfoTable(classificationRows));
     sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
   }
@@ -412,22 +412,22 @@ export async function generateLonglistWordDocument(
     sections.push(...createTextSection('Aplicación principal', tech.applications.join('. ')));
   }
   
-  // 6. DESCRIPCIÓN TÉCNICA
+  // 6. Descripción técnica
   if (tech.brief_description) {
-    sections.push(...createTextSection('DESCRIPCIÓN TÉCNICA', tech.brief_description));
+    sections.push(...createTextSection('Descripción técnica', tech.brief_description));
   }
   
   // 7. INNOVACIÓN Y VENTAJAS
   sections.push(...createInnovationSection(tech.ventaja_competitiva, tech.innovacion));
   
-  // 8. REFERENCIAS
+  // 8. Referencias
   if (tech.casos_referencia) {
-    sections.push(...createTextSection('REFERENCIAS', tech.casos_referencia));
+    sections.push(...createTextSection('Referencias', tech.casos_referencia));
   }
   
-  // 9. NOTAS DEL ANALISTA
+  // 9. Notas del analista
   if (tech.inclusion_reason) {
-    sections.push(createVandarumHeading1('NOTAS DEL ANALISTA'));
+    sections.push(createVandarumHeading1('Notas del analista'));
     sections.push(new Paragraph({
       children: [
         new TextRun({
@@ -441,8 +441,8 @@ export async function generateLonglistWordDocument(
     }));
   }
   
-  // 10. INFORMACIÓN DE REGISTRO - Tabla profesional
-  sections.push(createVandarumHeading1('INFORMACIÓN DE REGISTRO'));
+  // 10. Información de registro - Tabla profesional
+  sections.push(createVandarumHeading1('Información de registro'));
   
   const sourceLabel = tech.source === 'database' ? 'Base de Datos' : 
     tech.source === 'ai_session' || tech.source === 'ai_extracted' ? 'Búsqueda Web (IA)' : 
