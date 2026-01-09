@@ -9,7 +9,6 @@ import {
   ScoutingStudy,
   StudyReport,
 } from '@/hooks/useScoutingStudies';
-import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -48,12 +47,13 @@ import {
   AlertCircle,
   Zap,
 } from 'lucide-react';
-import AISessionPanel from './AISessionPanel';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface Props {
   studyId: string;
@@ -67,8 +67,8 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
   const stats = useStudyStats(studyId);
   const createReport = useCreateReport();
   const updateReport = useUpdateReport();
-  const aiSession = useAIStudySession(studyId, 'report');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<StudyReport | null>(null);
@@ -76,16 +76,46 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<StudyReport>>({});
   const [isExporting, setIsExporting] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-  const handleStartAIReport = () => {
-    aiSession.startSession('report', {
-      problem_statement: study.problem_statement,
-      objectives: study.objectives,
-      context: study.context,
-      constraints: study.constraints,
-      include_evaluations: true,
-      include_recommendations: true,
-    });
+  const handleGenerateComprehensiveReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      toast({
+        title: 'Generando informe...',
+        description: 'Recopilando datos y generando informe con IA. Esto puede tardar unos segundos.',
+      });
+
+      const { data, error } = await supabase.functions.invoke('generate-comprehensive-report', {
+        body: { study_id: studyId },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.report) {
+        // Refrescar la lista de informes
+        queryClient.invalidateQueries({ queryKey: ['study-reports', studyId] });
+        
+        // Seleccionar el nuevo informe
+        setSelectedReport(data.report);
+        
+        toast({
+          title: 'Informe generado',
+          description: `Se ha creado el informe final con datos de ${data.stats?.shortlist || 0} tecnologías evaluadas.`,
+        });
+      }
+    } catch (error: any) {
+      console.error('Error generando informe:', error);
+      toast({
+        title: 'Error al generar informe',
+        description: error.message || 'No se pudo generar el informe. Inténtalo de nuevo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   const handleCreateManualReport = async () => {
@@ -370,23 +400,42 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* AI Session Panel */}
-      <AISessionPanel
-        state={{
-          isActive: aiSession.isActive,
-          isStarting: aiSession.isStarting,
-          currentPhase: aiSession.currentPhase,
-          progress: aiSession.progress,
-          status: aiSession.status,
-          error: aiSession.error,
-          logs: aiSession.logs,
-        }}
-        onStart={handleStartAIReport}
-        onCancel={aiSession.cancelSession}
-        isStarting={aiSession.isStarting}
-        title="Generación Automática de Informe"
-        description="La IA genera un informe completo con resumen ejecutivo, análisis y recomendaciones"
-      />
+      {/* Generate Report Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Generar Informe Final
+          </CardTitle>
+          <CardDescription>
+            La IA genera un informe completo con resumen ejecutivo, análisis comparativo y recomendaciones
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={handleGenerateComprehensiveReport}
+            disabled={isGeneratingReport || !hasEnoughData}
+            className="w-full"
+          >
+            {isGeneratingReport ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Generando informe...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Generar Informe Final
+              </>
+            )}
+          </Button>
+          {!hasEnoughData && (
+            <p className="text-sm text-muted-foreground mt-2 text-center">
+              Se requiere al menos 1 tecnología en shortlist y 1 evaluación completa
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Data Readiness Check */}
       <Card>
@@ -621,82 +670,13 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             </CardHeader>
             <CardContent>
               {selectedReport ? (
-                <Tabs defaultValue="summary" className="h-full">
-                  <TabsList className="grid w-full grid-cols-5">
-                    <TabsTrigger value="summary">Resumen</TabsTrigger>
-                    <TabsTrigger value="analysis">Análisis</TabsTrigger>
-                    <TabsTrigger value="comparison">Comparativa</TabsTrigger>
-                    <TabsTrigger value="recommendations">Recomendaciones</TabsTrigger>
+                <Tabs defaultValue="comparison" className="h-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="comparison">Comparativa de Tecnologías</TabsTrigger>
                     <TabsTrigger value="evaluations">Evaluaciones</TabsTrigger>
                   </TabsList>
                   
                   <ScrollArea className="h-[400px] mt-4">
-                    <TabsContent value="summary" className="space-y-4 m-0">
-                      <div>
-                        <h4 className="font-semibold mb-2">Resumen Ejecutivo</h4>
-                        {isEditing ? (
-                          <Textarea
-                            value={editForm.executive_summary || ''}
-                            onChange={(e) => setEditForm({...editForm, executive_summary: e.target.value})}
-                            rows={6}
-                            placeholder="Resumen ejecutivo del estudio..."
-                          />
-                        ) : (
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {selectedReport.executive_summary || 'No disponible'}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold mb-2">Metodología</h4>
-                        {isEditing ? (
-                          <Textarea
-                            value={editForm.methodology || ''}
-                            onChange={(e) => setEditForm({...editForm, methodology: e.target.value})}
-                            rows={4}
-                            placeholder="Metodología utilizada..."
-                          />
-                        ) : (
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {selectedReport.methodology || 'No disponible'}
-                          </p>
-                        )}
-                      </div>
-                    </TabsContent>
-                    
-                    <TabsContent value="analysis" className="space-y-4 m-0">
-                      <div>
-                        <h4 className="font-semibold mb-2">Análisis del Problema</h4>
-                        {isEditing ? (
-                          <Textarea
-                            value={editForm.problem_analysis || ''}
-                            onChange={(e) => setEditForm({...editForm, problem_analysis: e.target.value})}
-                            rows={6}
-                            placeholder="Análisis detallado del problema..."
-                          />
-                        ) : (
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {selectedReport.problem_analysis || 'No disponible'}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold mb-2">Panorama de Soluciones</h4>
-                        {isEditing ? (
-                          <Textarea
-                            value={editForm.solutions_overview || ''}
-                            onChange={(e) => setEditForm({...editForm, solutions_overview: e.target.value})}
-                            rows={6}
-                            placeholder="Panorama de las soluciones identificadas..."
-                          />
-                        ) : (
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {selectedReport.solutions_overview || 'No disponible'}
-                          </p>
-                        )}
-                      </div>
-                    </TabsContent>
-                    
                     <TabsContent value="comparison" className="m-0">
                       <div>
                         <h4 className="font-semibold mb-2">Comparativa de Tecnologías</h4>
@@ -710,39 +690,6 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
                         ) : (
                           <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                             {selectedReport.technology_comparison || 'No disponible'}
-                          </p>
-                        )}
-                      </div>
-                    </TabsContent>
-                    
-                    <TabsContent value="recommendations" className="space-y-4 m-0">
-                      <div>
-                        <h4 className="font-semibold mb-2">Recomendaciones</h4>
-                        {isEditing ? (
-                          <Textarea
-                            value={editForm.recommendations || ''}
-                            onChange={(e) => setEditForm({...editForm, recommendations: e.target.value})}
-                            rows={6}
-                            placeholder="Recomendaciones del estudio..."
-                          />
-                        ) : (
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {selectedReport.recommendations || 'No disponible'}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold mb-2">Conclusiones</h4>
-                        {isEditing ? (
-                          <Textarea
-                            value={editForm.conclusions || ''}
-                            onChange={(e) => setEditForm({...editForm, conclusions: e.target.value})}
-                            rows={4}
-                            placeholder="Conclusiones finales..."
-                          />
-                        ) : (
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {selectedReport.conclusions || 'No disponible'}
                           </p>
                         )}
                       </div>
