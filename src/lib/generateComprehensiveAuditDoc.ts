@@ -1,6 +1,7 @@
-import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, BorderStyle, WidthType, AlignmentType, PageBreak } from 'docx';
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType, AlignmentType, PageBreak } from 'docx';
 import { saveAs } from 'file-saver';
 import { supabase } from '@/integrations/supabase/client';
+import type { Tables } from '@/integrations/supabase/types';
 
 // Types
 interface TableStats {
@@ -85,8 +86,6 @@ const TABLE_DESCRIPTIONS: Record<string, { description: string; module: string; 
   study_sessions: { description: 'Sesiones de AI para procesamiento de estudios', module: 'Studies', synced: false },
   study_session_logs: { description: 'Logs de actividad de sesiones de estudio', module: 'Studies', synced: false },
   profiles: { description: 'Perfiles de usuario vinculados a auth.users', module: 'Sistema', synced: false },
-  user_roles: { description: 'Roles asignados a usuarios del sistema', module: 'Sistema', synced: false },
-  user_invitations: { description: 'Invitaciones pendientes para nuevos usuarios', module: 'Sistema', synced: false },
   user_favorites: { description: 'Tecnologías marcadas como favoritas por usuarios', module: 'Sistema', synced: false },
   saved_ai_searches: { description: 'Búsquedas AI guardadas por usuarios', module: 'Sistema', synced: false },
   audit_logs: { description: 'Registro de auditoría de acciones en el sistema', module: 'Sistema', synced: false },
@@ -165,11 +164,12 @@ const SECRETS = [
   'SUPABASE_PUBLISHABLE_KEY',
 ];
 
-// Fetch table counts from database
+// Fetch table counts from database - only tables that exist
 async function fetchTableCounts(): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
   
-  const tables = [
+  // List of tables that definitely exist in the schema
+  const validTables: Array<keyof typeof TABLE_DESCRIPTIONS> = [
     'technologies', 'scouting_queue', 'rejected_technologies',
     'taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores',
     'technology_tipos', 'technology_subcategorias',
@@ -180,18 +180,28 @@ async function fetchTableCounts(): Promise<Record<string, number>> {
     'scouting_sessions', 'scouting_session_logs', 'scouting_sources',
     'scouting_studies', 'study_research', 'study_solutions', 'study_longlist', 
     'study_shortlist', 'study_evaluations', 'study_reports', 'study_sessions', 'study_session_logs',
-    'profiles', 'user_roles', 'user_favorites', 'saved_ai_searches',
+    'profiles', 'user_favorites', 'saved_ai_searches',
     'audit_logs', 'ai_usage_logs', 'ai_model_settings', 'technology_edits',
   ];
 
-  for (const table of tables) {
-    try {
-      const { count } = await supabase.from(table as any).select('*', { count: 'exact', head: true });
-      counts[table] = count || 0;
-    } catch {
-      counts[table] = 0;
+  // Use Promise.allSettled to fetch all counts in parallel, ignoring failures
+  const results = await Promise.allSettled(
+    validTables.map(async (table) => {
+      try {
+        const { count, error } = await supabase.from(table as any).select('*', { count: 'exact', head: true });
+        if (error) throw error;
+        return { table, count: count || 0 };
+      } catch {
+        return { table, count: 0 };
+      }
+    })
+  );
+
+  results.forEach((result) => {
+    if (result.status === 'fulfilled') {
+      counts[result.value.table] = result.value.count;
     }
-  }
+  });
 
   return counts;
 }
