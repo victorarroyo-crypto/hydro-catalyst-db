@@ -448,7 +448,42 @@ serve(async (req) => {
       const errorText = await railwayResponse.text();
       console.error('Railway backend error:', railwayResponse.status, errorText);
       
-      // Update session status to failed
+      // Handle 409 Conflict - Railway says there's already a job running
+      if (railwayResponse.status === 409) {
+        // Delete the session we just created since Railway already has one
+        await supabase
+          .from('study_sessions')
+          .delete()
+          .eq('id', sessionData.id);
+        
+        // Try to extract the existing job_id from Railway's response
+        let existingJobId: string | null = null;
+        try {
+          const errorJson = JSON.parse(errorText);
+          existingJobId = errorJson?.detail?.job_id || errorJson?.job_id || null;
+        } catch {
+          // Response wasn't JSON
+        }
+        
+        console.log('Railway 409: evaluation already running, job_id:', existingJobId);
+        
+        // Return success with already_running flag
+        return new Response(JSON.stringify({ 
+          success: true,
+          session_id: sessionData.id,
+          study_id,
+          session_type,
+          status: 'running',
+          already_running: true,
+          railway_job_id: existingJobId,
+          message: 'Ya hay una evaluación en ejecución en Railway'
+        }), { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      }
+      
+      // Update session status to failed for other errors
       await supabase
         .from('study_sessions')
         .update({ 
