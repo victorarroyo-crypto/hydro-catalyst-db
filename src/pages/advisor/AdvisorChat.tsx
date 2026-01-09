@@ -15,8 +15,7 @@ import {
   CreditCard,
   History,
   LayoutDashboard,
-  LogOut,
-  AlertTriangle
+  LogOut
 } from 'lucide-react';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
@@ -31,15 +30,13 @@ const AI_MODELS = [
   { id: 'claude-opus', name: 'Claude Opus', price: 7.50, credits: 16.65, freeAllowed: false },
 ];
 
-const WELCOME_MESSAGE = `¡Hola! 👋 Soy tu asistente experto en tratamiento de aguas industriales.
-
-Puedo ayudarte a:
-• **Encontrar tecnologías** para tu problema específico
-• **Comparar proveedores** y soluciones
-• **Analizar datos** de calidad de agua
-• **Recomendar configuraciones** de tratamiento
-
-¿En qué puedo ayudarte hoy?`;
+const EXAMPLE_QUERIES = [
+  "¿Qué tecnología me recomiendas para tratar agua con alto contenido en metales pesados?",
+  "Comparar sistemas de ósmosis inversa vs electrodiálisis",
+  "¿Cómo reducir el consumo energético de mi EDAR?",
+  "Tecnologías para reutilización de agua en industria alimentaria",
+  "¿Qué TRL tienen las tecnologías de desalinización solar?",
+];
 
 export default function AdvisorChat() {
   const navigate = useNavigate();
@@ -172,17 +169,28 @@ export default function AdvisorChat() {
 
       {/* Messages Area */}
       <ScrollArea className="flex-1 px-4" ref={scrollRef}>
-        <div className="max-w-5xl mx-auto py-6 space-y-6">
-          {/* Welcome Message */}
+        <div className="max-w-4xl mx-auto py-6 space-y-6">
+          {/* Welcome with example queries */}
           {messages.length === 0 && (
-            <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Droplets className="w-4 h-4 text-primary" />
-              </div>
-              <div className="flex-1 bg-muted/50 rounded-2xl rounded-tl-none p-4">
-                <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                  {WELCOME_MESSAGE}
+            <div className="flex flex-col items-center justify-center py-16 space-y-8">
+              <div className="text-center space-y-3">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+                  <Droplets className="w-8 h-8 text-primary" />
                 </div>
+                <h2 className="text-2xl font-semibold">¿En qué puedo ayudarte?</h2>
+                <p className="text-muted-foreground">Experto en tratamiento de aguas industriales</p>
+              </div>
+              
+              <div className="flex flex-wrap justify-center gap-2 max-w-2xl">
+                {EXAMPLE_QUERIES.map((query, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setInputValue(query)}
+                    className="px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg border border-border/50 hover:border-border transition-colors text-left"
+                  >
+                    {query}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -257,38 +265,36 @@ export default function AdvisorChat() {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t bg-background p-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex gap-2">
+      <div className="border-t bg-muted/30 p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex gap-3 bg-background border rounded-xl p-2 shadow-sm">
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Escribe tu consulta sobre tratamiento de agua..."
               disabled={isLoading}
-              className="flex-1"
+              className="flex-1 border-0 shadow-none focus-visible:ring-0 h-12 text-base"
             />
-            <Button onClick={handleSend} disabled={isLoading || !inputValue.trim()}>
+            <Button onClick={handleSend} disabled={isLoading || !inputValue.trim()} size="lg" className="h-12 px-6">
               {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <Send className="w-4 h-4" />
+                <Send className="w-5 h-5" />
               )}
             </Button>
           </div>
           
           {/* Cost indicator */}
-          <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+          <div className="flex items-center justify-center mt-3 text-xs text-muted-foreground gap-4">
             <span>
               {canUseFree 
-                ? `Consulta gratuita (${freeRemaining} restantes este mes)`
-                : `Coste: ${currentModel?.credits.toFixed(2)} créditos`
+                ? `Consulta gratuita (${freeRemaining} restantes)`
+                : `${currentModel?.credits.toFixed(2)} créditos por consulta`
               }
             </span>
-            <div className="flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              <span>Las recomendaciones son orientativas</span>
-            </div>
+            <span className="text-border">•</span>
+            <span>Las recomendaciones son orientativas</span>
           </div>
         </div>
       </div>
