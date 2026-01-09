@@ -1,37 +1,22 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { 
+  Message, 
+  ChatResponse, 
+  AttachmentInfo, 
+  MessageMetadata,
+  Source 
+} from '@/types/advisorChat';
 
 const RAILWAY_API_URL = 'https://watertech-scouting-production.up.railway.app';
-
-interface Source {
-  nombre: string;
-  proveedor: string;
-  trl: number;
-  similarity: number;
-}
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  sources?: Source[];
-  credits_used?: number;
-  created_at: string;
-}
-
-interface ChatResponse {
-  response: string;
-  chat_id: string;
-  credits_used: number;
-  credits_remaining: number;
-  sources: Source[];
-}
 
 export function useAdvisorChat(userId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<Map<string, string>>(new Map()); // id -> base64
 
   const loadChat = useCallback(async (existingChatId: string) => {
     if (!userId) return;
@@ -49,16 +34,62 @@ export function useAdvisorChat(userId: string | undefined) {
         content: msg.content,
         sources: (msg.sources as unknown as Source[]) || undefined,
         credits_used: msg.credits_used ? Number(msg.credits_used) : undefined,
-        created_at: msg.created_at,
+        created_at: msg.created_at || new Date().toISOString(),
       })));
       setChatId(existingChatId);
     }
   }, [userId]);
 
+  const addAttachment = useCallback(async (files: File[]) => {
+    for (const file of files) {
+      const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Convert to base64 for sending to API
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        setUploadedFiles(prev => new Map(prev).set(id, base64));
+      };
+      reader.readAsDataURL(file);
+      
+      const attachment: AttachmentInfo = {
+        id,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      };
+      
+      setAttachments(prev => [...prev, attachment]);
+    }
+  }, []);
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+    setUploadedFiles(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(id);
+      return newMap;
+    });
+  }, []);
+
+  const clearAttachments = useCallback(() => {
+    setAttachments([]);
+    setUploadedFiles(new Map());
+  }, []);
+
   const sendMessage = useCallback(async (message: string, model: string = 'gpt-4o-mini') => {
-    if (!userId || !message.trim()) return;
+    if (!userId || (!message.trim() && attachments.length === 0)) return;
 
     setIsLoading(true);
+
+    // Prepare attachments data
+    const attachmentsData = attachments.map(att => ({
+      id: att.id,
+      name: att.name,
+      type: att.type,
+      size: att.size,
+      data: uploadedFiles.get(att.id) || '',
+    }));
 
     // Add user message optimistically
     const tempUserMsg: Message = {
@@ -66,8 +97,12 @@ export function useAdvisorChat(userId: string | undefined) {
       role: 'user',
       content: message,
       created_at: new Date().toISOString(),
+      attachments: attachments.length > 0 ? [...attachments] : undefined,
     };
     setMessages(prev => [...prev, tempUserMsg]);
+
+    // Clear attachments after adding to message
+    clearAttachments();
 
     try {
       const response = await fetch(`${RAILWAY_API_URL}/api/advisor/chat`, {
@@ -78,6 +113,7 @@ export function useAdvisorChat(userId: string | undefined) {
           message,
           chat_id: chatId,
           model,
+          attachments: attachmentsData.length > 0 ? attachmentsData : undefined,
         }),
       });
 
@@ -104,6 +140,7 @@ export function useAdvisorChat(userId: string | undefined) {
         sources: data.sources,
         credits_used: data.credits_used,
         created_at: new Date().toISOString(),
+        metadata: data.metadata,
       };
       setMessages(prev => [...prev, assistantMsg]);
 
@@ -115,20 +152,24 @@ export function useAdvisorChat(userId: string | undefined) {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, chatId]);
+  }, [userId, chatId, attachments, uploadedFiles, clearAttachments]);
 
   const startNewChat = useCallback(() => {
     setMessages([]);
     setChatId(null);
-  }, []);
+    clearAttachments();
+  }, [clearAttachments]);
 
   return {
     messages,
     isLoading,
     chatId,
     creditsRemaining,
+    attachments,
     sendMessage,
     loadChat,
     startNewChat,
+    addAttachment,
+    removeAttachment,
   };
 }
