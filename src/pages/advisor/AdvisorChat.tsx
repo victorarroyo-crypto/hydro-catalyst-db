@@ -265,18 +265,18 @@ export default function AdvisorChat() {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t bg-muted/30 p-6">
+      <div className="border-t bg-muted/60 p-8">
         <div className="max-w-4xl mx-auto">
-          <div className="flex gap-3 bg-background border rounded-xl p-2 shadow-sm">
+          <div className="flex gap-3 bg-background border-2 border-primary/20 rounded-2xl p-3 shadow-lg">
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Escribe tu consulta sobre tratamiento de agua..."
               disabled={isLoading}
-              className="flex-1 border-0 shadow-none focus-visible:ring-0 h-12 text-base"
+              className="flex-1 border-0 shadow-none focus-visible:ring-0 h-14 text-base px-4"
             />
-            <Button onClick={handleSend} disabled={isLoading || !inputValue.trim()} size="lg" className="h-12 px-6">
+            <Button onClick={handleSend} disabled={isLoading || !inputValue.trim()} size="lg" className="h-14 px-8">
               {isLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
