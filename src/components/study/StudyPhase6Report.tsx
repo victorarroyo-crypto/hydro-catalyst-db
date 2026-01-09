@@ -49,7 +49,19 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak } from 'docx';
+import {
+  VANDARUM_COLORS,
+  createVandarumCover,
+  createVandarumHeading1,
+  createVandarumHeading2,
+  createVandarumParagraph,
+  createVandarumBullet,
+  createSwotLabel,
+  createVandarumFooter,
+  createVandarumHighlight,
+  createVandarumSeparator,
+} from '@/lib/vandarumDocStyles';
 import { saveAs } from 'file-saver';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -176,227 +188,154 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
     
     setIsExporting(true);
     try {
+      const dateStr = format(new Date(selectedReport.created_at), "d 'de' MMMM yyyy", { locale: es });
+      
+      // Portada Vandarum
       const sections: Paragraph[] = [
-        // Título
-        new Paragraph({
-          children: [new TextRun({ text: selectedReport.title, bold: true, size: 32 })],
-          heading: HeadingLevel.TITLE,
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 400 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: `Estudio: ${study.name}`, italics: true })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 200 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: `Generado: ${format(new Date(selectedReport.created_at), "d 'de' MMMM yyyy", { locale: es })}` })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 600 },
-        }),
+        ...createVandarumCover(
+          selectedReport.title,
+          `Estudio: ${study.name}`,
+          dateStr
+        ),
       ];
 
       // Resumen Ejecutivo
       if (selectedReport.executive_summary) {
         sections.push(
-          new Paragraph({ children: [new TextRun({ text: 'Resumen Ejecutivo', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
-          new Paragraph({ children: [new TextRun({ text: selectedReport.executive_summary })], spacing: { after: 200 } })
+          createVandarumHeading1('Resumen Ejecutivo'),
+          createVandarumParagraph(selectedReport.executive_summary)
         );
       }
 
       // Metodología
       if (selectedReport.methodology) {
         sections.push(
-          new Paragraph({ children: [new TextRun({ text: 'Metodología', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
-          new Paragraph({ children: [new TextRun({ text: selectedReport.methodology })], spacing: { after: 200 } })
+          createVandarumHeading1('Metodología'),
+          createVandarumParagraph(selectedReport.methodology)
         );
       }
 
       // Análisis del Problema
       if (selectedReport.problem_analysis) {
         sections.push(
-          new Paragraph({ children: [new TextRun({ text: 'Análisis del Problema', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
-          new Paragraph({ children: [new TextRun({ text: selectedReport.problem_analysis })], spacing: { after: 200 } })
+          createVandarumHeading1('Análisis del Problema'),
+          createVandarumParagraph(selectedReport.problem_analysis)
         );
       }
 
       // Panorama de Soluciones
       if (selectedReport.solutions_overview) {
         sections.push(
-          new Paragraph({ children: [new TextRun({ text: 'Panorama de Soluciones', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
-          new Paragraph({ children: [new TextRun({ text: selectedReport.solutions_overview })], spacing: { after: 200 } })
+          createVandarumHeading1('Panorama de Soluciones'),
+          createVandarumParagraph(selectedReport.solutions_overview)
         );
       }
 
       // Comparativa Tecnológica
       if (selectedReport.technology_comparison) {
         sections.push(
-          new Paragraph({ children: [new TextRun({ text: 'Comparativa Tecnológica', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
-          new Paragraph({ children: [new TextRun({ text: selectedReport.technology_comparison })], spacing: { after: 200 } })
+          createVandarumHeading1('Comparativa Tecnológica'),
+          createVandarumParagraph(selectedReport.technology_comparison)
         );
       }
 
       // Recomendaciones
       if (selectedReport.recommendations) {
         sections.push(
-          new Paragraph({ children: [new TextRun({ text: 'Recomendaciones', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
-          new Paragraph({ children: [new TextRun({ text: selectedReport.recommendations })], spacing: { after: 200 } })
+          createVandarumHeading1('Recomendaciones'),
+          createVandarumParagraph(selectedReport.recommendations)
         );
       }
 
       // Conclusiones
       if (selectedReport.conclusions) {
         sections.push(
-          new Paragraph({ children: [new TextRun({ text: 'Conclusiones', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } }),
-          new Paragraph({ children: [new TextRun({ text: selectedReport.conclusions })], spacing: { after: 200 } })
+          createVandarumHeading1('Conclusiones'),
+          createVandarumParagraph(selectedReport.conclusions)
         );
       }
 
-      // Análisis SWOT por Tecnología (desde evaluaciones)
+      // Análisis SWOT por Tecnología
       if (evaluations && evaluations.length > 0) {
-        sections.push(
-          new Paragraph({ children: [new TextRun({ text: 'Análisis SWOT por Tecnología', bold: true, size: 28 })], heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } })
-        );
+        sections.push(createVandarumHeading1('Análisis SWOT por Tecnología'));
 
         for (const evaluation of evaluations) {
           const techName = getTechName(evaluation.shortlist_id);
           
-          // Nombre de la tecnología
-          sections.push(
-            new Paragraph({ 
-              children: [new TextRun({ text: techName, bold: true, size: 24 })], 
-              heading: HeadingLevel.HEADING_2, 
-              spacing: { before: 300, after: 150 } 
-            })
-          );
+          sections.push(createVandarumHeading2(techName));
 
-          // Puntuación general
           if (evaluation.overall_score) {
-            sections.push(
-              new Paragraph({ 
-                children: [new TextRun({ text: `Puntuación General: ${evaluation.overall_score}/100`, bold: true })], 
-                spacing: { after: 100 } 
-              })
-            );
+            sections.push(createVandarumHighlight('Puntuación General', `${evaluation.overall_score}/10`));
           }
 
-          // Recomendación
           if (evaluation.recommendation) {
-            sections.push(
-              new Paragraph({ 
-                children: [
-                  new TextRun({ text: 'Recomendación: ', bold: true }),
-                  new TextRun({ text: evaluation.recommendation })
-                ], 
-                spacing: { after: 100 } 
-              })
-            );
+            const recText = evaluation.recommendation === 'highly_recommended' ? 'Muy recomendada' :
+                            evaluation.recommendation === 'recommended' ? 'Recomendada' :
+                            evaluation.recommendation === 'conditional' ? 'Condicional' : 'No recomendada';
+            sections.push(createVandarumHighlight('Recomendación', recText));
           }
 
           // Fortalezas
           if (evaluation.strengths && evaluation.strengths.length > 0) {
-            sections.push(
-              new Paragraph({ children: [new TextRun({ text: 'Fortalezas:', bold: true, color: '22863a' })], spacing: { before: 150, after: 50 } })
-            );
-            for (const strength of evaluation.strengths) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: `• ${strength}` })], spacing: { after: 50 } })
-              );
+            sections.push(createSwotLabel('strength'));
+            for (const s of evaluation.strengths) {
+              sections.push(createVandarumBullet(s, VANDARUM_COLORS.verdeClaro));
             }
           }
 
           // Debilidades
           if (evaluation.weaknesses && evaluation.weaknesses.length > 0) {
-            sections.push(
-              new Paragraph({ children: [new TextRun({ text: 'Debilidades:', bold: true, color: 'cb2431' })], spacing: { before: 150, after: 50 } })
-            );
-            for (const weakness of evaluation.weaknesses) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: `• ${weakness}` })], spacing: { after: 50 } })
-              );
+            sections.push(createSwotLabel('weakness'));
+            for (const w of evaluation.weaknesses) {
+              sections.push(createVandarumBullet(w, 'cb2431'));
             }
           }
 
           // Oportunidades
           if (evaluation.opportunities && evaluation.opportunities.length > 0) {
-            sections.push(
-              new Paragraph({ children: [new TextRun({ text: 'Oportunidades:', bold: true, color: '0366d6' })], spacing: { before: 150, after: 50 } })
-            );
-            for (const opportunity of evaluation.opportunities) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: `• ${opportunity}` })], spacing: { after: 50 } })
-              );
+            sections.push(createSwotLabel('opportunity'));
+            for (const o of evaluation.opportunities) {
+              sections.push(createVandarumBullet(o, VANDARUM_COLORS.azul));
             }
           }
 
           // Amenazas
           if (evaluation.threats && evaluation.threats.length > 0) {
-            sections.push(
-              new Paragraph({ children: [new TextRun({ text: 'Amenazas:', bold: true, color: 'e36209' })], spacing: { before: 150, after: 50 } })
-            );
-            for (const threat of evaluation.threats) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: `• ${threat}` })], spacing: { after: 50 } })
-              );
+            sections.push(createSwotLabel('threat'));
+            for (const t of evaluation.threats) {
+              sections.push(createVandarumBullet(t, VANDARUM_COLORS.naranja));
             }
           }
 
           // Ventajas competitivas
           if (evaluation.competitive_advantages && evaluation.competitive_advantages.length > 0) {
-            sections.push(
-              new Paragraph({ children: [new TextRun({ text: 'Ventajas Competitivas:', bold: true })], spacing: { before: 150, after: 50 } })
-            );
-            for (const advantage of evaluation.competitive_advantages) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: `• ${advantage}` })], spacing: { after: 50 } })
-              );
+            sections.push(createVandarumHeading2('Ventajas Competitivas'));
+            for (const a of evaluation.competitive_advantages) {
+              sections.push(createVandarumBullet(a));
             }
           }
 
           // Barreras de implementación
           if (evaluation.implementation_barriers && evaluation.implementation_barriers.length > 0) {
-            sections.push(
-              new Paragraph({ children: [new TextRun({ text: 'Barreras de Implementación:', bold: true })], spacing: { before: 150, after: 50 } })
-            );
-            for (const barrier of evaluation.implementation_barriers) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: `• ${barrier}` })], spacing: { after: 50 } })
-              );
+            sections.push(createVandarumHeading2('Barreras de Implementación'));
+            for (const b of evaluation.implementation_barriers) {
+              sections.push(createVandarumBullet(b));
             }
           }
 
-          // Separador entre tecnologías
-          sections.push(
-            new Paragraph({ children: [], spacing: { after: 200 } })
-          );
+          sections.push(createVandarumSeparator());
         }
       }
 
-      // Copyright Vandarum
-      sections.push(
-        new Paragraph({ children: [], spacing: { before: 600 } }),
-        new Paragraph({
-          children: [new TextRun({ text: '─'.repeat(50) })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 100 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: '© Vandarum - Todos los derechos reservados', italics: true, size: 20 })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 50 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: `Documento generado el ${format(new Date(), "d 'de' MMMM yyyy", { locale: es })}`, size: 18 })],
-          alignment: AlignmentType.CENTER,
-        })
-      );
+      // Footer con copyright Vandarum
+      sections.push(...createVandarumFooter(format(new Date(), "d 'de' MMMM yyyy", { locale: es })));
 
       const doc = new Document({
         sections: [{ children: sections }],
       });
 
       const blob = await Packer.toBlob(doc);
-      const fileName = `${selectedReport.title.replace(/[^a-zA-Z0-9]/g, '_')}_v${selectedReport.version}.docx`;
+      const fileName = `Vandarum_${selectedReport.title.replace(/[^a-zA-Z0-9]/g, '_')}_v${selectedReport.version}.docx`;
       saveAs(blob, fileName);
 
       toast({
@@ -415,165 +354,92 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
     }
   };
 
-  // Descarga rápida de evaluaciones (simple, solo comparativa + SWOT)
+  // Descarga rápida de evaluaciones con estilo Vandarum
   const handleExportEvaluationsOnly = async () => {
     setIsExportingEvaluations(true);
     try {
+      const dateStr = format(new Date(), "d 'de' MMMM yyyy", { locale: es });
+      
+      // Portada Vandarum
       const sections: Paragraph[] = [
-        // Título
-        new Paragraph({
-          children: [new TextRun({ text: 'Informe de Evaluación de Tecnologías', bold: true, size: 32 })],
-          heading: HeadingLevel.TITLE,
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 200 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: study.name, italics: true, size: 24 })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 200 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: format(new Date(), "d 'de' MMMM yyyy", { locale: es }) })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 400 },
-        }),
+        ...createVandarumCover(
+          'Informe de Evaluación de Tecnologías',
+          study.name,
+          dateStr
+        ),
       ];
 
-      // Tabla Comparativa
-      sections.push(
-        new Paragraph({ 
-          children: [new TextRun({ text: 'Comparativa de Tecnologías', bold: true, size: 28 })], 
-          heading: HeadingLevel.HEADING_1, 
-          spacing: { before: 400, after: 200 } 
-        })
-      );
+      // Comparativa de Tecnologías
+      sections.push(createVandarumHeading1('Comparativa de Tecnologías'));
 
       if (shortlist && shortlist.length > 0) {
         for (const item of shortlist) {
           const evaluation = evaluations?.find(e => e.shortlist_id === item.id);
           const techName = item.longlist?.technology_name || 'Tecnología';
           
-          sections.push(
-            new Paragraph({ 
-              children: [new TextRun({ text: techName, bold: true, size: 24 })], 
-              heading: HeadingLevel.HEADING_2, 
-              spacing: { before: 300, after: 100 } 
-            })
-          );
+          sections.push(createVandarumHeading2(techName));
 
           if (item.longlist?.provider) {
-            sections.push(
-              new Paragraph({ 
-                children: [
-                  new TextRun({ text: 'Proveedor: ', bold: true }),
-                  new TextRun({ text: item.longlist.provider })
-                ], 
-                spacing: { after: 50 } 
-              })
-            );
+            sections.push(createVandarumHighlight('Proveedor', item.longlist.provider));
           }
 
           if (evaluation) {
-            // Puntuación
             if (evaluation.overall_score) {
-              sections.push(
-                new Paragraph({ 
-                  children: [
-                    new TextRun({ text: 'Puntuación General: ', bold: true }),
-                    new TextRun({ text: `${evaluation.overall_score}/10` })
-                  ], 
-                  spacing: { after: 50 } 
-                })
-              );
+              sections.push(createVandarumHighlight('Puntuación General', `${evaluation.overall_score}/10`));
             }
 
-            // Recomendación
             if (evaluation.recommendation) {
               const recText = evaluation.recommendation === 'highly_recommended' ? 'Muy recomendada' :
                               evaluation.recommendation === 'recommended' ? 'Recomendada' :
                               evaluation.recommendation === 'conditional' ? 'Condicional' : 'No recomendada';
-              sections.push(
-                new Paragraph({ 
-                  children: [
-                    new TextRun({ text: 'Recomendación: ', bold: true }),
-                    new TextRun({ text: recText })
-                  ], 
-                  spacing: { after: 100 } 
-                })
-              );
+              sections.push(createVandarumHighlight('Recomendación', recText));
             }
 
-            // SWOT
+            // SWOT con colores de marca
             if (evaluation.strengths && evaluation.strengths.length > 0) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: 'Fortalezas:', bold: true, color: '22863a' })], spacing: { before: 100, after: 50 } })
-              );
+              sections.push(createSwotLabel('strength'));
               for (const s of evaluation.strengths) {
-                sections.push(new Paragraph({ children: [new TextRun({ text: `• ${s}` })], spacing: { after: 30 } }));
+                sections.push(createVandarumBullet(s, VANDARUM_COLORS.verdeClaro));
               }
             }
 
             if (evaluation.weaknesses && evaluation.weaknesses.length > 0) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: 'Debilidades:', bold: true, color: 'cb2431' })], spacing: { before: 100, after: 50 } })
-              );
+              sections.push(createSwotLabel('weakness'));
               for (const w of evaluation.weaknesses) {
-                sections.push(new Paragraph({ children: [new TextRun({ text: `• ${w}` })], spacing: { after: 30 } }));
+                sections.push(createVandarumBullet(w, 'cb2431'));
               }
             }
 
             if (evaluation.opportunities && evaluation.opportunities.length > 0) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: 'Oportunidades:', bold: true, color: '0366d6' })], spacing: { before: 100, after: 50 } })
-              );
+              sections.push(createSwotLabel('opportunity'));
               for (const o of evaluation.opportunities) {
-                sections.push(new Paragraph({ children: [new TextRun({ text: `• ${o}` })], spacing: { after: 30 } }));
+                sections.push(createVandarumBullet(o, VANDARUM_COLORS.azul));
               }
             }
 
             if (evaluation.threats && evaluation.threats.length > 0) {
-              sections.push(
-                new Paragraph({ children: [new TextRun({ text: 'Amenazas:', bold: true, color: 'e36209' })], spacing: { before: 100, after: 50 } })
-              );
+              sections.push(createSwotLabel('threat'));
               for (const t of evaluation.threats) {
-                sections.push(new Paragraph({ children: [new TextRun({ text: `• ${t}` })], spacing: { after: 30 } }));
+                sections.push(createVandarumBullet(t, VANDARUM_COLORS.naranja));
               }
             }
           }
 
-          sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+          sections.push(createVandarumSeparator());
         }
       } else {
-        sections.push(
-          new Paragraph({ children: [new TextRun({ text: 'No hay tecnologías en la lista corta.' })], spacing: { after: 200 } })
-        );
+        sections.push(createVandarumParagraph('No hay tecnologías en la lista corta.'));
       }
 
-      // Copyright Vandarum
-      sections.push(
-        new Paragraph({ children: [], spacing: { before: 600 } }),
-        new Paragraph({
-          children: [new TextRun({ text: '─'.repeat(50) })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 100 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: '© Vandarum - Todos los derechos reservados', italics: true, size: 20 })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 50 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: `Documento generado el ${format(new Date(), "d 'de' MMMM yyyy", { locale: es })}`, size: 18 })],
-          alignment: AlignmentType.CENTER,
-        })
-      );
+      // Footer Vandarum
+      sections.push(...createVandarumFooter(dateStr));
 
       const doc = new Document({
         sections: [{ children: sections }],
       });
 
       const blob = await Packer.toBlob(doc);
-      const fileName = `Evaluacion_Tecnologias_${study.name.replace(/[^a-zA-Z0-9]/g, '_')}.docx`;
+      const fileName = `Vandarum_Evaluacion_${study.name.replace(/[^a-zA-Z0-9]/g, '_')}.docx`;
       saveAs(blob, fileName);
 
       toast({
