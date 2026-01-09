@@ -60,6 +60,7 @@ import {
   createVandarumTechTitle,
   createVandarumSwotBlock,
   createVandarumSeparator,
+  createVandarumTableOfContents,
   VANDARUM_NUMBERING_CONFIG,
 } from '@/lib/vandarumDocStyles';
 import { saveAs } from 'file-saver';
@@ -237,12 +238,24 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         }
       }
       
+      // Construir índice dinámico
+      const tocItems: { title: string; isAnnex?: boolean }[] = [];
+      if (selectedReport.executive_summary) tocItems.push({ title: 'Resumen Ejecutivo' });
+      if (selectedReport.methodology) tocItems.push({ title: 'Metodología' });
+      if (selectedReport.problem_analysis) tocItems.push({ title: 'Análisis del Problema' });
+      if (selectedReport.solutions_overview) tocItems.push({ title: 'Panorama de Soluciones' });
+      if (shortlist && shortlist.length > 0) tocItems.push({ title: 'Comparativa Tecnológica' });
+      if (selectedReport.recommendations) tocItems.push({ title: 'Recomendaciones' });
+      if (selectedReport.conclusions) tocItems.push({ title: 'Conclusiones' });
+      if (shortlist && shortlist.length > 0) tocItems.push({ title: 'ANEXO: Fichas de Tecnologías', isAnnex: true });
+
       const sections: Paragraph[] = [
         ...createVandarumCover(
           selectedReport.title,
           `Estudio: ${study.name}`,
           dateStr
         ),
+        ...createVandarumTableOfContents(tocItems),
       ];
 
       // Usar createVandarumRichContent para procesar texto con estructura

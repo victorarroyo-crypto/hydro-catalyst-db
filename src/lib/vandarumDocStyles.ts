@@ -627,6 +627,56 @@ export function createVandarumTechSeparator(): Paragraph {
   });
 }
 
+/**
+ * Crea índice/tabla de contenidos profesional
+ */
+export function createVandarumTableOfContents(items: { title: string; isAnnex?: boolean }[]): Paragraph[] {
+  const paragraphs: Paragraph[] = [
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'ÍNDICE',
+          bold: true,
+          size: VANDARUM_SIZES.heading1,
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
+        })
+      ],
+      spacing: { before: 400, after: 300 },
+      border: {
+        bottom: {
+          color: VANDARUM_COLORS.verdeOscuro,
+          space: 1,
+          size: 6,
+          style: BorderStyle.SINGLE,
+        },
+      },
+    }),
+  ];
+
+  for (const [index, item] of items.entries()) {
+    const number = item.isAnnex ? '' : `${index + 1}. `;
+    paragraphs.push(new Paragraph({
+      children: [
+        new TextRun({
+          text: `${number}${item.title}`,
+          size: VANDARUM_SIZES.texto,
+          color: item.isAnnex ? VANDARUM_COLORS.verdeOscuro : VANDARUM_COLORS.grisTexto,
+          font: VANDARUM_FONTS.texto,
+          bold: item.isAnnex,
+        }),
+      ],
+      spacing: { after: 120 },
+      indent: { left: item.isAnnex ? 0 : 200 },
+    }));
+  }
+
+  // Espacio después del índice
+  paragraphs.push(new Paragraph({ children: [], spacing: { after: 400 } }));
+
+  return paragraphs;
+}
+
 // Crear pie de página con copyright Vandarum
 export function createVandarumFooter(date: string): Paragraph[] {
   return [
