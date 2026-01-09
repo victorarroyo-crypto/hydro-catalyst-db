@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Document, Packer, Paragraph } from 'docx';
+import { Document, Packer, Paragraph, PageBreak } from 'docx';
 import {
   createVandarumCover,
   createVandarumHeading1,
@@ -54,9 +54,11 @@ import {
   createSwotLabel,
   createVandarumFooter,
   createVandarumHighlight,
-  createVandarumSeparator,
+  createVandarumTechSeparator,
   createVandarumDocumentFooter,
   createVandarumDocumentHeader,
+  createVandarumRichContent,
+  VANDARUM_NUMBERING_CONFIG,
 } from '@/lib/vandarumDocStyles';
 import { saveAs } from 'file-saver';
 import { useToast } from '@/hooks/use-toast';
@@ -171,6 +173,13 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
     return shortlistItem?.longlist?.provider || '';
   };
 
+  // Normaliza puntuación (77 -> 7.7, 8 -> 8)
+  const formatScore = (score: number | null): string => {
+    if (!score) return 'N/A';
+    const normalizedScore = score > 10 ? score / 10 : score;
+    return `${normalizedScore.toFixed(1)}/10`;
+  };
+
   const handleExportReport = async () => {
     if (!selectedReport) return;
     
@@ -186,58 +195,46 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         ),
       ];
 
+      // Usar createVandarumRichContent para procesar texto con estructura
       if (selectedReport.executive_summary) {
-        sections.push(
-          createVandarumHeading1('Resumen Ejecutivo'),
-          createVandarumParagraph(selectedReport.executive_summary)
-        );
+        sections.push(createVandarumHeading1('Resumen Ejecutivo'));
+        sections.push(...createVandarumRichContent(selectedReport.executive_summary));
       }
 
       if (selectedReport.methodology) {
-        sections.push(
-          createVandarumHeading1('Metodología'),
-          createVandarumParagraph(selectedReport.methodology)
-        );
+        sections.push(createVandarumHeading1('Metodología'));
+        sections.push(...createVandarumRichContent(selectedReport.methodology));
       }
 
       if (selectedReport.problem_analysis) {
-        sections.push(
-          createVandarumHeading1('Análisis del Problema'),
-          createVandarumParagraph(selectedReport.problem_analysis)
-        );
+        sections.push(createVandarumHeading1('Análisis del Problema'));
+        sections.push(...createVandarumRichContent(selectedReport.problem_analysis));
       }
 
       if (selectedReport.solutions_overview) {
-        sections.push(
-          createVandarumHeading1('Panorama de Soluciones'),
-          createVandarumParagraph(selectedReport.solutions_overview)
-        );
+        sections.push(createVandarumHeading1('Panorama de Soluciones'));
+        sections.push(...createVandarumRichContent(selectedReport.solutions_overview));
       }
 
       if (selectedReport.technology_comparison) {
-        sections.push(
-          createVandarumHeading1('Comparativa Tecnológica'),
-          createVandarumParagraph(selectedReport.technology_comparison)
-        );
+        sections.push(createVandarumHeading1('Comparativa Tecnológica'));
+        sections.push(...createVandarumRichContent(selectedReport.technology_comparison));
       }
 
       if (selectedReport.recommendations) {
-        sections.push(
-          createVandarumHeading1('Recomendaciones'),
-          createVandarumParagraph(selectedReport.recommendations)
-        );
+        sections.push(createVandarumHeading1('Recomendaciones'));
+        sections.push(...createVandarumRichContent(selectedReport.recommendations));
       }
 
       if (selectedReport.conclusions) {
-        sections.push(
-          createVandarumHeading1('Conclusiones'),
-          createVandarumParagraph(selectedReport.conclusions)
-        );
+        sections.push(createVandarumHeading1('Conclusiones'));
+        sections.push(...createVandarumRichContent(selectedReport.conclusions));
       }
 
       sections.push(...createVandarumFooter(format(new Date(), "d 'de' MMMM yyyy", { locale: es })));
 
       const doc = new Document({
+        numbering: VANDARUM_NUMBERING_CONFIG,
         sections: [{
           properties: {},
           headers: {
@@ -368,7 +365,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
 
           if (evaluation) {
             if (evaluation.overall_score) {
-              sections.push(createVandarumHighlight('Puntuación General', `${evaluation.overall_score}/10`));
+              sections.push(createVandarumHighlight('Puntuación General', formatScore(evaluation.overall_score)));
             }
 
             if (evaluation.recommendation) {
@@ -429,7 +426,10 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             }
           }
 
-          sections.push(createVandarumSeparator());
+          // Salto de página entre tecnologías (excepto la última)
+          if (shortlist && shortlist.indexOf(item) < shortlist.length - 1) {
+            sections.push(createVandarumTechSeparator());
+          }
         }
       } else {
         sections.push(createVandarumParagraph('No hay tecnologías en la lista corta.'));
@@ -438,6 +438,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
       sections.push(...createVandarumFooter(dateStr));
 
       const doc = new Document({
+        numbering: VANDARUM_NUMBERING_CONFIG,
         sections: [{
           properties: {},
           headers: {
