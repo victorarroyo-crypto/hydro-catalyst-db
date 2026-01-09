@@ -253,17 +253,33 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
       if (selectedReport.conclusions) tocItems.push({ title: 'Conclusiones' });
       if (shortlist && shortlist.length > 0) tocItems.push({ title: 'ANEXO: Fichas de Tecnologías', isAnnex: true });
 
-      // Cargar logo de Vandarum
+      // Cargar logo de Vandarum - mantener proporciones originales
       let logoImageRun: ImageRun | null = null;
       try {
         const logoResponse = await fetch('/vandarum-logo-report.png');
         const logoBlob = await logoResponse.blob();
         const logoArrayBuffer = await logoBlob.arrayBuffer();
+        
+        // Crear imagen temporal para obtener proporciones originales
+        const img = new Image();
+        const imgUrl = URL.createObjectURL(logoBlob);
+        await new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.src = imgUrl;
+        });
+        URL.revokeObjectURL(imgUrl);
+        
+        // Calcular dimensiones manteniendo aspect ratio
+        const maxWidth = 180;
+        const aspectRatio = img.width / img.height;
+        const width = maxWidth;
+        const height = Math.round(maxWidth / aspectRatio);
+        
         logoImageRun = new ImageRun({
           data: logoArrayBuffer,
           transformation: {
-            width: 200,
-            height: 180,
+            width,
+            height,
           },
           type: 'png',
         });
@@ -289,7 +305,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         ));
       }
       
-      // Índice (ya incluye PageBreak al final)
+      // Índice (sin PageBreak al final, lo añadimos nosotros)
       sections.push(...createVandarumTableOfContents(tocItems));
 
       // Cada sección principal empieza en página nueva
@@ -383,7 +399,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         sections.push(...createVandarumRichContent(selectedReport.conclusions));
       }
 
-      // ========== ANEXO: FICHAS DE TECNOLOGÍAS ==========
+      // ========== ANEXO: FICHAS DE TECNOLOGÍAS COMPLETAS ==========
       if (shortlist && shortlist.length > 0) {
         // Página solo con título del Anexo
         sections.push(new Paragraph({ children: [new PageBreak()] }));
@@ -427,8 +443,8 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
           alignment: 'center' as any,
         }));
 
-        // Cada ficha de tecnología en página nueva con formato profesional
-        for (const [index, item] of shortlist.entries()) {
+        // Cada ficha de tecnología en página nueva con formato profesional COMPLETO
+        for (const item of shortlist) {
           const tech = item.longlist;
           if (!tech) continue;
 
@@ -465,7 +481,8 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             spacing: { after: 300 },
           }));
 
-          // Tabla de información principal
+          // ===== INFORMACIÓN GENERAL =====
+          sections.push(createVandarumHeading2('Información General'));
           const mainInfoRows: TableRow[] = [];
           
           const addTableRow = (label: string, value: string) => {
@@ -507,7 +524,9 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
 
           if (tech.provider) addTableRow('Proveedor / Empresa', tech.provider);
           if (tech.country) addTableRow('País de origen', tech.country);
+          if (tech.paises_actua) addTableRow('Países donde actúa', tech.paises_actua);
           if (tech.web) addTableRow('Web de la empresa', tech.web);
+          if (tech.email) addTableRow('Email de contacto', tech.email);
           if (tech.trl) addTableRow('Grado de madurez (TRL)', `TRL ${tech.trl}`);
 
           if (mainInfoRows.length > 0) {
@@ -525,39 +544,115 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             }));
           }
 
-          // Descripción Técnica
+          // ===== CLASIFICACIÓN =====
+          const hasClassification = tech.type_suggested || tech.subcategory_suggested || tech.sector;
+          if (hasClassification) {
+            sections.push(createVandarumHeading2('Clasificación'));
+            const classRows: TableRow[] = [];
+            if (tech.type_suggested) {
+              classRows.push(new TableRow({
+                children: [
+                  new TableCell({
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                    shading: { type: ShadingType.SOLID, color: 'E8E8E8' },
+                    children: [new Paragraph({ children: [new TextRun({ text: 'Tipo de tecnología', bold: true, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
+                  }),
+                  new TableCell({
+                    width: { size: 70, type: WidthType.PERCENTAGE },
+                    children: [new Paragraph({ children: [new TextRun({ text: tech.type_suggested, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
+                  }),
+                ],
+              }));
+            }
+            if (tech.subcategory_suggested) {
+              classRows.push(new TableRow({
+                children: [
+                  new TableCell({
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                    shading: { type: ShadingType.SOLID, color: 'E8E8E8' },
+                    children: [new Paragraph({ children: [new TextRun({ text: 'Subcategoría', bold: true, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
+                  }),
+                  new TableCell({
+                    width: { size: 70, type: WidthType.PERCENTAGE },
+                    children: [new Paragraph({ children: [new TextRun({ text: tech.subcategory_suggested, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
+                  }),
+                ],
+              }));
+            }
+            if (tech.sector) {
+              classRows.push(new TableRow({
+                children: [
+                  new TableCell({
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                    shading: { type: ShadingType.SOLID, color: 'E8E8E8' },
+                    children: [new Paragraph({ children: [new TextRun({ text: 'Sector', bold: true, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
+                  }),
+                  new TableCell({
+                    width: { size: 70, type: WidthType.PERCENTAGE },
+                    children: [new Paragraph({ children: [new TextRun({ text: tech.sector, size: VANDARUM_SIZES.texto, font: VANDARUM_FONTS.texto })] })],
+                  }),
+                ],
+              }));
+            }
+            if (classRows.length > 0) {
+              sections.push(new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                borders: {
+                  top: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                  bottom: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                  left: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                  right: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                  insideHorizontal: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                  insideVertical: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                },
+                rows: classRows,
+              }));
+            }
+          }
+
+          // ===== DESCRIPCIÓN TÉCNICA =====
           if (tech.brief_description) {
             sections.push(createVandarumHeading2('Descripción Técnica'));
             sections.push(...createVandarumRichContent(tech.brief_description));
           }
 
-          // Razón de inclusión / Notas del Analista
+          // ===== INNOVACIÓN Y VENTAJAS =====
+          const hasInnovation = tech.ventaja_competitiva || tech.innovacion;
+          if (hasInnovation) {
+            sections.push(createVandarumHeading2('Innovación y Ventajas'));
+            if (tech.ventaja_competitiva) {
+              sections.push(createVandarumHighlight('Ventaja competitiva', tech.ventaja_competitiva));
+            }
+            if (tech.innovacion) {
+              sections.push(createVandarumHighlight('Por qué es innovadora', tech.innovacion));
+            }
+          }
+
+          // ===== REFERENCIAS =====
+          if (tech.casos_referencia) {
+            sections.push(createVandarumHeading2('Referencias'));
+            sections.push(...createVandarumRichContent(tech.casos_referencia));
+          }
+
+          // ===== NOTAS DEL ANALISTA =====
           if (tech.inclusion_reason) {
             sections.push(createVandarumHeading2('Notas del Analista'));
             sections.push(createVandarumParagraph(tech.inclusion_reason));
           }
 
-          // Si hay evaluación, añadir SWOT
-          const evaluation = evaluations?.find(e => e.shortlist_id === item.id);
-          if (evaluation) {
-            const translation = translationsMap.get(evaluation.id);
-            const strengths = translation?.strengths || evaluation.strengths || [];
-            const weaknesses = translation?.weaknesses || evaluation.weaknesses || [];
-            const opportunities = translation?.opportunities || evaluation.opportunities || [];
-            const threats = translation?.threats || evaluation.threats || [];
-            
-            if (strengths.length || weaknesses.length || opportunities.length || threats.length) {
-              sections.push(createVandarumHeading2('Análisis SWOT'));
-              sections.push(...createVandarumSwotBlock(strengths, weaknesses, opportunities, threats));
-            }
-
-            if (evaluation.recommendation) {
-              const recText = evaluation.recommendation === 'highly_recommended' ? 'Muy recomendada' :
-                              evaluation.recommendation === 'recommended' ? 'Recomendada' :
-                              evaluation.recommendation === 'conditional' ? 'Condicional' : 'No recomendada';
-              sections.push(createVandarumHighlight('Recomendación', recText));
-            }
+          // ===== INFORMACIÓN DE REGISTRO =====
+          sections.push(createVandarumHeading2('Información de Registro'));
+          sections.push(createVandarumHighlight('Estudio', study.name));
+          const sourceLabel = tech.source === 'database' ? 'Base de Datos' : 
+            tech.source === 'ai_session' || tech.source === 'ai_extracted' ? 'Búsqueda Web (IA)' : 
+            tech.source === 'manual' ? 'Entrada Manual' : 
+            tech.source === 'chrome_extension' ? 'Extensión Chrome' : 'No especificada';
+          sections.push(createVandarumHighlight('Procedencia', sourceLabel));
+          if (tech.added_at) {
+            sections.push(createVandarumHighlight('Fecha de adición', new Date(tech.added_at).toLocaleDateString('es-ES')));
           }
+          
+          // NO incluir SWOT aquí - ya está en la Comparativa Tecnológica
         }
       }
 

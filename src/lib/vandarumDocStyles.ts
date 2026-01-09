@@ -629,6 +629,7 @@ export function createVandarumTechSeparator(): Paragraph {
 
 /**
  * Crea índice/tabla de contenidos profesional - compacto en una página
+ * NO incluye PageBreak al final (lo maneja el caller)
  */
 export function createVandarumTableOfContents(items: { title: string; isAnnex?: boolean }[]): Paragraph[] {
   // Numerador para items que no son anexo
@@ -645,7 +646,7 @@ export function createVandarumTableOfContents(items: { title: string; isAnnex?: 
           font: VANDARUM_FONTS.titulo,
         })
       ],
-      spacing: { before: 200, after: 200 },
+      spacing: { before: 200, after: 300 },
       border: {
         bottom: {
           color: VANDARUM_COLORS.verdeOscuro,
@@ -669,14 +670,12 @@ export function createVandarumTableOfContents(items: { title: string; isAnnex?: 
           bold: item.isAnnex,
         }),
       ],
-      spacing: { after: 80 },  // Más compacto
+      spacing: { after: 120 },
       indent: { left: item.isAnnex ? 0 : 200 },
     }));
   }
 
-  // Salto de página después del índice
-  paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
-
+  // NO incluye PageBreak - lo maneja cada sección
   return paragraphs;
 }
 
@@ -829,7 +828,7 @@ export function createVandarumCover(title: string, subtitle: string, date: strin
 }
 
 /**
- * Crea portada con logo como imagen
+ * Crea portada con logo como imagen - mantiene proporciones originales
  */
 export function createVandarumCoverWithLogo(
   title: string, 
@@ -838,14 +837,14 @@ export function createVandarumCoverWithLogo(
   logoImageRun: any // ImageRun from docx
 ): Paragraph[] {
   return [
-    // Espaciado superior reducido para hacer espacio para el logo
-    new Paragraph({ children: [], spacing: { before: 800 } }),
+    // Espaciado superior
+    new Paragraph({ children: [], spacing: { before: 600 } }),
     
-    // Logo
+    // Logo - centrado
     new Paragraph({
       children: [logoImageRun],
       alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
+      spacing: { after: 300 },
     }),
     
     // Línea decorativa sutil
@@ -858,7 +857,7 @@ export function createVandarumCoverWithLogo(
         })
       ],
       alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
+      spacing: { after: 300 },
     }),
     
     // Título del documento
@@ -888,7 +887,7 @@ export function createVandarumCoverWithLogo(
         })
       ],
       alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
+      spacing: { after: 300 },
     }),
     
     // Fecha
@@ -906,7 +905,7 @@ export function createVandarumCoverWithLogo(
     }),
     
     // Espacio antes del tagline
-    new Paragraph({ children: [], spacing: { before: 1200 } }),
+    new Paragraph({ children: [], spacing: { before: 1000 } }),
     
     // Tagline
     new Paragraph({
