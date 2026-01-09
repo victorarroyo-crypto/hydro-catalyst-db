@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Document, Packer, Paragraph, PageBreak } from 'docx';
+import { Document, Packer, Paragraph, PageBreak, TextRun } from 'docx';
 import {
   createVandarumCover,
   createVandarumHeading1,
@@ -54,7 +54,6 @@ import {
   createSwotLabel,
   createVandarumFooter,
   createVandarumHighlight,
-  createVandarumTechSeparator,
   createVandarumDocumentFooter,
   createVandarumDocumentHeader,
   createVandarumRichContent,
@@ -330,6 +329,105 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         sections.push(...createVandarumRichContent(selectedReport.conclusions));
       }
 
+      // ========== ANEXO: FICHAS DE TECNOLOGÍAS ==========
+      if (shortlist && shortlist.length > 0) {
+        sections.push(new Paragraph({ children: [new PageBreak()] }));
+        sections.push(createVandarumHeading1('ANEXO: Fichas de Tecnologías'));
+        sections.push(createVandarumParagraph(
+          `A continuación se incluyen las fichas detalladas de las ${shortlist.length} tecnologías que componen la Lista Corta de este estudio.`
+        ));
+
+        for (const [index, item] of shortlist.entries()) {
+          const tech = item.longlist;
+          if (!tech) continue;
+
+          // Separador entre fichas (no antes de la primera)
+          if (index > 0) {
+            sections.push(new Paragraph({ children: [], spacing: { before: 400 } }));
+            sections.push(createVandarumSeparator());
+          }
+
+          // Título de la tecnología
+          sections.push(...createVandarumTechTitle(
+            `${index + 1}. ${tech.technology_name}`,
+            evaluations?.find(e => e.shortlist_id === item.id)?.overall_score
+          ));
+
+          // Info contextual
+          const contextParts: string[] = [];
+          if (tech.provider) contextParts.push(`Proveedor: ${tech.provider}`);
+          if (tech.country) contextParts.push(`País: ${tech.country}`);
+          if (tech.trl) contextParts.push(`TRL: ${tech.trl}`);
+          if (contextParts.length > 0) {
+            sections.push(new Paragraph({
+              children: [
+                new TextRun({
+                  text: contextParts.join('  |  '),
+                  size: 22,
+                  color: '666666',
+                  font: 'Arial',
+                  italics: true,
+                })
+              ],
+              spacing: { after: 200 },
+            }));
+          }
+
+          // Información General - usar campos disponibles en StudyLonglistItem
+          const infoFields = [
+            { label: 'Proveedor / Empresa', value: tech.provider },
+            { label: 'País de origen', value: tech.country },
+            { label: 'Web', value: tech.web },
+          ].filter(f => f.value);
+          
+          if (infoFields.length > 0) {
+            sections.push(createVandarumHeading2('Información General'));
+            for (const field of infoFields) {
+              sections.push(createVandarumHighlight(field.label, field.value!));
+            }
+          }
+
+          // TRL si disponible
+          if (tech.trl) {
+            sections.push(createVandarumHighlight('Grado de madurez (TRL)', String(tech.trl)));
+          }
+
+          // Descripción Técnica
+          if (tech.brief_description) {
+            sections.push(createVandarumHeading2('Descripción Técnica'));
+            sections.push(...createVandarumRichContent(tech.brief_description));
+          }
+
+          // Razón de inclusión / Notas del Analista
+          if (tech.inclusion_reason) {
+            sections.push(createVandarumHeading2('Notas del Analista'));
+            sections.push(createVandarumParagraph(tech.inclusion_reason));
+          }
+
+          // Si hay evaluación, añadir SWOT
+          const evaluation = evaluations?.find(e => e.shortlist_id === item.id);
+          if (evaluation) {
+            const translation = translationsMap.get(evaluation.id);
+            const strengths = translation?.strengths || evaluation.strengths || [];
+            const weaknesses = translation?.weaknesses || evaluation.weaknesses || [];
+            const opportunities = translation?.opportunities || evaluation.opportunities || [];
+            const threats = translation?.threats || evaluation.threats || [];
+            
+            if (strengths.length || weaknesses.length || opportunities.length || threats.length) {
+              sections.push(createVandarumHeading2('Análisis SWOT'));
+              sections.push(...createVandarumSwotBlock(strengths, weaknesses, opportunities, threats));
+            }
+
+            if (evaluation.recommendation) {
+              const recText = evaluation.recommendation === 'highly_recommended' ? 'Muy recomendada' :
+                              evaluation.recommendation === 'recommended' ? 'Recomendada' :
+                              evaluation.recommendation === 'conditional' ? 'Condicional' : 'No recomendada';
+              sections.push(createVandarumHighlight('Recomendación', recText));
+            }
+          }
+        }
+      }
+
       sections.push(...createVandarumFooter(format(new Date(), "d 'de' MMMM yyyy", { locale: es })));
 
       const doc = new Document({
@@ -515,7 +613,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
 
           // Salto de página entre tecnologías (excepto la última)
           if (shortlist && shortlist.indexOf(item) < shortlist.length - 1) {
-            sections.push(createVandarumTechSeparator());
+            sections.push(createVandarumSeparator());
           }
         }
       } else {
