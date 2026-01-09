@@ -69,16 +69,19 @@ serve(async (req) => {
       // Railway sends 'research_progress' for progress updates
       case 'research_progress':
       case 'progress': {
-        const progressData = data || payload;
-        const progressValue = progressData?.progress ?? progressData?.percentage ?? 0;
-        const progressMessage = progressData?.message || progressData?.status || `Progreso: ${progressValue}%`;
+        // Progress viene en el nivel RAÍZ del payload, no dentro de data
+        const progressValue = payload.progress ?? data?.progress ?? data?.percentage ?? 0;
+        const phase = payload.phase ?? data?.phase ?? 'research';
+        const progressMessage = data?.message || data?.status || `Progreso: ${progressValue}%`;
+        
+        console.log(`[study-webhook] ${event}: ${progressValue}%, phase: ${phase}`);
         
         await supabase
           .from('study_sessions')
           .update({ 
             status: 'running',
             progress_percentage: progressValue,
-            current_phase: progressData?.phase || 'research',
+            current_phase: phase,
             updated_at: new Date().toISOString()
           })
           .eq('id', session_id);
@@ -87,18 +90,20 @@ serve(async (req) => {
           session_id,
           study_id,
           level: 'info',
-          phase: progressData?.phase || 'research',
+          phase: phase,
           message: progressMessage,
-          details: progressData
+          details: { ...data, payload_progress: payload.progress, payload_phase: payload.phase }
         });
         break;
       }
 
       // Railway sends 'solutions_progress' for solutions phase progress
       case 'solutions_progress': {
-        const progressData = data || payload;
-        const progressValue = progressData?.progress ?? progressData?.percentage ?? 0;
-        const progressMessage = progressData?.message || progressData?.status || `Identificando soluciones: ${progressValue}%`;
+        // Progress viene en el nivel RAÍZ del payload, no dentro de data
+        const progressValue = payload.progress ?? data?.progress ?? data?.percentage ?? 0;
+        const progressMessage = data?.message || data?.status || `Identificando soluciones: ${progressValue}%`;
+        
+        console.log(`[study-webhook] solutions_progress: ${progressValue}%`);
         
         await supabase
           .from('study_sessions')
@@ -116,7 +121,7 @@ serve(async (req) => {
           level: 'info',
           phase: 'solutions',
           message: progressMessage,
-          details: progressData
+          details: { ...data, payload_progress: payload.progress }
         });
         break;
       }
@@ -464,10 +469,12 @@ serve(async (req) => {
       }
 
       case 'evaluation_progress': {
-        const progressData = data || payload;
-        const progressValue = progressData?.progress ?? 0;
-        const phase = progressData?.phase || 'evaluating_technologies';
-        const message = progressData?.message || `Evaluando tecnologías: ${progressValue}%`;
+        // Progress y phase vienen en el nivel RAÍZ del payload, no dentro de data
+        const progressValue = payload.progress ?? data?.progress ?? 0;
+        const phase = payload.phase ?? data?.phase ?? 'evaluating_technologies';
+        const message = data?.message || `Evaluando tecnologías: ${progressValue}%`;
+        
+        console.log(`[study-webhook] evaluation_progress: ${progressValue}%, phase: ${phase}`);
         
         await supabase
           .from('study_sessions')
@@ -485,7 +492,7 @@ serve(async (req) => {
           level: 'info',
           phase: 'evaluation',
           message: message,
-          details: progressData
+          details: { ...data, payload_progress: payload.progress, payload_phase: payload.phase }
         });
         break;
       }
@@ -818,9 +825,11 @@ serve(async (req) => {
 
       // Longlist progress and complete events
       case 'longlist_progress': {
-        const progressData = data || payload;
-        const progressValue = progressData?.progress ?? progressData?.percentage ?? 0;
-        const progressMessage = progressData?.message || progressData?.status || `Progreso longlist: ${progressValue}%`;
+        // Progress viene en el nivel RAÍZ del payload, no dentro de data
+        const progressValue = payload.progress ?? data?.progress ?? data?.percentage ?? 0;
+        const progressMessage = data?.message || data?.status || `Progreso longlist: ${progressValue}%`;
+        
+        console.log(`[study-webhook] longlist_progress: ${progressValue}%`);
         
         await supabase
           .from('study_sessions')
@@ -838,7 +847,7 @@ serve(async (req) => {
           level: 'info',
           phase: 'longlist',
           message: progressMessage,
-          details: progressData
+          details: { ...data, payload_progress: payload.progress }
         });
         break;
       }
