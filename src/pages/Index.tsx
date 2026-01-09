@@ -1,8 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import vandarumLogo from "@/assets/vandarum-logo-principal.png";
-import vandarumSymbolNaranja from "@/assets/simbolo-naranja.png";
+import vandarumLogo from "@/assets/vandarum-logo-principal-new.png";
+import vandarumSymbolBlue from "@/assets/vandarum-symbol-blue.png";
 import { 
   Droplets, 
   Search, 
@@ -171,7 +171,7 @@ const Index = () => {
       <section className="py-24 gradient-hero">
         <div className="container mx-auto px-6 text-center">
           <img 
-            src={vandarumSymbolNaranja} 
+            src={vandarumSymbolBlue} 
             alt="Vandarum" 
             className="h-16 w-auto mx-auto mb-6 object-contain"
           />

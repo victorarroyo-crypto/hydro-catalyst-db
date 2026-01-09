@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Droplets, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { toast } from 'sonner';
+import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
 
 export default function AdvisorAuth() {
   const navigate = useNavigate();
@@ -128,10 +129,8 @@ export default function AdvisorAuth() {
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <Link to="/advisor" className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-lg bg-primary flex items-center justify-center">
-              <Droplets className="w-7 h-7 text-primary-foreground" />
-            </div>
+          <Link to="/advisor" className="flex items-center justify-center mb-4">
+            <img src={vandarumSymbolBlue} alt="Vandarum" className="h-12 w-auto" />
           </Link>
           <CardTitle className="text-2xl">AI Advisor</CardTitle>
           <CardDescription>
