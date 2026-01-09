@@ -9,7 +9,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { 
   Send, 
   Loader2, 
-  Droplets, 
   ChevronDown, 
   Plus, 
   CreditCard,
@@ -22,6 +21,7 @@ import { useAdvisorChat } from '@/hooks/useAdvisorChat';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
 
 const AI_MODELS = [
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini', price: 0.75, credits: 1.65, freeAllowed: true },
@@ -111,9 +111,7 @@ export default function AdvisorChat() {
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 py-3">
         <div className="flex items-center justify-between max-w-5xl mx-auto">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-              <Droplets className="w-5 h-5 text-primary-foreground" />
-            </div>
+            <img src={vandarumSymbolBlue} alt="Vandarum" className="h-9 w-auto" />
             <span className="font-bold text-lg">AI Advisor</span>
           </div>
 
@@ -174,9 +172,7 @@ export default function AdvisorChat() {
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 space-y-8">
               <div className="text-center space-y-3">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-                  <Droplets className="w-8 h-8 text-primary" />
-                </div>
+                <img src={vandarumSymbolBlue} alt="Vandarum" className="h-16 w-auto mx-auto" />
                 <h2 className="text-2xl font-semibold">¿En qué puedo ayudarte?</h2>
                 <p className="text-muted-foreground">Experto en tratamiento de aguas industriales</p>
               </div>
@@ -205,9 +201,7 @@ export default function AdvisorChat() {
               )}
             >
               {message.role === 'assistant' && (
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Droplets className="w-4 h-4 text-primary" />
-                </div>
+                <img src={vandarumSymbolBlue} alt="Vandarum" className="w-8 h-8 flex-shrink-0" />
               )}
               <div
                 className={cn(
@@ -253,9 +247,7 @@ export default function AdvisorChat() {
           {/* Loading indicator */}
           {isLoading && (
             <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Droplets className="w-4 h-4 text-primary" />
-              </div>
+              <img src={vandarumSymbolBlue} alt="Vandarum" className="w-8 h-8 flex-shrink-0" />
               <div className="bg-muted/50 rounded-2xl rounded-tl-none p-4">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>

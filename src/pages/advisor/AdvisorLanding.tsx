@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Scale, FlaskConical, Droplets, Check, ArrowRight, Home } from 'lucide-react';
+import { Search, Scale, FlaskConical, Check, ArrowRight, Home } from 'lucide-react';
+import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
 
 const features = [
   {
@@ -61,9 +62,7 @@ export default function AdvisorLanding() {
       <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Droplets className="w-6 h-6 text-primary-foreground" />
-            </div>
+            <img src={vandarumSymbolBlue} alt="Vandarum" className="h-10 w-auto" />
             <span className="font-bold text-xl">AI Advisor</span>
           </div>
           <div className="flex items-center gap-4">

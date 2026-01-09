@@ -8,7 +8,6 @@ import {
   Star,
   Settings,
   LogOut,
-  Droplets,
   ShieldCheck,
   TrendingUp,
   BookOpen,
@@ -31,6 +30,7 @@ import {
   MessageSquare,
   History,
 } from 'lucide-react';
+import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
 import {
   Sidebar,
   SidebarContent,
@@ -137,9 +137,7 @@ export function AppSidebar() {
     <Sidebar className={cn('border-r-0', collapsed ? 'w-16' : 'w-64')} collapsible="icon">
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <Link to="/dashboard" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg gradient-primary flex items-center justify-center shadow-glow">
-            <Droplets className="w-6 h-6 text-sidebar-primary" />
-          </div>
+          <img src={vandarumSymbolBlue} alt="Vandarum" className="h-10 w-auto" />
           {!collapsed && (
             <div className="flex flex-col">
               <span className="font-display text-lg font-bold text-sidebar-foreground">
