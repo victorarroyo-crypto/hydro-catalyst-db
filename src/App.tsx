@@ -34,6 +34,7 @@ import DatabaseAudit from "./pages/DatabaseAudit";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import ScoutingMonitor from "./pages/ScoutingMonitor";
 import AdminScoutingJobs from "./pages/AdminScoutingJobs";
+import AdminKBSync from "./pages/AdminKBSync";
 import Studies from "./pages/Studies";
 import StudyDetail from "./pages/StudyDetail";
 import AdvisorLanding from "./pages/advisor/AdvisorLanding";
@@ -92,6 +93,7 @@ const App = () => (
               <Route path="/admin/db-audit" element={<AdminDbAudit />} />
               <Route path="/scouting-monitor" element={<ScoutingMonitor />} />
               <Route path="/admin/scouting-jobs" element={<AdminScoutingJobs />} />
+              <Route path="/admin/kb-sync" element={<AdminKBSync />} />
             </Route>
             {/* AI Advisor Routes - Public */}
             <Route path="/advisor" element={<AdvisorLanding />} />
