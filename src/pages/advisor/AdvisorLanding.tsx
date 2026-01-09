@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Scale, FlaskConical, Droplets, Check, ArrowRight } from 'lucide-react';
+import { Search, Scale, FlaskConical, Droplets, Check, ArrowRight, Home } from 'lucide-react';
 
 const features = [
   {
@@ -67,6 +67,12 @@ export default function AdvisorLanding() {
             <span className="font-bold text-xl">AI Advisor</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link to="/dashboard">
+              <Button variant="ghost" size="sm" className="gap-2">
+                <Home className="w-4 h-4" />
+                Dashboard
+              </Button>
+            </Link>
             <Link to="/advisor/auth">
               <Button variant="ghost">Iniciar Sesión</Button>
             </Link>
