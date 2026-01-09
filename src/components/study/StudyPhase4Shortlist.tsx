@@ -9,7 +9,6 @@ import {
 import { useAIStudySession } from '@/hooks/useAIStudySession';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -26,11 +25,13 @@ import {
   ArrowRight,
   Trash2,
   Loader2,
-  MapPin,
   Building2,
   GripVertical,
+  Eye,
 } from 'lucide-react';
 import AISessionPanel from './AISessionPanel';
+import { LonglistTechDetailModal } from './LonglistTechDetailModal';
+import type { FullLonglistItem } from '@/hooks/useScoutingStudies';
 
 interface Props {
   studyId: string;
@@ -47,6 +48,12 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [selectionReason, setSelectionReason] = useState('');
   const [notes, setNotes] = useState('');
+  const [viewingLonglistId, setViewingLonglistId] = useState<string | null>(null);
+
+  // Find the full longlist item for viewing
+  const viewingTech = viewingLonglistId 
+    ? longlist?.find(item => item.id === viewingLonglistId) ?? null 
+    : null;
 
   const shortlistIds = new Set(shortlist?.map(s => s.longlist_id));
   const availableLonglist = longlist?.filter(item => !shortlistIds.has(item.id)) ?? [];
@@ -182,7 +189,11 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
           ) : (
             <div className="space-y-2">
               {shortlist?.map((item, idx) => (
-                <Card key={item.id} className="border-amber-200 group">
+                <Card 
+                  key={item.id} 
+                  className="border-amber-200 group cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => setViewingLonglistId(item.longlist_id)}
+                >
                   <CardContent className="p-3">
                     <div className="flex items-start gap-2">
                       <div className="flex items-center gap-1 text-muted-foreground">
@@ -213,7 +224,21 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 opacity-0 group-hover:opacity-100"
-                          onClick={() => handleRemove(item.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewingLonglistId(item.longlist_id);
+                          }}
+                        >
+                          <Eye className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemove(item.id);
+                          }}
                         >
                           <Trash2 className="w-3 h-3 text-destructive" />
                         </Button>
@@ -226,6 +251,15 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
           )}
         </div>
       </div>
+
+      {/* Tech Detail Modal */}
+      <LonglistTechDetailModal
+        item={viewingTech}
+        open={!!viewingTech}
+        onOpenChange={(open) => !open && setViewingLonglistId(null)}
+        studyId={studyId}
+        studyName={study.name}
+      />
 
       {/* Add to Shortlist Dialog */}
       <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { Tables } from '@/integrations/supabase/types';
 
 // Types
 export interface ScoutingStudy {
@@ -459,6 +460,8 @@ export function useAddSolution() {
 }
 
 // Hooks for Longlist (Phase 3)
+export type FullLonglistItem = Tables<'study_longlist'>;
+
 export function useStudyLonglist(studyId: string | undefined) {
   return useQuery({
     queryKey: ['study-longlist', studyId],
@@ -470,7 +473,7 @@ export function useStudyLonglist(studyId: string | undefined) {
         .eq('study_id', studyId)
         .order('added_at', { ascending: false });
       if (error) throw error;
-      return data as StudyLonglistItem[];
+      return data as FullLonglistItem[];
     },
     enabled: !!studyId,
 
