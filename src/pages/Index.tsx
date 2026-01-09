@@ -79,9 +79,9 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a4a5e]">
+    <div className="min-h-screen bg-[#307177]">
       {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#1a4a5e] via-[#2a5a6e] to-[#1a4a5e] opacity-90" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#307177] via-[#3a8a90] to-[#2a6068] opacity-90" />
       
       {/* Content */}
       <div className="relative z-10">
@@ -105,7 +105,7 @@ const Index = () => {
               {user ? (
                 <Button 
                   onClick={() => navigate("/dashboard")}
-                  className="bg-amber-500 hover:bg-amber-600 text-white font-medium px-6 gap-2"
+                  className="bg-[#ffa720] hover:bg-[#e69500] text-white font-medium px-6 gap-2"
                 >
                   <Home className="w-4 h-4" />
                   Dashboard
@@ -117,7 +117,7 @@ const Index = () => {
                   </Link>
                   <Button 
                     onClick={handleGetStarted}
-                    className="bg-amber-500 hover:bg-amber-600 text-white font-medium px-6"
+                    className="bg-[#ffa720] hover:bg-[#e69500] text-white font-medium px-6"
                   >
                     Registrarse
                   </Button>
@@ -134,7 +134,7 @@ const Index = () => {
             <div>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
                 Encuentra la tecnología perfecta para tus{" "}
-                <span className="text-amber-400">desafíos en agua</span>
+                <span className="text-[#ffa720]">desafíos en agua</span>
               </h1>
               
               <p className="text-lg text-white/70 mb-8 max-w-xl">
@@ -146,7 +146,7 @@ const Index = () => {
                 <Button 
                   size="lg"
                   onClick={handleGetStarted}
-                  className="bg-amber-500 hover:bg-amber-600 text-white font-medium px-8 gap-2"
+                  className="bg-[#ffa720] hover:bg-[#e69500] text-white font-medium px-8 gap-2"
                 >
                   <Search className="w-4 h-4" />
                   Explorar Tecnologías
@@ -173,7 +173,7 @@ const Index = () => {
                   className="bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/15 transition-colors"
                 >
                   <CardContent className="p-6">
-                    <feature.icon className="w-8 h-8 text-amber-400 mb-4" />
+                    <feature.icon className="w-8 h-8 text-[#ffa720] mb-4" />
                     <h3 className="font-semibold text-white mb-2 text-sm">
                       {feature.title}
                     </h3>
@@ -192,7 +192,7 @@ const Index = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {stats.map((stat) => (
               <div key={stat.label} className="text-center">
-                <div className="text-4xl font-bold text-amber-400 mb-2">{stat.value}</div>
+                <div className="text-4xl font-bold text-[#ffa720] mb-2">{stat.value}</div>
                 <div className="text-white/60 text-sm">{stat.label}</div>
               </div>
             ))}
@@ -214,14 +214,14 @@ const Index = () => {
             {industries.map((industry) => (
               <Card key={industry.title} className="bg-white/10 backdrop-blur-sm border-white/20">
                 <CardContent className="p-8">
-                  <div className="w-14 h-14 rounded-xl bg-amber-500 text-white flex items-center justify-center mb-6">
+                  <div className="w-14 h-14 rounded-xl bg-[#ffa720] text-white flex items-center justify-center mb-6">
                     <industry.icon className="w-7 h-7" />
                   </div>
                   <h3 className="font-semibold text-white mb-4">{industry.title}</h3>
                   <ul className="space-y-3">
                     {industry.items.map((item) => (
                       <li key={item} className="flex items-center gap-2 text-white/70 text-sm">
-                        <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                        <Check className="w-4 h-4 text-[#ffa720] shrink-0" />
                         {item}
                       </li>
                     ))}
@@ -241,8 +241,8 @@ const Index = () => {
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-amber-400/20 flex items-center justify-center mx-auto mb-4">
-                <Zap className="w-8 h-8 text-amber-400" />
+              <div className="w-16 h-16 rounded-full bg-[#ffa720]/20 flex items-center justify-center mx-auto mb-4">
+                <Zap className="w-8 h-8 text-[#ffa720]" />
               </div>
               <h3 className="font-semibold text-white mb-2">Rápido y Eficiente</h3>
               <p className="text-white/60 text-sm">
@@ -250,8 +250,8 @@ const Index = () => {
               </p>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-amber-400/20 flex items-center justify-center mx-auto mb-4">
-                <Shield className="w-8 h-8 text-amber-400" />
+              <div className="w-16 h-16 rounded-full bg-[#ffa720]/20 flex items-center justify-center mx-auto mb-4">
+                <Shield className="w-8 h-8 text-[#ffa720]" />
               </div>
               <h3 className="font-semibold text-white mb-2">Información Verificada</h3>
               <p className="text-white/60 text-sm">
@@ -259,8 +259,8 @@ const Index = () => {
               </p>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-amber-400/20 flex items-center justify-center mx-auto mb-4">
-                <Sparkles className="w-8 h-8 text-amber-400" />
+              <div className="w-16 h-16 rounded-full bg-[#ffa720]/20 flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-8 h-8 text-[#ffa720]" />
               </div>
               <h3 className="font-semibold text-white mb-2">IA Especializada</h3>
               <p className="text-white/60 text-sm">
@@ -284,7 +284,7 @@ const Index = () => {
               <Button 
                 size="lg" 
                 onClick={handleGetStarted}
-                className="bg-amber-500 hover:bg-amber-600 text-white font-medium px-10"
+                className="bg-[#ffa720] hover:bg-[#e69500] text-white font-medium px-10"
               >
                 {user ? "Ir al Dashboard" : "Acceder a la Plataforma"}
                 <ArrowRight className="w-5 h-5 ml-2" />
