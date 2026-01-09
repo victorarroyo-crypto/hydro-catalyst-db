@@ -76,6 +76,22 @@ export interface StudyLonglistItem {
   web: string | null;
   confidence_score: number | null;
   already_in_db: boolean | null;
+  // Extended fields for complete tech sheets
+  paises_actua: string | null;
+  email: string | null;
+  sector: string | null;
+  type_suggested: string | null;
+  subcategory_suggested: string | null;
+  applications: string[] | null;
+  ventaja_competitiva: string | null;
+  innovacion: string | null;
+  casos_referencia: string | null;
+  // Taxonomy IDs
+  tipo_id: number | null;
+  subcategoria_id: number | null;
+  sector_id: string | null;
+  subsector_industrial: string | null;
+  status: string | null;
 }
 
 export interface StudyShortlistItem {
