@@ -76,6 +76,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<StudyReport>>({});
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingEvaluations, setIsExportingEvaluations] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   const handleGenerateComprehensiveReport = async () => {
@@ -371,6 +372,25 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         }
       }
 
+      // Copyright Vandarum
+      sections.push(
+        new Paragraph({ children: [], spacing: { before: 600 } }),
+        new Paragraph({
+          children: [new TextRun({ text: '─'.repeat(50) })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: '© Vandarum - Todos los derechos reservados', italics: true, size: 20 })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 50 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: `Documento generado el ${format(new Date(), "d 'de' MMMM yyyy", { locale: es })}`, size: 18 })],
+          alignment: AlignmentType.CENTER,
+        })
+      );
+
       const doc = new Document({
         sections: [{ children: sections }],
       });
@@ -395,6 +415,183 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
     }
   };
 
+  // Descarga rápida de evaluaciones (simple, solo comparativa + SWOT)
+  const handleExportEvaluationsOnly = async () => {
+    setIsExportingEvaluations(true);
+    try {
+      const sections: Paragraph[] = [
+        // Título
+        new Paragraph({
+          children: [new TextRun({ text: 'Informe de Evaluación de Tecnologías', bold: true, size: 32 })],
+          heading: HeadingLevel.TITLE,
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: study.name, italics: true, size: 24 })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: format(new Date(), "d 'de' MMMM yyyy", { locale: es }) })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        }),
+      ];
+
+      // Tabla Comparativa
+      sections.push(
+        new Paragraph({ 
+          children: [new TextRun({ text: 'Comparativa de Tecnologías', bold: true, size: 28 })], 
+          heading: HeadingLevel.HEADING_1, 
+          spacing: { before: 400, after: 200 } 
+        })
+      );
+
+      if (shortlist && shortlist.length > 0) {
+        for (const item of shortlist) {
+          const evaluation = evaluations?.find(e => e.shortlist_id === item.id);
+          const techName = item.longlist?.technology_name || 'Tecnología';
+          
+          sections.push(
+            new Paragraph({ 
+              children: [new TextRun({ text: techName, bold: true, size: 24 })], 
+              heading: HeadingLevel.HEADING_2, 
+              spacing: { before: 300, after: 100 } 
+            })
+          );
+
+          if (item.longlist?.provider) {
+            sections.push(
+              new Paragraph({ 
+                children: [
+                  new TextRun({ text: 'Proveedor: ', bold: true }),
+                  new TextRun({ text: item.longlist.provider })
+                ], 
+                spacing: { after: 50 } 
+              })
+            );
+          }
+
+          if (evaluation) {
+            // Puntuación
+            if (evaluation.overall_score) {
+              sections.push(
+                new Paragraph({ 
+                  children: [
+                    new TextRun({ text: 'Puntuación General: ', bold: true }),
+                    new TextRun({ text: `${evaluation.overall_score}/10` })
+                  ], 
+                  spacing: { after: 50 } 
+                })
+              );
+            }
+
+            // Recomendación
+            if (evaluation.recommendation) {
+              const recText = evaluation.recommendation === 'highly_recommended' ? 'Muy recomendada' :
+                              evaluation.recommendation === 'recommended' ? 'Recomendada' :
+                              evaluation.recommendation === 'conditional' ? 'Condicional' : 'No recomendada';
+              sections.push(
+                new Paragraph({ 
+                  children: [
+                    new TextRun({ text: 'Recomendación: ', bold: true }),
+                    new TextRun({ text: recText })
+                  ], 
+                  spacing: { after: 100 } 
+                })
+              );
+            }
+
+            // SWOT
+            if (evaluation.strengths && evaluation.strengths.length > 0) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: 'Fortalezas:', bold: true, color: '22863a' })], spacing: { before: 100, after: 50 } })
+              );
+              for (const s of evaluation.strengths) {
+                sections.push(new Paragraph({ children: [new TextRun({ text: `• ${s}` })], spacing: { after: 30 } }));
+              }
+            }
+
+            if (evaluation.weaknesses && evaluation.weaknesses.length > 0) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: 'Debilidades:', bold: true, color: 'cb2431' })], spacing: { before: 100, after: 50 } })
+              );
+              for (const w of evaluation.weaknesses) {
+                sections.push(new Paragraph({ children: [new TextRun({ text: `• ${w}` })], spacing: { after: 30 } }));
+              }
+            }
+
+            if (evaluation.opportunities && evaluation.opportunities.length > 0) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: 'Oportunidades:', bold: true, color: '0366d6' })], spacing: { before: 100, after: 50 } })
+              );
+              for (const o of evaluation.opportunities) {
+                sections.push(new Paragraph({ children: [new TextRun({ text: `• ${o}` })], spacing: { after: 30 } }));
+              }
+            }
+
+            if (evaluation.threats && evaluation.threats.length > 0) {
+              sections.push(
+                new Paragraph({ children: [new TextRun({ text: 'Amenazas:', bold: true, color: 'e36209' })], spacing: { before: 100, after: 50 } })
+              );
+              for (const t of evaluation.threats) {
+                sections.push(new Paragraph({ children: [new TextRun({ text: `• ${t}` })], spacing: { after: 30 } }));
+              }
+            }
+          }
+
+          sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+        }
+      } else {
+        sections.push(
+          new Paragraph({ children: [new TextRun({ text: 'No hay tecnologías en la lista corta.' })], spacing: { after: 200 } })
+        );
+      }
+
+      // Copyright Vandarum
+      sections.push(
+        new Paragraph({ children: [], spacing: { before: 600 } }),
+        new Paragraph({
+          children: [new TextRun({ text: '─'.repeat(50) })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: '© Vandarum - Todos los derechos reservados', italics: true, size: 20 })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 50 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: `Documento generado el ${format(new Date(), "d 'de' MMMM yyyy", { locale: es })}`, size: 18 })],
+          alignment: AlignmentType.CENTER,
+        })
+      );
+
+      const doc = new Document({
+        sections: [{ children: sections }],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const fileName = `Evaluacion_Tecnologias_${study.name.replace(/[^a-zA-Z0-9]/g, '_')}.docx`;
+      saveAs(blob, fileName);
+
+      toast({
+        title: 'Evaluaciones exportadas',
+        description: `El archivo ${fileName} se ha descargado correctamente`,
+      });
+    } catch (error) {
+      console.error('Error exporting evaluations:', error);
+      toast({
+        title: 'Error al exportar',
+        description: 'No se pudo generar el archivo Word',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExportingEvaluations(false);
+    }
+  };
+
   const completedEvaluations = evaluations?.filter(e => e.recommendation) ?? [];
   const hasEnoughData = stats.shortlistCount >= 1 && completedEvaluations.length >= 1;
 
@@ -411,26 +608,64 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             La IA genera un informe completo con resumen ejecutivo, análisis comparativo y recomendaciones
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <Button
+              onClick={handleGenerateComprehensiveReport}
+              disabled={isGeneratingReport || !hasEnoughData}
+              className="flex-1"
+            >
+              {isGeneratingReport ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generando...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Generar Informe Final
+                </>
+              )}
+            </Button>
+            {selectedReport && (
+              <Button
+                variant="outline"
+                onClick={handleExportReport}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Descargar Informe
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+          
           <Button
-            onClick={handleGenerateComprehensiveReport}
-            disabled={isGeneratingReport || !hasEnoughData}
+            variant="secondary"
+            onClick={handleExportEvaluationsOnly}
+            disabled={isExportingEvaluations || !hasEnoughData}
             className="w-full"
           >
-            {isGeneratingReport ? (
+            {isExportingEvaluations ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Generando informe...
+                Exportando evaluaciones...
               </>
             ) : (
               <>
-                <Sparkles className="w-4 h-4 mr-2" />
-                Generar Informe Final
+                <Download className="w-4 h-4 mr-2" />
+                Descargar Evaluaciones Rápidas
               </>
             )}
           </Button>
+          
           {!hasEnoughData && (
-            <p className="text-sm text-muted-foreground mt-2 text-center">
+            <p className="text-sm text-muted-foreground text-center">
               Se requiere al menos 1 tecnología en shortlist y 1 evaluación completa
             </p>
           )}
