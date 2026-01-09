@@ -44,9 +44,10 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Document, Packer, Paragraph, PageBreak, TextRun } from 'docx';
+import { Document, Packer, Paragraph, PageBreak, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle as DocxBorderStyle, ShadingType } from 'docx';
 import {
   createVandarumCover,
+  createVandarumCoverWithLogo,
   createVandarumHeading1,
   createVandarumHeading2,
   createVandarumParagraph,
@@ -62,6 +63,9 @@ import {
   createVandarumSeparator,
   createVandarumTableOfContents,
   VANDARUM_NUMBERING_CONFIG,
+  VANDARUM_COLORS,
+  VANDARUM_FONTS,
+  VANDARUM_SIZES,
 } from '@/lib/vandarumDocStyles';
 import { saveAs } from 'file-saver';
 import { useToast } from '@/hooks/use-toast';
@@ -249,38 +253,73 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
       if (selectedReport.conclusions) tocItems.push({ title: 'Conclusiones' });
       if (shortlist && shortlist.length > 0) tocItems.push({ title: 'ANEXO: Fichas de Tecnologías', isAnnex: true });
 
-      const sections: Paragraph[] = [
-        ...createVandarumCover(
+      // Cargar logo de Vandarum
+      let logoImageRun: ImageRun | null = null;
+      try {
+        const logoResponse = await fetch('/vandarum-logo-report.png');
+        const logoBlob = await logoResponse.blob();
+        const logoArrayBuffer = await logoBlob.arrayBuffer();
+        logoImageRun = new ImageRun({
+          data: logoArrayBuffer,
+          transformation: {
+            width: 200,
+            height: 180,
+          },
+          type: 'png',
+        });
+      } catch (logoError) {
+        console.warn('No se pudo cargar el logo, usando portada de texto:', logoError);
+      }
+
+      const sections: (Paragraph | Table)[] = [];
+      
+      // Portada con logo o sin logo
+      if (logoImageRun) {
+        sections.push(...createVandarumCoverWithLogo(
+          selectedReport.title,
+          `Estudio: ${study.name}`,
+          dateStr,
+          logoImageRun
+        ));
+      } else {
+        sections.push(...createVandarumCover(
           selectedReport.title,
           `Estudio: ${study.name}`,
           dateStr
-        ),
-        ...createVandarumTableOfContents(tocItems),
-      ];
+        ));
+      }
+      
+      // Índice (ya incluye PageBreak al final)
+      sections.push(...createVandarumTableOfContents(tocItems));
 
-      // Usar createVandarumRichContent para procesar texto con estructura
+      // Cada sección principal empieza en página nueva
       if (selectedReport.executive_summary) {
+        sections.push(new Paragraph({ children: [new PageBreak()] }));
         sections.push(createVandarumHeading1('Resumen Ejecutivo'));
         sections.push(...createVandarumRichContent(selectedReport.executive_summary));
       }
 
       if (selectedReport.methodology) {
+        sections.push(new Paragraph({ children: [new PageBreak()] }));
         sections.push(createVandarumHeading1('Metodología'));
         sections.push(...createVandarumRichContent(selectedReport.methodology));
       }
 
       if (selectedReport.problem_analysis) {
+        sections.push(new Paragraph({ children: [new PageBreak()] }));
         sections.push(createVandarumHeading1('Análisis del Problema'));
         sections.push(...createVandarumRichContent(selectedReport.problem_analysis));
       }
 
       if (selectedReport.solutions_overview) {
+        sections.push(new Paragraph({ children: [new PageBreak()] }));
         sections.push(createVandarumHeading1('Panorama de Soluciones'));
         sections.push(...createVandarumRichContent(selectedReport.solutions_overview));
       }
 
-      // SECCIÓN COMPARATIVA TECNOLÓGICA - Usar datos estructurados en lugar de texto raw
+      // SECCIÓN COMPARATIVA TECNOLÓGICA - Cada tecnología en página nueva
       if (shortlist && shortlist.length > 0) {
+        sections.push(new Paragraph({ children: [new PageBreak()] }));
         sections.push(createVandarumHeading1('Comparativa Tecnológica'));
         
         for (const [index, item] of shortlist.entries()) {
@@ -290,6 +329,11 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
           
           // Get translated content if available
           const translation = evaluation ? translationsMap.get(evaluation.id) : undefined;
+          
+          // Cada tecnología en página nueva (excepto la primera que sigue al título)
+          if (index > 0) {
+            sections.push(new Paragraph({ children: [new PageBreak()] }));
+          }
           
           // Título de tecnología profesional con puntuación y prioridad
           sections.push(...createVandarumTechTitle(
@@ -319,90 +363,166 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
           
           // Bloque SWOT profesional
           sections.push(...createVandarumSwotBlock(strengths, weaknesses, opportunities, threats));
-          
-          // Separador entre tecnologías (excepto última)
-          if (index < shortlist.length - 1) {
-            sections.push(new Paragraph({ children: [], spacing: { before: 200 } }));
-            sections.push(createVandarumSeparator());
-          }
         }
       } else if (selectedReport.technology_comparison) {
         // Fallback: usar texto raw si no hay shortlist
+        sections.push(new Paragraph({ children: [new PageBreak()] }));
         sections.push(createVandarumHeading1('Comparativa Tecnológica'));
         sections.push(...createVandarumRichContent(selectedReport.technology_comparison));
       }
 
       if (selectedReport.recommendations) {
+        sections.push(new Paragraph({ children: [new PageBreak()] }));
         sections.push(createVandarumHeading1('Recomendaciones'));
         sections.push(...createVandarumRichContent(selectedReport.recommendations));
       }
 
       if (selectedReport.conclusions) {
+        sections.push(new Paragraph({ children: [new PageBreak()] }));
         sections.push(createVandarumHeading1('Conclusiones'));
         sections.push(...createVandarumRichContent(selectedReport.conclusions));
       }
 
       // ========== ANEXO: FICHAS DE TECNOLOGÍAS ==========
       if (shortlist && shortlist.length > 0) {
+        // Página solo con título del Anexo
         sections.push(new Paragraph({ children: [new PageBreak()] }));
-        sections.push(createVandarumHeading1('ANEXO: Fichas de Tecnologías'));
-        sections.push(createVandarumParagraph(
-          `A continuación se incluyen las fichas detalladas de las ${shortlist.length} tecnologías que componen la Lista Corta de este estudio.`
-        ));
+        sections.push(new Paragraph({ children: [], spacing: { before: 2000 } }));
+        sections.push(new Paragraph({
+          children: [
+            new TextRun({
+              text: 'ANEXO',
+              bold: true,
+              size: 72,
+              color: VANDARUM_COLORS.verdeOscuro,
+              font: VANDARUM_FONTS.titulo,
+            })
+          ],
+          alignment: 'center' as any,
+          spacing: { after: 200 },
+        }));
+        sections.push(new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Fichas de Tecnologías',
+              bold: true,
+              size: VANDARUM_SIZES.titulo,
+              color: VANDARUM_COLORS.grisTexto,
+              font: VANDARUM_FONTS.titulo,
+            })
+          ],
+          alignment: 'center' as any,
+          spacing: { after: 400 },
+        }));
+        sections.push(new Paragraph({
+          children: [
+            new TextRun({
+              text: `${shortlist.length} tecnologías de la Lista Corta`,
+              size: VANDARUM_SIZES.subtitulo,
+              color: VANDARUM_COLORS.grisClaro,
+              font: VANDARUM_FONTS.texto,
+              italics: true,
+            })
+          ],
+          alignment: 'center' as any,
+        }));
 
+        // Cada ficha de tecnología en página nueva con formato profesional
         for (const [index, item] of shortlist.entries()) {
           const tech = item.longlist;
           if (!tech) continue;
 
-          // Separador entre fichas (no antes de la primera)
-          if (index > 0) {
-            sections.push(new Paragraph({ children: [], spacing: { before: 400 } }));
-            sections.push(createVandarumSeparator());
-          }
+          // Cada ficha en página nueva
+          sections.push(new Paragraph({ children: [new PageBreak()] }));
 
-          // Título de la tecnología
-          sections.push(...createVandarumTechTitle(
-            `${index + 1}. ${tech.technology_name}`,
-            evaluations?.find(e => e.shortlist_id === item.id)?.overall_score
-          ));
+          // Encabezado "FICHA DE TECNOLOGÍA"
+          sections.push(new Paragraph({
+            children: [
+              new TextRun({
+                text: 'FICHA DE TECNOLOGÍA',
+                bold: true,
+                size: VANDARUM_SIZES.heading1,
+                color: VANDARUM_COLORS.verdeOscuro,
+                font: VANDARUM_FONTS.titulo,
+              })
+            ],
+            alignment: 'center' as any,
+            spacing: { after: 200 },
+          }));
 
-          // Info contextual
-          const contextParts: string[] = [];
-          if (tech.provider) contextParts.push(`Proveedor: ${tech.provider}`);
-          if (tech.country) contextParts.push(`País: ${tech.country}`);
-          if (tech.trl) contextParts.push(`TRL: ${tech.trl}`);
-          if (contextParts.length > 0) {
-            sections.push(new Paragraph({
-              children: [
-                new TextRun({
-                  text: contextParts.join('  |  '),
-                  size: 22,
-                  color: '666666',
-                  font: 'Arial',
-                  italics: true,
-                })
-              ],
-              spacing: { after: 200 },
-            }));
-          }
+          // Nombre de la tecnología centrado
+          sections.push(new Paragraph({
+            children: [
+              new TextRun({
+                text: tech.technology_name,
+                bold: true,
+                size: 36,
+                color: VANDARUM_COLORS.verdeOscuro,
+                font: VANDARUM_FONTS.titulo,
+              })
+            ],
+            alignment: 'center' as any,
+            spacing: { after: 300 },
+          }));
 
-          // Información General - usar campos disponibles en StudyLonglistItem
-          const infoFields = [
-            { label: 'Proveedor / Empresa', value: tech.provider },
-            { label: 'País de origen', value: tech.country },
-            { label: 'Web', value: tech.web },
-          ].filter(f => f.value);
+          // Tabla de información principal
+          const mainInfoRows: TableRow[] = [];
           
-          if (infoFields.length > 0) {
-            sections.push(createVandarumHeading2('Información General'));
-            for (const field of infoFields) {
-              sections.push(createVandarumHighlight(field.label, field.value!));
-            }
-          }
+          const addTableRow = (label: string, value: string) => {
+            mainInfoRows.push(new TableRow({
+              children: [
+                new TableCell({
+                  width: { size: 30, type: WidthType.PERCENTAGE },
+                  shading: { type: ShadingType.SOLID, color: 'E8E8E8' },
+                  children: [
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: label,
+                          bold: true,
+                          size: VANDARUM_SIZES.texto,
+                          font: VANDARUM_FONTS.texto,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                new TableCell({
+                  width: { size: 70, type: WidthType.PERCENTAGE },
+                  children: [
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: value || 'N/A',
+                          size: VANDARUM_SIZES.texto,
+                          font: VANDARUM_FONTS.texto,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }));
+          };
 
-          // TRL si disponible
-          if (tech.trl) {
-            sections.push(createVandarumHighlight('Grado de madurez (TRL)', String(tech.trl)));
+          if (tech.provider) addTableRow('Proveedor / Empresa', tech.provider);
+          if (tech.country) addTableRow('País de origen', tech.country);
+          if (tech.web) addTableRow('Web de la empresa', tech.web);
+          if (tech.trl) addTableRow('Grado de madurez (TRL)', `TRL ${tech.trl}`);
+
+          if (mainInfoRows.length > 0) {
+            sections.push(new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: {
+                top: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                bottom: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                left: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                right: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                insideHorizontal: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+                insideVertical: { style: DocxBorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+              },
+              rows: mainInfoRows,
+            }));
           }
 
           // Descripción Técnica
