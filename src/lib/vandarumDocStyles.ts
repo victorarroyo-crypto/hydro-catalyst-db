@@ -352,3 +352,86 @@ export function createVandarumHighlight(label: string, value: string): Paragraph
     spacing: { after: 80 },
   });
 }
+
+// Crear footer nativo de Word con numeración de páginas y copyright
+export function createVandarumDocumentFooter(): Footer {
+  return new Footer({
+    children: [
+      new Paragraph({
+        children: [
+          new TextRun({ 
+            text: '─'.repeat(80), 
+            color: VANDARUM_COLORS.grisClaro,
+            size: VANDARUM_SIZES.footer,
+          })
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 80 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '© 2026 Vandarum - Todos los derechos reservados',
+            size: VANDARUM_SIZES.footer,
+            color: VANDARUM_COLORS.grisClaro,
+            font: VANDARUM_FONTS.texto,
+          }),
+          new TextRun({
+            text: '   |   Página ',
+            size: VANDARUM_SIZES.footer,
+            color: VANDARUM_COLORS.grisClaro,
+            font: VANDARUM_FONTS.texto,
+          }),
+          new TextRun({
+            children: [PageNumber.CURRENT],
+            size: VANDARUM_SIZES.footer,
+            color: VANDARUM_COLORS.grisClaro,
+            font: VANDARUM_FONTS.texto,
+          }),
+          new TextRun({
+            text: ' de ',
+            size: VANDARUM_SIZES.footer,
+            color: VANDARUM_COLORS.grisClaro,
+            font: VANDARUM_FONTS.texto,
+          }),
+          new TextRun({
+            children: [PageNumber.TOTAL_PAGES],
+            size: VANDARUM_SIZES.footer,
+            color: VANDARUM_COLORS.grisClaro,
+            font: VANDARUM_FONTS.texto,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+      }),
+    ],
+  });
+}
+
+// Crear header nativo de Word con nombre del estudio
+export function createVandarumDocumentHeader(title: string): Header {
+  return new Header({
+    children: [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: title,
+            size: VANDARUM_SIZES.footer,
+            color: VANDARUM_COLORS.grisClaro,
+            font: VANDARUM_FONTS.texto,
+            italics: true,
+          }),
+        ],
+        alignment: AlignmentType.RIGHT,
+        border: {
+          bottom: {
+            color: VANDARUM_COLORS.grisClaro,
+            size: 4,
+            style: BorderStyle.SINGLE,
+            space: 4,
+          },
+        },
+        spacing: { after: 200 },
+      }),
+    ],
+  });
+}
