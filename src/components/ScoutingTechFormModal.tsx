@@ -468,40 +468,51 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
     });
   };
 
-  // Handler for AI enrichment
+  // Handler for AI enrichment - now auto-saves to DB
   const handleEnrichmentComplete = (enrichedData: Record<string, string | number>) => {
-    setFormData(prev => {
-      const updated = { ...prev };
-      
-      if (enrichedData.descripcion) {
-        updated.descripcion = enrichedData.descripcion as string;
-      }
-      if (enrichedData.aplicacion_principal) {
-        updated.aplicacion_principal = enrichedData.aplicacion_principal as string;
-      }
-      if (enrichedData.ventaja_competitiva) {
-        updated.ventaja_competitiva = enrichedData.ventaja_competitiva as string;
-      }
-      if (enrichedData.innovacion) {
-        updated.innovacion = enrichedData.innovacion as string;
-      }
-      if (enrichedData.casos_referencia) {
-        updated.casos_referencia = enrichedData.casos_referencia as string;
-      }
-      if (enrichedData.comentarios_analista) {
-        updated.comentarios_analista = enrichedData.comentarios_analista as string;
-      }
-      if (enrichedData.trl_estimado && typeof enrichedData.trl_estimado === 'number') {
-        updated.trl_estimado = enrichedData.trl_estimado;
-      }
-      if (enrichedData.paises_actua) {
-        updated.paises_actua = enrichedData.paises_actua as string;
-      }
-      
-      return updated;
-    });
+    if (!technology) return;
     
-    toast.success('Datos enriquecidos aplicados al formulario');
+    const updated = { ...formData };
+    
+    if (enrichedData.descripcion) {
+      updated.descripcion = enrichedData.descripcion as string;
+    }
+    if (enrichedData.aplicacion_principal) {
+      updated.aplicacion_principal = enrichedData.aplicacion_principal as string;
+    }
+    if (enrichedData.ventaja_competitiva) {
+      updated.ventaja_competitiva = enrichedData.ventaja_competitiva as string;
+    }
+    if (enrichedData.innovacion) {
+      updated.innovacion = enrichedData.innovacion as string;
+    }
+    if (enrichedData.casos_referencia) {
+      updated.casos_referencia = enrichedData.casos_referencia as string;
+    }
+    if (enrichedData.comentarios_analista) {
+      updated.comentarios_analista = enrichedData.comentarios_analista as string;
+    }
+    if (enrichedData.trl_estimado && typeof enrichedData.trl_estimado === 'number') {
+      updated.trl_estimado = enrichedData.trl_estimado;
+    }
+    if (enrichedData.paises_actua) {
+      updated.paises_actua = enrichedData.paises_actua as string;
+    }
+    
+    setFormData(updated);
+    
+    // Auto-save to DB after enrichment
+    updateItemMutation.mutate({
+      id: technology.id,
+      updates: updated,
+    }, {
+      onSuccess: () => {
+        toast.success('Enriquecimiento guardado en la base de datos');
+      },
+      onError: () => {
+        toast.error('Los datos se aplicaron al formulario pero no se guardaron');
+      }
+    });
   };
 
   if (!technology) return null;

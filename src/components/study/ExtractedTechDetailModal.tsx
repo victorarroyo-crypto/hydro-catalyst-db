@@ -291,26 +291,65 @@ export default function ExtractedTechDetailModal({
     comentarios_analista: tech.inclusion_reason || '',
   };
 
-  const handleEnrichmentComplete = (enrichedData: Record<string, any>) => {
+  const handleEnrichmentComplete = async (enrichedData: Record<string, any>) => {
     if (isLinkedToDB) return;
     
-    setEditData(prev => ({
-      ...prev,
-      brief_description: enrichedData.descripcion || prev.brief_description,
-      inclusion_reason: enrichedData.comentarios_analista || prev.inclusion_reason,
-      ventaja_competitiva: enrichedData.ventaja_competitiva || prev.ventaja_competitiva,
-      innovacion: enrichedData.innovacion || prev.innovacion,
-      casos_referencia: enrichedData.casos_referencia || prev.casos_referencia,
-      paises_actua: enrichedData.paises_actua || prev.paises_actua,
-      sector: enrichedData.sector || prev.sector,
+    const updatedData = {
+      ...editData,
+      brief_description: enrichedData.descripcion || editData.brief_description,
+      inclusion_reason: enrichedData.comentarios_analista || editData.inclusion_reason,
+      ventaja_competitiva: enrichedData.ventaja_competitiva || editData.ventaja_competitiva,
+      innovacion: enrichedData.innovacion || editData.innovacion,
+      casos_referencia: enrichedData.casos_referencia || editData.casos_referencia,
+      paises_actua: enrichedData.paises_actua || editData.paises_actua,
+      sector: enrichedData.sector || editData.sector,
       applications: enrichedData.aplicacion_principal 
         ? enrichedData.aplicacion_principal.split(',').map((s: string) => s.trim()).filter(Boolean)
-        : prev.applications,
-    }));
+        : editData.applications,
+    };
     
-    setTimeout(() => {
-      handleSave();
-    }, 500);
+    setEditData(updatedData);
+    
+    // Save directly to DB without setTimeout
+    setIsSaving(true);
+    const { error } = await supabase
+      .from('study_longlist')
+      .update({
+        technology_name: updatedData.technology_name,
+        provider: updatedData.provider,
+        country: updatedData.country,
+        trl: updatedData.trl,
+        brief_description: updatedData.brief_description,
+        inclusion_reason: updatedData.inclusion_reason,
+        web: updatedData.web,
+        applications: updatedData.applications,
+        type_suggested: updatedData.type_suggested,
+        subcategory_suggested: updatedData.subcategory_suggested,
+        paises_actua: updatedData.paises_actua,
+        sector: updatedData.sector,
+        ventaja_competitiva: updatedData.ventaja_competitiva,
+        innovacion: updatedData.innovacion,
+        casos_referencia: updatedData.casos_referencia,
+        email: updatedData.email,
+      } as any)
+      .eq('id', tech.id);
+
+    setIsSaving(false);
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar el enriquecimiento',
+        variant: 'destructive',
+      });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['study-longlist', tech.study_id] });
+      queryClient.invalidateQueries({ queryKey: ['study-solutions', tech.study_id] });
+      toast({
+        title: 'Enriquecimiento guardado',
+        description: 'Los datos de la IA se han guardado correctamente',
+      });
+    }
   };
 
   // InfoRow component that shows empty state
