@@ -52,10 +52,16 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingToDB, setIsSendingToDB] = useState(false);
-  const [editData, setEditData] = useState<UnifiedTechEditData | null>(null);
-
   // Determine if already linked to database
   const isLinkedToDB = item?.already_in_db || !!item?.existing_technology_id;
+
+  // Initialize editData synchronously to avoid timing issues with AI enrichment
+  const [editData, setEditData] = useState<UnifiedTechEditData | null>(() => {
+    if (item && !isLinkedToDB) {
+      return toEditData(mapFromLonglist(item, null));
+    }
+    return null;
+  });
 
   // Fetch fresh data from technologies table when linked to DB
   const { data: linkedTechnology, isLoading: isLoadingLinked } = useQuery({
@@ -73,13 +79,14 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     enabled: !!item?.existing_technology_id && open,
   });
 
-  // Initialize edit data when item changes
+  // Update editData when item changes
   useEffect(() => {
     if (item && !isLinkedToDB) {
-      const unifiedData = mapFromLonglist(item, null);
-      setEditData(toEditData(unifiedData));
+      setEditData(toEditData(mapFromLonglist(item, null)));
+    } else if (isLinkedToDB) {
+      setEditData(null);
     }
-  }, [item, isLinkedToDB]);
+  }, [item?.id, isLinkedToDB]);
 
   if (!item) return null;
 
@@ -208,24 +215,52 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     onOpenChange(false);
   };
 
-  const handleEnrichmentComplete = (enrichedData: Record<string, any>) => {
-    if (isLinkedToDB || !editData) return;
+  const handleEnrichmentComplete = async (enrichedData: Record<string, any>) => {
+    if (isLinkedToDB) return;
     
-    setEditData(prev => prev ? {
-      ...prev,
-      description: enrichedData.descripcion || prev.description,
-      comentarios_analista: enrichedData.comentarios_analista || prev.comentarios_analista,
-      ventaja_competitiva: enrichedData.ventaja_competitiva || prev.ventaja_competitiva,
-      innovacion: enrichedData.innovacion || prev.innovacion,
-      casos_referencia: enrichedData.casos_referencia || prev.casos_referencia,
-      paises_actua: enrichedData.paises_actua || prev.paises_actua,
-      sector: enrichedData.sector || prev.sector,
-      applications: enrichedData.aplicacion_principal || prev.applications,
-    } : null);
+    // Use current editData or create from item to avoid null issues
+    const currentData = editData || toEditData(mapFromLonglist(item, null));
     
-    setTimeout(() => {
-      handleSave();
-    }, 500);
+    const updatedData = {
+      ...currentData,
+      description: enrichedData.descripcion || currentData.description,
+      comentarios_analista: enrichedData.comentarios_analista || currentData.comentarios_analista,
+      ventaja_competitiva: enrichedData.ventaja_competitiva || currentData.ventaja_competitiva,
+      innovacion: enrichedData.innovacion || currentData.innovacion,
+      casos_referencia: enrichedData.casos_referencia || currentData.casos_referencia,
+      paises_actua: enrichedData.paises_actua || currentData.paises_actua,
+      sector: enrichedData.sector || currentData.sector,
+      applications: enrichedData.aplicacion_principal || currentData.applications,
+    };
+    
+    setEditData(updatedData);
+    
+    // Save directly to DB without setTimeout
+    setIsSaving(true);
+    const { error } = await supabase
+      .from('study_longlist')
+      .update({
+        brief_description: updatedData.description,
+        inclusion_reason: updatedData.comentarios_analista,
+        ventaja_competitiva: updatedData.ventaja_competitiva,
+        innovacion: updatedData.innovacion,
+        casos_referencia: updatedData.casos_referencia,
+        paises_actua: updatedData.paises_actua,
+        sector: updatedData.sector,
+        applications: updatedData.applications 
+          ? updatedData.applications.split(',').map(s => s.trim()).filter(Boolean) 
+          : [],
+      })
+      .eq('id', item.id);
+    
+    setIsSaving(false);
+    
+    if (error) {
+      toast({ title: 'Error', description: 'No se pudo guardar el enriquecimiento', variant: 'destructive' });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
+      toast({ title: 'Enriquecimiento guardado', description: 'Los datos de la IA se han guardado correctamente' });
+    }
   };
 
   const handleDownloadWord = () => {
