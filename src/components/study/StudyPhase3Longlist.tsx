@@ -48,7 +48,9 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportLonglistToExcel } from '@/lib/exportLonglistExcel';
 import { LonglistTechDetailModal } from './LonglistTechDetailModal';
 import { toast } from 'sonner';
 import type { Tables } from '@/integrations/supabase/types';
@@ -295,6 +297,15 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => longlist && exportLonglistToExcel(longlist as any, study.name)}
+            disabled={!longlist || longlist.length === 0}
+            className="gap-2"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Exportar Excel
+          </Button>
           <Button
             onClick={handleGenerateLonglist}
             disabled={generationState === 'generating_db' || generationState === 'generating_web' || !study.problem_statement}
@@ -673,6 +684,7 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
         open={isDetailOpen}
         onOpenChange={setIsDetailOpen}
         studyId={studyId}
+        studyName={study.name}
       />
     </div>
   );
