@@ -122,12 +122,16 @@ export function AppSidebar() {
   const [scoutingOpen, setScoutingOpen] = useState(
     scoutingSubItems.some((item) => location.pathname === item.url)
   );
+  const [advisorOpen, setAdvisorOpen] = useState(
+    advisorSubItems.some((item) => location.pathname.startsWith('/advisor'))
+  );
 
   const isActive = (path: string) => location.pathname === path;
   const isKnowledgeBaseActive = location.pathname === '/knowledge-base';
   const isAiToolActive = aiToolsItems.some((item) => location.pathname === item.url);
   const isAuditActive = auditSubItems.some((item) => location.pathname === item.url);
   const isScoutingActive = scoutingSubItems.some((item) => location.pathname === item.url);
+  const isAdvisorActive = advisorSubItems.some((item) => location.pathname === item.url);
 
   return (
     <Sidebar className={cn('border-r-0', collapsed ? 'w-16' : 'w-64')} collapsible="icon">
@@ -207,6 +211,60 @@ export function AppSidebar() {
                   <CollapsibleContent>
                     <SidebarMenuSub>
                       {scoutingSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isActive(item.url)}
+                            className={cn(
+                              'transition-all duration-200',
+                              isActive(item.url)
+                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                            )}
+                          >
+                            <Link to={item.url} className="flex items-center gap-2">
+                              <item.icon className="w-4 h-4" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+
+              {/* AI Advisor Submenu */}
+              <Collapsible
+                open={advisorOpen}
+                onOpenChange={setAdvisorOpen}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      className={cn(
+                        'transition-all duration-200 w-full',
+                        isAdvisorActive
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                      )}
+                    >
+                      <Bot className="w-5 h-5" />
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 text-left">AI Advisor</span>
+                          <ChevronDown className={cn(
+                            "w-4 h-4 transition-transform duration-200",
+                            advisorOpen && "rotate-180"
+                          )} />
+                        </>
+                      )}
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {advisorSubItems.map((item) => (
                         <SidebarMenuSubItem key={item.title}>
                           <SidebarMenuSubButton
                             asChild
