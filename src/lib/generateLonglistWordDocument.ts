@@ -1,23 +1,29 @@
 /**
  * Generador de documentos Word profesionales para tecnologías del Longlist
- * Formato Vandarum con portada, headers, footers y estilos corporativos
+ * Formato Vandarum oficial - basado en plantilla Vandarum_Ficha_Template.docx
  */
 
-import { Document, Packer, Paragraph, TextRun } from 'docx';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  Table,
+  AlignmentType,
+  BorderStyle,
+  PageBreak,
+} from 'docx';
 import { saveAs } from 'file-saver';
 import {
   VANDARUM_NUMBERING_CONFIG,
   VANDARUM_COLORS,
   VANDARUM_FONTS,
   VANDARUM_SIZES,
-  createVandarumCover,
   createVandarumDocumentHeader,
   createVandarumDocumentFooter,
   createVandarumHeading1,
-  createVandarumHighlight,
-  createVandarumRichContent,
+  createVandarumInfoTable,
   createVandarumFooter,
-  createVandarumTechTitle,
   cleanMarkdownFromText,
 } from './vandarumDocStyles';
 
@@ -40,7 +46,6 @@ interface LonglistTechData {
   inclusion_reason?: string | null;
   source?: string | null;
   added_at?: string | null;
-  // New fields for full parity with technologies table
   estado_seguimiento?: string | null;
   fecha_scouting?: string | null;
 }
@@ -57,32 +62,215 @@ function formatDate(date: Date): string {
 }
 
 /**
- * Crea una sección de información con campos highlight
+ * Crea la portada del documento siguiendo el formato Vandarum oficial
  */
-function createInfoSection(title: string, fields: { label: string; value: string | null | undefined }[]): Paragraph[] {
-  const paragraphs: Paragraph[] = [
-    createVandarumHeading1(title),
-  ];
-  
-  for (const field of fields) {
-    if (field.value) {
-      paragraphs.push(createVandarumHighlight(field.label, cleanMarkdownFromText(field.value)));
-    }
-  }
-  
-  // Si no hay campos con valor, mostrar mensaje
-  if (paragraphs.length === 1) {
-    paragraphs.push(new Paragraph({
+function createVandarumFichaCover(techName: string, date: string): Paragraph[] {
+  return [
+    // Espaciado superior
+    new Paragraph({ children: [], spacing: { before: 800 } }),
+    
+    // Nombre de la tecnología (grande, centrado, verde)
+    new Paragraph({
       children: [
         new TextRun({
-          text: 'Sin información disponible',
+          text: techName,
+          bold: true,
+          size: 56,
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    }),
+    
+    // Espaciador
+    new Paragraph({ children: [], spacing: { before: 400 } }),
+    
+    // Logo Vandarum (texto)
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'VANDARUM',
+          bold: true,
+          size: 72,
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    }),
+    
+    // Línea decorativa
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: '━━━━━━━━━━━━━━━━━━━━',
+          color: VANDARUM_COLORS.grisClaro,
+          size: 24,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 300 },
+    }),
+    
+    // FICHA DE TECNOLOGÍA
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'FICHA DE TECNOLOGÍA',
+          bold: true,
+          size: VANDARUM_SIZES.titulo,
+          color: VANDARUM_COLORS.grisTexto,
+          font: VANDARUM_FONTS.titulo,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    }),
+    
+    // Nombre de la tecnología (subtítulo)
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: techName,
           italics: true,
+          size: VANDARUM_SIZES.subtitulo,
+          color: VANDARUM_COLORS.grisClaro,
+          font: VANDARUM_FONTS.texto,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    }),
+    
+    // Fecha
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: date,
           size: VANDARUM_SIZES.texto,
           color: VANDARUM_COLORS.grisClaro,
           font: VANDARUM_FONTS.texto,
         })
       ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    }),
+    
+    // Espacio antes del tagline
+    new Paragraph({ children: [], spacing: { before: 1200 } }),
+    
+    // Tagline
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'Innovación aplicada, red global de resultados sostenibles',
+          italics: true,
+          size: VANDARUM_SIZES.pequeno,
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.texto,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+    }),
+    
+    // Copyright
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: '© 2026 Vandarum - Todos los derechos reservados',
+          size: VANDARUM_SIZES.footer,
+          color: VANDARUM_COLORS.grisClaro,
+          font: VANDARUM_FONTS.texto,
+        })
+      ],
+      alignment: AlignmentType.CENTER,
+    }),
+    
+    // Salto de página
+    new Paragraph({ children: [new PageBreak()] }),
+  ];
+}
+
+/**
+ * Crea el encabezado de página interior con nombre tech + TRL badge
+ */
+function createTechPageHeader(techName: string, provider?: string | null, country?: string | null, trl?: number | null): Paragraph[] {
+  const paragraphs: Paragraph[] = [
+    // Nombre de la tecnología
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: techName,
+          bold: true,
+          size: VANDARUM_SIZES.heading1,
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
+        })
+      ],
+      border: {
+        bottom: {
+          color: VANDARUM_COLORS.verdeOscuro,
+          space: 1,
+          size: 6,
+          style: BorderStyle.SINGLE,
+        },
+      },
       spacing: { after: 150 },
+    }),
+  ];
+  
+  // Línea de contexto: Proveedor + País
+  const contextChildren: TextRun[] = [];
+  
+  if (provider) {
+    contextChildren.push(new TextRun({
+      text: `Proveedor: ${provider}`,
+      bold: true,
+      size: VANDARUM_SIZES.texto,
+      color: VANDARUM_COLORS.grisTexto,
+      font: VANDARUM_FONTS.texto,
+    }));
+  }
+  
+  if (country) {
+    if (contextChildren.length > 0) {
+      contextChildren.push(new TextRun({
+        text: '\n',
+        size: VANDARUM_SIZES.texto,
+      }));
+    }
+    contextChildren.push(new TextRun({
+      text: `País: ${country}`,
+      size: VANDARUM_SIZES.texto,
+      color: VANDARUM_COLORS.grisTexto,
+      font: VANDARUM_FONTS.texto,
+    }));
+  }
+  
+  if (contextChildren.length > 0) {
+    paragraphs.push(new Paragraph({
+      children: contextChildren,
+      spacing: { after: 100 },
+    }));
+  }
+  
+  // TRL Badge separado
+  if (trl !== null && trl !== undefined) {
+    paragraphs.push(new Paragraph({
+      children: [
+        new TextRun({
+          text: `TRL ${trl}`,
+          bold: true,
+          size: VANDARUM_SIZES.texto,
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
+        })
+      ],
+      spacing: { after: 300 },
     }));
   }
   
@@ -90,15 +278,80 @@ function createInfoSection(title: string, fields: { label: string; value: string
 }
 
 /**
- * Crea sección de texto largo
+ * Crea una sección de texto descriptivo
  */
 function createTextSection(title: string, content: string | null | undefined): Paragraph[] {
   if (!content) return [];
   
   return [
     createVandarumHeading1(title),
-    ...createVandarumRichContent(cleanMarkdownFromText(content)),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: cleanMarkdownFromText(content),
+          size: VANDARUM_SIZES.texto,
+          color: VANDARUM_COLORS.grisTexto,
+          font: VANDARUM_FONTS.texto,
+        })
+      ],
+      spacing: { after: 200, line: 280 },
+    }),
   ];
+}
+
+/**
+ * Crea sección de Innovación y Ventajas
+ */
+function createInnovationSection(ventaja?: string | null, innovacion?: string | null): Paragraph[] {
+  if (!ventaja && !innovacion) return [];
+  
+  const paragraphs: Paragraph[] = [
+    createVandarumHeading1('INNOVACIÓN Y VENTAJAS'),
+  ];
+  
+  if (ventaja) {
+    paragraphs.push(new Paragraph({
+      children: [
+        new TextRun({
+          text: 'Ventaja competitiva: ',
+          bold: true,
+          size: VANDARUM_SIZES.texto,
+          color: VANDARUM_COLORS.grisTexto,
+          font: VANDARUM_FONTS.titulo,
+        }),
+        new TextRun({
+          text: cleanMarkdownFromText(ventaja),
+          size: VANDARUM_SIZES.texto,
+          color: VANDARUM_COLORS.grisTexto,
+          font: VANDARUM_FONTS.texto,
+        })
+      ],
+      spacing: { after: 150, line: 280 },
+    }));
+  }
+  
+  if (innovacion) {
+    paragraphs.push(new Paragraph({
+      children: [
+        new TextRun({
+          text: 'Por qué es innovadora: ',
+          bold: true,
+          size: VANDARUM_SIZES.texto,
+          color: VANDARUM_COLORS.grisTexto,
+          font: VANDARUM_FONTS.titulo,
+        }),
+        new TextRun({
+          text: cleanMarkdownFromText(innovacion),
+          size: VANDARUM_SIZES.texto,
+          color: VANDARUM_COLORS.grisTexto,
+          font: VANDARUM_FONTS.texto,
+        })
+      ],
+      spacing: { after: 200, line: 280 },
+    }));
+  }
+  
+  return paragraphs;
 }
 
 /**
@@ -112,115 +365,103 @@ export async function generateLonglistWordDocument(
   const dateStr = formatDate(now);
   
   // Construir contenido del documento
-  const sections: Paragraph[] = [];
+  const sections: (Paragraph | Table)[] = [];
   
-  // 1. Portada profesional
-  sections.push(...createVandarumCover(
-    'FICHA DE TECNOLOGÍA',
+  // 1. Portada profesional Vandarum
+  sections.push(...createVandarumFichaCover(tech.technology_name, dateStr));
+  
+  // 2. Encabezado de página interior
+  sections.push(...createTechPageHeader(
     tech.technology_name,
-    dateStr
+    tech.provider,
+    tech.country,
+    tech.trl
   ));
   
-  // 2. Título de la tecnología con TRL
-  sections.push(...createVandarumTechTitle(tech.technology_name, null, undefined));
+  // 3. INFORMACIÓN GENERAL - Tabla profesional
+  sections.push(createVandarumHeading1('INFORMACIÓN GENERAL'));
   
-  // Info de contexto debajo del título
-  if (tech.provider || tech.country) {
-    const contextParts: string[] = [];
-    if (tech.provider) contextParts.push(`Proveedor: ${tech.provider}`);
-    if (tech.country) contextParts.push(`País: ${tech.country}`);
-    if (tech.trl) contextParts.push(`TRL: ${tech.trl}`);
-    
-    sections.push(new Paragraph({
-      children: [
-        new TextRun({
-          text: contextParts.join('  |  '),
-          size: VANDARUM_SIZES.texto,
-          color: VANDARUM_COLORS.grisClaro,
-          font: VANDARUM_FONTS.texto,
-          italics: true,
-        })
-      ],
-      spacing: { after: 300 },
-    }));
+  const generalInfoRows: { label: string; value: string }[] = [
+    { label: 'Proveedor / Empresa', value: tech.provider || '' },
+    { label: 'País de origen', value: tech.country || '' },
+    { label: 'Países donde actúa', value: tech.paises_actua || '' },
+    { label: 'Web de la empresa', value: tech.web || '' },
+    { label: 'Email de contacto', value: tech.email || '' },
+    { label: 'Grado de madurez (TRL)', value: tech.trl ? `TRL ${tech.trl}` : '' },
+    { label: 'Estado del seguimiento', value: tech.estado_seguimiento || '' },
+  ].filter(row => row.value);
+  
+  sections.push(createVandarumInfoTable(generalInfoRows));
+  sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+  
+  // 4. CLASIFICACIÓN - Tabla profesional
+  const classificationRows: { label: string; value: string }[] = [
+    { label: 'Tipo de tecnología', value: tech.type_suggested || '' },
+    { label: 'Subcategoría', value: tech.subcategory_suggested || '' },
+    { label: 'Sector', value: tech.sector || '' },
+  ].filter(row => row.value);
+  
+  if (classificationRows.length > 0) {
+    sections.push(createVandarumHeading1('CLASIFICACIÓN'));
+    sections.push(createVandarumInfoTable(classificationRows));
+    sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
   }
   
-  // 3. Información General
-  sections.push(...createInfoSection('INFORMACIÓN GENERAL', [
-    { label: 'Proveedor / Empresa', value: tech.provider },
-    { label: 'País de origen', value: tech.country },
-    { label: 'Países donde actúa', value: tech.paises_actua },
-    { label: 'Web', value: tech.web },
-    { label: 'Email de contacto', value: tech.email },
-    { label: 'Grado de madurez (TRL)', value: tech.trl?.toString() },
-    { label: 'Estado del seguimiento', value: tech.estado_seguimiento },
-    { label: 'Fecha de scouting', value: tech.fecha_scouting ? new Date(tech.fecha_scouting).toLocaleDateString('es-ES') : null },
-  ]));
+  // 5. Aplicación principal
+  if (tech.applications && tech.applications.length > 0) {
+    sections.push(...createTextSection('Aplicación principal', tech.applications.join('. ')));
+  }
   
-  // 4. Clasificación
-  sections.push(...createInfoSection('CLASIFICACIÓN', [
-    { label: 'Tipo de tecnología', value: tech.type_suggested },
-    { label: 'Subcategoría', value: tech.subcategory_suggested },
-    { label: 'Sector', value: tech.sector },
-    { label: 'Aplicaciones', value: tech.applications?.join(', ') },
-  ]));
-  
-  // 5. Descripción Técnica
+  // 6. DESCRIPCIÓN TÉCNICA
   if (tech.brief_description) {
     sections.push(...createTextSection('DESCRIPCIÓN TÉCNICA', tech.brief_description));
   }
   
-  // 6. Innovación y Ventajas
-  const hasInnovation = tech.ventaja_competitiva || tech.innovacion;
-  if (hasInnovation) {
-    sections.push(createVandarumHeading1('INNOVACIÓN Y VENTAJAS'));
-    
-    if (tech.ventaja_competitiva) {
-      sections.push(createVandarumHighlight('Ventaja competitiva', cleanMarkdownFromText(tech.ventaja_competitiva)));
-    }
-    if (tech.innovacion) {
-      sections.push(createVandarumHighlight('Por qué es innovadora', cleanMarkdownFromText(tech.innovacion)));
-    }
-  }
+  // 7. INNOVACIÓN Y VENTAJAS
+  sections.push(...createInnovationSection(tech.ventaja_competitiva, tech.innovacion));
   
-  // 7. Referencias
+  // 8. REFERENCIAS
   if (tech.casos_referencia) {
     sections.push(...createTextSection('REFERENCIAS', tech.casos_referencia));
   }
   
-  // 8. Notas del Analista
+  // 9. NOTAS DEL ANALISTA
   if (tech.inclusion_reason) {
     sections.push(createVandarumHeading1('NOTAS DEL ANALISTA'));
     sections.push(new Paragraph({
       children: [
         new TextRun({
           text: cleanMarkdownFromText(tech.inclusion_reason),
-          italics: true,
           size: VANDARUM_SIZES.texto,
           color: VANDARUM_COLORS.grisTexto,
           font: VANDARUM_FONTS.texto,
         })
       ],
-      spacing: { after: 200 },
+      spacing: { after: 200, line: 280 },
     }));
   }
   
-  // 9. Información de Registro
+  // 10. INFORMACIÓN DE REGISTRO - Tabla profesional
   sections.push(createVandarumHeading1('INFORMACIÓN DE REGISTRO'));
-  sections.push(createVandarumHighlight('Estudio', studyName));
-  sections.push(createVandarumHighlight('Procedencia', 
-    tech.source === 'database' ? 'Base de Datos' : 
+  
+  const sourceLabel = tech.source === 'database' ? 'Base de Datos' : 
     tech.source === 'ai_session' || tech.source === 'ai_extracted' ? 'Búsqueda Web (IA)' : 
     tech.source === 'manual' ? 'Entrada Manual' : 
-    tech.source === 'chrome_extension' ? 'Extensión Chrome' : 'No especificada'
-  ));
-  if (tech.added_at) {
-    sections.push(createVandarumHighlight('Fecha de adición', 
-      new Date(tech.added_at).toLocaleDateString('es-ES')
-    ));
+    tech.source === 'chrome_extension' ? 'Extensión Chrome' : 'No especificada';
+  
+  const registroRows: { label: string; value: string }[] = [
+    { label: 'Estudio', value: studyName },
+    { label: 'Procedencia', value: sourceLabel },
+    { label: 'Fecha de adición', value: tech.added_at ? new Date(tech.added_at).toLocaleDateString('es-ES') : '' },
+  ].filter(row => row.value);
+  
+  if (tech.fecha_scouting) {
+    registroRows.push({ label: 'Fecha de scouting', value: new Date(tech.fecha_scouting).toLocaleDateString('es-ES') });
   }
   
-  // 10. Pie de documento con copyright
+  sections.push(createVandarumInfoTable(registroRows));
+  
+  // 11. Pie de documento con copyright
   sections.push(...createVandarumFooter(dateStr));
   
   // Crear documento
