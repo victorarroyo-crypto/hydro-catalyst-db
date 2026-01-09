@@ -202,6 +202,9 @@ const Settings: React.FC = () => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(profile?.full_name || '');
   const [isSavingName, setIsSavingName] = useState(false);
+  
+  // Audit document generation state
+  const [isGeneratingAudit, setIsGeneratingAudit] = useState(false);
 
   // Load users for admin
   useEffect(() => {
@@ -1185,30 +1188,44 @@ const Settings: React.FC = () => {
                 </p>
                 <Button 
                   onClick={async () => {
+                    if (isGeneratingAudit) return;
+                    setIsGeneratingAudit(true);
                     toast({
                       title: 'Generando auditoría completa...',
-                      description: 'Recopilando datos de todas las tablas y relaciones',
+                      description: 'Este proceso puede tardar unos segundos',
                     });
                     try {
+                      console.log('[Audit] Iniciando generación de documento...');
                       await generateComprehensiveAuditDocument();
+                      console.log('[Audit] Documento generado exitosamente');
                       toast({
                         title: 'Auditoría generada',
                         description: 'El documento completo de auditoría se ha descargado',
                       });
                     } catch (error: any) {
+                      console.error('[Audit] Error:', error);
                       toast({
                         title: 'Error al generar auditoría',
-                        description: error.message,
+                        description: error.message || 'Error desconocido al generar el documento',
                         variant: 'destructive',
                       });
+                    } finally {
+                      setIsGeneratingAudit(false);
                     }
                   }}
+                  disabled={isGeneratingAudit}
                   variant="outline" 
                   className="w-full justify-between bg-primary/5 border-primary/20 hover:bg-primary/10"
                 >
                   <span className="flex items-center gap-2">
-                    <Database className="w-4 h-4 text-primary" />
-                    <span className="font-medium">Auditoría Completa de Arquitectura</span>
+                    {isGeneratingAudit ? (
+                      <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                    ) : (
+                      <Database className="w-4 h-4 text-primary" />
+                    )}
+                    <span className="font-medium">
+                      {isGeneratingAudit ? 'Generando documento...' : 'Auditoría Completa de Arquitectura'}
+                    </span>
                   </span>
                   <FileText className="w-4 h-4" />
                 </Button>

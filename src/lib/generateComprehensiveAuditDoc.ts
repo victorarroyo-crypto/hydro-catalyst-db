@@ -366,35 +366,51 @@ export async function generateComprehensiveAuditDocument(): Promise<void> {
   let currentStage = 'inicialización';
   
   try {
+    console.log('[AuditDoc] Iniciando generación...');
+    
     const generatedAt = new Date().toLocaleString('es-ES', { 
       dateStyle: 'full', 
       timeStyle: 'short' 
     });
 
-    // Fetch data with stage tracking
-    currentStage = 'contando registros de tablas';
-    const tableCounts = await fetchTableCounts();
+    // Fetch data with stage tracking - use Promise.allSettled for resilience
+    currentStage = 'obteniendo datos';
+    console.log('[AuditDoc] Obteniendo datos en paralelo...');
     
-    currentStage = 'obteniendo foreign keys';
-    const foreignKeys = await fetchForeignKeys();
+    const [tableCountsResult, foreignKeysResult, syncStatusResult] = await Promise.allSettled([
+      fetchTableCounts(),
+      fetchForeignKeys(),
+      fetchSyncStatus()
+    ]);
     
-    currentStage = 'verificando estado de sincronización';
-    const syncStatus = await fetchSyncStatus();
+    // Extract results with fallbacks
+    const tableCounts = tableCountsResult.status === 'fulfilled' ? tableCountsResult.value : {};
+    const foreignKeys = foreignKeysResult.status === 'fulfilled' ? foreignKeysResult.value : [];
+    const syncStatus = syncStatusResult.status === 'fulfilled' ? syncStatusResult.value : [];
+    
+    console.log('[AuditDoc] Datos obtenidos:', {
+      tablas: Object.keys(tableCounts).length,
+      foreignKeys: foreignKeys.length,
+      syncStatus: syncStatus.length
+    });
 
-  // Build tables array with stats
-  const tables: TableStats[] = Object.entries(TABLE_DESCRIPTIONS).map(([name, info]) => ({
-    name,
-    count: tableCounts[name] || 0,
-    module: info.module,
-    synced: info.synced,
-    description: info.description,
-  }));
+    // Build tables array with stats
+    currentStage = 'procesando datos de tablas';
+    const tables: TableStats[] = Object.entries(TABLE_DESCRIPTIONS).map(([name, info]) => ({
+      name,
+      count: tableCounts[name] || 0,
+      module: info.module || 'Sin módulo',
+      synced: info.synced || false,
+      description: info.description || 'Sin descripción',
+    }));
 
-  // Calculate totals
-  const totalRecords = Object.values(tableCounts).reduce((a, b) => a + b, 0);
-  const totalTables = tables.length;
-  const syncedTables = tables.filter(t => t.synced).length;
-  const modules = [...new Set(tables.map(t => t.module))];
+    // Calculate totals
+    const totalRecords = Object.values(tableCounts).reduce((a, b) => a + b, 0);
+    const totalTables = tables.length;
+    const syncedTablesCount = tables.filter(t => t.synced).length;
+    const modules = [...new Set(tables.map(t => t.module))];
+    
+    console.log('[AuditDoc] Estadísticas:', { totalRecords, totalTables, syncedTablesCount, modules: modules.length });
 
     currentStage = 'construyendo documento';
     // Build document
@@ -429,7 +445,7 @@ export async function generateComprehensiveAuditDocument(): Promise<void> {
           [
             ['Total de Tablas', totalTables.toString()],
             ['Total de Registros', totalRecords.toLocaleString()],
-            ['Tablas Sincronizadas', `${syncedTables} de ${totalTables}`],
+            ['Tablas Sincronizadas', `${syncedTablesCount} de ${totalTables}`],
             ['Funciones de BD', DB_FUNCTIONS.length.toString()],
             ['Edge Functions', EDGE_FUNCTIONS.length.toString()],
             ['Secrets Configurados', SECRETS.length.toString()],
@@ -698,31 +714,73 @@ export async function generateComprehensiveAuditDocument(): Promise<void> {
   });
 
     currentStage = 'empaquetando documento DOCX';
+    console.log('[AuditDoc] Empaquetando documento...');
     const blob = await Packer.toBlob(doc);
+    console.log('[AuditDoc] Documento empaquetado, tamaño:', (blob.size / 1024).toFixed(2), 'KB');
     
     currentStage = 'iniciando descarga';
     const date = new Date().toISOString().split('T')[0];
     const fileName = `Vandarum_Auditoria_Arquitectura_${date}.docx`;
     
-    // Try saveAs first, fallback to manual download if it fails
+    // Create proper blob with correct MIME type
+    const docBlob = new Blob([blob], { 
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+    });
+    
+    // Try multiple download methods for maximum compatibility
+    let downloadSucceeded = false;
+    
+    // Method 1: saveAs from file-saver
     try {
-      saveAs(blob, fileName);
+      console.log('[AuditDoc] Intentando descarga con saveAs...');
+      saveAs(docBlob, fileName);
+      downloadSucceeded = true;
+      console.log('[AuditDoc] saveAs ejecutado');
     } catch (saveError) {
-      console.warn('saveAs failed, using fallback download:', saveError);
-      // Fallback: create object URL and trigger download manually
-      const url = URL.createObjectURL(new Blob([blob], { 
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
-      }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      console.warn('[AuditDoc] saveAs falló:', saveError);
     }
+    
+    // Method 2: Manual anchor click if saveAs didn't work
+    if (!downloadSucceeded) {
+      try {
+        console.log('[AuditDoc] Intentando descarga con anchor...');
+        const url = URL.createObjectURL(docBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        
+        // Clean up after a short delay
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        downloadSucceeded = true;
+        console.log('[AuditDoc] Descarga con anchor iniciada');
+      } catch (anchorError) {
+        console.warn('[AuditDoc] Descarga con anchor falló:', anchorError);
+      }
+    }
+    
+    // Method 3: Open in new tab as last resort
+    if (!downloadSucceeded) {
+      console.log('[AuditDoc] Intentando abrir en nueva pestaña...');
+      const url = URL.createObjectURL(docBlob);
+      const newWindow = window.open(url, '_blank');
+      if (newWindow) {
+        console.log('[AuditDoc] Abierto en nueva pestaña');
+      } else {
+        throw new Error('No se pudo iniciar la descarga. Por favor, desbloquea las ventanas emergentes e inténtalo de nuevo.');
+      }
+    }
+    
+    console.log('[AuditDoc] Proceso completado exitosamente');
+    
   } catch (error) {
-    console.error(`Error en auditoría (etapa: ${currentStage}):`, error);
+    console.error(`[AuditDoc] Error en etapa "${currentStage}":`, error);
     throw new Error(`Falló en: ${currentStage}. ${error instanceof Error ? error.message : 'Error desconocido'}`);
   }
 }
