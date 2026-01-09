@@ -26,11 +26,53 @@ interface TextRunBaseStyles {
 }
 
 /**
- * Elimina asteriscos markdown de cualquier texto
- * "**Texto**" -> "Texto"
+ * Elimina TODOS los patrones de markdown del texto
+ * - **negritas** → negritas
+ * - *cursivas* → cursivas  
+ * - __negritas__ → negritas
+ * - _cursivas_ → cursivas
+ * - Asteriscos sueltos
+ * - Pipes de tablas
  */
 export function cleanMarkdownFromText(text: string): string {
-  return text.replace(/\*\*/g, '');
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')  // **negrita**
+    .replace(/\*([^*]+)\*/g, '$1')       // *cursiva*
+    .replace(/__([^_]+)__/g, '$1')       // __negrita__
+    .replace(/_([^_]+)_/g, '$1')         // _cursiva_
+    .replace(/\*/g, '')                  // Asteriscos sueltos
+    .replace(/^\s*[-•]\s*/, '')          // Bullets al inicio
+    .replace(/^\s*\d+\.\s*/, '')         // Números al inicio
+    .trim();
+}
+
+/**
+ * Procesa texto con tablas markdown, limpiando asteriscos
+ */
+export function processMarkdownTable(text: string): string[] {
+  const lines = text.split('\n');
+  const cleanLines: string[] = [];
+  
+  for (const line of lines) {
+    if (line.includes('|')) {
+      // Es una fila de tabla - extraer celdas y limpiar
+      const cells = line.split('|')
+        .map(cell => cleanMarkdownFromText(cell.trim()))
+        .filter(cell => cell && !cell.match(/^-+$/)); // Ignorar separadores
+      
+      if (cells.length > 0) {
+        cleanLines.push(cells.join(' - '));
+      }
+    } else {
+      // Línea normal - limpiar markdown
+      const cleanLine = cleanMarkdownFromText(line);
+      if (cleanLine) {
+        cleanLines.push(cleanLine);
+      }
+    }
+  }
+  
+  return cleanLines;
 }
 
 /**
@@ -41,6 +83,16 @@ export function parseMarkdownToTextRuns(
   text: string, 
   baseStyles: TextRunBaseStyles
 ): TextRun[] {
+  // Si no hay patrones de negrita válidos, limpiar todos los asteriscos
+  if (!text.includes('**')) {
+    return [new TextRun({ 
+      text: text.replace(/\*/g, ''), // Eliminar asteriscos sueltos
+      size: baseStyles.size,
+      color: baseStyles.color,
+      font: baseStyles.font,
+    })];
+  }
+  
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.filter(Boolean).map(part => {
     if (part.startsWith('**') && part.endsWith('**')) {
@@ -52,8 +104,9 @@ export function parseMarkdownToTextRuns(
         font: baseStyles.font,
       });
     }
+    // Limpiar asteriscos sueltos del texto normal
     return new TextRun({ 
-      text: part, 
+      text: part.replace(/\*/g, ''), 
       size: baseStyles.size,
       color: baseStyles.color,
       font: baseStyles.font,
@@ -387,13 +440,30 @@ export function createVandarumFormattedParagraph(text: string): Paragraph {
 }
 
 /**
- * Procesa texto largo detectando párrafos, listas numeradas y bullets
+ * Procesa texto largo detectando párrafos, listas numeradas, bullets y tablas
  * Convierte texto plano en estructura profesional de Word
+ * ELIMINA todos los asteriscos y formateo markdown
  */
 export function createVandarumRichContent(text: string): Paragraph[] {
   if (!text) return [];
   
   const paragraphs: Paragraph[] = [];
+  
+  // PRIMERO: Detectar si contiene tablas markdown
+  if (text.includes('|') && text.split('|').length > 4) {
+    // Procesar como contenido con tablas
+    const cleanLines = processMarkdownTable(text);
+    for (const line of cleanLines) {
+      // Detectar encabezados markdown (#, ##, etc.)
+      if (/^#+\s/.test(line)) {
+        const headingText = cleanMarkdownFromText(line.replace(/^#+\s*/, ''));
+        paragraphs.push(createVandarumHeading2(headingText));
+      } else {
+        paragraphs.push(createVandarumFormattedParagraph(cleanMarkdownFromText(line)));
+      }
+    }
+    return paragraphs;
+  }
   
   // Dividir por doble salto de línea para crear párrafos separados
   const blocks = text.split(/\n\n+/);
@@ -402,6 +472,13 @@ export function createVandarumRichContent(text: string): Paragraph[] {
     const trimmedBlock = block.trim();
     if (!trimmedBlock) continue;
     
+    // Detectar encabezados markdown (#, ##, etc.)
+    if (/^#+\s/.test(trimmedBlock)) {
+      const headingText = cleanMarkdownFromText(trimmedBlock.replace(/^#+\s*/, ''));
+      paragraphs.push(createVandarumHeading2(headingText));
+      continue;
+    }
+    
     // Detectar si es una lista numerada (1., 2., etc.)
     if (/^\d+\.\s/.test(trimmedBlock)) {
       const items = trimmedBlock.split(/\n(?=\d+\.)/);
@@ -409,7 +486,7 @@ export function createVandarumRichContent(text: string): Paragraph[] {
         const match = item.match(/^\d+\.\s*(.*)$/s);
         if (match) {
           // Separar título y descripción si hay dos puntos
-          const content = match[1].trim();
+          const content = cleanMarkdownFromText(match[1].trim());
           const colonIndex = content.indexOf(':');
           if (colonIndex > 0 && colonIndex < 50) {
             const title = content.substring(0, colonIndex + 1);
@@ -425,7 +502,7 @@ export function createVandarumRichContent(text: string): Paragraph[] {
     else if (/^[-•]\s/.test(trimmedBlock)) {
       const items = trimmedBlock.split(/\n(?=[-•]\s)/);
       for (const item of items) {
-        const content = item.replace(/^[-•]\s*/, '').trim();
+        const content = cleanMarkdownFromText(item.replace(/^[-•]\s*/, '').trim());
         paragraphs.push(createVandarumBullet(content));
       }
     }
@@ -433,9 +510,9 @@ export function createVandarumRichContent(text: string): Paragraph[] {
     else {
       const lines = trimmedBlock.split(/\n/);
       for (const line of lines) {
-        const trimmedLine = line.trim();
-        if (trimmedLine) {
-          paragraphs.push(createVandarumFormattedParagraph(trimmedLine));
+        const cleanLine = cleanMarkdownFromText(line.trim());
+        if (cleanLine) {
+          paragraphs.push(createVandarumFormattedParagraph(cleanLine));
         }
       }
     }
