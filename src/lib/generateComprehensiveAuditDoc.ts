@@ -482,10 +482,10 @@ export async function generateComprehensiveAuditDocument(): Promise<void> {
             createSimpleTable(
               ['Tabla', 'Registros', 'Sincronizada', 'Descripción'],
               moduleTables.map(t => [
-                t.name,
-                t.count.toLocaleString(),
-                t.synced ? '✓ Sí' : '✗ No',
-                t.description,
+                String(t?.name ?? 'N/A'),
+                Number(t?.count ?? 0).toLocaleString(),
+                t?.synced ? '✓ Sí' : '✗ No',
+                String(t?.description ?? ''),
               ])
             ),
             new Paragraph({ spacing: { after: 200 } }),
@@ -496,35 +496,43 @@ export async function generateComprehensiveAuditDocument(): Promise<void> {
         
         // Foreign Keys
         createHeading1('4. Relaciones entre Tablas (Foreign Keys)'),
-        createParagraph(`Se identificaron ${foreignKeys.length} relaciones de clave foránea:`),
+        createParagraph(`Se identificaron ${foreignKeys?.length ?? 0} relaciones de clave foránea:`),
         createSimpleTable(
           ['Tabla Origen', 'Columna', 'Tabla Destino', 'Columna FK'],
-          foreignKeys.map(fk => [
-            fk.table_name,
-            fk.column_name,
-            fk.foreign_table_name,
-            fk.foreign_column_name,
+          (foreignKeys ?? []).map(fk => [
+            String(fk?.table_name ?? ''),
+            String(fk?.column_name ?? ''),
+            String(fk?.foreign_table_name ?? ''),
+            String(fk?.foreign_column_name ?? ''),
           ])
         ),
         
         createPageBreakParagraph(),
         
-        // Sync Status
+        // Sync Status - with safe conversions
         createHeading1('5. Estado de Sincronización'),
         createParagraph('Comparativa entre Base Local y Base Externa:'),
-        ...(syncStatus.length > 0 ? [
-          createSimpleTable(
-            ['Tabla', 'Local', 'Externa', 'Estado'],
-            syncStatus.map(s => [
-              s.table,
-              s.local_count.toString(),
-              s.external_count.toString(),
-              s.status,
-            ])
-          ),
-        ] : [
-          createParagraph('No se pudo obtener el estado de sincronización. Verifique la conectividad con la BD externa.'),
-        ]),
+        ...(() => {
+          try {
+            if (syncStatus && syncStatus.length > 0) {
+              return [
+                createSimpleTable(
+                  ['Tabla', 'Local', 'Externa', 'Estado'],
+                  syncStatus.map(s => [
+                    String(s?.table ?? 'N/A'),
+                    String(s?.local_count ?? 0),
+                    String(s?.external_count ?? 0),
+                    String(s?.status ?? 'unknown'),
+                  ])
+                ),
+              ];
+            }
+            return [createParagraph('No se pudo obtener el estado de sincronización. Verifique la conectividad con la BD externa.')];
+          } catch (syncError) {
+            console.warn('[AuditDoc] Error al renderizar sección de sincronización:', syncError);
+            return [createParagraph('Error al procesar datos de sincronización. La sección no está disponible.')];
+          }
+        })(),
         
         createHeading2('5.1 Campos Excluidos de Sincronización'),
         createParagraph('Los siguientes campos NO se sincronizan a la BD externa:'),
@@ -535,10 +543,10 @@ export async function generateComprehensiveAuditDocument(): Promise<void> {
         
         // Database Functions
         createHeading1('6. Funciones de Base de Datos'),
-        createParagraph(`El sistema cuenta con ${DB_FUNCTIONS.length} funciones almacenadas:`),
+        createParagraph(`El sistema cuenta con ${DB_FUNCTIONS?.length ?? 0} funciones almacenadas:`),
         createSimpleTable(
           ['Función', 'Descripción', 'Seguridad'],
-          DB_FUNCTIONS.map(f => [f.name, f.description, f.security])
+          (DB_FUNCTIONS ?? []).map(f => [String(f?.name ?? ''), String(f?.description ?? ''), String(f?.security ?? '')])
         ),
         
         createPageBreakParagraph(),
