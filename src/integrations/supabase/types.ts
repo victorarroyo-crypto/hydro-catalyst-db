@@ -2249,6 +2249,15 @@ export type Database = {
         Returns: string
       }
       close_zombie_jobs: { Args: { max_age_minutes?: number }; Returns: number }
+      deduct_advisor_credits: {
+        Args: {
+          p_amount: number
+          p_description: string
+          p_model: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       force_close_scouting_job: {
         Args: { close_reason?: string; job_id: string }
         Returns: boolean
