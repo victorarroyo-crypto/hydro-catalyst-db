@@ -704,6 +704,21 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
                   <Eye className="w-5 h-5" />
                   {selectedReport ? selectedReport.title : 'Vista Previa del Informe'}
                 </CardTitle>
+                {selectedReport && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportEvaluationsOnly}
+                    disabled={isExportingEvaluations || !hasEnoughData}
+                  >
+                    {isExportingEvaluations ? (
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-1" />
+                    )}
+                    Descargar Evaluaciones Rápidas
+                  </Button>
+                )}
               </div>
               {selectedReport && (
                 <CardDescription>
