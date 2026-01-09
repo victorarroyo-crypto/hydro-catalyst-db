@@ -1258,14 +1258,19 @@ export type Database = {
           paises_actua: string | null
           provider: string | null
           sector: string | null
+          sector_id: string | null
           session_id: string | null
           solution_id: string | null
           source: string | null
           source_research_id: string | null
+          status: string | null
           study_id: string
+          subcategoria_id: number | null
           subcategory_suggested: string | null
+          subsector_industrial: string | null
           technology_id: string | null
           technology_name: string
+          tipo_id: number | null
           trl: number | null
           type_suggested: string | null
           ventaja_competitiva: string | null
@@ -1288,14 +1293,19 @@ export type Database = {
           paises_actua?: string | null
           provider?: string | null
           sector?: string | null
+          sector_id?: string | null
           session_id?: string | null
           solution_id?: string | null
           source?: string | null
           source_research_id?: string | null
+          status?: string | null
           study_id: string
+          subcategoria_id?: number | null
           subcategory_suggested?: string | null
+          subsector_industrial?: string | null
           technology_id?: string | null
           technology_name: string
+          tipo_id?: number | null
           trl?: number | null
           type_suggested?: string | null
           ventaja_competitiva?: string | null
@@ -1318,14 +1328,19 @@ export type Database = {
           paises_actua?: string | null
           provider?: string | null
           sector?: string | null
+          sector_id?: string | null
           session_id?: string | null
           solution_id?: string | null
           source?: string | null
           source_research_id?: string | null
+          status?: string | null
           study_id?: string
+          subcategoria_id?: number | null
           subcategory_suggested?: string | null
+          subsector_industrial?: string | null
           technology_id?: string | null
           technology_name?: string
+          tipo_id?: number | null
           trl?: number | null
           type_suggested?: string | null
           ventaja_competitiva?: string | null
@@ -1337,6 +1352,13 @@ export type Database = {
             columns: ["existing_technology_id"]
             isOneToOne: false
             referencedRelation: "technologies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_longlist_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_sectores"
             referencedColumns: ["id"]
           },
           {
@@ -1368,10 +1390,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "study_longlist_subcategoria_id_fkey"
+            columns: ["subcategoria_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_subcategorias"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "study_longlist_technology_id_fkey"
             columns: ["technology_id"]
             isOneToOne: false
             referencedRelation: "technologies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_longlist_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_tipos"
             referencedColumns: ["id"]
           },
         ]

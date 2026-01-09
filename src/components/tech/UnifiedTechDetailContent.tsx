@@ -31,33 +31,42 @@ import {
   Database,
   Clock,
 } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { UnifiedInfoRow } from './UnifiedInfoRow';
 import { UnifiedTechHeader } from './UnifiedTechHeader';
 import { UnifiedTechActions } from './UnifiedTechActions';
 import { getSourceLabel } from '@/lib/mapToUnifiedTech';
+import {
+  CountrySelector,
+  TRLSelector,
+  StatusSelector,
+  TaxonomySectorSelector,
+  TaxonomyTypeSelector,
+  TaxonomySubcategorySelector,
+  type SelectedTipo,
+  type SelectedSubcategoria,
+} from '@/components/taxonomy';
 import type { 
   UnifiedTechData, 
   TechMetadata, 
-  TechActions, 
+  TechActions as TechActionsType, 
   UnifiedTechEditData 
 } from '@/types/unifiedTech';
 
 interface UnifiedTechDetailContentProps {
   data: UnifiedTechData;
   metadata: TechMetadata;
-  actions: TechActions;
+  actions: TechActionsType;
   isEditing?: boolean;
   editData?: UnifiedTechEditData;
   isLoading?: boolean;
   isSaving?: boolean;
   isSendingToDB?: boolean;
+  
+  // Taxonomy state for checkboxes
+  selectedTipos?: SelectedTipo[];
+  selectedSubcategorias?: SelectedSubcategoria[];
+  onTiposChange?: (tipos: SelectedTipo[]) => void;
+  onSubcategoriasChange?: (subcategorias: SelectedSubcategoria[]) => void;
   
   // Edit handlers
   onEditChange?: (field: keyof UnifiedTechEditData, value: string | number | null) => void;
@@ -81,6 +90,10 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
   isLoading = false,
   isSaving = false,
   isSendingToDB = false,
+  selectedTipos = [],
+  selectedSubcategorias = [],
+  onTiposChange,
+  onSubcategoriasChange,
   onEditChange,
   onStartEdit,
   onCancelEdit,
@@ -107,15 +120,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
     });
   };
 
-  // Use editData when editing, otherwise use data
-  const displayValue = (field: keyof UnifiedTechEditData): string | null => {
-    if (isEditing && editData) {
-      const value = editData[field];
-      return value != null ? String(value) : null;
-    }
-    const dataValue = data[field as keyof UnifiedTechData];
-    return dataValue != null ? String(dataValue) : null;
-  };
+  // Get tipo IDs for filtering subcategories
+  const selectedTipoIds = selectedTipos.map(t => t.tipo_id);
 
   return (
     <div className="space-y-6">
@@ -185,9 +191,9 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               </div>
               <div className="space-y-2">
                 <Label>País de origen</Label>
-                <Input
+                <CountrySelector
                   value={editData.country}
-                  onChange={(e) => onEditChange('country', e.target.value)}
+                  onChange={(value) => onEditChange('country', value)}
                 />
               </div>
               <div className="space-y-2">
@@ -195,6 +201,7 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
                 <Input
                   value={editData.paises_actua}
                   onChange={(e) => onEditChange('paises_actua', e.target.value)}
+                  placeholder="Ej: España, Francia, Alemania"
                 />
               </div>
               <div className="space-y-2">
@@ -213,21 +220,18 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               </div>
               <div className="space-y-2">
                 <Label>Grado de madurez (TRL)</Label>
-                <Select
-                  value={editData.trl?.toString() || ''}
-                  onValueChange={(val) => onEditChange('trl', val ? parseInt(val) : null)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar TRL" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((trl) => (
-                      <SelectItem key={trl} value={trl.toString()}>
-                        TRL {trl}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <TRLSelector
+                  value={editData.trl}
+                  onChange={(value) => onEditChange('trl', value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Estado del seguimiento</Label>
+                <StatusSelector
+                  type="estado_seguimiento"
+                  value={editData.estado_seguimiento}
+                  onChange={(value) => onEditChange('estado_seguimiento', value)}
+                />
               </div>
             </div>
           </div>
@@ -238,35 +242,59 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               <Tag className="w-4 h-4" />
               CLASIFICACIÓN
             </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Tipo de tecnología</Label>
+            
+            {/* Tipo de tecnología - Checkboxes */}
+            <div className="space-y-2">
+              <Label>Tipo de tecnología</Label>
+              {onTiposChange ? (
+                <TaxonomyTypeSelector
+                  selectedTipos={selectedTipos}
+                  onChange={onTiposChange}
+                />
+              ) : (
                 <Input
                   value={editData.type}
                   onChange={(e) => onEditChange('type', e.target.value)}
+                  placeholder="Tipo de tecnología"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label>Subcategoría</Label>
+              )}
+            </div>
+            
+            {/* Subcategoría - Checkboxes filtered by tipos */}
+            <div className="space-y-2">
+              <Label>Subcategoría</Label>
+              {onSubcategoriasChange ? (
+                <TaxonomySubcategorySelector
+                  selectedSubcategorias={selectedSubcategorias}
+                  onChange={onSubcategoriasChange}
+                  filterByTipoIds={selectedTipoIds}
+                />
+              ) : (
                 <Input
                   value={editData.subcategory}
                   onChange={(e) => onEditChange('subcategory', e.target.value)}
+                  placeholder="Subcategoría"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label>Sector y subsector</Label>
-                <Input
-                  value={editData.sector}
-                  onChange={(e) => onEditChange('sector', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Aplicación principal</Label>
-                <Input
-                  value={editData.applications}
-                  onChange={(e) => onEditChange('applications', e.target.value)}
-                />
-              </div>
+              )}
+            </div>
+            
+            {/* Sector */}
+            <div className="space-y-2">
+              <Label>Sector</Label>
+              <TaxonomySectorSelector
+                value={editData.sector_id}
+                onChange={(value) => onEditChange('sector_id', value)}
+                subsectorValue={editData.subsector_industrial}
+                onSubsectorChange={(value) => onEditChange('subsector_industrial', value)}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Aplicación principal</Label>
+              <Input
+                value={editData.applications}
+                onChange={(e) => onEditChange('applications', e.target.value)}
+              />
             </div>
           </div>
 

@@ -133,6 +133,14 @@ export interface UnifiedTechEditData {
   innovacion: string;
   casos_referencia: string;
   comentarios_analista: string;
+  
+  // Taxonomy IDs for standardized dropdowns
+  status: string;
+  tipo_id: number | null;
+  subcategoria_id: number | null;
+  sector_id: string | null;
+  subsector_industrial: string;
+  estado_seguimiento: string;
 }
 
 /**
