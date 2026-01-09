@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.translate-swot]
 verify_jwt = false
+
+[functions.sync-advisor-embeddings]
+verify_jwt = false
