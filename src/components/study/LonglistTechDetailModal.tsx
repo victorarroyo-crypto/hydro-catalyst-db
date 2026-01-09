@@ -55,9 +55,9 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   // Determine if already linked to database
   const isLinkedToDB = item?.already_in_db || !!item?.existing_technology_id;
 
-  // Initialize editData synchronously to avoid timing issues with AI enrichment
+  // Initialize editData synchronously - always allow editing for all items
   const [editData, setEditData] = useState<UnifiedTechEditData | null>(() => {
-    if (item && !isLinkedToDB) {
+    if (item) {
       return toEditData(mapFromLonglist(item, null));
     }
     return null;
@@ -79,14 +79,17 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     enabled: !!item?.existing_technology_id && open,
   });
 
-  // Update editData when item changes
+  // Update editData when item changes - always initialize for all items
   useEffect(() => {
-    if (item && !isLinkedToDB) {
-      setEditData(toEditData(mapFromLonglist(item, null)));
-    } else if (isLinkedToDB) {
-      setEditData(null);
+    if (item) {
+      // For linked items, prefer linkedTechnology data if available
+      if (isLinkedToDB && linkedTechnology) {
+        setEditData(toEditData(mapFromLonglist(item, linkedTechnology)));
+      } else {
+        setEditData(toEditData(mapFromLonglist(item, null)));
+      }
     }
-  }, [item?.id, isLinkedToDB]);
+  }, [item?.id, isLinkedToDB, linkedTechnology]);
 
   if (!item) return null;
 
@@ -101,10 +104,12 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   };
 
   const handleSave = async () => {
-    if (isLinkedToDB || !editData) return;
+    if (!editData) return;
     
     setIsSaving(true);
-    const { error } = await supabase
+    
+    // Always save to study_longlist
+    const { error: longlistError } = await supabase
       .from('study_longlist')
       .update({
         technology_name: editData.technology_name,
@@ -126,9 +131,38 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
       } as any)
       .eq('id', item.id);
 
+    // If linked to DB, also sync changes to technologies table
+    if (isLinkedToDB && item.existing_technology_id) {
+      const { error: techError } = await supabase
+        .from('technologies')
+        .update({
+          'Nombre de la tecnología': editData.technology_name,
+          'Proveedor / Empresa': editData.provider || null,
+          'País de origen': editData.country || null,
+          'Paises donde actua': editData.paises_actua || null,
+          'Web de la empresa': editData.web || null,
+          'Email de contacto': editData.email || null,
+          'Grado de madurez (TRL)': editData.trl,
+          'Descripción técnica breve': editData.description || null,
+          'Tipo de tecnología': editData.type || 'Por clasificar',
+          'Subcategoría': editData.subcategory || null,
+          'Sector y subsector': editData.sector || null,
+          'Aplicación principal': editData.applications || null,
+          'Ventaja competitiva clave': editData.ventaja_competitiva || null,
+          'Porque es innovadora': editData.innovacion || null,
+          'Casos de referencia': editData.casos_referencia || null,
+          'Comentarios del analista': editData.comentarios_analista || null,
+        })
+        .eq('id', item.existing_technology_id);
+
+      if (techError) {
+        console.error('Error syncing to technologies:', techError);
+      }
+    }
+
     setIsSaving(false);
 
-    if (error) {
+    if (longlistError) {
       toast({
         title: 'Error',
         description: 'No se pudo guardar los cambios',
@@ -136,9 +170,15 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
       });
     } else {
       queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
+      if (isLinkedToDB) {
+        queryClient.invalidateQueries({ queryKey: ['technologies'] });
+        queryClient.invalidateQueries({ queryKey: ['linked-technology', item.existing_technology_id] });
+      }
       toast({
         title: 'Guardado',
-        description: 'Los cambios se han guardado correctamente',
+        description: isLinkedToDB 
+          ? 'Los cambios se han sincronizado con la BD principal' 
+          : 'Los cambios se han guardado correctamente',
       });
       setIsEditing(false);
     }
@@ -216,10 +256,8 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
   };
 
   const handleEnrichmentComplete = async (enrichedData: Record<string, any>) => {
-    if (isLinkedToDB) return;
-    
     // Use current editData or create from item to avoid null issues
-    const currentData = editData || toEditData(mapFromLonglist(item, null));
+    const currentData = editData || toEditData(mapFromLonglist(item, linkedTechnology));
     
     const updatedData = {
       ...currentData,
@@ -235,9 +273,9 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     
     setEditData(updatedData);
     
-    // Save directly to DB without setTimeout
+    // Save directly to study_longlist
     setIsSaving(true);
-    const { error } = await supabase
+    const { error: longlistError } = await supabase
       .from('study_longlist')
       .update({
         brief_description: updatedData.description,
@@ -253,13 +291,43 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
       })
       .eq('id', item.id);
     
+    // If linked to DB, also sync enriched data to technologies table
+    if (isLinkedToDB && item.existing_technology_id) {
+      const { error: techError } = await supabase
+        .from('technologies')
+        .update({
+          'Descripción técnica breve': updatedData.description || null,
+          'Comentarios del analista': updatedData.comentarios_analista || null,
+          'Ventaja competitiva clave': updatedData.ventaja_competitiva || null,
+          'Porque es innovadora': updatedData.innovacion || null,
+          'Casos de referencia': updatedData.casos_referencia || null,
+          'Paises donde actua': updatedData.paises_actua || null,
+          'Sector y subsector': updatedData.sector || null,
+          'Aplicación principal': updatedData.applications || null,
+        })
+        .eq('id', item.existing_technology_id);
+
+      if (techError) {
+        console.error('Error syncing enrichment to technologies:', techError);
+      }
+    }
+    
     setIsSaving(false);
     
-    if (error) {
+    if (longlistError) {
       toast({ title: 'Error', description: 'No se pudo guardar el enriquecimiento', variant: 'destructive' });
     } else {
       queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
-      toast({ title: 'Enriquecimiento guardado', description: 'Los datos de la IA se han guardado correctamente' });
+      if (isLinkedToDB) {
+        queryClient.invalidateQueries({ queryKey: ['technologies'] });
+        queryClient.invalidateQueries({ queryKey: ['linked-technology', item.existing_technology_id] });
+      }
+      toast({ 
+        title: 'Enriquecimiento guardado', 
+        description: isLinkedToDB 
+          ? 'Los datos de la IA se han sincronizado con la BD principal'
+          : 'Los datos de la IA se han guardado correctamente' 
+      });
     }
   };
 
