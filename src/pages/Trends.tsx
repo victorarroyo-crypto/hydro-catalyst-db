@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { syncTechnologyInsert, syncTrendDelete } from "@/lib/syncToExternal";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, Lightbulb, Tag, Calendar, RotateCcw, Edit } from "lucide-react";
+import { 
+  Loader2, TrendingUp, Upload, FileText, Download, RefreshCw, 
+  Trash2, Search, ChevronDown, ChevronRight, Sparkles, X,
+  CheckCircle, Clock, AlertCircle
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,248 +22,410 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
 
-interface TechnologicalTrend {
+interface TrendDocument {
   id: string;
   name: string;
   description: string | null;
-  technology_type: string;
-  subcategory: string | null;
-  sector: string | null;
+  file_path: string;
+  file_size: number | null;
+  mime_type: string | null;
+  status: string;
+  chunk_count: number | null;
+  category: string | null;
   created_at: string;
-  source_technology_id: string | null;
-  original_data: Record<string, unknown> | null;
+  updated_at: string;
+}
+
+// Categories for trend documents
+const TREND_CATEGORY_OPTIONS = [
+  { value: 'report', label: 'Informe de Tendencias' },
+  { value: 'market_analysis', label: 'Análisis de Mercado' },
+  { value: 'technology_forecast', label: 'Pronóstico Tecnológico' },
+  { value: 'industry_outlook', label: 'Perspectiva Industrial' },
+  { value: 'research_paper', label: 'Artículo de Investigación' },
+  { value: 'whitepaper', label: 'Whitepaper' },
+  { value: 'other', label: 'Otro' },
+];
+
+interface GroupedDocument {
+  baseName: string;
+  isMultiPart: boolean;
+  totalParts: number;
+  mainDoc: TrendDocument;
+  parts: TrendDocument[];
+  processedCount: number;
+  totalChunks: number;
+}
+
+function groupDocumentParts(docs: TrendDocument[]): GroupedDocument[] {
+  const partRegex = /^(.+)_parte(\d+)de(\d+)\.pdf$/i;
+  const groups: Map<string, TrendDocument[]> = new Map();
+  const standalonesDocs: TrendDocument[] = [];
+
+  docs.forEach(doc => {
+    const match = doc.name.match(partRegex);
+    if (match) {
+      const baseName = match[1];
+      if (!groups.has(baseName)) {
+        groups.set(baseName, []);
+      }
+      groups.get(baseName)!.push(doc);
+    } else {
+      standalonesDocs.push(doc);
+    }
+  });
+
+  const result: GroupedDocument[] = [];
+
+  // Add standalone documents
+  standalonesDocs.forEach(doc => {
+    result.push({
+      baseName: doc.name,
+      isMultiPart: false,
+      totalParts: 1,
+      mainDoc: doc,
+      parts: [doc],
+      processedCount: doc.status === 'processed' ? 1 : 0,
+      totalChunks: doc.chunk_count || 0,
+    });
+  });
+
+  // Add grouped documents
+  groups.forEach((parts, baseName) => {
+    // Sort parts by part number
+    parts.sort((a, b) => {
+      const matchA = a.name.match(partRegex);
+      const matchB = b.name.match(partRegex);
+      return (parseInt(matchA?.[2] || '0') - parseInt(matchB?.[2] || '0'));
+    });
+
+    const processedCount = parts.filter(p => p.status === 'processed').length;
+    const totalChunks = parts.reduce((sum, p) => sum + (p.chunk_count || 0), 0);
+    const totalParts = parts.length;
+
+    result.push({
+      baseName: baseName + '.pdf',
+      isMultiPart: true,
+      totalParts,
+      mainDoc: parts[0],
+      parts,
+      processedCount,
+      totalChunks,
+    });
+  });
+
+  // Sort by creation date of main doc
+  result.sort((a, b) => new Date(b.mainDoc.created_at).getTime() - new Date(a.mainDoc.created_at).getTime());
+
+  return result;
 }
 
 const Trends = () => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedTrend, setSelectedTrend] = useState<TechnologicalTrend | null>(null);
-  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
-  const [trendToRestore, setTrendToRestore] = useState<TechnologicalTrend | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingTrend, setEditingTrend] = useState<TechnologicalTrend | null>(null);
-  const [editForm, setEditForm] = useState({
-    name: '',
-    description: '',
-    technology_type: '',
-    subcategory: '',
-    sector: '',
-    // Original data fields
-    proveedor: '',
-    pais_origen: '',
-    web: '',
-    email: '',
-    ventaja_competitiva: '',
-    porque_innovadora: '',
-    casos_referencia: '',
-    comentarios_analista: '',
-    aplicacion_principal: '',
-    paises_actua: '',
-  });
-  const [isSaving, setIsSaving] = useState(false);
-
+  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  
+  // Upload modal state
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadDescription, setUploadDescription] = useState("");
+  const [uploadCategory, setUploadCategory] = useState<string>("");
+  const [generatingDescription, setGeneratingDescription] = useState(false);
+  
   const isInternalUser = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
-  // Subscribe to real-time updates
-  useRealtimeSubscription({
-    tables: ['technological_trends', 'technologies'],
-    queryKeys: [['technological-trends'], ['technologies']],
-  });
-
-  const { data: trends, isLoading } = useQuery({
-    queryKey: ['technological-trends'],
+  // Fetch trend documents (sector = 'tendencias')
+  const { data: documents, isLoading } = useQuery({
+    queryKey: ['trend-documents'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('technological_trends')
+        .from('knowledge_documents')
         .select('*')
+        .eq('sector', 'tendencias')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as TechnologicalTrend[];
+      return data as TrendDocument[];
     },
     enabled: !!user,
   });
 
-  // Mutation to restore trend as technology
-  const restoreMutation = useMutation({
-    mutationFn: async (trend: TechnologicalTrend) => {
-      // Use original_data if available, otherwise fallback to trend's basic info
-      const originalData = trend.original_data as Record<string, unknown> | null;
+  // Upload mutation
+  const uploadMutation = useMutation({
+    mutationFn: async ({ file, description, category }: { file: File | Blob; description?: string; category?: string }) => {
+      const fileName = file instanceof File ? file.name : `document_${Date.now()}.pdf`;
+      const filePath = `trends/${Date.now()}_${fileName}`;
       
-      const technologyData = originalData ? {
-        "Nombre de la tecnología": originalData["Nombre de la tecnología"] as string || trend.name,
-        "Proveedor / Empresa": originalData["Proveedor / Empresa"] as string | null,
-        "País de origen": originalData["País de origen"] as string | null,
-        "Web de la empresa": originalData["Web de la empresa"] as string | null,
-        "Email de contacto": originalData["Email de contacto"] as string | null,
-        "Tipo de tecnología": originalData["Tipo de tecnología"] as string || trend.technology_type,
-        "Subcategoría": originalData["Subcategoría"] as string | null || trend.subcategory,
-        "Sector y subsector": originalData["Sector y subsector"] as string | null || trend.sector,
-        "Aplicación principal": originalData["Aplicación principal"] as string | null,
-        "Descripción técnica breve": originalData["Descripción técnica breve"] as string | null || trend.description,
-        "Ventaja competitiva clave": originalData["Ventaja competitiva clave"] as string | null,
-        "Porque es innovadora": originalData["Porque es innovadora"] as string | null,
-        "Casos de referencia": originalData["Casos de referencia"] as string | null,
-        "Paises donde actua": originalData["Paises donde actua"] as string | null,
-        "Comentarios del analista": originalData["Comentarios del analista"] as string | null,
-        "Fecha de scouting": originalData["Fecha de scouting"] as string | null,
-        "Estado del seguimiento": originalData["Estado del seguimiento"] as string | null,
-        "Grado de madurez (TRL)": originalData["Grado de madurez (TRL)"] as number | null,
-        quality_score: originalData.quality_score as number | null,
-        status: 'en_revision',
-        review_status: 'pending',
-        sector_id: originalData.sector_id as string | null,
-        tipo_id: originalData.tipo_id as number | null,
-        subcategoria_id: originalData.subcategoria_id as number | null,
-        subsector_industrial: originalData.subsector_industrial as string | null,
-      } : {
-        "Nombre de la tecnología": trend.name,
-        "Descripción técnica breve": trend.description,
-        "Tipo de tecnología": trend.technology_type,
-        "Subcategoría": trend.subcategory,
-        "Sector y subsector": trend.sector,
-        status: 'en_revision',
-        review_status: 'pending',
-      };
+      const { error: uploadError } = await supabase.storage
+        .from('knowledge-base')
+        .upload(filePath, file);
 
-      // Insert back into technologies with all original data
-      const { data: insertedTech, error: insertError } = await supabase
-        .from('technologies')
-        .insert(technologyData)
-        .select()
-        .single();
+      if (uploadError) throw uploadError;
+
+      const { error: insertError } = await supabase
+        .from('knowledge_documents')
+        .insert({
+          name: fileName,
+          file_path: filePath,
+          file_size: file.size,
+          mime_type: file instanceof File ? file.type : 'application/pdf',
+          status: 'pending',
+          sector: 'tendencias',
+          category: category || null,
+          description: description || null,
+          uploaded_by: user?.id,
+        });
 
       if (insertError) throw insertError;
-
-      // Sync to external Supabase
-      try {
-        await syncTechnologyInsert({ ...technologyData, id: insertedTech.id });
-      } catch (syncError) {
-        console.error('External sync failed:', syncError);
-      }
-
-      // Then delete from trends
-      const { error: deleteError } = await supabase
-        .from('technological_trends')
-        .delete()
-        .eq('id', trend.id);
-
-      if (deleteError) throw deleteError;
-
-      // Sync deletion to external
-      try {
-        await syncTrendDelete(trend.id);
-      } catch (syncError) {
-        console.error('External sync failed:', syncError);
-      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['technological-trends'] });
-      queryClient.invalidateQueries({ queryKey: ['technologies'] });
-      setSelectedTrend(null);
-      setShowRestoreConfirm(false);
-      setTrendToRestore(null);
+      queryClient.invalidateQueries({ queryKey: ['trend-documents'] });
       toast({
-        title: 'Restaurada como tecnología',
-        description: 'La tendencia ha sido restaurada y sincronizada con Supabase externo',
+        title: 'Documento subido',
+        description: 'El documento se está procesando',
       });
     },
-    onError: () => {
+    onError: (error) => {
       toast({
-        title: 'Error',
-        description: 'No se pudo restaurar la tecnología',
+        title: 'Error al subir',
+        description: error.message,
         variant: 'destructive',
       });
     },
   });
 
-  const handleEditClick = (trend: TechnologicalTrend) => {
-    setEditingTrend(trend);
-    const od = trend.original_data || {};
-    setEditForm({
-      name: trend.name,
-      description: trend.description || '',
-      technology_type: trend.technology_type,
-      subcategory: trend.subcategory || '',
-      sector: trend.sector || '',
-      proveedor: String(od["Proveedor / Empresa"] || ''),
-      pais_origen: String(od["País de origen"] || ''),
-      web: String(od["Web de la empresa"] || ''),
-      email: String(od["Email de contacto"] || ''),
-      ventaja_competitiva: String(od["Ventaja competitiva clave"] || ''),
-      porque_innovadora: String(od["Porque es innovadora"] || ''),
-      casos_referencia: String(od["Casos de referencia"] || ''),
-      comentarios_analista: String(od["Comentarios del analista"] || ''),
-      aplicacion_principal: String(od["Aplicación principal"] || ''),
-      paises_actua: String(od["Paises donde actua"] || ''),
-    });
-    setShowEditModal(true);
-    setSelectedTrend(null);
-  };
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (doc: TrendDocument) => {
+      // Delete from storage
+      await supabase.storage
+        .from('knowledge-base')
+        .remove([doc.file_path]);
 
-  const handleSaveEdit = async () => {
-    if (!editingTrend) return;
-    
-    setIsSaving(true);
-    
-    // Update original_data with new values
-    const updatedOriginalData = {
-      ...(editingTrend.original_data || {}),
-      "Nombre de la tecnología": editForm.name,
-      "Descripción técnica breve": editForm.description || null,
-      "Tipo de tecnología": editForm.technology_type,
-      "Subcategoría": editForm.subcategory || null,
-      "Sector y subsector": editForm.sector || null,
-      "Proveedor / Empresa": editForm.proveedor || null,
-      "País de origen": editForm.pais_origen || null,
-      "Web de la empresa": editForm.web || null,
-      "Email de contacto": editForm.email || null,
-      "Ventaja competitiva clave": editForm.ventaja_competitiva || null,
-      "Porque es innovadora": editForm.porque_innovadora || null,
-      "Casos de referencia": editForm.casos_referencia || null,
-      "Comentarios del analista": editForm.comentarios_analista || null,
-      "Aplicación principal": editForm.aplicacion_principal || null,
-      "Paises donde actua": editForm.paises_actua || null,
-    };
-    
-    const { error } = await supabase
-      .from('technological_trends')
-      .update({
-        name: editForm.name,
-        description: editForm.description || null,
-        technology_type: editForm.technology_type,
-        subcategory: editForm.subcategory || null,
-        sector: editForm.sector || null,
-        original_data: updatedOriginalData,
-      })
-      .eq('id', editingTrend.id);
-    
-    setIsSaving(false);
-    
-    if (error) {
+      // Delete from database
+      const { error } = await supabase
+        .from('knowledge_documents')
+        .delete()
+        .eq('id', doc.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trend-documents'] });
       toast({
-        title: 'Error',
-        description: 'No se pudo guardar los cambios',
+        title: 'Documento eliminado',
+        description: 'El documento ha sido eliminado correctamente',
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error al eliminar',
+        description: error.message,
         variant: 'destructive',
       });
-    } else {
-      queryClient.invalidateQueries({ queryKey: ['technological-trends'] });
-      setShowEditModal(false);
-      setEditingTrend(null);
+    },
+  });
+
+  // Reprocess mutation
+  const reprocessMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const { error } = await supabase
+        .from('knowledge_documents')
+        .update({ status: 'pending', chunk_count: null })
+        .eq('id', docId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trend-documents'] });
       toast({
-        title: 'Guardado',
-        description: 'Los cambios se han guardado correctamente',
+        title: 'Reprocesando',
+        description: 'El documento se está reprocesando',
+      });
+    },
+  });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      toast({
+        title: 'Formato no soportado',
+        description: 'Solo se permiten archivos PDF',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      toast({
+        title: 'Archivo muy grande',
+        description: 'El tamaño máximo es 100MB',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSelectedFile(file);
+    setUploadDescription("");
+    setUploadCategory("");
+    setShowUploadModal(true);
+    e.target.value = '';
+  };
+
+  const handleGenerateDescription = async () => {
+    if (!selectedFile) return;
+    
+    setGeneratingDescription(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-document-description', {
+        body: {
+          fileName: selectedFile.name,
+          category: uploadCategory,
+          sector: 'tendencias',
+        },
+      });
+
+      if (error) throw error;
+      if (data?.description) {
+        setUploadDescription(data.description);
+      }
+    } catch (error) {
+      toast({
+        title: 'Error al generar descripción',
+        description: 'No se pudo generar la descripción automáticamente',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
+
+  const handleConfirmUpload = async () => {
+    if (!selectedFile) return;
+
+    try {
+      const splitResult = await splitPdfIfNeeded(selectedFile);
+
+      if (splitResult.wasSplit) {
+        toast({
+          title: 'Dividiendo PDF',
+          description: `El PDF se dividirá en ${splitResult.parts.length} partes`,
+        });
+
+        for (let i = 0; i < splitResult.parts.length; i++) {
+          const part = splitResult.parts[i];
+          const partFile = new File([part.blob], part.name, { type: 'application/pdf' });
+          
+          await uploadMutation.mutateAsync({
+            file: partFile,
+            description: i === 0 ? uploadDescription : undefined,
+            category: uploadCategory,
+          });
+        }
+      } else {
+        await uploadMutation.mutateAsync({
+          file: selectedFile,
+          description: uploadDescription,
+          category: uploadCategory,
+        });
+      }
+
+      setShowUploadModal(false);
+      setSelectedFile(null);
+      setUploadDescription("");
+      setUploadCategory("");
+    } catch (error) {
+      console.error('Upload error:', error);
+    }
+  };
+
+  const handleDownload = async (doc: TrendDocument) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('knowledge-base')
+        .download(doc.file_path);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: 'Error al descargar',
+        description: 'No se pudo descargar el documento',
+        variant: 'destructive',
       });
     }
   };
 
-  const handleRestoreClick = (trend: TechnologicalTrend) => {
-    setTrendToRestore(trend);
-    setShowRestoreConfirm(true);
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'processed':
+        return <Badge variant="outline" className="text-green-600 border-green-300"><CheckCircle className="w-3 h-3 mr-1" />Procesado</Badge>;
+      case 'processing':
+        return <Badge variant="outline" className="text-blue-600 border-blue-300"><Clock className="w-3 h-3 mr-1" />Procesando</Badge>;
+      case 'error':
+        return <Badge variant="outline" className="text-red-600 border-red-300"><AlertCircle className="w-3 h-3 mr-1" />Error</Badge>;
+      default:
+        return <Badge variant="outline" className="text-amber-600 border-amber-300"><Clock className="w-3 h-3 mr-1" />Pendiente</Badge>;
+    }
   };
+
+  const getCategoryLabel = (value: string | null) => {
+    if (!value) return null;
+    return TREND_CATEGORY_OPTIONS.find(c => c.value === value)?.label || value;
+  };
+
+  // Filter documents
+  const filteredDocs = useMemo(() => {
+    if (!documents) return [];
+    
+    return documents.filter(doc => {
+      const matchesSearch = !searchQuery || 
+        doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        doc.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesCategory = categoryFilter === 'all' || doc.category === categoryFilter;
+      
+      return matchesSearch && matchesCategory;
+    });
+  }, [documents, searchQuery, categoryFilter]);
+
+  const groupedDocs = useMemo(() => groupDocumentParts(filteredDocs), [filteredDocs]);
 
   if (isLoading) {
     return (
@@ -273,404 +437,324 @@ const Trends = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 bg-primary/10 rounded-lg">
-          <TrendingUp className="w-6 h-6 text-primary" />
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <TrendingUp className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Tendencias Tecnológicas</h1>
+            <p className="text-muted-foreground">
+              Documentos sobre tendencias y análisis del sector
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">Tendencias Tecnológicas</h1>
-          <p className="text-muted-foreground">
-            Categorías y tendencias identificadas en el sector del tratamiento de agua
-          </p>
-        </div>
+        
+        {isInternalUser && (
+          <div>
+            <input
+              type="file"
+              id="trend-upload"
+              className="hidden"
+              accept="application/pdf"
+              onChange={handleFileSelect}
+            />
+            <Button asChild>
+              <label htmlFor="trend-upload" className="cursor-pointer">
+                <Upload className="w-4 h-4 mr-2" />
+                Subir documento
+              </label>
+            </Button>
+          </div>
+        )}
       </div>
 
-      {trends && trends.length === 0 ? (
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar documentos..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Categoría" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas las categorías</SelectItem>
+            {TREND_CATEGORY_OPTIONS.map(cat => (
+              <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Document List */}
+      {groupedDocs.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Lightbulb className="w-12 h-12 text-muted-foreground/50 mb-4" />
+            <FileText className="w-12 h-12 text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground text-center">
-              No hay tendencias tecnológicas registradas aún.
+              No hay documentos de tendencias.
               <br />
-              Las tecnologías que son categorías o tendencias pueden moverse aquí desde su ficha.
+              Sube documentos PDF para comenzar.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {trends?.map((trend) => (
-            <Card 
-              key={trend.id} 
-              className="hover:shadow-md transition-shadow cursor-pointer hover:border-primary/50"
-              onClick={() => setSelectedTrend(trend)}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-lg leading-tight">{trend.name}</CardTitle>
-                </div>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {trend.technology_type}
-                  </Badge>
-                  {trend.subcategory && (
-                    <Badge variant="outline" className="text-xs">
-                      {trend.subcategory}
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {trend.description && (
-                  <p className="text-sm text-muted-foreground line-clamp-3 mb-3">
-                    {trend.description}
-                  </p>
-                )}
-                {trend.sector && (
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium">Sector:</span> {trend.sector}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+        <div className="space-y-2">
+          {groupedDocs.map((group) => {
+            if (group.isMultiPart) {
+              return (
+                <Collapsible key={group.baseName}>
+                  <Card className="overflow-hidden">
+                    <CollapsibleTrigger asChild>
+                      <div className="flex items-center gap-4 p-4 hover:bg-muted/50 cursor-pointer transition-colors">
+                        <ChevronRight className="w-4 h-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                        <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium truncate">{group.baseName}</span>
+                            <Badge variant="secondary">{group.totalParts} partes</Badge>
+                            {getCategoryLabel(group.mainDoc.category) && (
+                              <Badge variant="outline">{getCategoryLabel(group.mainDoc.category)}</Badge>
+                            )}
+                          </div>
+                          {group.mainDoc.description && (
+                            <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                              {group.mainDoc.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span>{group.totalChunks} chunks</span>
+                          <Badge variant={group.processedCount === group.totalParts ? "outline" : "secondary"} 
+                                 className={group.processedCount === group.totalParts ? "text-green-600 border-green-300" : ""}>
+                            {group.processedCount}/{group.totalParts} procesados
+                          </Badge>
+                        </div>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border-t bg-muted/30">
+                        {group.parts.map((part, idx) => {
+                          const partMatch = part.name.match(/_parte(\d+)de(\d+)\.pdf$/i);
+                          const partNum = partMatch ? partMatch[1] : idx + 1;
+                          const totalNum = partMatch ? partMatch[2] : group.totalParts;
+                          
+                          return (
+                            <div key={part.id} className="flex items-center gap-4 px-4 py-2 border-b last:border-b-0">
+                              <div className="w-4" />
+                              <span className="text-sm text-muted-foreground w-24">
+                                Parte {partNum} de {totalNum}
+                              </span>
+                              <div className="flex-1">
+                                {getStatusBadge(part.status)}
+                              </div>
+                              <span className="text-sm text-muted-foreground">
+                                {part.chunk_count || 0} chunks
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleDownload(part)}
+                                >
+                                  <Download className="w-4 h-4" />
+                                </Button>
+                                {isInternalUser && part.status !== 'processing' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => reprocessMutation.mutate(part.id)}
+                                  >
+                                    <RefreshCw className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              );
+            }
 
-      {/* Trend Detail Modal */}
-      <Dialog open={!!selectedTrend} onOpenChange={(open) => !open && setSelectedTrend(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          {selectedTrend && (
-            <>
-              <DialogHeader className="pb-4">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                    <TrendingUp className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div className="flex-1">
-                    <DialogTitle className="text-xl font-display mb-2">
-                      {selectedTrend.name}
-                    </DialogTitle>
+            // Single document
+            const doc = group.mainDoc;
+            return (
+              <Card key={doc.id} className="overflow-hidden">
+                <div className="flex items-center gap-4 p-4">
+                  <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="secondary">{selectedTrend.technology_type}</Badge>
-                      {selectedTrend.subcategory && (
-                        <Badge variant="outline">{selectedTrend.subcategory}</Badge>
+                      <span className="font-medium truncate">{doc.name}</span>
+                      {getCategoryLabel(doc.category) && (
+                        <Badge variant="outline">{getCategoryLabel(doc.category)}</Badge>
+                      )}
+                      {getStatusBadge(doc.status)}
+                    </div>
+                    {doc.description && (
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                        {doc.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span>{doc.chunk_count || 0} chunks</span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleDownload(doc)}
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
+                      {isInternalUser && doc.status !== 'processing' && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => reprocessMutation.mutate(doc.id)}
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>¿Eliminar documento?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Esta acción eliminará permanentemente "{doc.name}" y todos sus datos procesados.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteMutation.mutate(doc)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Eliminar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
                       )}
                     </div>
                   </div>
                 </div>
-              </DialogHeader>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
-              <div className="space-y-6">
-                {/* Description */}
-                {selectedTrend.description && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-                      <Lightbulb className="w-4 h-4" />
-                      Descripción
-                    </h3>
-                    <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
-                      {selectedTrend.description}
-                    </p>
-                  </div>
-                )}
-
-                <Separator />
-
-                {/* Classification */}
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <Tag className="w-4 h-4" />
-                    Clasificación
-                  </h3>
-                  <div className="bg-muted/30 rounded-lg p-4 space-y-3">
-                    <div className="flex items-start gap-3">
-                      <Tag className="w-4 h-4 text-muted-foreground mt-0.5" />
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-0.5">Tipo de tecnología</p>
-                        <p className="text-sm">{selectedTrend.technology_type}</p>
-                      </div>
-                    </div>
-                    {selectedTrend.subcategory && (
-                      <div className="flex items-start gap-3">
-                        <Tag className="w-4 h-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Subcategoría</p>
-                          <p className="text-sm">{selectedTrend.subcategory}</p>
-                        </div>
-                      </div>
-                    )}
-                    {selectedTrend.sector && (
-                      <div className="flex items-start gap-3">
-                        <Tag className="w-4 h-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Sector</p>
-                          <p className="text-sm">{selectedTrend.sector}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Actions */}
-                {isInternalUser && (
-                  <>
-                    <Separator />
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditClick(selectedTrend)}
-                      >
-                        <Edit className="w-4 h-4 mr-2" />
-                        Editar
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRestoreClick(selectedTrend)}
-                        disabled={restoreMutation.isPending}
-                        className="text-green-600 border-green-300 hover:bg-green-50"
-                      >
-                        <RotateCcw className="w-4 h-4 mr-2" />
-                        Restaurar como tecnología
-                      </Button>
-                    </div>
-                  </>
-                )}
-
-                {/* Metadata */}
-                <div className="text-xs text-muted-foreground pt-4 border-t flex items-center gap-2">
-                  <Calendar className="w-3 h-3" />
-                  <span>Registrado: {new Date(selectedTrend.created_at).toLocaleDateString('es-ES')}</span>
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Restore Confirmation Dialog */}
-      <Dialog open={showRestoreConfirm} onOpenChange={setShowRestoreConfirm}>
+      {/* Upload Modal */}
+      <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="w-5 h-5 text-primary" />
-              Restaurar como Tecnología
+              <Upload className="w-5 h-5" />
+              Subir documento de tendencias
             </DialogTitle>
-            <DialogDescription className="text-left pt-2 space-y-3">
-              <p>
-                Al confirmar, esta tendencia se convertirá de nuevo en una <strong>tecnología</strong> y:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Aparecerá en el catálogo de tecnologías</li>
-                <li>Se eliminará de la sección de Tendencias</li>
-                <li>Se recuperarán todos los datos originales (TRL, proveedor, etc.) si estaban guardados</li>
-              </ul>
+            <DialogDescription>
+              Añade información adicional antes de subir el documento.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setShowRestoreConfirm(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => trendToRestore && restoreMutation.mutate(trendToRestore)}
-              disabled={restoreMutation.isPending}
-            >
-              {restoreMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <RotateCcw className="w-4 h-4 mr-2" />
-              )}
-              Confirmar y restaurar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Edit Modal */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Edit className="w-5 h-5 text-primary" />
-              Editar Tendencia
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-            {/* Basic Info */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">Nombre *</Label>
-              <Input
-                id="edit-name"
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="edit-type">Tipo de tecnología *</Label>
-              <Input
-                id="edit-type"
-                value={editForm.technology_type}
-                onChange={(e) => setEditForm({ ...editForm, technology_type: e.target.value })}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-subcategory">Subcategoría</Label>
-                <Input
-                  id="edit-subcategory"
-                  value={editForm.subcategory}
-                  onChange={(e) => setEditForm({ ...editForm, subcategory: e.target.value })}
-                />
+          <div className="space-y-4 py-4">
+            {selectedFile && (
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                <FileText className="w-8 h-8 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{selectedFile.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-sector">Sector</Label>
-                <Input
-                  id="edit-sector"
-                  value={editForm.sector}
-                  onChange={(e) => setEditForm({ ...editForm, sector: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Company Info */}
-            <h4 className="text-sm font-semibold text-muted-foreground">Información de la empresa</h4>
-            
-            <div className="space-y-2">
-              <Label htmlFor="edit-proveedor">Proveedor / Empresa</Label>
-              <Input
-                id="edit-proveedor"
-                value={editForm.proveedor}
-                onChange={(e) => setEditForm({ ...editForm, proveedor: e.target.value })}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-pais">País de origen</Label>
-                <Input
-                  id="edit-pais"
-                  value={editForm.pais_origen}
-                  onChange={(e) => setEditForm({ ...editForm, pais_origen: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-paises">Países donde actúa</Label>
-                <Input
-                  id="edit-paises"
-                  value={editForm.paises_actua}
-                  onChange={(e) => setEditForm({ ...editForm, paises_actua: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-web">Web</Label>
-                <Input
-                  id="edit-web"
-                  value={editForm.web}
-                  onChange={(e) => setEditForm({ ...editForm, web: e.target.value })}
-                  placeholder="https://..."
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-email">Email de contacto</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Descriptions */}
-            <h4 className="text-sm font-semibold text-muted-foreground">Descripciones</h4>
+            )}
 
             <div className="space-y-2">
-              <Label htmlFor="edit-description">Descripción técnica</Label>
+              <Label>Categoría</Label>
+              <Select value={uploadCategory} onValueChange={setUploadCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TREND_CATEGORY_OPTIONS.map(cat => (
+                    <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Descripción</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleGenerateDescription}
+                  disabled={generatingDescription || !selectedFile}
+                  className="h-7 text-xs"
+                >
+                  {generatingDescription ? (
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3 h-3 mr-1" />
+                  )}
+                  Generar con IA
+                </Button>
+              </div>
               <Textarea
-                id="edit-description"
-                value={editForm.description}
-                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                value={uploadDescription}
+                onChange={(e) => setUploadDescription(e.target.value.slice(0, 300))}
+                placeholder="Descripción breve del documento..."
                 rows={3}
+                maxLength={300}
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-aplicacion">Aplicación principal</Label>
-              <Textarea
-                id="edit-aplicacion"
-                value={editForm.aplicacion_principal}
-                onChange={(e) => setEditForm({ ...editForm, aplicacion_principal: e.target.value })}
-                rows={2}
-              />
-            </div>
-
-            <Separator />
-
-            {/* Differentiation */}
-            <h4 className="text-sm font-semibold text-muted-foreground">Diferenciación</h4>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-ventaja">Ventaja competitiva clave</Label>
-              <Textarea
-                id="edit-ventaja"
-                value={editForm.ventaja_competitiva}
-                onChange={(e) => setEditForm({ ...editForm, ventaja_competitiva: e.target.value })}
-                rows={2}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-innovadora">Por qué es innovadora</Label>
-              <Textarea
-                id="edit-innovadora"
-                value={editForm.porque_innovadora}
-                onChange={(e) => setEditForm({ ...editForm, porque_innovadora: e.target.value })}
-                rows={2}
-              />
-            </div>
-
-            <Separator />
-
-            {/* References and Comments */}
-            <h4 className="text-sm font-semibold text-muted-foreground">Referencias y comentarios</h4>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-casos">Casos de referencia</Label>
-              <Textarea
-                id="edit-casos"
-                value={editForm.casos_referencia}
-                onChange={(e) => setEditForm({ ...editForm, casos_referencia: e.target.value })}
-                rows={2}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-comentarios">Comentarios del analista</Label>
-              <Textarea
-                id="edit-comentarios"
-                value={editForm.comentarios_analista}
-                onChange={(e) => setEditForm({ ...editForm, comentarios_analista: e.target.value })}
-                rows={3}
-              />
+              <p className="text-xs text-muted-foreground text-right">
+                {uploadDescription.length}/300
+              </p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowUploadModal(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveEdit} disabled={isSaving || !editForm.name || !editForm.technology_type}>
-              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Guardar cambios
+            <Button 
+              onClick={handleConfirmUpload}
+              disabled={uploadMutation.isPending || !selectedFile}
+            >
+              {uploadMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4 mr-2" />
+              )}
+              Subir documento
             </Button>
           </DialogFooter>
         </DialogContent>
