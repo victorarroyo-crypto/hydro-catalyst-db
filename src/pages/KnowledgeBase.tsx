@@ -549,13 +549,31 @@ export default function KnowledgeBase() {
         // For other values like 'agrícola', 'desalación', etc., we leave it null
       }
 
+
+      // Map tipo to valid values (constraint only allows: directorio, feria, revista, aceleradora, asociacion, empresa, otro)
+      const validTipo = ['directorio', 'feria', 'revista', 'aceleradora', 'asociacion', 'empresa', 'otro'];
+      let tipoDb = 'otro';
+      if (source.tipo) {
+        const t = source.tipo.toLowerCase();
+        if (validTipo.includes(t)) {
+          tipoDb = t;
+        } else if (t === 'web') {
+          // generic website  treat as directory/website source
+          tipoDb = 'directorio';
+        } else if (t === 'newsletter') {
+          tipoDb = 'revista';
+        } else {
+          tipoDb = 'otro';
+        }
+      }
+
       const { error } = await supabase
         .from("scouting_sources")
         .insert({
           nombre: source.nombre,
           url: source.url,
           descripcion: source.descripcion,
-          tipo: source.tipo || 'web',
+          tipo: tipoDb,
           pais: source.pais || null,
           sector_foco: sectorFoco,
           calidad_score: 3,
