@@ -97,16 +97,28 @@ export const useCaseStudyFiles = () => {
   // Add files to IndexedDB
   const addFiles = useCallback(async (files: File[]) => {
     try {
+      // Convert all files to ArrayBuffer BEFORE opening the transaction
+      // IndexedDB transactions auto-close when awaiting non-transaction promises
+      const fileDataPromises = files.map(async (file) => {
+        const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${file.name}`;
+        const buffer = await fileToArrayBuffer(file);
+        return {
+          id,
+          file,
+          buffer,
+        };
+      });
+      
+      const filesWithBuffers = await Promise.all(fileDataPromises);
+      
+      // Now open the transaction and add all files synchronously
       const db = await openDB();
       const transaction = db.transaction(STORE_NAME, 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       
       const newPendingFiles: PendingFile[] = [];
       
-      for (const file of files) {
-        const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const buffer = await fileToArrayBuffer(file);
-        
+      for (const { id, file, buffer } of filesWithBuffers) {
         const storedFile: StoredFile = {
           id,
           name: file.name,
