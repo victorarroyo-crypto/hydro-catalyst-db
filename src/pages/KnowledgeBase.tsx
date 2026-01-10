@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { InstructionTip } from "@/components/ui/instruction-tip";
+import { CaseStudiesSection } from "@/components/kb/CaseStudiesSection";
 
 // Types
 interface KnowledgeDocument {
@@ -2862,109 +2863,21 @@ export default function KnowledgeBase() {
 
         {/* CASES SECTION */}
         {activeSection === 'cases' && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Casos de Estudio
-              </CardTitle>
-              <CardDescription>
-                Proyectos municipales, corporaciones y casos de implementación
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar casos..."
-                    value={caseSearchQuery}
-                    onChange={(e) => setCaseSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-              
-              {loadingCases ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
-              ) : filteredCases.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No hay casos de estudio</p>
-                </div>
-              ) : viewMode.cases === 'grid' ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {filteredCases.map((caseStudy) => (
-                    <Card 
-                      key={caseStudy.id} 
-                      className="cursor-pointer hover:border-primary/50 transition-colors"
-                      onClick={() => setSelectedCase(caseStudy)}
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <CardTitle className="text-base line-clamp-2">{caseStudy.name}</CardTitle>
-                          {caseStudy.entity_type && (
-                            <Badge variant="secondary" className="shrink-0 text-xs">{caseStudy.entity_type}</Badge>
-                          )}
-                        </div>
-                        <CardDescription className="flex items-center gap-2">
-                          {caseStudy.country && (
-                            <>
-                              <MapPin className="w-3 h-3" />
-                              {caseStudy.country}
-                            </>
-                          )}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        {caseStudy.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-2">{caseStudy.description}</p>
-                        )}
-                        {caseStudy.technology_types && caseStudy.technology_types.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {caseStudy.technology_types.slice(0, 2).map((type, i) => (
-                              <Badge key={i} variant="outline" className="text-xs">{type}</Badge>
-                            ))}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredCases.map((caseStudy) => (
-                    <div 
-                      key={caseStudy.id} 
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
-                      onClick={() => setSelectedCase(caseStudy)}
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{caseStudy.name}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {caseStudy.country && <><MapPin className="w-3 h-3" /><span>{caseStudy.country}</span></>}
-                            {caseStudy.sector && <><span>•</span><span>{caseStudy.sector}</span></>}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {caseStudy.entity_type && (
-                          <Badge variant="secondary" className="text-xs">{caseStudy.entity_type}</Badge>
-                        )}
-                        {caseStudy.technology_types && caseStudy.technology_types.length > 0 && (
-                          <Badge variant="outline" className="text-xs">{caseStudy.technology_types.length} tipos</Badge>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <CaseStudiesSection
+            onNewCase={() => {
+              // TODO: Implement new case modal
+              toast.info('Funcionalidad de nuevo caso en desarrollo');
+            }}
+            onViewCase={(cs) => setSelectedCase(cs as any)}
+            onEditCase={(cs) => {
+              // TODO: Implement edit case modal
+              toast.info('Funcionalidad de edición en desarrollo');
+            }}
+            onDeleteCase={(cs) => {
+              // TODO: Implement delete confirmation
+              toast.info('Funcionalidad de eliminación en desarrollo');
+            }}
+          />
         )}
 
         {/* TRENDS SECTION */}
