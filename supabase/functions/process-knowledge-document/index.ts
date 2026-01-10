@@ -129,10 +129,11 @@ serve(async (req) => {
       )
     }
 
-    // Generate signed URL (valid for 1 hour) - bucket is not public
+    // Generate signed URL (valid for 4 hours) - bucket is not public
+    // Extended duration to handle queue delays in multi-part processing
     const { data: signedUrlData, error: signedError } = await supabase.storage
       .from('knowledge-documents')
-      .createSignedUrl(document.file_path, 3600) // 3600 seconds = 1 hour
+      .createSignedUrl(document.file_path, 14400) // 14400 seconds = 4 hours
 
     if (signedError || !signedUrlData?.signedUrl) {
       console.error(`[KB-PROCESS] Error creating signed URL:`, signedError)
@@ -176,6 +177,26 @@ serve(async (req) => {
 
     const endpoint = `${railwayUrl}/api/kb/process-pdf`
     console.log(`[KB-PROCESS] Sending to Railway: ${endpoint}`)
+
+    // Health check before sending - verify Railway is responsive
+    try {
+      const healthUrl = `${railwayUrl}/health`
+      console.log(`[KB-PROCESS] Checking Railway health: ${healthUrl}`)
+      const healthCheck = await fetch(healthUrl, {
+        method: 'GET',
+        signal: AbortSignal.timeout(10000), // 10 second timeout for health check
+      })
+      
+      if (!healthCheck.ok) {
+        console.warn(`[KB-PROCESS] Railway health check failed: ${healthCheck.status}`)
+        // Don't fail immediately - Railway might still work for processing
+      } else {
+        console.log(`[KB-PROCESS] Railway health check passed`)
+      }
+    } catch (healthError) {
+      console.warn(`[KB-PROCESS] Railway health check error (continuing anyway):`, healthError)
+      // Continue processing even if health check fails - it's just a warning
+    }
 
     const payload = {
       document_id: documentId,
