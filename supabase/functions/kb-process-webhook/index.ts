@@ -24,15 +24,17 @@ serve(async (req) => {
       )
     }
 
+    const payload = await req.json()
     const { 
       document_id, 
       status,
       chunk_count,
       description,
       error_message 
-    } = await req.json()
+    } = payload
 
     console.log(`[KB-WEBHOOK] Received callback for document: ${document_id}, status: ${status}`)
+    console.log(`[KB-WEBHOOK] Full payload:`, JSON.stringify(payload))
 
     if (!document_id) {
       return new Response(
@@ -55,9 +57,16 @@ serve(async (req) => {
       updateData.chunk_count = chunk_count
     }
 
-    if (description) {
+    // If status is 'failed' and there's an error_message, store it in description
+    if (status === 'failed' && error_message) {
+      updateData.description = `Error: ${error_message}`
+      console.log(`[KB-WEBHOOK] Storing error message: ${error_message}`)
+    } else if (description) {
+      // Only update description if provided and not a failure
       updateData.description = description
     }
+
+    console.log(`[KB-WEBHOOK] Updating document ${document_id} with:`, JSON.stringify(updateData))
 
     const { error: updateError } = await supabase
       .from('knowledge_documents')
@@ -69,10 +78,10 @@ serve(async (req) => {
       throw updateError
     }
 
-    console.log(`[KB-WEBHOOK] Document ${document_id} updated successfully`)
+    console.log(`[KB-WEBHOOK] Document ${document_id} updated successfully with status: ${status}`)
 
     return new Response(
-      JSON.stringify({ success: true, document_id }),
+      JSON.stringify({ success: true, document_id, status }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 

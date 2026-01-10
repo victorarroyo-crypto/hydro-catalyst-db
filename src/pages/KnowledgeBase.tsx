@@ -46,6 +46,7 @@ interface KnowledgeDocument {
   status: string;
   chunk_count: number;
   created_at: string;
+  updated_at?: string;
   description: string | null;
   category: string | null;
   sector: string | null;
@@ -58,7 +59,18 @@ interface GroupedDocument {
   mainDoc: KnowledgeDocument;
   parts: KnowledgeDocument[];
   processedCount: number;
+  failedCount: number;
+  stuckCount: number;
   totalChunks: number;
+}
+
+// Helper to detect stuck processing documents (>30 min in processing)
+function isStuckProcessing(doc: KnowledgeDocument): boolean {
+  if (doc.status !== 'processing') return false;
+  const updatedAt = new Date(doc.updated_at || doc.created_at);
+  const now = new Date();
+  const thirtyMinutes = 30 * 60 * 1000;
+  return (now.getTime() - updatedAt.getTime()) > thirtyMinutes;
 }
 
 // Function to group document parts
@@ -112,6 +124,8 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
     });
     
     const processedCount = parts.filter(p => p.status === 'processed').length;
+    const failedCount = parts.filter(p => p.status === 'failed' || p.status === 'error').length;
+    const stuckCount = parts.filter(p => isStuckProcessing(p)).length;
     const totalChunks = parts.reduce((sum, p) => sum + (p.chunk_count || 0), 0);
     
     result.push({
@@ -121,6 +135,8 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
       mainDoc: parts[0], // First part (or base doc) has the description
       parts,
       processedCount,
+      failedCount,
+      stuckCount,
       totalChunks
     });
   });
@@ -128,6 +144,8 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
   // Add remaining standalone documents (those not merged into groups)
   standalone.forEach(doc => {
     if (standaloneToRemove.has(doc.id)) return;
+    const isFailed = doc.status === 'failed' || doc.status === 'error';
+    const isStuck = isStuckProcessing(doc);
     result.push({
       baseName: doc.name.replace(/\.pdf$/i, ''),
       isMultiPart: false,
@@ -135,6 +153,8 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
       mainDoc: doc,
       parts: [doc],
       processedCount: doc.status === 'processed' ? 1 : 0,
+      failedCount: isFailed ? 1 : 0,
+      stuckCount: isStuck ? 1 : 0,
       totalChunks: doc.chunk_count || 0
     });
   });
@@ -1195,16 +1215,86 @@ export default function KnowledgeBase() {
   };
 
   // Helpers
-  const getStatusBadge = (status: string) => {
+  // State for batch reprocessing
+  const [batchReprocessing, setBatchReprocessing] = useState<string | null>(null);
+
+  const getStatusBadge = (status: string, doc?: KnowledgeDocument) => {
+    // Check for stuck processing first
+    if (status === 'processing' && doc && isStuckProcessing(doc)) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="destructive" className="cursor-help">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Atascado
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Procesando por más de 30 min. Clic en reprocesar.</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    
     switch (status) {
       case "processed":
         return <Badge className="bg-green-500">Procesado</Badge>;
       case "processing":
         return <Badge className="bg-yellow-500">Procesando</Badge>;
+      case "failed":
       case "error":
         return <Badge variant="destructive">Error</Badge>;
       default:
         return <Badge variant="secondary">Pendiente</Badge>;
+    }
+  };
+
+  // Batch reprocess all failed/stuck parts
+  const handleBatchReprocess = async (group: GroupedDocument) => {
+    const toReprocess = group.parts.filter(p => 
+      p.status === 'failed' || 
+      p.status === 'error' || 
+      p.status === 'pending' ||
+      isStuckProcessing(p)
+    );
+    
+    if (toReprocess.length === 0) {
+      toast.info("No hay partes para reprocesar");
+      return;
+    }
+    
+    setBatchReprocessing(group.baseName);
+    toast.info(`Reprocesando ${toReprocess.length} partes...`);
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const doc of toReprocess) {
+      try {
+        const { error } = await supabase.functions.invoke('process-knowledge-document', {
+          body: { documentId: doc.id, forceReprocess: true },
+        });
+        if (error) {
+          errorCount++;
+          console.error(`Error reprocessing ${doc.name}:`, error);
+        } else {
+          successCount++;
+        }
+      } catch (err) {
+        errorCount++;
+        console.error(`Error reprocessing ${doc.name}:`, err);
+      }
+    }
+    
+    setBatchReprocessing(null);
+    queryClient.invalidateQueries({ queryKey: ['knowledge-documents'] });
+    
+    if (errorCount === 0) {
+      toast.success(`${successCount} partes enviadas a reprocesar`);
+    } else {
+      toast.warning(`${successCount} enviadas, ${errorCount} errores`);
     }
   };
 
@@ -1537,10 +1627,23 @@ export default function KnowledgeBase() {
                       <span className="text-xs text-muted-foreground shrink-0">
                         └─ Parte {partNumber} de {totalParts}
                       </span>
-                      {getStatusBadge(doc.status)}
+                      {getStatusBadge(doc.status, doc)}
                       <span className="text-xs text-muted-foreground">
                         {doc.chunk_count || 0} chunks
                       </span>
+                      {/* Show error message if available */}
+                      {(doc.status === 'failed' || doc.status === 'error') && doc.description?.startsWith('Error:') && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <AlertCircle className="h-3 w-3 text-destructive cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p className="text-xs">{doc.description}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <TooltipProvider>
@@ -1582,14 +1685,30 @@ export default function KnowledgeBase() {
                 );
                 
                 // Helper to render document group actions
-                const renderGroupActions = (group: GroupedDocument, doc: KnowledgeDocument) => (
-                  <div className="flex items-center gap-1 shrink-0">
+                const renderGroupActions = (group: GroupedDocument, doc: KnowledgeDocument) => {
+                  const hasFailedOrStuck = group.failedCount > 0 || group.stuckCount > 0;
+                  const toReprocessCount = group.parts.filter(p => 
+                    p.status === 'failed' || 
+                    p.status === 'error' || 
+                    p.status === 'pending' ||
+                    isStuckProcessing(p)
+                  ).length;
+                  
+                  return (
+                  <div className="flex items-center gap-1 shrink-0 flex-wrap">
                     {group.isMultiPart ? (
-                      <Badge variant="outline" className="text-xs">
-                        {group.processedCount}/{group.totalParts} procesados
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge variant="outline" className="text-xs">
+                          {group.processedCount}/{group.totalParts} procesados
+                        </Badge>
+                        {hasFailedOrStuck && (
+                          <Badge variant="destructive" className="text-xs">
+                            {group.failedCount + group.stuckCount} fallidas
+                          </Badge>
+                        )}
+                      </div>
                     ) : (
-                      getStatusBadge(doc.status)
+                      getStatusBadge(doc.status, doc)
                     )}
                     <TooltipProvider>
                       <Tooltip>
@@ -1601,6 +1720,34 @@ export default function KnowledgeBase() {
                         <TooltipContent>{group.isMultiPart ? 'Descargar parte 1' : 'Descargar PDF'}</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                    {/* Batch reprocess for multi-part with failures */}
+                    {canManage && group.isMultiPart && toReprocessCount > 0 && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              className="text-destructive border-destructive hover:bg-destructive/10"
+                              onClick={() => handleBatchReprocess(group)}
+                              disabled={batchReprocessing === group.baseName}
+                            >
+                              {batchReprocessing === group.baseName ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <RotateCcw className="h-4 w-4 mr-1" />
+                                  {toReprocessCount}
+                                </>
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Reprocesar {toReprocessCount} partes (fallidas, atascadas o pendientes)
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     {canManage && !group.isMultiPart && (
                       <TooltipProvider>
                         <Tooltip>
@@ -1669,7 +1816,7 @@ export default function KnowledgeBase() {
                       </>
                     )}
                   </div>
-                );
+                );};
                 
                 return viewMode.documents === 'list' ? (
                 <div className="space-y-2">
@@ -1989,7 +2136,7 @@ export default function KnowledgeBase() {
                                 {group.totalParts} partes
                               </Badge>
                             ) : (
-                              getStatusBadge(doc.status)
+                              getStatusBadge(doc.status, doc)
                             )}
                           </div>
                         </CardHeader>
