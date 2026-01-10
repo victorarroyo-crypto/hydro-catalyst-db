@@ -219,6 +219,8 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   };
 
   const handleFormSaved = async () => {
+    // Clear IndexedDB files after successful save
+    await clearFiles();
     // Close modal and refresh
     if (onCompleted) {
       onCompleted();
@@ -255,8 +257,8 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={(value) => {
-      if (!value && (step === 'processing' || step === 'form')) {
-        // Prevent closing during processing/form by clicking outside
+      if (!value && step === 'processing') {
+        // Only prevent closing during processing (not form step)
         return;
       }
       handleClose();
@@ -424,11 +426,24 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
         ) : (
           /* Form step */
           currentJobId && (
-            <CaseStudyFormView
-              jobId={currentJobId}
-              onBack={handleFormBack}
-              onSaved={handleFormSaved}
-            />
+            <>
+              <DialogHeader>
+                <div className="flex items-center justify-between">
+                  <DialogTitle className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    Completar Caso de Estudio
+                  </DialogTitle>
+                  <Button variant="ghost" size="icon" onClick={handleClose} className="h-8 w-8">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </DialogHeader>
+              <CaseStudyFormView
+                jobId={currentJobId}
+                onBack={handleFormBack}
+                onSaved={handleFormSaved}
+              />
+            </>
           )
         )}
       </DialogContent>
