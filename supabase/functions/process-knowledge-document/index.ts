@@ -69,9 +69,27 @@ serve(async (req) => {
       console.error(`[KB-PROCESS] Error updating status:`, updateError)
     }
 
-    // Build public URL for the file
-    const file_url = `${supabaseUrl}/storage/v1/object/public/knowledge-documents/${document.file_path}`
-    console.log(`[KB-PROCESS] File URL: ${file_url}`)
+    // Generate signed URL (valid for 1 hour) - bucket is not public
+    const { data: signedUrlData, error: signedError } = await supabase.storage
+      .from('knowledge-documents')
+      .createSignedUrl(document.file_path, 3600) // 3600 seconds = 1 hour
+
+    if (signedError || !signedUrlData?.signedUrl) {
+      console.error(`[KB-PROCESS] Error creating signed URL:`, signedError)
+      
+      await supabase
+        .from('knowledge_documents')
+        .update({ status: 'error', updated_at: new Date().toISOString() })
+        .eq('id', documentId)
+      
+      return new Response(
+        JSON.stringify({ error: `Error creating signed URL: ${signedError?.message}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const file_url = signedUrlData.signedUrl
+    console.log(`[KB-PROCESS] Signed URL created for ${document.name}`)
 
     // Get Railway config from secrets
     const railwayUrl = Deno.env.get('RAILWAY_API_URL')
