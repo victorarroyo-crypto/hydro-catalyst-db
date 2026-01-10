@@ -48,6 +48,17 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // Extended CaseStudy type with new fields
 interface CaseStudy {
@@ -127,20 +138,9 @@ const getStatusBadge = (status: string | null) => {
   return found ? { color: found.color, label: found.label } : { color: 'bg-muted text-muted-foreground', label: status || 'Sin estado' };
 };
 
-interface CaseStudiesSectionProps {
-  onViewCase?: (caseStudy: CaseStudy) => void;
-  onEditCase?: (caseStudy: CaseStudy) => void;
-  onDeleteCase?: (caseStudy: CaseStudy) => void;
-}
-
-export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
-  onViewCase,
-  onEditCase,
-  onDeleteCase,
-}) => {
+export const CaseStudiesSection: React.FC = () => {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
-  const isAdmin = profile?.role === 'admin';
   const canManage = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
   // Modal state
@@ -151,6 +151,11 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
   
   // Edit mode state
   const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
+
+  // Delete confirmation state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [caseToDelete, setCaseToDelete] = useState<CaseStudy | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // View mode
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -217,6 +222,44 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
     return techCounts?.[caseId] || [];
   };
 
+  // Handle delete case study
+  const handleDeleteCase = async () => {
+    if (!caseToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      // First delete associated technologies
+      await supabase
+        .from('case_study_technologies')
+        .delete()
+        .eq('case_study_id', caseToDelete.id);
+      
+      // Then delete the case study
+      const { error } = await supabase
+        .from('casos_de_estudio')
+        .delete()
+        .eq('id', caseToDelete.id);
+      
+      if (error) throw error;
+      
+      toast.success('Caso de estudio eliminado correctamente');
+      queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
+      queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
+    } catch (error) {
+      console.error('Error deleting case study:', error);
+      toast.error('Error al eliminar el caso de estudio');
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setCaseToDelete(null);
+    }
+  };
+
+  const openDeleteDialog = (caseStudy: CaseStudy) => {
+    setCaseToDelete(caseStudy);
+    setDeleteDialogOpen(true);
+  };
+
   // Render quality score bar
   const renderQualityBar = (score: number | null) => {
     const value = score ?? 0;
@@ -264,24 +307,20 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
           <Eye className="h-4 w-4 mr-2" />
           Ver detalle
         </DropdownMenuItem>
-        {canManage && (
-          <DropdownMenuItem onClick={() => onEditCase?.(caseStudy)}>
-            <Edit className="h-4 w-4 mr-2" />
-            Editar
-          </DropdownMenuItem>
-        )}
-        {isAdmin && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              onClick={() => onDeleteCase?.(caseStudy)}
-              className="text-destructive focus:text-destructive"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Eliminar
-            </DropdownMenuItem>
-          </>
-        )}
+        <DropdownMenuItem onClick={() => {
+          setEditingCaseId(caseStudy.id);
+        }}>
+          <Edit className="h-4 w-4 mr-2" />
+          Editar
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem 
+          onClick={() => openDeleteDialog(caseStudy)}
+          className="text-destructive focus:text-destructive"
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          Eliminar
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -309,6 +348,10 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
         onEdit={() => {
           setEditingCaseId(selectedCaseId);
           setSelectedCaseId(null);
+        }}
+        onDelete={() => {
+          queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
+          queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
         }}
       />
     );
@@ -496,7 +539,7 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => onViewCase?.(cs)}
+                      onClick={() => setSelectedCaseId(cs.id)}
                     >
                       Ver detalle
                     </Button>
@@ -533,7 +576,7 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
                     <TableCell>
                       <button 
                         className="font-medium text-left hover:text-primary transition-colors"
-                        onClick={() => onViewCase?.(cs)}
+                        onClick={() => setSelectedCaseId(cs.id)}
                       >
                         {cs.name.length > 40 ? cs.name.slice(0, 40) + '...' : cs.name}
                       </button>
@@ -589,12 +632,41 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
       <NewCaseStudyModal
         open={isNewCaseModalOpen}
         onOpenChange={setIsNewCaseModalOpen}
-      onCompleted={() => {
+        onCompleted={() => {
           // Refresh case studies list after processing completes
           queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
           queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
         }}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar caso de estudio?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente el caso de estudio "{caseToDelete?.name}" y todas sus tecnologías asociadas. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCase}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                'Eliminar'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

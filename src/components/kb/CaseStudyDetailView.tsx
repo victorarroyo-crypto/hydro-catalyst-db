@@ -11,7 +11,7 @@ import {
   ArrowLeft,
   Download,
   Edit,
-  Archive,
+  Trash2,
   MapPin,
   TrendingUp,
   DollarSign,
@@ -27,7 +27,19 @@ import {
   Calendar,
   Building2,
   Loader2,
+  Users,
+  Globe,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateCaseStudyWordDocument } from '@/lib/generateCaseStudyWordDocument';
 import { toast } from 'sonner';
@@ -78,6 +90,7 @@ interface CaseStudyDetailViewProps {
   caseStudyId: string;
   onBack: () => void;
   onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 interface CaseStudyFull {
@@ -115,11 +128,13 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   caseStudyId,
   onBack,
   onEdit,
+  onDelete,
 }) => {
   const { profile } = useAuth();
-  const canManage = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch case study
   const { data: caseStudy, isLoading } = useQuery({
@@ -193,9 +208,33 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     }
   };
 
-  const handleArchive = async () => {
-    // TODO: Implement archive
-    console.log('Archive case study');
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      // First delete associated technologies
+      await supabase
+        .from('case_study_technologies')
+        .delete()
+        .eq('case_study_id', caseStudyId);
+      
+      // Then delete the case study
+      const { error } = await supabase
+        .from('casos_de_estudio')
+        .delete()
+        .eq('id', caseStudyId);
+      
+      if (error) throw error;
+      
+      toast.success('Caso de estudio eliminado correctamente');
+      onDelete?.();
+      onBack();
+    } catch (error) {
+      console.error('Error deleting case study:', error);
+      toast.error('Error al eliminar el caso de estudio');
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+    }
   };
 
   if (isLoading) {
@@ -286,12 +325,14 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
             <Edit className="h-4 w-4 mr-2" />
             Editar
           </Button>
-          {canManage && (
-            <Button variant="outline" onClick={handleArchive}>
-              <Archive className="h-4 w-4 mr-2" />
-              Archivar
-            </Button>
-          )}
+          <Button 
+            variant="outline" 
+            onClick={() => setDeleteDialogOpen(true)}
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Eliminar
+          </Button>
         </div>
       </div>
 
@@ -624,6 +665,35 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar caso de estudio?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente el caso de estudio "{caseStudy.name}" y todas sus tecnologías asociadas. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                'Eliminar'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
