@@ -354,7 +354,6 @@ export default function AdvisorChat() {
                             <Badge variant="secondary" className="text-[10px] h-4 px-1">
                               {source.type}
                             </Badge>
-                            <span className="ml-auto">{Math.round(source.similarity * 100)}% relevancia</span>
                           </div>
                         </div>
                       ))}
