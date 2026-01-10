@@ -32,22 +32,21 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useCaseStudyFiles } from '@/hooks/useCaseStudyFiles';
+import { PAISES } from '@/constants/taxonomyData';
 
-// Sector options matching Documentos Técnicos + Municipal
+// Sector options matching Documentos Técnicos
 const SECTOR_OPTIONS = [
-  { value: 'PAPEL', label: 'Papel y Celulosa' },
-  { value: 'ALIMENTACION', label: 'Alimentación y Bebidas' },
-  { value: 'QUIMICO', label: 'Químico y Farmacéutico' },
-  { value: 'TEXTIL', label: 'Textil' },
-  { value: 'ENERGIA', label: 'Energía' },
-  { value: 'MINERIA', label: 'Minería y Metales' },
-  { value: 'MUNICIPAL', label: 'Municipal' },
-];
-
-const COUNTRY_OPTIONS = [
-  'España', 'México', 'Argentina', 'Chile', 'Colombia', 'Perú', 
-  'Brasil', 'Estados Unidos', 'Alemania', 'Francia', 'Italia',
-  'Reino Unido', 'China', 'India', 'Japón', 'Australia', 'Otro'
+  { value: 'general', label: 'General', icon: '🌐' },
+  { value: 'food_beverage', label: 'Alimentación y Bebidas', icon: '🍔' },
+  { value: 'pulp_paper', label: 'Celulosa y Papel', icon: '📜' },
+  { value: 'textile', label: 'Textil', icon: '👕' },
+  { value: 'chemical', label: 'Química', icon: '⚗️' },
+  { value: 'pharma', label: 'Farmacéutica', icon: '💊' },
+  { value: 'oil_gas', label: 'Oil & Gas', icon: '⛽' },
+  { value: 'metal', label: 'Metal-Mecánica', icon: '🔩' },
+  { value: 'mining', label: 'Minería', icon: '⛏️' },
+  { value: 'power', label: 'Energía', icon: '⚡' },
+  { value: 'municipal', label: 'Municipal', icon: '🏛️' },
 ];
 
 interface Parameter {
@@ -413,13 +412,13 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
       }
 
       // Insert into casos_de_estudio
+      // Note: subsector is stored in original_data since there's no subsector_industrial column
       const { data: caseStudy, error: insertError } = await supabase
         .from('casos_de_estudio')
         .insert({
           name: title.trim(),
           sector,
           country,
-          subsector_industrial: subsector.trim() || null,
           description: problemDescription.trim(),
           problem_parameters: problemParamsJson,
           solution_applied: solutionDescription.trim(),
@@ -434,6 +433,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
           lessons_learned: lessonsLearned.trim() || null,
           quality_score: qualityScore || null,
           status,
+          original_data: subsector.trim() ? { subsector: subsector.trim() } : null,
         })
         .select('id')
         .single();
@@ -530,7 +530,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                     <SelectContent>
                       {SECTOR_OPTIONS.map(opt => (
                         <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
+                          {opt.icon} {opt.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -544,7 +544,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                       <SelectValue placeholder="Seleccionar país" />
                     </SelectTrigger>
                     <SelectContent>
-                      {COUNTRY_OPTIONS.map(c => (
+                      {PAISES.map(c => (
                         <SelectItem key={c} value={c}>
                           {c}
                         </SelectItem>
