@@ -188,6 +188,12 @@ export default function KnowledgeBase() {
   const [uploadCategory, setUploadCategory] = useState<string>('technical_guide');
   const [uploadSector, setUploadSector] = useState<string>('general');
   
+  // Upload modal state
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadDescription, setUploadDescription] = useState("");
+  const [generatingDescription, setGeneratingDescription] = useState(false);
+  
   // Edit category modal state
   const [editingCategoryDocId, setEditingCategoryDocId] = useState<string | null>(null);
   const [editCategory, setEditCategory] = useState<string>('');
@@ -332,7 +338,7 @@ export default function KnowledgeBase() {
 
   // Document mutations
   const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, description }: { file: File; description?: string }) => {
       console.log("[KB-UPLOAD] Starting upload for:", file.name, "Size:", (file.size / 1024 / 1024).toFixed(2), "MB");
       
       const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -371,6 +377,7 @@ export default function KnowledgeBase() {
           status: "pending",
           category: uploadCategory,
           sector: uploadSector,
+          description: description || null,
           uploaded_by: authData.user.id,
         })
         .select()
@@ -877,28 +884,72 @@ export default function KnowledgeBase() {
     }
   };
 
-  // File upload handler
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // File select handler - opens modal
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.type !== "application/pdf") {
       toast.error("Solo se permiten archivos PDF");
+      e.target.value = "";
       return;
     }
 
     if (file.size > 100 * 1024 * 1024) {
       toast.error("El archivo no puede superar 100MB");
+      e.target.value = "";
       return;
     }
 
+    setSelectedFile(file);
+    setUploadDescription("");
+    setShowUploadModal(true);
+    e.target.value = "";
+  };
+
+  // Generate description with AI
+  const handleGenerateDescription = async () => {
+    if (!selectedFile) return;
+    
+    setGeneratingDescription(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-document-description', {
+        body: {
+          fileName: selectedFile.name,
+          category: uploadCategory,
+          sector: uploadSector,
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      setUploadDescription(data.description || '');
+      toast.success("Descripción generada");
+    } catch (error) {
+      console.error('Generate description error:', error);
+      toast.error("Error al generar descripción");
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
+
+  // Confirm upload from modal
+  const handleConfirmUpload = async () => {
+    if (!selectedFile) return;
+
+    setShowUploadModal(false);
     setUploading(true);
     setUploadProgress(null);
     
     try {
-      console.log("[KB-UPLOAD-HANDLER] Starting file upload process:", file.name);
+      console.log("[KB-UPLOAD-HANDLER] Starting file upload process:", selectedFile.name);
       toast.info("Analizando documento...");
-      const { parts, totalPages, wasSplit } = await splitPdfIfNeeded(file);
+      const { parts, totalPages, wasSplit } = await splitPdfIfNeeded(selectedFile);
       console.log("[KB-UPLOAD-HANDLER] Split result:", { parts: parts.length, totalPages, wasSplit });
       
       if (wasSplit) {
@@ -912,7 +963,11 @@ export default function KnowledgeBase() {
         console.log(`[KB-UPLOAD-HANDLER] Uploading part ${i + 1}/${parts.length}:`, part.name);
         setUploadProgress({ current: i + 1, total: parts.length });
         const partFile = new File([part.blob], part.name, { type: "application/pdf" });
-        await uploadMutation.mutateAsync(partFile);
+        // Pass description only for the first part (or all parts share same description)
+        await uploadMutation.mutateAsync({ 
+          file: partFile, 
+          description: i === 0 ? uploadDescription : undefined 
+        });
         console.log(`[KB-UPLOAD-HANDLER] Part ${i + 1} uploaded successfully`);
       }
       
@@ -927,7 +982,8 @@ export default function KnowledgeBase() {
     } finally {
       setUploading(false);
       setUploadProgress(null);
-      e.target.value = "";
+      setSelectedFile(null);
+      setUploadDescription("");
     }
   };
 
@@ -1203,7 +1259,7 @@ export default function KnowledgeBase() {
                       type="file"
                       id="file-upload"
                       accept=".pdf"
-                      onChange={handleFileUpload}
+                      onChange={handleFileSelect}
                       className="hidden"
                       disabled={uploading}
                     />
@@ -2558,6 +2614,128 @@ export default function KnowledgeBase() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Document Modal */}
+      <Dialog open={showUploadModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowUploadModal(false);
+          setSelectedFile(null);
+          setUploadDescription("");
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Subir Documento
+            </DialogTitle>
+            <DialogDescription>
+              Añade una descripción antes de subir el documento
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* File info */}
+            {selectedFile && (
+              <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                <FileText className="h-8 w-8 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{selectedFile.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Description field */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Descripción</Label>
+                <span className="text-xs text-muted-foreground">
+                  {uploadDescription.length}/300
+                </span>
+              </div>
+              <Textarea
+                placeholder="Describe brevemente el contenido del documento..."
+                value={uploadDescription}
+                onChange={(e) => setUploadDescription(e.target.value.slice(0, 300))}
+                className="min-h-[100px] resize-none"
+                maxLength={300}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={handleGenerateDescription}
+                disabled={generatingDescription || !selectedFile}
+              >
+                {generatingDescription ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                Generar con IA
+              </Button>
+            </div>
+
+            {/* Category selector */}
+            <div className="space-y-2">
+              <Label>Tipo de documento</Label>
+              <Select value={uploadCategory} onValueChange={setUploadCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_CATEGORY_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.icon} {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Sector selector */}
+            <div className="space-y-2">
+              <Label>Industria</Label>
+              <Select value={uploadSector} onValueChange={setUploadSector}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una industria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_SECTOR_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.icon} {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowUploadModal(false);
+              setSelectedFile(null);
+              setUploadDescription("");
+            }}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleConfirmUpload}
+              disabled={!selectedFile || uploading}
+            >
+              {uploading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Upload className="h-4 w-4 mr-2" />
+              )}
+              Subir documento
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

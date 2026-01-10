@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.search-scouting-sources]
 verify_jwt = false
+
+[functions.generate-document-description]
+verify_jwt = false
