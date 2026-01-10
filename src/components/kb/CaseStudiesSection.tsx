@@ -61,16 +61,53 @@ interface CaseStudy {
   created_at: string;
 }
 
+// Sector options (same as Documents + Municipal)
+const SECTOR_OPTIONS = [
+  { value: 'general', label: 'General', icon: '🌐' },
+  { value: 'food_beverage', label: 'Alimentación y Bebidas', icon: '🍔' },
+  { value: 'pulp_paper', label: 'Celulosa y Papel', icon: '📜' },
+  { value: 'textile', label: 'Textil', icon: '👕' },
+  { value: 'chemical', label: 'Química', icon: '⚗️' },
+  { value: 'pharma', label: 'Farmacéutica', icon: '💊' },
+  { value: 'oil_gas', label: 'Oil & Gas', icon: '⛽' },
+  { value: 'metal', label: 'Metal-Mecánica', icon: '🔩' },
+  { value: 'mining', label: 'Minería', icon: '⛏️' },
+  { value: 'power', label: 'Energía', icon: '⚡' },
+  { value: 'electronics', label: 'Electrónica/Semiconductores', icon: '💻' },
+  { value: 'automotive', label: 'Automoción', icon: '🚗' },
+  { value: 'cosmetics', label: 'Cosmética', icon: '🧴' },
+  { value: 'municipal', label: 'Municipal', icon: '🏛️' },
+];
+
 // Sector colors mapping
 const SECTOR_COLORS: Record<string, string> = {
-  'pharma': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
-  'food': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  'general': 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300',
+  'food_beverage': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  'pulp_paper': 'bg-stone-100 text-stone-800 dark:bg-stone-900/30 dark:text-stone-300',
   'textile': 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300',
   'chemical': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+  'pharma': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+  'oil_gas': 'bg-zinc-100 text-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-300',
+  'metal': 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300',
+  'mining': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  'power': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  'electronics': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300',
+  'automotive': 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
+  'cosmetics': 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300',
   'municipal': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-  'water': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
-  'energy': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  'agriculture': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+};
+
+// Get sector label from value
+const getSectorLabel = (sectorValue: string | null): string => {
+  if (!sectorValue) return 'Sin sector';
+  const sector = SECTOR_OPTIONS.find(s => s.value === sectorValue);
+  return sector?.label || sectorValue;
+};
+
+// Helper to get badge color for sector
+const getSectorBadge = (sector: string | null) => {
+  if (!sector) return 'bg-muted text-muted-foreground';
+  return SECTOR_COLORS[sector] || 'bg-muted text-muted-foreground';
 };
 
 // Status options
@@ -80,13 +117,6 @@ const STATUS_OPTIONS = [
   { value: 'approved', label: 'Aprobado', color: 'bg-accent/20 text-accent' },
   { value: 'archived', label: 'Archivado', color: 'bg-secondary/20 text-secondary' },
 ];
-
-// Helper to get badge color for sector
-const getSectorBadge = (sector: string | null) => {
-  if (!sector) return 'bg-muted text-muted-foreground';
-  const key = sector.toLowerCase();
-  return SECTOR_COLORS[key] || 'bg-muted text-muted-foreground';
-};
 
 // Helper to get badge color for status
 const getStatusBadge = (status: string | null) => {
@@ -119,19 +149,6 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
   const [sectorFilter, setSectorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // Fetch sectors from taxonomy
-  const { data: sectors } = useQuery({
-    queryKey: ['taxonomy-sectores'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('taxonomy_sectores')
-        .select('id, nombre')
-        .order('nombre');
-      if (error) throw error;
-      return data;
-    },
-  });
-
   // Fetch case studies with new fields
   const { data: caseStudies, isLoading } = useQuery({
     queryKey: ['case-studies-enhanced'],
@@ -145,13 +162,6 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
       return data as CaseStudy[];
     },
   });
-
-  // Get sector name by id
-  const getSectorName = (sectorId: string | null) => {
-    if (!sectorId) return null;
-    const sector = sectors?.find(s => s.id === sectorId);
-    return sector?.nombre || sectorId;
-  };
 
   // Filter case studies
   const filteredCases = caseStudies?.filter(cs => {
@@ -306,13 +316,13 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
           <div className="flex flex-wrap items-center gap-3">
             {/* Sector filter */}
             <Select value={sectorFilter} onValueChange={setSectorFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[220px]">
                 <SelectValue placeholder="Sector" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los sectores</SelectItem>
-                {sectors?.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
+                {SECTOR_OPTIONS.map(s => (
+                  <SelectItem key={s.value} value={s.value}>{s.icon} {s.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -401,8 +411,8 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
                   {/* Badges */}
                   <div className="flex items-center gap-2 mb-2">
                     {cs.sector && (
-                      <Badge className={`text-xs ${getSectorBadge(getSectorName(cs.sector))}`}>
-                        {getSectorName(cs.sector)}
+                      <Badge className={`text-xs ${getSectorBadge(cs.sector)}`}>
+                        {getSectorLabel(cs.sector)}
                       </Badge>
                     )}
                     <Badge className={`text-xs ${statusInfo.color}`}>
@@ -491,8 +501,8 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
                     </TableCell>
                     <TableCell>
                       {cs.sector ? (
-                        <Badge className={`text-xs ${getSectorBadge(getSectorName(cs.sector))}`}>
-                          {getSectorName(cs.sector)}
+                        <Badge className={`text-xs ${getSectorBadge(cs.sector)}`}>
+                          {getSectorLabel(cs.sector)}
                         </Badge>
                       ) : '—'}
                     </TableCell>
