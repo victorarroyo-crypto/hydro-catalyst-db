@@ -80,3 +80,15 @@ verify_jwt = false
 
 [functions.sync-advisor-embeddings]
 verify_jwt = false
+
+[functions.sync-knowledge-chunks]
+verify_jwt = false
+
+[functions.generate-chunk-embeddings]
+verify_jwt = false
+
+[functions.sync-processor]
+verify_jwt = false
+
+[functions.sync-reconcile]
+verify_jwt = false
