@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,7 +20,7 @@ import {
   AlertCircle, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, 
   RefreshCw, DollarSign, Info, Globe, TrendingUp, Star, MapPin, 
   Building2, ExternalLink, Calendar, Plus, RotateCcw, Edit, LayoutGrid, List,
-  Database, ArrowRight, Lightbulb, Send, Play, ChevronDown, ChevronRight
+  Database, ArrowRight, Lightbulb, Send, Play, ChevronDown, ChevronRight, Pause
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useAuth } from "@/contexts/AuthContext";
@@ -285,6 +285,12 @@ export default function KnowledgeBase() {
   // Documents state
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  
+  // Multi-part upload progress state with pause/continue
+  const [isProcessingMultiPart, setIsProcessingMultiPart] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const pauseRef = useRef<boolean>(false);
+  const [multiPartStats, setMultiPartStats] = useState({ processed: 0, failed: 0, pending: 0 });
   const [query, setQuery] = useState("");
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [querying, setQuerying] = useState(false);
@@ -1156,10 +1162,11 @@ export default function KnowledgeBase() {
 
   // Confirm upload from modal
   // Process parts with concurrency limit to avoid overwhelming Railway
+  // Supports pause/resume functionality
   const processWithConcurrencyLimit = async (
     parts: Array<{ blob: Blob; name: string; pageRange: string }>,
     concurrencyLimit: number = 3
-  ): Promise<{ processed: number; failed: number }> => {
+  ): Promise<{ processed: number; failed: number; wasCancelled: boolean }> => {
     const queue = [...parts];
     let processed = 0;
     let failed = 0;
@@ -1174,17 +1181,31 @@ export default function KnowledgeBase() {
           description: index === 0 ? uploadDescription : undefined 
         });
         processed++;
+        setMultiPartStats(prev => ({ ...prev, processed: prev.processed + 1, pending: prev.pending - 1 }));
         console.log(`[KB-UPLOAD-HANDLER] Part ${index + 1} completed successfully`);
       } catch (error) {
         failed++;
+        setMultiPartStats(prev => ({ ...prev, failed: prev.failed + 1, pending: prev.pending - 1 }));
         console.error(`[KB-UPLOAD-HANDLER] Part ${index + 1} failed:`, error);
       }
       setUploadProgress({ current: processed + failed, total: parts.length });
     };
 
+    // Helper to wait while paused
+    const waitWhilePaused = async () => {
+      while (pauseRef.current) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    };
+
     let partIndex = 0;
 
     while (queue.length > 0 || inProgress.length > 0) {
+      // Check for pause before starting new parts
+      if (pauseRef.current && queue.length > 0) {
+        await waitWhilePaused();
+      }
+
       // Fill up to concurrency limit
       while (inProgress.length < concurrencyLimit && queue.length > 0) {
         const part = queue.shift()!;
@@ -1202,7 +1223,7 @@ export default function KnowledgeBase() {
       }
     }
 
-    return { processed, failed };
+    return { processed, failed, wasCancelled: false };
   };
 
   const handleConfirmUpload = async () => {
@@ -1212,6 +1233,10 @@ export default function KnowledgeBase() {
     setUploading(true);
     setUploadProgress(null);
     
+    // Reset pause state
+    pauseRef.current = false;
+    setIsPaused(false);
+    
     try {
       console.log("[KB-UPLOAD-HANDLER] Starting file upload process:", selectedFile.name);
       toast.info("Analizando documento...");
@@ -1220,6 +1245,8 @@ export default function KnowledgeBase() {
       
       if (wasSplit) {
         toast.info(`Documento dividido en ${parts.length} partes (${totalPages} páginas total). Procesando con límite de 3 concurrentes...`);
+        setIsProcessingMultiPart(true);
+        setMultiPartStats({ processed: 0, failed: 0, pending: parts.length });
       }
       
       setUploadProgress({ current: 0, total: parts.length });
@@ -1242,8 +1269,11 @@ export default function KnowledgeBase() {
     } finally {
       setUploading(false);
       setUploadProgress(null);
+      setIsProcessingMultiPart(false);
       setSelectedFile(null);
       setUploadDescription("");
+      pauseRef.current = false;
+      setIsPaused(false);
     }
   };
 
@@ -1672,6 +1702,79 @@ export default function KnowledgeBase() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Multi-part upload progress card with pause/continue */}
+              {isProcessingMultiPart && uploadProgress && uploadProgress.total > 1 && (
+                <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 mb-4">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                        <span className="font-medium text-sm">
+                          Procesando parte {uploadProgress.current + 1} de {uploadProgress.total}
+                        </span>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="h-8"
+                        onClick={() => {
+                          pauseRef.current = !pauseRef.current;
+                          setIsPaused(!isPaused);
+                          if (!isPaused) {
+                            toast.info("Procesamiento pausado. Las partes en curso terminarán.");
+                          } else {
+                            toast.info("Reanudando procesamiento...");
+                          }
+                        }}
+                      >
+                        {isPaused ? (
+                          <>
+                            <Play className="h-4 w-4 mr-1" />
+                            Continuar
+                          </>
+                        ) : (
+                          <>
+                            <Pause className="h-4 w-4 mr-1" />
+                            Pausar
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    
+                    <Progress 
+                      value={(uploadProgress.current / uploadProgress.total) * 100} 
+                      className="h-2 mb-2"
+                    />
+                    
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>
+                        {Math.round((uploadProgress.current / uploadProgress.total) * 100)}% completado
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓ {multiPartStats.processed} procesadas
+                        </span>
+                        {multiPartStats.failed > 0 && (
+                          <span className="text-red-600 dark:text-red-400">
+                            ✗ {multiPartStats.failed} fallidas
+                          </span>
+                        )}
+                        <span className="text-muted-foreground">
+                          ⏳ {multiPartStats.pending} pendientes
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {isPaused && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+                        <Pause className="h-3 w-3" />
+                        Pausado - Presiona "Continuar" para reanudar
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+              
               {loadingDocs ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin" />
