@@ -152,13 +152,50 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       setCurrentJobId(job.id);
       setStep('processing');
       
-      // Here you would trigger the actual processing
-      // For now, we just created the job and will watch for updates
-      console.log('Created processing job:', job.id);
+      // Send files to Railway for processing
+      const formData = new FormData();
+      formData.append('job_id', job.id);
+      formData.append('webhook_url', 'https://bdmpshiqspkxcisnnlyr.supabase.co/functions/v1/case-study-webhook');
+      formData.append('webhook_secret', 'AquaTechWebhook26');
+      
+      // Append each file to FormData
+      for (const pendingFile of pendingFiles) {
+        if (pendingFile.file) {
+          formData.append('files', pendingFile.file, pendingFile.name);
+        }
+      }
+      
+      console.log('Sending files to Railway for job:', job.id);
+      
+      // Call Railway API
+      const railwayUrl = import.meta.env.VITE_RAILWAY_CASE_STUDY_URL || 'https://case-study-processor.railway.app/process';
+      const response = await fetch(railwayUrl, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Railway error:', errorText);
+        throw new Error(`Error al enviar a Railway: ${response.status}`);
+      }
+      
+      console.log('Files sent to Railway successfully');
       
     } catch (error) {
       console.error('Error starting processing:', error);
       toast.error('Error al iniciar el procesamiento');
+      
+      // If Railway call failed, update job status
+      if (currentJobId) {
+        await supabase
+          .from('case_study_jobs')
+          .update({ 
+            status: 'failed', 
+            error_message: error instanceof Error ? error.message : 'Error desconocido' 
+          })
+          .eq('id', currentJobId);
+      }
     } finally {
       setIsStartingProcess(false);
     }
