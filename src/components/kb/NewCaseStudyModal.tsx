@@ -130,11 +130,19 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   };
 
   const handleStartProcessing = async () => {
-    if (pendingFiles.length === 0) return;
+    console.log('[CaseStudy] handleStartProcessing called');
+    console.log('[CaseStudy] pendingFiles count:', pendingFiles.length);
+    
+    if (pendingFiles.length === 0) {
+      console.log('[CaseStudy] No pending files, returning early');
+      return;
+    }
     
     setIsStartingProcess(true);
     
     try {
+      console.log('[CaseStudy] Creating job in case_study_jobs...');
+      
       // Create a new job in case_study_jobs
       const { data: job, error } = await supabase
         .from('case_study_jobs')
@@ -147,29 +155,40 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
         .select('id')
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[CaseStudy] Error creating job:', error);
+        throw error;
+      }
 
+      console.log('[CaseStudy] Job created with ID:', job.id);
       setCurrentJobId(job.id);
       setStep('processing');
       
       // Send files to Railway for processing
+      console.log('[CaseStudy] Building FormData...');
       const formData = new FormData();
       formData.append('job_id', job.id);
       formData.append('webhook_url', 'https://bdmpshiqspkxcisnnlyr.supabase.co/functions/v1/case-study-webhook');
       formData.append('webhook_secret', 'AquaTechWebhook26');
       
       // Append each file to FormData
+      let filesAppended = 0;
       for (const pendingFile of pendingFiles) {
+        console.log('[CaseStudy] Processing file:', pendingFile.name, 'has file object:', !!pendingFile.file);
         if (pendingFile.file) {
           formData.append('files', pendingFile.file, pendingFile.name);
+          filesAppended++;
         }
       }
       
-      console.log('Sending files to Railway for job:', job.id);
+      console.log('[CaseStudy] Files appended to FormData:', filesAppended);
       
       // Call Railway API
       const railwayUrl = import.meta.env.VITE_RAILWAY_CASE_STUDY_URL || 'https://watertech-scouting-production.up.railway.app/api/case-study/upload-and-process';
       const railwaySyncSecret = import.meta.env.VITE_RAILWAY_SYNC_SECRET || 'wt-sync-2026-secure';
+      
+      console.log('[CaseStudy] Railway URL:', railwayUrl);
+      console.log('[CaseStudy] About to call fetch...');
       
       const response = await fetch(railwayUrl, {
         method: 'POST',
@@ -179,20 +198,24 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
         body: formData,
       });
       
+      console.log('[CaseStudy] Fetch completed, status:', response.status);
+      
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Railway error:', errorText);
+        console.error('[CaseStudy] Railway error response:', errorText);
         throw new Error(`Error al enviar a Railway: ${response.status}`);
       }
       
-      console.log('Files sent to Railway successfully');
+      const responseData = await response.text();
+      console.log('[CaseStudy] Railway success response:', responseData);
       
     } catch (error) {
-      console.error('Error starting processing:', error);
+      console.error('[CaseStudy] Error in handleStartProcessing:', error);
       toast.error('Error al iniciar el procesamiento');
       
       // If Railway call failed, update job status
       if (currentJobId) {
+        console.log('[CaseStudy] Updating job status to failed...');
         await supabase
           .from('case_study_jobs')
           .update({ 
@@ -202,6 +225,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
           .eq('id', currentJobId);
       }
     } finally {
+      console.log('[CaseStudy] handleStartProcessing finished');
       setIsStartingProcess(false);
     }
   };
