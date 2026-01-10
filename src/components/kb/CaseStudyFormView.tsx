@@ -64,7 +64,42 @@ interface Technology {
   role: 'Recomendada' | 'Evaluada';
 }
 
+// Nested structure from Railway
+interface ExtractedData {
+  title?: string;
+  sector?: string;
+  country?: string;
+  subsector?: string;
+  problem?: {
+    description?: string;
+    parameters?: { name: string; value: number; unit: string }[];
+  };
+  solution?: {
+    description?: string;
+    treatment_train?: string[];
+  };
+  results?: {
+    description?: string;
+    dqo_final?: number;
+    reduction?: number;
+  };
+  economic?: {
+    capex?: number;
+    opex?: number;
+    payback?: number;
+    roi?: number;
+    roi_justification?: string;
+  };
+  lessons_learned?: string;
+}
+
 interface ResultData {
+  // Nested structure from Railway
+  extracted?: ExtractedData;
+  technologies?: { name: string; provider: string; role: string }[];
+  review?: { quality_score?: number };
+  
+  // Legacy flat structure (backward compatibility)
   title?: string;
   sector?: string;
   country?: string;
@@ -82,7 +117,6 @@ interface ResultData {
   roi?: number;
   roiJustification?: string;
   lessonsLearned?: string;
-  technologies?: { name: string; provider: string; role: string }[];
   qualityScore?: number;
 }
 
@@ -157,33 +191,104 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
 
         if (job?.result_data) {
           const data = job.result_data as ResultData;
+          const extracted = data.extracted;
           
-          if (data.title) setTitle(data.title);
-          if (data.sector) setSector(data.sector);
-          if (data.country) setCountry(data.country);
-          if (data.subsector) setSubsector(data.subsector);
-          if (data.problemDescription) setProblemDescription(data.problemDescription);
-          if (data.solutionDescription) setSolutionDescription(data.solutionDescription);
-          if (data.resultsDescription) setResultsDescription(data.resultsDescription);
-          if (data.dqoFinal) setDqoFinal(String(data.dqoFinal));
-          if (data.reduction) setReduction(String(data.reduction));
-          if (data.capex) setCapex(String(data.capex));
-          if (data.opex) setOpex(String(data.opex));
-          if (data.payback) setPayback(String(data.payback));
-          if (data.roi) setRoi(String(data.roi));
-          if (data.roiJustification) setRoiJustification(data.roiJustification);
-          if (data.lessonsLearned) setLessonsLearned(data.lessonsLearned);
-          if (data.treatmentTrain) setTreatmentTrain(data.treatmentTrain);
-          
-          if (data.problemParameters && data.problemParameters.length > 0) {
-            setProblemParameters(data.problemParameters.map((p, i) => ({
-              id: String(i + 1),
-              name: p.name,
-              value: String(p.value),
-              unit: p.unit,
-            })));
+          // Try nested Railway structure first
+          if (extracted) {
+            console.log('Loading from nested Railway structure:', extracted);
+            
+            if (extracted.title) setTitle(extracted.title);
+            if (extracted.sector) setSector(extracted.sector);
+            if (extracted.country) setCountry(extracted.country);
+            if (extracted.subsector) setSubsector(extracted.subsector);
+            
+            // Problem
+            if (extracted.problem?.description) {
+              setProblemDescription(extracted.problem.description);
+            }
+            if (extracted.problem?.parameters && extracted.problem.parameters.length > 0) {
+              setProblemParameters(extracted.problem.parameters.map((p, i) => ({
+                id: String(i + 1),
+                name: p.name,
+                value: String(p.value),
+                unit: p.unit,
+              })));
+            }
+            
+            // Solution
+            if (extracted.solution?.description) {
+              setSolutionDescription(extracted.solution.description);
+            }
+            if (extracted.solution?.treatment_train) {
+              setTreatmentTrain(extracted.solution.treatment_train);
+            }
+            
+            // Results
+            if (extracted.results?.description) {
+              setResultsDescription(extracted.results.description);
+            }
+            if (extracted.results?.dqo_final) {
+              setDqoFinal(String(extracted.results.dqo_final));
+            }
+            if (extracted.results?.reduction) {
+              setReduction(String(extracted.results.reduction));
+            }
+            
+            // Economic
+            if (extracted.economic) {
+              if (extracted.economic.capex) setCapex(String(extracted.economic.capex));
+              if (extracted.economic.opex) setOpex(String(extracted.economic.opex));
+              if (extracted.economic.payback) setPayback(String(extracted.economic.payback));
+              if (extracted.economic.roi) setRoi(String(extracted.economic.roi));
+              if (extracted.economic.roi_justification) setRoiJustification(extracted.economic.roi_justification);
+              setEconomicOpen(true);
+            }
+            
+            // Lessons learned
+            if (extracted.lessons_learned) {
+              setLessonsLearned(extracted.lessons_learned);
+              setLessonsOpen(true);
+            }
+          } else {
+            // Fallback to legacy flat structure
+            console.log('Loading from flat legacy structure:', data);
+            
+            if (data.title) setTitle(data.title);
+            if (data.sector) setSector(data.sector);
+            if (data.country) setCountry(data.country);
+            if (data.subsector) setSubsector(data.subsector);
+            if (data.problemDescription) setProblemDescription(data.problemDescription);
+            if (data.solutionDescription) setSolutionDescription(data.solutionDescription);
+            if (data.resultsDescription) setResultsDescription(data.resultsDescription);
+            if (data.dqoFinal) setDqoFinal(String(data.dqoFinal));
+            if (data.reduction) setReduction(String(data.reduction));
+            if (data.capex) setCapex(String(data.capex));
+            if (data.opex) setOpex(String(data.opex));
+            if (data.payback) setPayback(String(data.payback));
+            if (data.roi) setRoi(String(data.roi));
+            if (data.roiJustification) setRoiJustification(data.roiJustification);
+            if (data.lessonsLearned) setLessonsLearned(data.lessonsLearned);
+            if (data.treatmentTrain) setTreatmentTrain(data.treatmentTrain);
+            
+            if (data.problemParameters && data.problemParameters.length > 0) {
+              setProblemParameters(data.problemParameters.map((p, i) => ({
+                id: String(i + 1),
+                name: p.name,
+                value: String(p.value),
+                unit: p.unit,
+              })));
+            }
+            
+            // Auto-expand sections if they have data
+            if (data.capex || data.opex || data.payback || data.roi) {
+              setEconomicOpen(true);
+            }
+            if (data.lessonsLearned) {
+              setLessonsOpen(true);
+            }
           }
           
+          // Technologies (at root level in both structures)
           if (data.technologies && data.technologies.length > 0) {
             setTechnologies(data.technologies.map((t, i) => ({
               id: String(i + 1),
@@ -193,12 +298,11 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             })));
           }
           
-          // Auto-expand sections if they have data
-          if (data.capex || data.opex || data.payback || data.roi) {
-            setEconomicOpen(true);
-          }
-          if (data.lessonsLearned) {
-            setLessonsOpen(true);
+          // Quality score from review or legacy
+          if (data.review?.quality_score) {
+            setQualityScore(data.review.quality_score);
+          } else if (data.qualityScore) {
+            setQualityScore(data.qualityScore);
           }
         }
       } catch (error) {
