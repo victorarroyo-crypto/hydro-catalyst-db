@@ -343,6 +343,67 @@ export type Database = {
         }
         Relationships: []
       }
+      case_study_technologies: {
+        Row: {
+          case_study_id: string
+          created_at: string
+          economic_analysis: Json | null
+          id: string
+          provider: string | null
+          role: string
+          scouting_queue_id: string | null
+          selection_rationale: string | null
+          technology_id: string | null
+          technology_name: string
+        }
+        Insert: {
+          case_study_id: string
+          created_at?: string
+          economic_analysis?: Json | null
+          id?: string
+          provider?: string | null
+          role: string
+          scouting_queue_id?: string | null
+          selection_rationale?: string | null
+          technology_id?: string | null
+          technology_name: string
+        }
+        Update: {
+          case_study_id?: string
+          created_at?: string
+          economic_analysis?: Json | null
+          id?: string
+          provider?: string | null
+          role?: string
+          scouting_queue_id?: string | null
+          selection_rationale?: string | null
+          technology_id?: string | null
+          technology_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_study_technologies_case_study_id_fkey"
+            columns: ["case_study_id"]
+            isOneToOne: false
+            referencedRelation: "casos_de_estudio"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_study_technologies_scouting_queue_id_fkey"
+            columns: ["scouting_queue_id"]
+            isOneToOne: false
+            referencedRelation: "scouting_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_study_technologies_technology_id_fkey"
+            columns: ["technology_id"]
+            isOneToOne: false
+            referencedRelation: "technologies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       casos_de_estudio: {
         Row: {
           capex: number | null
