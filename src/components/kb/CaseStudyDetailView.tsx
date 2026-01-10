@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   ArrowLeft,
   Download,
@@ -29,6 +30,7 @@ import {
   Loader2,
   Users,
   Globe,
+  Sparkles,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -43,6 +45,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { generateCaseStudyWordDocument } from '@/lib/generateCaseStudyWordDocument';
 import { toast } from 'sonner';
+import { CaseStudyFormView } from './CaseStudyFormView';
 
 // Sector options (same as in CaseStudiesSection)
 const SECTOR_OPTIONS = [
@@ -132,10 +135,14 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   onDelete,
 }) => {
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
 
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Review modal state
+  const [reviewJobId, setReviewJobId] = useState<string | null>(null);
 
   // Fetch case study
   const { data: caseStudy, isLoading } = useQuery({
@@ -167,7 +174,38 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     },
   });
 
-  // Helper para obtener el badge de estado de vinculación
+  // Fetch associated job with technologies (for review button)
+  const { data: associatedJob } = useQuery({
+    queryKey: ['case-study-job', caseStudyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('case_study_jobs')
+        .select('id, status, result_data, technologies_new, technologies_found')
+        .eq('case_study_id', caseStudyId)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (error) return null;
+      
+      if (data) {
+        const resultData = data.result_data as any;
+        const hasTechs = 
+          (data.technologies_new && data.technologies_new > 0) ||
+          (data.technologies_found && data.technologies_found > 0) ||
+          (resultData?.technologies?.technologies_new?.length > 0) ||
+          (resultData?.technologies?.technologies_found?.length > 0);
+        
+        if (hasTechs) {
+          return { jobId: data.id };
+        }
+      }
+      return null;
+    },
+    enabled: !technologies?.length, // Only fetch if no technologies
+  });
+
   const getTechStatusBadge = (tech: CaseStudyTechnology) => {
     if (tech.technology_id) {
       return (
@@ -625,7 +663,18 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
             )}
 
             {recommendedTechs.length === 0 && evaluatedTechs.length === 0 && (
-              <p className="text-sm text-muted-foreground">No hay tecnologías asociadas</p>
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground mb-3">No hay tecnologías asociadas</p>
+                {associatedJob?.jobId && (
+                  <Button 
+                    onClick={() => setReviewJobId(associatedJob.jobId)}
+                    className="gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Revisar tecnologías extraídas
+                  </Button>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -724,6 +773,33 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Review Extraction Modal */}
+      <Dialog 
+        open={!!reviewJobId} 
+        onOpenChange={(open) => !open && setReviewJobId(null)}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Revisar Extracción
+            </DialogTitle>
+          </DialogHeader>
+          {reviewJobId && (
+            <CaseStudyFormView
+              jobId={reviewJobId}
+              existingCaseId={caseStudyId}
+              onBack={() => setReviewJobId(null)}
+              onSaved={() => {
+                setReviewJobId(null);
+                queryClient.invalidateQueries({ queryKey: ['case-study-technologies', caseStudyId] });
+                queryClient.invalidateQueries({ queryKey: ['case-study-detail', caseStudyId] });
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
