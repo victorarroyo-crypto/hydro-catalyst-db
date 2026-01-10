@@ -329,9 +329,16 @@ export default function KnowledgeBase() {
   // Document mutations
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      const filePath = `${Date.now()}-${file.name}`;
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('Usuario no autenticado');
+
+      // Store under user folder so paths are unique and consistent
+      const filePath = `${authData.user.id}/${Date.now()}-${file.name}`;
+
+      // IMPORTANT: bucket used by the backend processor
       const { error: uploadError } = await supabase.storage
-        .from("knowledge-docs")
+        .from("knowledge-documents")
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
@@ -346,6 +353,7 @@ export default function KnowledgeBase() {
           status: "pending",
           category: uploadCategory,
           sector: uploadSector,
+          uploaded_by: authData.user.id,
         })
         .select()
         .single();
@@ -376,8 +384,8 @@ export default function KnowledgeBase() {
 
   const deleteMutation = useMutation({
     mutationFn: async (doc: KnowledgeDocument) => {
-      await supabase.storage.from("knowledge-docs").remove([doc.file_path]);
-      
+      await supabase.storage.from("knowledge-documents").remove([doc.file_path]);
+
       const { error } = await supabase
         .from("knowledge_documents")
         .delete()
