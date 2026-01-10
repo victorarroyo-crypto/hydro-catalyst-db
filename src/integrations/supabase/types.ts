@@ -345,45 +345,90 @@ export type Database = {
       }
       casos_de_estudio: {
         Row: {
+          capex: number | null
           country: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
           entity_type: string | null
           id: string
+          lessons_learned: string | null
           name: string
+          opex_year: number | null
           original_data: Json | null
+          payback_months: number | null
+          problem_parameters: Json | null
+          quality_score: number | null
+          results_achieved: string | null
+          results_parameters: Json | null
+          roi_percent: number | null
+          roi_rationale: string | null
           sector: string | null
+          solution_applied: string | null
+          source_documents: Json | null
+          source_folder: string | null
           source_technology_id: string | null
+          status: string | null
           technology_types: string[] | null
+          treatment_train: string[] | null
           updated_at: string | null
         }
         Insert: {
+          capex?: number | null
           country?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
           entity_type?: string | null
           id?: string
+          lessons_learned?: string | null
           name: string
+          opex_year?: number | null
           original_data?: Json | null
+          payback_months?: number | null
+          problem_parameters?: Json | null
+          quality_score?: number | null
+          results_achieved?: string | null
+          results_parameters?: Json | null
+          roi_percent?: number | null
+          roi_rationale?: string | null
           sector?: string | null
+          solution_applied?: string | null
+          source_documents?: Json | null
+          source_folder?: string | null
           source_technology_id?: string | null
+          status?: string | null
           technology_types?: string[] | null
+          treatment_train?: string[] | null
           updated_at?: string | null
         }
         Update: {
+          capex?: number | null
           country?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
           entity_type?: string | null
           id?: string
+          lessons_learned?: string | null
           name?: string
+          opex_year?: number | null
           original_data?: Json | null
+          payback_months?: number | null
+          problem_parameters?: Json | null
+          quality_score?: number | null
+          results_achieved?: string | null
+          results_parameters?: Json | null
+          roi_percent?: number | null
+          roi_rationale?: string | null
           sector?: string | null
+          solution_applied?: string | null
+          source_documents?: Json | null
+          source_folder?: string | null
           source_technology_id?: string | null
+          status?: string | null
           technology_types?: string[] | null
+          treatment_train?: string[] | null
           updated_at?: string | null
         }
         Relationships: []
