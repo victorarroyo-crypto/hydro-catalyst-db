@@ -28,7 +28,18 @@ import {
   Loader2,
   Sparkles,
   AlertCircle,
+  Eye,
+  Building2,
+  Globe,
+  Lightbulb,
+  Tag,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useCaseStudyFiles } from '@/hooks/useCaseStudyFiles';
@@ -187,6 +198,9 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
   
   const [economicOpen, setEconomicOpen] = useState(false);
   const [lessonsOpen, setLessonsOpen] = useState(false);
+  
+  // Technology detail modal state
+  const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
 
   // Load data from job
   useEffect(() => {
@@ -1118,6 +1132,16 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                       )}
                     </div>
                     <div className="flex items-center gap-1 ml-2">
+                      {/* View details button */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setSelectedTech(tech)}
+                        className="h-8 w-8"
+                        title="Ver detalles"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       {tech.status === 'new' && (
                         <Button
                           variant="ghost"
@@ -1243,6 +1267,95 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Technology Detail Modal */}
+      <Dialog open={!!selectedTech} onOpenChange={(open) => !open && setSelectedTech(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-primary" />
+              {selectedTech?.name || 'Detalle de Tecnología'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedTech && (
+            <div className="space-y-4 py-4">
+              {/* Status & Role Badges */}
+              <div className="flex flex-wrap gap-2">
+                <Badge 
+                  variant="outline"
+                  className={
+                    selectedTech.status === 'linked' 
+                      ? 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' 
+                      : selectedTech.status === 'sent_to_scouting'
+                      ? 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700'
+                      : 'bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700'
+                  }
+                >
+                  {selectedTech.status === 'linked' ? '🟢 En Base de Datos' : selectedTech.status === 'sent_to_scouting' ? '📤 Enviada a Scouting' : '🆕 Nueva'}
+                </Badge>
+                <Badge variant={selectedTech.role === 'Recomendada' ? 'default' : 'secondary'}>
+                  {selectedTech.role}
+                </Badge>
+                {selectedTech.trl && (
+                  <Badge variant="outline">TRL {selectedTech.trl}</Badge>
+                )}
+              </div>
+
+              {/* Provider */}
+              {selectedTech.provider && (
+                <div className="flex items-start gap-3">
+                  <Building2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Proveedor / Empresa</p>
+                    <p className="text-sm">{selectedTech.provider}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Type */}
+              {selectedTech.type && (
+                <div className="flex items-start gap-3">
+                  <Tag className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Tipo Sugerido</p>
+                    <p className="text-sm">{selectedTech.type}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Description */}
+              {selectedTech.description && (
+                <div className="flex items-start gap-3">
+                  <Lightbulb className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Descripción</p>
+                    <p className="text-sm whitespace-pre-wrap">{selectedTech.description}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Linked Tech ID */}
+              {selectedTech.linkedTechId && (
+                <div className="flex items-start gap-3">
+                  <Globe className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">ID en Base de Datos</p>
+                    <p className="text-sm font-mono text-xs">{selectedTech.linkedTechId}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* No extra info message */}
+              {!selectedTech.provider && !selectedTech.description && !selectedTech.type && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay información adicional disponible para esta tecnología.
+                </p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
