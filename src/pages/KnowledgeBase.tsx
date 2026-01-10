@@ -20,8 +20,9 @@ import {
   AlertCircle, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, 
   RefreshCw, DollarSign, Info, Globe, TrendingUp, Star, MapPin, 
   Building2, ExternalLink, Calendar, Plus, RotateCcw, Edit, LayoutGrid, List,
-  Database, ArrowRight, Lightbulb, Send, Play
+  Database, ArrowRight, Lightbulb, Send, Play, ChevronDown, ChevronRight
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
@@ -48,6 +49,81 @@ interface KnowledgeDocument {
   description: string | null;
   category: string | null;
   sector: string | null;
+}
+
+interface GroupedDocument {
+  baseName: string;
+  isMultiPart: boolean;
+  totalParts: number;
+  mainDoc: KnowledgeDocument;
+  parts: KnowledgeDocument[];
+  processedCount: number;
+  totalChunks: number;
+}
+
+// Function to group document parts
+function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
+  const partRegex = /^(.+)_parte(\d+)de(\d+)\.pdf$/i;
+  const groups: Map<string, KnowledgeDocument[]> = new Map();
+  const standalone: KnowledgeDocument[] = [];
+  
+  docs.forEach(doc => {
+    const match = doc.name.match(partRegex);
+    if (match) {
+      const baseName = match[1];
+      if (!groups.has(baseName)) {
+        groups.set(baseName, []);
+      }
+      groups.get(baseName)!.push(doc);
+    } else {
+      standalone.push(doc);
+    }
+  });
+  
+  const result: GroupedDocument[] = [];
+  
+  // Add grouped documents
+  groups.forEach((parts, baseName) => {
+    // Sort parts by part number
+    parts.sort((a, b) => {
+      const matchA = a.name.match(partRegex);
+      const matchB = b.name.match(partRegex);
+      const numA = matchA ? parseInt(matchA[2]) : 0;
+      const numB = matchB ? parseInt(matchB[2]) : 0;
+      return numA - numB;
+    });
+    
+    const processedCount = parts.filter(p => p.status === 'processed').length;
+    const totalChunks = parts.reduce((sum, p) => sum + (p.chunk_count || 0), 0);
+    
+    result.push({
+      baseName,
+      isMultiPart: true,
+      totalParts: parts.length,
+      mainDoc: parts[0], // First part has the description
+      parts,
+      processedCount,
+      totalChunks
+    });
+  });
+  
+  // Add standalone documents
+  standalone.forEach(doc => {
+    result.push({
+      baseName: doc.name.replace(/\.pdf$/i, ''),
+      isMultiPart: false,
+      totalParts: 1,
+      mainDoc: doc,
+      parts: [doc],
+      processedCount: doc.status === 'processed' ? 1 : 0,
+      totalChunks: doc.chunk_count || 0
+    });
+  });
+  
+  // Sort by creation date of main doc (newest first)
+  result.sort((a, b) => new Date(b.mainDoc.created_at).getTime() - new Date(a.mainDoc.created_at).getTime());
+  
+  return result;
 }
 
 // Document category and sector options
@@ -1363,84 +1439,363 @@ export default function KnowledgeBase() {
                   );
                 }
                 
+                // Group document parts
+                const groupedDocs = groupDocumentParts(filteredDocs);
+                
+                // Helper to render a single document row (for parts inside collapsible)
+                const renderDocumentPartRow = (doc: KnowledgeDocument, partNumber?: number, totalParts?: number) => (
+                  <div key={doc.id} className="flex items-center justify-between py-2 px-3 ml-6 border-l-2 border-muted hover:bg-muted/30">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        └─ Parte {partNumber} de {totalParts}
+                      </span>
+                      {getStatusBadge(doc.status)}
+                      <span className="text-xs text-muted-foreground">
+                        {doc.chunk_count || 0} chunks
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDownloadDocument(doc)}>
+                              <Download className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Descargar</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      {canManage && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                className="h-7 w-7 p-0"
+                                onClick={() => reprocessMutation.mutate(doc.id)}
+                                disabled={reprocessMutation.isPending}
+                              >
+                                {doc.status === 'pending' ? (
+                                  <Play className="h-3 w-3" />
+                                ) : (
+                                  <RotateCcw className={`h-3 w-3 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {doc.status === 'pending' ? 'Procesar' : 'Reprocesar'}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
+                  </div>
+                );
+                
+                // Helper to render document group actions
+                const renderGroupActions = (group: GroupedDocument, doc: KnowledgeDocument) => (
+                  <div className="flex items-center gap-1 shrink-0">
+                    {group.isMultiPart ? (
+                      <Badge variant="outline" className="text-xs">
+                        {group.processedCount}/{group.totalParts} procesados
+                      </Badge>
+                    ) : (
+                      getStatusBadge(doc.status)
+                    )}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="sm" variant="outline" onClick={() => handleDownloadDocument(doc)}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{group.isMultiPart ? 'Descargar parte 1' : 'Descargar PDF'}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    {canManage && !group.isMultiPart && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => reprocessMutation.mutate(doc.id)}
+                              disabled={reprocessMutation.isPending}
+                            >
+                              {doc.status === 'pending' ? (
+                                <Play className="h-4 w-4" />
+                              ) : (
+                                <RotateCcw className={`h-4 w-4 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {doc.status === 'pending' ? 'Procesar documento' : 'Reprocesar'}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    {canManage && (
+                      <>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Renombrar</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                onClick={() => { 
+                                  setEditingCategoryDocId(doc.id); 
+                                  setEditCategory(doc.category || ''); 
+                                  setEditSector(doc.sector || ''); 
+                                }}
+                              >
+                                📁
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Categorizar</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {isAdmin && !group.isMultiPart && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Eliminar</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+                
                 return viewMode.documents === 'list' ? (
                 <div className="space-y-2">
-                  {filteredDocs.map((doc) => (
-                    <div key={doc.id} className="flex items-start justify-between p-3 border rounded-lg hover:bg-muted/50">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-                        <div className="min-w-0 flex-1 space-y-2">
-                          {editingDocId === doc.id ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                value={editingName}
-                                onChange={(e) => setEditingName(e.target.value)}
-                                className="h-8"
-                              />
-                              <Button size="sm" variant="ghost" onClick={() => renameMutation.mutate({ id: doc.id, name: editingName })}>
-                                <Check className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => setEditingDocId(null)}>
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <p className="font-medium truncate">{doc.name}</p>
-                          )}
-                          
-                          {/* Editable description */}
-                          {editingDescDocId === doc.id ? (
-                            <div className="space-y-2">
-                              <Textarea
-                                value={editingDescription}
-                                onChange={(e) => setEditingDescription(e.target.value)}
-                                className="min-h-[80px] text-sm"
-                                placeholder="Descripción del documento..."
-                              />
-                              <div className="flex items-center gap-2">
-                                <Button 
-                                  size="sm" 
-                                  onClick={() => updateDescriptionMutation.mutate({ docId: doc.id, description: editingDescription })}
-                                  disabled={updateDescriptionMutation.isPending}
-                                >
-                                  {updateDescriptionMutation.isPending ? (
-                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  {groupedDocs.map((group) => {
+                    const doc = group.mainDoc;
+                    const partRegex = /^(.+)_parte(\d+)de(\d+)\.pdf$/i;
+                    
+                    if (group.isMultiPart) {
+                      // Multi-part document - render as collapsible
+                      return (
+                        <Collapsible key={group.baseName} className="border rounded-lg">
+                          <div className="flex items-start justify-between p-3 hover:bg-muted/50">
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              <CollapsibleTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0 mt-0.5">
+                                  <ChevronRight className="h-4 w-4 transition-transform duration-200 [[data-state=open]>&]:rotate-90" />
+                                </Button>
+                              </CollapsibleTrigger>
+                              <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium truncate">{group.baseName}.pdf</p>
+                                  <Badge variant="secondary" className="text-xs shrink-0">
+                                    {group.totalParts} partes
+                                  </Badge>
+                                </div>
+                                
+                                {/* Description from first part */}
+                                {doc.description ? (
+                                  <p className="text-xs text-muted-foreground line-clamp-2">{doc.description}</p>
+                                ) : null}
+                                
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{group.totalChunks} chunks total</span>
+                                  <span>•</span>
+                                  <span>{group.processedCount}/{group.totalParts} procesados</span>
+                                </div>
+                                
+                                {/* Category/Sector badges */}
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {doc.category ? (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.icon || '📄'}{' '}
+                                      {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.label || doc.category}
+                                    </Badge>
                                   ) : (
-                                    <Check className="h-3 w-3 mr-1" />
+                                    <Badge variant="outline" className="text-xs text-muted-foreground">Sin tipo</Badge>
                                   )}
-                                  Guardar
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={() => setEditingDescDocId(null)}>
-                                  Cancelar
-                                </Button>
+                                  {doc.sector ? (
+                                    <Badge variant="outline" className="text-xs">
+                                      {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.icon || '🌐'}{' '}
+                                      {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.label || doc.sector}
+                                    </Badge>
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
-                          ) : doc.description ? (
-                            <div 
-                              className="text-xs text-muted-foreground cursor-pointer hover:bg-muted/50 p-1 rounded group"
-                              onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(doc.description || ''); }}
-                            >
-                              <p className="line-clamp-2">{doc.description}</p>
-                              <span className="text-[10px] text-muted-foreground/50 group-hover:text-primary">
-                                Clic para editar
-                              </span>
+                            {renderGroupActions(group, doc)}
+                          </div>
+                          <CollapsibleContent>
+                            <div className="border-t bg-muted/20 py-1">
+                              {group.parts.map((part, idx) => {
+                                const match = part.name.match(partRegex);
+                                const partNum = match ? parseInt(match[2]) : idx + 1;
+                                return renderDocumentPartRow(part, partNum, group.totalParts);
+                              })}
                             </div>
-                          ) : canManage ? (
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="text-xs h-6 px-2"
-                              onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(''); }}
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              Añadir descripción
-                            </Button>
-                          ) : null}
-                          
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    }
+                    
+                    // Single document - render normally
+                    return (
+                      <div key={doc.id} className="flex items-start justify-between p-3 border rounded-lg hover:bg-muted/50">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                          <div className="min-w-0 flex-1 space-y-2">
+                            {editingDocId === doc.id ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  value={editingName}
+                                  onChange={(e) => setEditingName(e.target.value)}
+                                  className="h-8"
+                                />
+                                <Button size="sm" variant="ghost" onClick={() => renameMutation.mutate({ id: doc.id, name: editingName })}>
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => setEditingDocId(null)}>
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <p className="font-medium truncate">{doc.name}</p>
+                            )}
+                            
+                            {/* Editable description */}
+                            {editingDescDocId === doc.id ? (
+                              <div className="space-y-2">
+                                <Textarea
+                                  value={editingDescription}
+                                  onChange={(e) => setEditingDescription(e.target.value)}
+                                  className="min-h-[80px] text-sm"
+                                  placeholder="Descripción del documento..."
+                                />
+                                <div className="flex items-center gap-2">
+                                  <Button 
+                                    size="sm" 
+                                    onClick={() => updateDescriptionMutation.mutate({ docId: doc.id, description: editingDescription })}
+                                    disabled={updateDescriptionMutation.isPending}
+                                  >
+                                    {updateDescriptionMutation.isPending ? (
+                                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                    ) : (
+                                      <Check className="h-3 w-3 mr-1" />
+                                    )}
+                                    Guardar
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setEditingDescDocId(null)}>
+                                    Cancelar
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : doc.description ? (
+                              <div 
+                                className="text-xs text-muted-foreground cursor-pointer hover:bg-muted/50 p-1 rounded group"
+                                onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(doc.description || ''); }}
+                              >
+                                <p className="line-clamp-2">{doc.description}</p>
+                                <span className="text-[10px] text-muted-foreground/50 group-hover:text-primary">
+                                  Clic para editar
+                                </span>
+                              </div>
+                            ) : canManage ? (
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-xs h-6 px-2"
+                                onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(''); }}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Añadir descripción
+                              </Button>
+                            ) : null}
+                            
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span>{formatFileSize(doc.file_size)}</span>
+                              <span>•</span>
+                              <span>{doc.chunk_count} chunks</span>
+                            </div>
+                            
+                            {/* Category/Sector badges */}
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {doc.category ? (
+                                <Badge variant="secondary" className="text-xs">
+                                  {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.icon || '📄'}{' '}
+                                  {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.label || doc.category}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs text-muted-foreground">Sin tipo</Badge>
+                              )}
+                              {doc.sector ? (
+                                <Badge variant="outline" className="text-xs">
+                                  {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.icon || '🌐'}{' '}
+                                  {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.label || doc.sector}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                        {renderGroupActions(group, doc)}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {groupedDocs.map((group) => {
+                    const doc = group.mainDoc;
+                    
+                    return (
+                      <Card key={group.baseName} className="relative">
+                        <CardHeader className="pb-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                              <CardTitle className="text-base line-clamp-2">
+                                {group.isMultiPart ? `${group.baseName}.pdf` : doc.name}
+                              </CardTitle>
+                            </div>
+                            {group.isMultiPart ? (
+                              <Badge variant="secondary" className="text-xs shrink-0">
+                                {group.totalParts} partes
+                              </Badge>
+                            ) : (
+                              getStatusBadge(doc.status)
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-0 space-y-3">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{formatFileSize(doc.file_size)}</span>
-                            <span>•</span>
-                            <span>{doc.chunk_count} chunks</span>
+                            {group.isMultiPart ? (
+                              <>
+                                <span>{group.totalChunks} chunks</span>
+                                <span>•</span>
+                                <span>{group.processedCount}/{group.totalParts} procesados</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>{formatFileSize(doc.file_size)}</span>
+                                <span>•</span>
+                                <span>{doc.chunk_count} chunks</span>
+                              </>
+                            )}
                           </div>
                           
                           {/* Category/Sector badges */}
@@ -1460,262 +1815,105 @@ export default function KnowledgeBase() {
                               </Badge>
                             ) : null}
                           </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {getStatusBadge(doc.status)}
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button size="sm" variant="outline" onClick={() => handleDownloadDocument(doc)}>
-                                <Download className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Descargar PDF</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        {canManage && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  onClick={() => reprocessMutation.mutate(doc.id)}
-                                  disabled={reprocessMutation.isPending}
-                                >
-                                  {doc.status === 'pending' ? (
-                                    <Play className="h-4 w-4" />
-                                  ) : (
-                                    <RotateCcw className={`h-4 w-4 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
-                                  )}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {doc.status === 'pending' ? 'Procesar documento' : 
-                                 doc.status === 'processing' ? 'Reintentar procesamiento' : 
-                                 'Reprocesar con PyMuPDF'}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                        {canManage && (
-                          <>
+                          
+                          {/* Description */}
+                          {doc.description ? (
+                            <p className="text-sm text-muted-foreground line-clamp-2">{doc.description}</p>
+                          ) : canManage ? (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-xs h-6 px-2"
+                              onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(''); }}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Añadir descripción
+                            </Button>
+                          ) : null}
+                          
+                          <div className="flex items-center gap-1 flex-wrap">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
-                                    <Pencil className="h-4 w-4" />
+                                  <Button size="sm" variant="outline" onClick={() => handleDownloadDocument(doc)}>
+                                    <Download className="h-3 w-3" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Renombrar</TooltipContent>
+                                <TooltipContent>{group.isMultiPart ? 'Descargar parte 1' : 'Descargar PDF'}</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    onClick={() => { 
-                                      setEditingCategoryDocId(doc.id); 
-                                      setEditCategory(doc.category || ''); 
-                                      setEditSector(doc.sector || ''); 
-                                    }}
-                                  >
-                                    📁
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Categorizar</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            {isAdmin && (
+                            {canManage && !group.isMultiPart && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => reprocessMutation.mutate(doc.id)}
+                                      disabled={reprocessMutation.isPending}
+                                    >
+                                      {doc.status === 'pending' ? (
+                                        <Play className="h-3 w-3" />
+                                      ) : (
+                                        <RotateCcw className={`h-3 w-3 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {doc.status === 'pending' ? 'Procesar' : 'Reprocesar'}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            {canManage && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
+                                      <Pencil className="h-3 w-3" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Renombrar</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            {canManage && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost" 
+                                      onClick={() => { 
+                                        setEditingCategoryDocId(doc.id); 
+                                        setEditCategory(doc.category || ''); 
+                                        setEditSector(doc.sector || ''); 
+                                      }}
+                                    >
+                                      📁
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Categorizar</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            {isAdmin && !group.isMultiPart && (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
-                                      <Trash2 className="h-4 w-4" />
+                                      <Trash2 className="h-3 w-3" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>Eliminar</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {filteredDocs.map((doc) => (
-                    <Card key={doc.id} className="relative">
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                            <CardTitle className="text-base line-clamp-2">{doc.name}</CardTitle>
                           </div>
-                          {getStatusBadge(doc.status)}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0 space-y-3">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{formatFileSize(doc.file_size)}</span>
-                          <span>•</span>
-                          <span>{doc.chunk_count} chunks</span>
-                        </div>
-                        
-                        {/* Category/Sector badges */}
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {doc.category ? (
-                            <Badge variant="secondary" className="text-xs">
-                              {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.icon || '📄'}{' '}
-                              {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.label || doc.category}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-xs text-muted-foreground">Sin tipo</Badge>
-                          )}
-                          {doc.sector ? (
-                            <Badge variant="outline" className="text-xs">
-                              {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.icon || '🌐'}{' '}
-                              {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.label || doc.sector}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        
-                        {/* Editable description */}
-                        {editingDescDocId === doc.id ? (
-                          <div className="space-y-2">
-                            <Textarea
-                              value={editingDescription}
-                              onChange={(e) => setEditingDescription(e.target.value)}
-                              className="min-h-[60px] text-sm"
-                              placeholder="Descripción del documento..."
-                            />
-                            <div className="flex items-center gap-2">
-                              <Button 
-                                size="sm" 
-                                onClick={() => updateDescriptionMutation.mutate({ docId: doc.id, description: editingDescription })}
-                                disabled={updateDescriptionMutation.isPending}
-                              >
-                                {updateDescriptionMutation.isPending ? (
-                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                ) : (
-                                  <Check className="h-3 w-3 mr-1" />
-                                )}
-                                Guardar
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => setEditingDescDocId(null)}>
-                                Cancelar
-                              </Button>
-                            </div>
-                          </div>
-                        ) : doc.description ? (
-                          <div 
-                            className="text-sm text-muted-foreground cursor-pointer hover:bg-muted/50 p-1 rounded group"
-                            onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(doc.description || ''); }}
-                          >
-                            <p className="line-clamp-2">{doc.description}</p>
-                            <span className="text-[10px] text-muted-foreground/50 group-hover:text-primary">
-                              Clic para editar
-                            </span>
-                          </div>
-                        ) : canManage ? (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="text-xs h-6 px-2"
-                            onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(''); }}
-                          >
-                            <Plus className="h-3 w-3 mr-1" />
-                            Añadir descripción
-                          </Button>
-                        ) : null}
-                        
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button size="sm" variant="outline" onClick={() => handleDownloadDocument(doc)}>
-                                  <Download className="h-3 w-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Descargar PDF</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          {canManage && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline"
-                                    onClick={() => reprocessMutation.mutate(doc.id)}
-                                    disabled={reprocessMutation.isPending}
-                                  >
-                                    {doc.status === 'pending' ? (
-                                      <Play className="h-3 w-3" />
-                                    ) : (
-                                      <RotateCcw className={`h-3 w-3 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
-                                    )}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  {doc.status === 'pending' ? 'Procesar' : 'Reprocesar'}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                          {canManage && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
-                                    <Pencil className="h-3 w-3" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Renombrar</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                          {canManage && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    onClick={() => { 
-                                      setEditingCategoryDocId(doc.id); 
-                                      setEditCategory(doc.category || ''); 
-                                      setEditSector(doc.sector || ''); 
-                                    }}
-                                  >
-                                    📁
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Categorizar</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                          {isAdmin && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Eliminar</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               );
               })()}
