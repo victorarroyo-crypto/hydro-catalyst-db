@@ -2864,10 +2864,6 @@ export default function KnowledgeBase() {
         {/* CASES SECTION */}
         {activeSection === 'cases' && (
           <CaseStudiesSection
-            onNewCase={() => {
-              // TODO: Implement new case modal
-              toast.info('Funcionalidad de nuevo caso en desarrollo');
-            }}
             onViewCase={(cs) => setSelectedCase(cs as any)}
             onEditCase={(cs) => {
               // TODO: Implement edit case modal
