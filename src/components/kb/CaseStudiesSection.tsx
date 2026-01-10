@@ -571,9 +571,10 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
       <NewCaseStudyModal
         open={isNewCaseModalOpen}
         onOpenChange={setIsNewCaseModalOpen}
-        onCompleted={() => {
+      onCompleted={() => {
           // Refresh case studies list after processing completes
-          queryClient.invalidateQueries({ queryKey: ['case-studies'] });
+          queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
+          queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
         }}
       />
     </div>
