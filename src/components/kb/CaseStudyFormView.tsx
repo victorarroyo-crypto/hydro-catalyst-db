@@ -602,8 +602,8 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
       // Insert technologies with hybrid logic
       if (technologies.length > 0 && caseStudy?.id) {
         for (const tech of technologies) {
-          if (tech.linkedTechId) {
-            // CASO A: Tecnología ya existe → vincular directamente
+          if (tech.linkedTechId || tech.status === 'linked') {
+            // CASO A: Tecnología ya existe en DB → vincular directamente
             const { error: techError } = await supabase
               .from('case_study_technologies')
               .insert({
@@ -611,24 +611,50 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 technology_name: tech.name,
                 provider: tech.provider || null,
                 role: tech.role,
-                technology_id: tech.linkedTechId,
+                technology_id: tech.linkedTechId || null,
               });
 
             if (techError) {
               console.error('Error inserting linked technology:', techError);
             }
+          } else if (tech.status === 'sent_to_scouting') {
+            // CASO B: Ya fue enviada a scouting → solo crear link sin duplicar en scouting
+            // Buscar el ID en scouting_queue
+            const { data: existingScouting } = await supabase
+              .from('scouting_queue')
+              .select('id')
+              .ilike('"Nombre de la tecnología"', tech.name)
+              .limit(1)
+              .maybeSingle();
+
+            const { error: techError } = await supabase
+              .from('case_study_technologies')
+              .insert({
+                case_study_id: caseStudy.id,
+                technology_name: tech.name,
+                provider: tech.provider || null,
+                role: tech.role,
+                scouting_queue_id: existingScouting?.id || null,
+              });
+
+            if (techError) {
+              console.error('Error inserting sent_to_scouting technology:', techError);
+            }
           } else {
-            // CASO B: Tecnología nueva → enviar a scouting_queue para revisión
+            // CASO C: Tecnología nueva → enviar a scouting_queue para revisión
             const { data: scoutingItem, error: scoutingError } = await supabase
               .from('scouting_queue')
               .insert({
                 'Nombre de la tecnología': tech.name,
                 'Proveedor / Empresa': tech.provider || null,
-                'Tipo de tecnología': 'Por clasificar',
+                'Descripción técnica breve': tech.description || null,
+                'Grado de madurez (TRL)': tech.trl || null,
+                'Tipo de tecnología': tech.type || 'Por clasificar',
                 'Sector y subsector': sector,
                 source: 'case_study',
                 case_study_id: caseStudy.id,
-                queue_status: 'review',
+                queue_status: 'pending',
+                priority: tech.role === 'Recomendada' ? 'high' : 'medium',
                 notes: `Extraída del caso: ${title}`,
               })
               .select('id')
