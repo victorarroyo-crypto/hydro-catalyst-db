@@ -94,10 +94,19 @@ interface ExtractedData {
   lessons_learned?: string;
 }
 
+// Technologies structure from Railway
+interface RailwayTechnologiesObject {
+  summary?: { found_in_db: number; new_for_scouting: number; total_mentioned: number };
+  technologies_found?: { name: string; provider?: string; role?: string }[];
+  technologies_new?: { name: string; provider?: string; role?: string }[];
+}
+
 interface ResultData {
   // Nested structure from Railway
   extracted?: ExtractedData;
-  technologies?: { name: string; provider: string; role: string }[];
+  technologies?: 
+    | { name: string; provider: string; role: string }[]  // Legacy array
+    | RailwayTechnologiesObject;                          // Railway object
   review?: { quality_score?: number };
   
   // Legacy flat structure (backward compatibility)
@@ -289,14 +298,52 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             }
           }
           
-          // Technologies (at root level in both structures)
-          if (data.technologies && data.technologies.length > 0) {
-            setTechnologies(data.technologies.map((t, i) => ({
-              id: String(i + 1),
-              name: t.name,
-              provider: t.provider || '',
-              role: (t.role as 'Recomendada' | 'Evaluada') || 'Evaluada',
-            })));
+          // Technologies handling - supports both Railway object and legacy array
+          if (data.technologies) {
+            let techArray: { name: string; provider?: string; role?: string }[] = [];
+            
+            // Check if it's Railway's object structure (has technologies_found or technologies_new)
+            if (typeof data.technologies === 'object' && !Array.isArray(data.technologies)) {
+              const techData = data.technologies as RailwayTechnologiesObject;
+              console.log('[CaseStudyForm] Railway technologies object:', techData);
+              
+              // Combine technologies_found and technologies_new
+              if (techData.technologies_found?.length) {
+                console.log('[CaseStudyForm] Found technologies_found:', techData.technologies_found.length);
+                techArray = [...techArray, ...techData.technologies_found];
+              }
+              if (techData.technologies_new?.length) {
+                console.log('[CaseStudyForm] Found technologies_new:', techData.technologies_new.length);
+                techArray = [...techArray, ...techData.technologies_new];
+              }
+            } 
+            // Legacy array structure
+            else if (Array.isArray(data.technologies) && data.technologies.length > 0) {
+              console.log('[CaseStudyForm] Legacy technologies array:', data.technologies.length);
+              techArray = data.technologies;
+            }
+            
+            // Map to form format with role translation
+            if (techArray.length > 0) {
+              console.log('[CaseStudyForm] Setting technologies:', techArray.length);
+              setTechnologies(techArray.map((t, i) => {
+                // Map English roles to Spanish
+                let mappedRole: 'Recomendada' | 'Evaluada' = 'Evaluada';
+                if (t.role) {
+                  const roleLower = t.role.toLowerCase();
+                  if (roleLower === 'recommended' || roleLower === 'recomendada') {
+                    mappedRole = 'Recomendada';
+                  }
+                }
+                
+                return {
+                  id: String(i + 1),
+                  name: t.name,
+                  provider: t.provider || '',
+                  role: mappedRole,
+                };
+              }));
+            }
           }
           
           // Quality score from review or legacy
