@@ -25,7 +25,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
-import { getModelPricing, formatCost, estimateCostFromTotal } from "@/lib/aiModelPricing";
+import { getModelPricing, formatCost, estimateCostFromTotal, AI_MODELS, MODEL_PRICING } from "@/lib/aiModelPricing";
 import {
   Dialog,
   DialogContent,
@@ -225,6 +225,7 @@ export default function KnowledgeBase() {
   }>>([]);
   const [aiSourceExplanation, setAiSourceExplanation] = useState('');
   const [isSearchingAI, setIsSearchingAI] = useState(false);
+  const [selectedAIModel, setSelectedAIModel] = useState('google/gemini-2.5-pro');
   
   // Case studies state
   const [selectedCase, setSelectedCase] = useState<CaseStudy | null>(null);
@@ -545,6 +546,7 @@ export default function KnowledgeBase() {
       const { data, error } = await supabase.functions.invoke('search-scouting-sources', {
         body: {
           prompt: aiSourcePrompt.trim(),
+          model: selectedAIModel,
           filters: {
             tipo: aiSourceFilters.tipo || null,
             region: aiSourceFilters.region || null,
@@ -2348,6 +2350,54 @@ export default function KnowledgeBase() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* AI Model Selector */}
+            <div>
+              <Label className="text-sm flex items-center gap-2">
+                Modelo AI
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>Los modelos premium son más precisos pero más lentos y costosos. Los económicos son rápidos y baratos pero menos precisos.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Select value={selectedAIModel} onValueChange={setSelectedAIModel}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AI_MODELS.map(model => {
+                    const pricing = MODEL_PRICING[model.id];
+                    const avgCost = pricing ? ((pricing.input + pricing.output) / 2).toFixed(2) : '?';
+                    return (
+                      <SelectItem key={model.id} value={model.id}>
+                        <div className="flex items-center gap-2 w-full">
+                          <span className="font-medium">{model.name}</span>
+                          <Badge 
+                            variant="outline" 
+                            className={`text-[10px] px-1.5 py-0 ${
+                              model.tier === 'premium' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              model.tier === 'estándar' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              'bg-green-50 text-green-700 border-green-200'
+                            }`}
+                          >
+                            {model.tier}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            ~${avgCost}/1M • {model.speed}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Prompt */}
