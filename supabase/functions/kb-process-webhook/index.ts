@@ -29,11 +29,18 @@ serve(async (req) => {
       document_id, 
       status,
       chunk_count,
+      chunks_created,  // Railway puede enviar este campo
       description,
-      error_message 
+      error_message,
+      chunks  // Railway puede enviar los chunks aquí
     } = payload
 
+    // Usar chunks_created si existe, chunk_count como fallback
+    const finalChunkCount = chunks_created ?? chunk_count
+
     console.log(`[KB-WEBHOOK] Received callback for document: ${document_id}, status: ${status}`)
+    console.log(`[KB-WEBHOOK] chunk_count: ${chunk_count}, chunks_created: ${chunks_created}, finalChunkCount: ${finalChunkCount}`)
+    console.log(`[KB-WEBHOOK] chunks array length: ${chunks?.length ?? 'not provided'}`)
     console.log(`[KB-WEBHOOK] Full payload:`, JSON.stringify(payload))
 
     if (!document_id) {
@@ -47,14 +54,52 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
+    // Si Railway envía los chunks, insertarlos en knowledge_chunks
+    let insertedChunksCount = 0
+    if (chunks && Array.isArray(chunks) && chunks.length > 0) {
+      console.log(`[KB-WEBHOOK] Inserting ${chunks.length} chunks for document ${document_id}`)
+      
+      // Primero eliminar chunks existentes para este documento (por si es reprocesamiento)
+      const { error: deleteError } = await supabase
+        .from('knowledge_chunks')
+        .delete()
+        .eq('document_id', document_id)
+      
+      if (deleteError) {
+        console.error('[KB-WEBHOOK] Error deleting old chunks:', deleteError)
+      }
+      
+      const chunksToInsert = chunks.map((chunk: { content?: string; text?: string; chunk_index?: number; tokens?: number }, index: number) => ({
+        document_id: document_id,
+        content: chunk.content || chunk.text || '',
+        chunk_index: chunk.chunk_index ?? index,
+        tokens: chunk.tokens || null
+      }))
+      
+      const { error: insertError, data: insertedData } = await supabase
+        .from('knowledge_chunks')
+        .insert(chunksToInsert)
+        .select('id')
+      
+      if (insertError) {
+        console.error('[KB-WEBHOOK] Error inserting chunks:', insertError)
+      } else {
+        insertedChunksCount = insertedData?.length || chunksToInsert.length
+        console.log(`[KB-WEBHOOK] Successfully inserted ${insertedChunksCount} chunks`)
+      }
+    }
+
     // Update document in Lovable
     const updateData: Record<string, unknown> = {
       status: status || 'processed',
       updated_at: new Date().toISOString(),
     }
 
-    if (chunk_count !== undefined) {
-      updateData.chunk_count = chunk_count
+    // Usar el conteo real de chunks insertados si se insertaron, sino usar el valor del payload
+    if (insertedChunksCount > 0) {
+      updateData.chunk_count = insertedChunksCount
+    } else if (finalChunkCount !== undefined) {
+      updateData.chunk_count = finalChunkCount
     }
 
     // If status is 'failed' and there's an error_message, store it in description
@@ -78,7 +123,7 @@ serve(async (req) => {
       throw updateError
     }
 
-    console.log(`[KB-WEBHOOK] Document ${document_id} updated successfully with status: ${status}`)
+    console.log(`[KB-WEBHOOK] Document ${document_id} updated successfully with status: ${status}, chunks: ${updateData.chunk_count}`)
 
     return new Response(
       JSON.stringify({ success: true, document_id, status }),
