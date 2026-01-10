@@ -532,6 +532,23 @@ export default function KnowledgeBase() {
   // Add AI-suggested source to database
   const addAISourceToDb = async (source: typeof aiSourceResults[0]) => {
     try {
+      // Map sector_foco to valid values (constraint only allows: 'municipal', 'industrial', 'ambos')
+      const validSectorFoco = ['municipal', 'industrial', 'ambos'];
+      let sectorFoco: string | null = null;
+      if (source.sector_foco) {
+        const lowerSector = source.sector_foco.toLowerCase();
+        if (validSectorFoco.includes(lowerSector)) {
+          sectorFoco = lowerSector;
+        } else if (lowerSector.includes('municipal') && lowerSector.includes('industrial')) {
+          sectorFoco = 'ambos';
+        } else if (lowerSector.includes('municipal')) {
+          sectorFoco = 'municipal';
+        } else if (lowerSector.includes('industrial')) {
+          sectorFoco = 'industrial';
+        }
+        // For other values like 'agrícola', 'desalación', etc., we leave it null
+      }
+
       const { error } = await supabase
         .from("scouting_sources")
         .insert({
@@ -540,7 +557,7 @@ export default function KnowledgeBase() {
           descripcion: source.descripcion,
           tipo: source.tipo || 'web',
           pais: source.pais || null,
-          sector_foco: source.sector_foco || null,
+          sector_foco: sectorFoco,
           calidad_score: 3,
           activo: true,
         });
