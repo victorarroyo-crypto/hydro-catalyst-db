@@ -1628,9 +1628,53 @@ export default function KnowledgeBase() {
                                   </Badge>
                                 </div>
                                 
-                                {/* Description from first part */}
-                                {doc.description ? (
-                                  <p className="text-xs text-muted-foreground line-clamp-2">{doc.description}</p>
+                                {/* Editable description for multi-part */}
+                                {editingDescDocId === doc.id ? (
+                                  <div className="space-y-2">
+                                    <Textarea
+                                      value={editingDescription}
+                                      onChange={(e) => setEditingDescription(e.target.value)}
+                                      className="min-h-[80px] text-sm"
+                                      placeholder="Descripción del documento..."
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <Button 
+                                        size="sm" 
+                                        onClick={() => updateDescriptionMutation.mutate({ docId: doc.id, description: editingDescription })}
+                                        disabled={updateDescriptionMutation.isPending}
+                                      >
+                                        {updateDescriptionMutation.isPending ? (
+                                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                        ) : (
+                                          <Check className="h-3 w-3 mr-1" />
+                                        )}
+                                        Guardar
+                                      </Button>
+                                      <Button size="sm" variant="ghost" onClick={() => setEditingDescDocId(null)}>
+                                        Cancelar
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : doc.description ? (
+                                  <div 
+                                    className="text-xs text-muted-foreground cursor-pointer hover:bg-muted/50 p-1 rounded group"
+                                    onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(doc.description || ''); }}
+                                  >
+                                    <p className="line-clamp-2">{doc.description}</p>
+                                    <span className="text-[10px] text-muted-foreground/50 group-hover:text-primary">
+                                      Clic para editar
+                                    </span>
+                                  </div>
+                                ) : canManage ? (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="text-xs h-6 px-2"
+                                    onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(''); }}
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Añadir descripción
+                                  </Button>
                                 ) : null}
                                 
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
