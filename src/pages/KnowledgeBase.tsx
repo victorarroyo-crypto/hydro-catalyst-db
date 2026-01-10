@@ -70,6 +70,8 @@ const DOCUMENT_SECTOR_OPTIONS = [
   { value: 'electronics', label: 'Electrónica/Semiconductores', icon: '💻' },
   { value: 'automotive', label: 'Automoción', icon: '🚗' },
   { value: 'cosmetics', label: 'Cosmética', icon: '🧴' },
+  { value: 'cooling_towers', label: 'Torres de Refrigeración', icon: '❄️' },
+  { value: 'desalination', label: 'Desalación', icon: '🌊' },
 ];
 
 interface ScoutingSource {
