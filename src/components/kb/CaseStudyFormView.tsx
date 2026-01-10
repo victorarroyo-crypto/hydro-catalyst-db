@@ -77,6 +77,7 @@ interface Technology {
   description?: string;        // Descripción de la tecnología
   trl?: number;                // TRL estimado
   type?: string;               // Tipo sugerido
+  web?: string;                // URL de la empresa/tecnología
 }
 
 // Nested structure from Railway
@@ -109,10 +110,22 @@ interface ExtractedData {
 }
 
 // Technologies structure from Railway
+interface RailwayTechnologyItem {
+  name: string;
+  provider?: string;
+  role?: string;
+  description?: string;
+  trl_estimated?: number;
+  type_suggested?: string;
+  web?: string;
+  url?: string;
+  website?: string;
+}
+
 interface RailwayTechnologiesObject {
   summary?: { found_in_db: number; new_for_scouting: number; total_mentioned: number };
-  technologies_found?: { name: string; provider?: string; role?: string }[];
-  technologies_new?: { name: string; provider?: string; role?: string }[];
+  technologies_found?: RailwayTechnologyItem[];
+  technologies_new?: RailwayTechnologyItem[];
 }
 
 interface ResultData {
@@ -364,6 +377,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                   description: t.description || '',
                   trl: t.trl_estimated || t.trl || null,
                   type: t.type_suggested || t.type || '',
+                  web: t.web || t.url || t.website || '',
                 };
               }));
             }
@@ -1302,55 +1316,77 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 )}
               </div>
 
-              {/* Provider */}
-              {selectedTech.provider && (
-                <div className="flex items-start gap-3">
-                  <Building2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Proveedor / Empresa</p>
+              {/* Provider - Always show */}
+              <div className="flex items-start gap-3">
+                <Building2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">Proveedor / Empresa</p>
+                  {selectedTech.provider ? (
                     <p className="text-sm">{selectedTech.provider}</p>
-                  </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground/50 italic">Sin información</p>
+                  )}
                 </div>
-              )}
+              </div>
 
-              {/* Type */}
-              {selectedTech.type && (
-                <div className="flex items-start gap-3">
-                  <Tag className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Tipo Sugerido</p>
+              {/* Web/URL - Always show */}
+              <div className="flex items-start gap-3">
+                <Globe className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">Web de la empresa</p>
+                  {selectedTech.web ? (
+                    <a 
+                      href={selectedTech.web.startsWith('http') ? selectedTech.web : `https://${selectedTech.web}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-secondary hover:underline flex items-center gap-1 break-all"
+                    >
+                      {selectedTech.web}
+                      <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  ) : (
+                    <p className="text-sm text-muted-foreground/50 italic">Sin información</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Type - Always show */}
+              <div className="flex items-start gap-3">
+                <Tag className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">Tipo Sugerido</p>
+                  {selectedTech.type ? (
                     <p className="text-sm">{selectedTech.type}</p>
-                  </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground/50 italic">Sin información</p>
+                  )}
                 </div>
-              )}
+              </div>
 
-              {/* Description */}
-              {selectedTech.description && (
-                <div className="flex items-start gap-3">
-                  <Lightbulb className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Descripción</p>
+              {/* Description - Always show */}
+              <div className="flex items-start gap-3">
+                <Lightbulb className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">Descripción Técnica</p>
+                  {selectedTech.description ? (
                     <p className="text-sm whitespace-pre-wrap">{selectedTech.description}</p>
-                  </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground/50 italic">Sin información</p>
+                  )}
                 </div>
-              )}
+              </div>
 
-              {/* Linked Tech ID */}
+              {/* Linked Tech ID - Only if linked */}
               {selectedTech.linkedTechId && (
-                <div className="flex items-start gap-3">
-                  <Globe className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div>
+                <div className="flex items-start gap-3 pt-2 border-t">
+                  <Tag className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
                     <p className="text-xs text-muted-foreground">ID en Base de Datos</p>
                     <p className="text-sm font-mono text-xs">{selectedTech.linkedTechId}</p>
                   </div>
                 </div>
-              )}
-
-              {/* No extra info message */}
-              {!selectedTech.provider && !selectedTech.description && !selectedTech.type && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay información adicional disponible para esta tecnología.
-                </p>
               )}
             </div>
           )}
