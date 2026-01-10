@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NewCaseStudyModal } from './NewCaseStudyModal';
+import { CaseStudyDetailView } from './CaseStudyDetailView';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -143,6 +144,9 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
 
   // Modal state
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
+  
+  // Detail view state
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
 
   // View mode
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -252,7 +256,7 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => onViewCase?.(caseStudy)}>
+        <DropdownMenuItem onClick={() => setSelectedCaseId(caseStudy.id)}>
           <Eye className="h-4 w-4 mr-2" />
           Ver detalle
         </DropdownMenuItem>
@@ -277,6 +281,20 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+
+  // If a case is selected, show detail view
+  if (selectedCaseId) {
+    return (
+      <CaseStudyDetailView
+        caseStudyId={selectedCaseId}
+        onBack={() => setSelectedCaseId(null)}
+        onEdit={() => {
+          // TODO: Open edit modal
+          console.log('Edit case:', selectedCaseId);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
