@@ -135,12 +135,14 @@ interface ResultData {
 
 interface CaseStudyFormViewProps {
   jobId: string;
+  existingCaseId?: string;  // If provided, update this case instead of creating new
   onBack: () => void;
   onSaved: () => void;
 }
 
 export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
   jobId,
+  existingCaseId,
   onBack,
   onSaved,
 }) => {
@@ -570,44 +572,61 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         resultsParamsJson['Reduccion'] = { value: parseFloat(reduction) || 0, unit: '%' };
       }
 
-      // Insert into casos_de_estudio
-      // Note: subsector is stored in original_data since there's no subsector_industrial column
-      const { data: caseStudy, error: insertError } = await supabase
-        .from('casos_de_estudio')
-        .insert({
-          name: title.trim(),
-          sector,
-          country,
-          description: problemDescription.trim(),
-          problem_parameters: problemParamsJson,
-          solution_applied: solutionDescription.trim(),
-          treatment_train: treatmentTrain.length > 0 ? treatmentTrain : null,
-          results_achieved: resultsDescription.trim(),
-          results_parameters: Object.keys(resultsParamsJson).length > 0 ? resultsParamsJson : null,
-          capex: capex ? parseFloat(capex) : null,
-          opex_year: opex ? parseFloat(opex) : null,
-          payback_months: payback ? parseFloat(payback) : null,
-          roi_percent: roi ? parseFloat(roi) : null,
-          roi_rationale: roiJustification.trim() || null,
-          lessons_learned: lessonsLearned.trim() || null,
-          quality_score: qualityScore || null,
-          status,
-          original_data: subsector.trim() ? { subsector: subsector.trim() } : null,
-        })
-        .select('id')
-        .single();
+      const caseData = {
+        name: title.trim(),
+        sector,
+        country,
+        description: problemDescription.trim(),
+        problem_parameters: problemParamsJson,
+        solution_applied: solutionDescription.trim(),
+        treatment_train: treatmentTrain.length > 0 ? treatmentTrain : null,
+        results_achieved: resultsDescription.trim(),
+        results_parameters: Object.keys(resultsParamsJson).length > 0 ? resultsParamsJson : null,
+        capex: capex ? parseFloat(capex) : null,
+        opex_year: opex ? parseFloat(opex) : null,
+        payback_months: payback ? parseFloat(payback) : null,
+        roi_percent: roi ? parseFloat(roi) : null,
+        roi_rationale: roiJustification.trim() || null,
+        lessons_learned: lessonsLearned.trim() || null,
+        quality_score: qualityScore || null,
+        status,
+        original_data: subsector.trim() ? { subsector: subsector.trim() } : null,
+      };
 
-      if (insertError) throw insertError;
+      let caseStudyId: string;
+
+      // If we have an existing case ID, UPDATE it instead of inserting
+      if (existingCaseId) {
+        const { error: updateError } = await supabase
+          .from('casos_de_estudio')
+          .update(caseData)
+          .eq('id', existingCaseId);
+
+        if (updateError) throw updateError;
+        caseStudyId = existingCaseId;
+        console.log('[CaseStudyForm] Updated existing case:', existingCaseId);
+      } else {
+        // Create new case
+        const { data: newCase, error: insertError } = await supabase
+          .from('casos_de_estudio')
+          .insert(caseData)
+          .select('id')
+          .single();
+
+        if (insertError) throw insertError;
+        caseStudyId = newCase.id;
+        console.log('[CaseStudyForm] Created new case:', caseStudyId);
+      }
 
       // Insert technologies with hybrid logic
-      if (technologies.length > 0 && caseStudy?.id) {
+      if (technologies.length > 0 && caseStudyId) {
         for (const tech of technologies) {
           if (tech.linkedTechId || tech.status === 'linked') {
             // CASO A: Tecnología ya existe en DB → vincular directamente
             const { error: techError } = await supabase
               .from('case_study_technologies')
               .insert({
-                case_study_id: caseStudy.id,
+                case_study_id: caseStudyId,
                 technology_name: tech.name,
                 provider: tech.provider || null,
                 role: tech.role,
@@ -630,7 +649,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             const { error: techError } = await supabase
               .from('case_study_technologies')
               .insert({
-                case_study_id: caseStudy.id,
+                case_study_id: caseStudyId,
                 technology_name: tech.name,
                 provider: tech.provider || null,
                 role: tech.role,
@@ -652,7 +671,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 'Tipo de tecnología': tech.type || 'Por clasificar',
                 'Sector y subsector': sector,
                 source: 'case_study',
-                case_study_id: caseStudy.id,
+                case_study_id: caseStudyId,
                 queue_status: 'pending',
                 priority: tech.role === 'Recomendada' ? 'high' : 'medium',
                 notes: `Extraída del caso: ${title}`,
@@ -664,7 +683,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
               console.error('Error inserting to scouting_queue:', scoutingError);
               // Aún así insertar en case_study_technologies sin referencia
               await supabase.from('case_study_technologies').insert({
-                case_study_id: caseStudy.id,
+                case_study_id: caseStudyId,
                 technology_name: tech.name,
                 provider: tech.provider || null,
                 role: tech.role,
@@ -674,7 +693,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
               const { error: techError } = await supabase
                 .from('case_study_technologies')
                 .insert({
-                  case_study_id: caseStudy.id,
+                  case_study_id: caseStudyId,
                   technology_name: tech.name,
                   provider: tech.provider || null,
                   role: tech.role,
@@ -689,11 +708,13 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         }
       }
 
-      // Update job with case_study_id
-      await supabase
-        .from('case_study_jobs')
-        .update({ case_study_id: caseStudy?.id })
-        .eq('id', jobId);
+      // Update job with case_study_id (only if creating new case)
+      if (!existingCaseId) {
+        await supabase
+          .from('case_study_jobs')
+          .update({ case_study_id: caseStudyId })
+          .eq('id', jobId);
+      }
 
       // Clear IndexedDB
       await clearFiles();

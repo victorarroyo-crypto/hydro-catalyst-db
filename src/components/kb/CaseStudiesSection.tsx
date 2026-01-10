@@ -46,7 +46,10 @@ import {
   Trash2,
   X,
   Loader2,
+  Sparkles,
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { CaseStudyFormView } from './CaseStudyFormView';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import {
@@ -157,6 +160,10 @@ export const CaseStudiesSection: React.FC = () => {
   const [caseToDelete, setCaseToDelete] = useState<CaseStudy | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Review modal state
+  const [reviewJobId, setReviewJobId] = useState<string | null>(null);
+  const [reviewCaseId, setReviewCaseId] = useState<string | null>(null);
+
   // View mode
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
@@ -218,8 +225,53 @@ export const CaseStudiesSection: React.FC = () => {
     },
   });
 
+  // Fetch jobs with result_data for review button
+  const { data: jobsByCaseId } = useQuery({
+    queryKey: ['case-study-jobs-map'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('case_study_jobs')
+        .select('id, case_study_id, status, result_data, technologies_new, technologies_found')
+        .eq('status', 'completed')
+        .not('result_data', 'is', null);
+      
+      if (error) return {};
+      
+      // Map by case_study_id for quick lookup
+      const map: Record<string, { jobId: string; hasTechnologies: boolean }> = {};
+      data?.forEach(job => {
+        if (job.case_study_id) {
+          const resultData = job.result_data as any;
+          const hasTechs = 
+            (job.technologies_new && job.technologies_new > 0) ||
+            (job.technologies_found && job.technologies_found > 0) ||
+            (resultData?.technologies?.technologies_new?.length > 0) ||
+            (resultData?.technologies?.technologies_found?.length > 0);
+          
+          map[job.case_study_id] = { 
+            jobId: job.id, 
+            hasTechnologies: !!hasTechs 
+          };
+        }
+      });
+      return map;
+    },
+  });
+
   const getTechnologies = (caseId: string): string[] => {
     return techCounts?.[caseId] || [];
+  };
+
+  // Check if case has review available
+  const hasReviewAvailable = (caseId: string): { available: boolean; jobId?: string } => {
+    const techCount = techCounts?.[caseId]?.length || 0;
+    const jobInfo = jobsByCaseId?.[caseId];
+    
+    // Show review if: case has completed job with technologies AND no persisted technologies
+    if (jobInfo?.hasTechnologies && techCount === 0) {
+      return { available: true, jobId: jobInfo.jobId };
+    }
+    return { available: false };
   };
 
   // Handle delete case study
@@ -295,35 +347,55 @@ export const CaseStudiesSection: React.FC = () => {
   };
 
   // Actions dropdown
-  const renderActions = (caseStudy: CaseStudy) => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <MoreVertical className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => setSelectedCaseId(caseStudy.id)}>
-          <Eye className="h-4 w-4 mr-2" />
-          Ver detalle
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => {
-          setEditingCaseId(caseStudy.id);
-        }}>
-          <Edit className="h-4 w-4 mr-2" />
-          Editar
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem 
-          onClick={() => openDeleteDialog(caseStudy)}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="h-4 w-4 mr-2" />
-          Eliminar
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  const renderActions = (caseStudy: CaseStudy) => {
+    const reviewInfo = hasReviewAvailable(caseStudy.id);
+    
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {/* Show "Revisar extracción" if job completed with technologies but none persisted */}
+          {reviewInfo.available && (
+            <>
+              <DropdownMenuItem 
+                onClick={() => {
+                  setReviewJobId(reviewInfo.jobId!);
+                  setReviewCaseId(caseStudy.id);
+                }}
+                className="text-primary"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Revisar extracción
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          <DropdownMenuItem onClick={() => setSelectedCaseId(caseStudy.id)}>
+            <Eye className="h-4 w-4 mr-2" />
+            Ver detalle
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => {
+            setEditingCaseId(caseStudy.id);
+          }}>
+            <Edit className="h-4 w-4 mr-2" />
+            Editar
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem 
+            onClick={() => openDeleteDialog(caseStudy)}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Eliminar
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
 
   // If editing a case, show edit view
   if (editingCaseId) {
@@ -483,6 +555,7 @@ export const CaseStudiesSection: React.FC = () => {
           {filteredCases.map((cs) => {
             const techs = getTechnologies(cs.id);
             const statusInfo = getStatusBadge(cs.status);
+            const reviewInfo = hasReviewAvailable(cs.id);
             
             return (
               <Card 
@@ -500,6 +573,13 @@ export const CaseStudiesSection: React.FC = () => {
                     <Badge className={`text-xs ${statusInfo.color}`}>
                       {statusInfo.label}
                     </Badge>
+                    {/* Show pending review badge */}
+                    {reviewInfo.available && (
+                      <Badge className="text-xs bg-primary/20 text-primary border-primary/30">
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        Revisión pendiente
+                      </Badge>
+                    )}
                   </div>
                   
                   {/* Title */}
@@ -536,13 +616,27 @@ export const CaseStudiesSection: React.FC = () => {
                   
                   {/* Actions */}
                   <div className="flex items-center justify-between pt-2 border-t">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setSelectedCaseId(cs.id)}
-                    >
-                      Ver detalle
-                    </Button>
+                    {reviewInfo.available ? (
+                      <Button 
+                        size="sm"
+                        onClick={() => {
+                          setReviewJobId(reviewInfo.jobId!);
+                          setReviewCaseId(cs.id);
+                        }}
+                        className="gap-1"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Revisar
+                      </Button>
+                    ) : (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setSelectedCaseId(cs.id)}
+                      >
+                        Ver detalle
+                      </Button>
+                    )}
                     {renderActions(cs)}
                   </div>
                 </CardContent>
@@ -667,6 +761,43 @@ export const CaseStudiesSection: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Review Extraction Modal */}
+      <Dialog 
+        open={!!reviewJobId} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setReviewJobId(null);
+            setReviewCaseId(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Revisar Extracción
+            </DialogTitle>
+          </DialogHeader>
+          {reviewJobId && (
+            <CaseStudyFormView
+              jobId={reviewJobId}
+              existingCaseId={reviewCaseId || undefined}
+              onBack={() => {
+                setReviewJobId(null);
+                setReviewCaseId(null);
+              }}
+              onSaved={() => {
+                setReviewJobId(null);
+                setReviewCaseId(null);
+                queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
+                queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
+                queryClient.invalidateQueries({ queryKey: ['case-study-jobs-map'] });
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
