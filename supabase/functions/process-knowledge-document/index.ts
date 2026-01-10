@@ -208,77 +208,75 @@ serve(async (req) => {
     }
     console.log(`[KB-PROCESS] Payload:`, JSON.stringify(payload))
 
-    try {
-      // Send to Railway for PyMuPDF processing with retry and timeout
-      const response = await fetchWithRetry(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Sync-Secret': syncSecret,
-        },
-        body: JSON.stringify(payload),
-      });
+    // Send to Railway asynchronously - don't wait for response
+    // Railway will call back to kb-process-webhook when done
+    const sendToRailway = async () => {
+      try {
+        console.log(`[KB-PROCESS] Sending async request to Railway...`)
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Sync-Secret': syncSecret,
+          },
+          body: JSON.stringify(payload),
+        });
 
-      const responseText = await response.text()
-      console.log(`[KB-PROCESS] Railway response: ${response.status} - ${responseText}`)
+        const responseText = await response.text()
+        console.log(`[KB-PROCESS] Railway async response: ${response.status} - ${responseText}`)
 
-      if (!response.ok) {
-        console.error(`[KB-PROCESS] Railway error: ${response.status}`)
+        if (!response.ok) {
+          console.error(`[KB-PROCESS] Railway error: ${response.status}`)
+          
+          // Mark document as failed
+          await supabase
+            .from('knowledge_documents')
+            .update({ 
+              status: 'failed', 
+              description: `Railway error: ${response.status} - ${responseText.substring(0, 200)}`,
+              updated_at: new Date().toISOString() 
+            })
+            .eq('id', documentId)
+        } else {
+          console.log(`[KB-PROCESS] Railway accepted document for processing`)
+        }
+      } catch (fetchError) {
+        console.error('[KB-PROCESS] Railway async fetch error:', fetchError)
         
-        // Mark document as failed
+        // Mark document as failed due to network error
+        const errorMsg = fetchError instanceof Error ? fetchError.message : 'Unknown network error'
         await supabase
           .from('knowledge_documents')
           .update({ 
             status: 'failed', 
-            description: `Railway error: ${response.status} - ${responseText.substring(0, 200)}`,
+            description: `Error de conexión: ${errorMsg}`,
             updated_at: new Date().toISOString() 
           })
           .eq('id', documentId)
-        
-        return new Response(
-          JSON.stringify({ error: `Railway error: ${response.status}`, details: responseText }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
       }
-
-      let result = {}
-      try {
-        result = JSON.parse(responseText)
-      } catch {
-        result = { raw: responseText }
-      }
-
-      console.log(`[KB-PROCESS] Success - Document sent to Railway for processing`)
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'Document sent to Railway for PyMuPDF processing',
-          document_id: documentId,
-          file_url,
-          railway_response: result,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    } catch (fetchError) {
-      console.error('[KB-PROCESS] Fetch error:', fetchError)
-      
-      // Mark document as failed due to timeout/network error
-      const errorMsg = fetchError instanceof Error ? fetchError.message : 'Unknown network error'
-      await supabase
-        .from('knowledge_documents')
-        .update({ 
-          status: 'failed', 
-          description: `Error de conexión: ${errorMsg}`,
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', documentId)
-      
-      return new Response(
-        JSON.stringify({ error: errorMsg }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
     }
+
+    // Use EdgeRuntime.waitUntil for background processing
+    // deno-lint-ignore no-explicit-any
+    const runtime = (globalThis as any).EdgeRuntime
+    if (runtime && typeof runtime.waitUntil === 'function') {
+      runtime.waitUntil(sendToRailway())
+    } else {
+      // Fallback: fire and forget (don't await)
+      sendToRailway()
+    }
+
+    console.log(`[KB-PROCESS] Request queued - returning immediately`)
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Document queued for Railway PyMuPDF processing',
+        document_id: documentId,
+        status: 'processing',
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
 
   } catch (error) {
     console.error('[KB-PROCESS] Unexpected error:', error)
