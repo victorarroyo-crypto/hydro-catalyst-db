@@ -274,6 +274,8 @@ export default function KnowledgeBase() {
   const [editingDescription, setEditingDescription] = useState("");
   const [generatingDescId, setGeneratingDescId] = useState<string | null>(null);
   const [lastQueryCost, setLastQueryCost] = useState<number | null>(null);
+  const [editingGroupBaseName, setEditingGroupBaseName] = useState<string | null>(null);
+  const [editingGroupNewName, setEditingGroupNewName] = useState("");
   
   // Document filters state
   const [docCategoryFilter, setDocCategoryFilter] = useState<string>('all');
@@ -547,6 +549,44 @@ export default function KnowledgeBase() {
     },
     onError: () => {
       toast.error("Error al renombrar el documento");
+    },
+  });
+
+  // Mutation to rename all parts of a multi-part document group
+  const renameGroupMutation = useMutation({
+    mutationFn: async ({ parts, oldBaseName, newBaseName }: { parts: KnowledgeDocument[]; oldBaseName: string; newBaseName: string }) => {
+      const partRegex = /^(.+?)[\s_]parte(\d+)de(\d+)\.pdf$/i;
+      
+      for (const part of parts) {
+        const match = part.name.match(partRegex);
+        let newName: string;
+        
+        if (match) {
+          // This is a parteXdeY file - replace base name
+          const partNum = match[2];
+          const totalParts = match[3];
+          newName = `${newBaseName}_parte${partNum}de${totalParts}.pdf`;
+        } else {
+          // This is the base document (no parte suffix)
+          newName = `${newBaseName}.pdf`;
+        }
+        
+        const { error } = await supabase
+          .from("knowledge_documents")
+          .update({ name: newName })
+          .eq("id", part.id);
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      toast.success("Nombre del grupo actualizado");
+      setEditingGroupBaseName(null);
+      setEditingGroupNewName("");
+    },
+    onError: () => {
+      toast.error("Error al renombrar el grupo");
     },
   });
 
@@ -1621,12 +1661,66 @@ export default function KnowledgeBase() {
                               </CollapsibleTrigger>
                               <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                               <div className="min-w-0 flex-1 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium truncate">{group.baseName}.pdf</p>
-                                  <Badge variant="secondary" className="text-xs shrink-0">
-                                    {group.totalParts} partes
-                                  </Badge>
-                                </div>
+                                {/* Editable title for multi-part group */}
+                                {editingGroupBaseName === group.baseName ? (
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={editingGroupNewName}
+                                      onChange={(e) => setEditingGroupNewName(e.target.value)}
+                                      className="h-8 flex-1"
+                                      placeholder="Nuevo nombre del documento..."
+                                    />
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost" 
+                                      onClick={() => renameGroupMutation.mutate({ 
+                                        parts: group.parts, 
+                                        oldBaseName: group.baseName, 
+                                        newBaseName: editingGroupNewName 
+                                      })}
+                                      disabled={renameGroupMutation.isPending || !editingGroupNewName.trim()}
+                                    >
+                                      {renameGroupMutation.isPending ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Check className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                    <Button size="sm" variant="ghost" onClick={() => { setEditingGroupBaseName(null); setEditingGroupNewName(""); }}>
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <p 
+                                      className="font-medium truncate cursor-pointer hover:text-primary"
+                                      onClick={() => { setEditingGroupBaseName(group.baseName); setEditingGroupNewName(group.baseName); }}
+                                      title="Clic para editar"
+                                    >
+                                      {group.baseName}.pdf
+                                    </p>
+                                    <Badge variant="secondary" className="text-xs shrink-0">
+                                      {group.totalParts} partes
+                                    </Badge>
+                                    {canManage && (
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              size="sm" 
+                                              variant="ghost" 
+                                              className="h-6 w-6 p-0"
+                                              onClick={() => { setEditingGroupBaseName(group.baseName); setEditingGroupNewName(group.baseName); }}
+                                            >
+                                              <Pencil className="h-3 w-3" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>Renombrar grupo</TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    )}
+                                  </div>
+                                )}
                                 
                                 {/* Editable description for multi-part */}
                                 {editingDescDocId === doc.id ? (
