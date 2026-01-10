@@ -170,6 +170,25 @@ export default function KnowledgeBase() {
     notas: '',
   });
   
+  // AI Source Search state
+  const [showAISourceSearch, setShowAISourceSearch] = useState(false);
+  const [aiSourcePrompt, setAiSourcePrompt] = useState('');
+  const [aiSourceFilters, setAiSourceFilters] = useState({
+    tipo: '',
+    region: '',
+    sector: '',
+  });
+  const [aiSourceResults, setAiSourceResults] = useState<Array<{
+    nombre: string;
+    url: string;
+    descripcion: string;
+    tipo: string;
+    pais: string;
+    sector_foco: string;
+  }>>([]);
+  const [aiSourceExplanation, setAiSourceExplanation] = useState('');
+  const [isSearchingAI, setIsSearchingAI] = useState(false);
+  
   // Case studies state
   const [selectedCase, setSelectedCase] = useState<CaseStudy | null>(null);
   const [caseSearchQuery, setCaseSearchQuery] = useState('');
@@ -462,6 +481,81 @@ export default function KnowledgeBase() {
       return;
     }
     saveSourceMutation.mutate(sourceForm);
+  };
+
+  // AI Source Search handler
+  const handleAISourceSearch = async () => {
+    if (!aiSourcePrompt.trim() || aiSourcePrompt.trim().length < 5) {
+      toast.error("Escribe una descripción de las fuentes que buscas (mínimo 5 caracteres)");
+      return;
+    }
+
+    setIsSearchingAI(true);
+    setAiSourceResults([]);
+    setAiSourceExplanation('');
+
+    try {
+      const { data, error } = await supabase.functions.invoke('search-scouting-sources', {
+        body: {
+          prompt: aiSourcePrompt.trim(),
+          filters: {
+            tipo: aiSourceFilters.tipo || null,
+            region: aiSourceFilters.region || null,
+            sector: aiSourceFilters.sector || null,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      setAiSourceResults(data.sources || []);
+      setAiSourceExplanation(data.explanation || '');
+      
+      if (data.sources?.length > 0) {
+        toast.success(`Se encontraron ${data.sources.length} fuentes`);
+      } else {
+        toast.info("No se encontraron fuentes con esos criterios");
+      }
+    } catch (error) {
+      console.error('AI search error:', error);
+      toast.error("Error al buscar fuentes con IA");
+    } finally {
+      setIsSearchingAI(false);
+    }
+  };
+
+  // Add AI-suggested source to database
+  const addAISourceToDb = async (source: typeof aiSourceResults[0]) => {
+    try {
+      const { error } = await supabase
+        .from("scouting_sources")
+        .insert({
+          nombre: source.nombre,
+          url: source.url,
+          descripcion: source.descripcion,
+          tipo: source.tipo || 'web',
+          pais: source.pais || null,
+          sector_foco: source.sector_foco || null,
+          calidad_score: 3,
+          activo: true,
+        });
+
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ["scouting-sources"] });
+      toast.success(`"${source.nombre}" añadida a las fuentes`);
+      
+      // Remove from results
+      setAiSourceResults(prev => prev.filter(s => s.url !== source.url));
+    } catch (error) {
+      console.error('Add source error:', error);
+      toast.error("Error al añadir la fuente");
+    }
   };
 
   // Move case study to technologies
@@ -1250,12 +1344,28 @@ export default function KnowledgeBase() {
                   Webs, ferias, directorios y fuentes para descubrir nuevas tecnologías
                 </CardDescription>
               </div>
-              {canManage && (
-                <Button onClick={() => { resetSourceForm(); setEditingSource(null); setShowAddSourceModal(true); }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Añadir Fuente
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {canManage && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setShowAISourceSearch(true);
+                      setAiSourceResults([]);
+                      setAiSourcePrompt('');
+                      setAiSourceExplanation('');
+                    }}
+                  >
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Buscar con IA (temporal)
+                  </Button>
+                )}
+                {canManage && (
+                  <Button onClick={() => { resetSourceForm(); setEditingSource(null); setShowAddSourceModal(true); }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Añadir Fuente
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {loadingSources ? (
@@ -1875,6 +1985,182 @@ export default function KnowledgeBase() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Source Search Modal */}
+      <Dialog open={showAISourceSearch} onOpenChange={setShowAISourceSearch}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Buscar Nuevas Fuentes con IA
+            </DialogTitle>
+            <DialogDescription>
+              Describe qué tipo de fuentes buscas y la IA te sugerirá opciones relevantes para scouting de tecnologías del agua
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Filters */}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-sm">Tipo de fuente</Label>
+                <Select 
+                  value={aiSourceFilters.tipo} 
+                  onValueChange={(v) => setAiSourceFilters(prev => ({ ...prev, tipo: v }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Cualquiera" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Cualquiera</SelectItem>
+                    <SelectItem value="web">Web</SelectItem>
+                    <SelectItem value="directorio">Directorio</SelectItem>
+                    <SelectItem value="feria">Feria/Congreso</SelectItem>
+                    <SelectItem value="aceleradora">Aceleradora</SelectItem>
+                    <SelectItem value="gobierno">Gobierno</SelectItem>
+                    <SelectItem value="universidad">Universidad</SelectItem>
+                    <SelectItem value="newsletter">Newsletter</SelectItem>
+                    <SelectItem value="asociacion">Asociación</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm">Región</Label>
+                <Select 
+                  value={aiSourceFilters.region} 
+                  onValueChange={(v) => setAiSourceFilters(prev => ({ ...prev, region: v }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Global" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Global</SelectItem>
+                    <SelectItem value="España">España</SelectItem>
+                    <SelectItem value="Europa">Europa</SelectItem>
+                    <SelectItem value="LATAM">Latinoamérica</SelectItem>
+                    <SelectItem value="Norteamérica">Norteamérica</SelectItem>
+                    <SelectItem value="Asia">Asia</SelectItem>
+                    <SelectItem value="MENA">MENA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm">Sector</Label>
+                <Select 
+                  value={aiSourceFilters.sector} 
+                  onValueChange={(v) => setAiSourceFilters(prev => ({ ...prev, sector: v }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todos</SelectItem>
+                    <SelectItem value="municipal">Municipal</SelectItem>
+                    <SelectItem value="industrial">Industrial</SelectItem>
+                    <SelectItem value="agricola">Agrícola</SelectItem>
+                    <SelectItem value="desalacion">Desalación</SelectItem>
+                    <SelectItem value="reutilizacion">Reutilización</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Prompt */}
+            <div>
+              <Label className="text-sm">¿Qué tipo de fuentes buscas?</Label>
+              <Textarea
+                value={aiSourcePrompt}
+                onChange={(e) => setAiSourcePrompt(e.target.value)}
+                placeholder="Ej: Ferias y congresos de tecnología del agua en Europa para 2025, especialmente enfocadas en desalación y reutilización de agua..."
+                className="mt-1 min-h-[100px]"
+              />
+            </div>
+
+            {/* Search button */}
+            <Button 
+              onClick={handleAISourceSearch} 
+              disabled={isSearchingAI || aiSourcePrompt.trim().length < 5}
+              className="w-full"
+            >
+              {isSearchingAI ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Buscando fuentes...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Buscar con IA
+                </>
+              )}
+            </Button>
+
+            {/* Results */}
+            {(aiSourceResults.length > 0 || aiSourceExplanation) && (
+              <div className="border-t pt-4 space-y-4">
+                {aiSourceExplanation && (
+                  <p className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
+                    {aiSourceExplanation}
+                  </p>
+                )}
+                
+                <ScrollArea className="max-h-[300px]">
+                  <div className="space-y-3">
+                    {aiSourceResults.map((source, idx) => (
+                      <div 
+                        key={idx} 
+                        className="flex items-start justify-between gap-3 p-3 border rounded-lg hover:bg-muted/50"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium truncate">{source.nombre}</span>
+                            {source.tipo && (
+                              <Badge variant="secondary" className="text-xs shrink-0">
+                                {source.tipo}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground line-clamp-2 mb-1">
+                            {source.descripcion}
+                          </p>
+                          <a 
+                            href={source.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-xs text-primary hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            {source.url.substring(0, 50)}{source.url.length > 50 ? '...' : ''}
+                          </a>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                            {source.pais && <span>📍 {source.pais}</span>}
+                            {source.sector_foco && <span>🎯 {source.sector_foco}</span>}
+                          </div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => addAISourceToDb(source)}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Añadir
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+
+                {aiSourceResults.length === 0 && aiSourceExplanation && (
+                  <p className="text-center text-muted-foreground py-4">
+                    No se encontraron fuentes con esos criterios. Intenta con otra descripción.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

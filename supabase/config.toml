@@ -95,3 +95,6 @@ verify_jwt = false
 
 [functions.kb-process-webhook]
 verify_jwt = false
+
+[functions.search-scouting-sources]
+verify_jwt = false
