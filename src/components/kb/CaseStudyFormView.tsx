@@ -61,8 +61,11 @@ interface Technology {
   name: string;
   provider: string;
   role: 'Recomendada' | 'Evaluada';
-  status?: 'new' | 'linked';  // Estado de vinculación
+  status?: 'new' | 'linked' | 'sent_to_scouting';  // Estado de vinculación
   linkedTechId?: string;       // ID de tecnología existente en DB
+  description?: string;        // Descripción de la tecnología
+  trl?: number;                // TRL estimado
+  type?: string;               // Tipo sugerido
 }
 
 // Nested structure from Railway
@@ -300,7 +303,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
           
           // Technologies handling - supports both Railway object and legacy array
           if (data.technologies) {
-            let techArray: { name: string; provider?: string; role?: string }[] = [];
+            let techArray: { name: string; provider?: string; role?: string; description?: string; trl_estimated?: number; type_suggested?: string }[] = [];
             
             // Check if it's Railway's object structure (has technologies_found or technologies_new)
             if (typeof data.technologies === 'object' && !Array.isArray(data.technologies)) {
@@ -310,7 +313,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
               // Combine technologies_found and technologies_new
               if (techData.technologies_found?.length) {
                 console.log('[CaseStudyForm] Found technologies_found:', techData.technologies_found.length);
-                techArray = [...techArray, ...techData.technologies_found];
+                techArray = [...techArray, ...techData.technologies_found.map(t => ({ ...t, status: 'linked' as const }))];
               }
               if (techData.technologies_new?.length) {
                 console.log('[CaseStudyForm] Found technologies_new:', techData.technologies_new.length);
@@ -326,7 +329,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             // Map to form format with role translation
             if (techArray.length > 0) {
               console.log('[CaseStudyForm] Setting technologies:', techArray.length);
-              setTechnologies(techArray.map((t, i) => {
+              setTechnologies(techArray.map((t: any, i) => {
                 // Map English roles to Spanish
                 let mappedRole: 'Recomendada' | 'Evaluada' = 'Evaluada';
                 if (t.role) {
@@ -341,6 +344,10 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                   name: t.name,
                   provider: t.provider || '',
                   role: mappedRole,
+                  status: t.status || 'new',
+                  description: t.description || '',
+                  trl: t.trl_estimated || t.trl || null,
+                  type: t.type_suggested || t.type || '',
                 };
               }));
             }
@@ -444,6 +451,76 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
 
   const removeTechnology = (id: string) => {
     setTechnologies(techs => techs.filter(t => t.id !== id));
+  };
+
+  const [sendingToScouting, setSendingToScouting] = useState<string | null>(null);
+
+  const sendToScouting = async (tech: Technology) => {
+    if (tech.status === 'linked' || tech.status === 'sent_to_scouting') {
+      toast.info('Esta tecnología ya está vinculada o enviada a scouting');
+      return;
+    }
+
+    setSendingToScouting(tech.id);
+    try {
+      // Verificar si ya existe en scouting_queue
+      const { data: existingInQueue } = await supabase
+        .from('scouting_queue')
+        .select('id')
+        .ilike('"Nombre de la tecnología"', tech.name)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingInQueue) {
+        toast.warning(`"${tech.name}" ya está en la cola de scouting`);
+        // Marcar como enviada
+        setTechnologies(techs =>
+          techs.map(t => t.id === tech.id ? { ...t, status: 'sent_to_scouting' as const } : t)
+        );
+        return;
+      }
+
+      // Insertar en scouting_queue
+      const { error } = await supabase
+        .from('scouting_queue')
+        .insert({
+          'Nombre de la tecnología': tech.name,
+          'Proveedor / Empresa': tech.provider || null,
+          'Descripción técnica breve': tech.description || null,
+          'Grado de madurez (TRL)': tech.trl || null,
+          'Tipo de tecnología': tech.type || 'Por clasificar',
+          source: 'case_study',
+          queue_status: 'pending',
+          priority: tech.role === 'Recomendada' ? 'high' : 'medium',
+          notes: `Extraída de caso de estudio: ${title}`,
+        });
+
+      if (error) throw error;
+
+      // Actualizar estado local
+      setTechnologies(techs =>
+        techs.map(t => t.id === tech.id ? { ...t, status: 'sent_to_scouting' as const } : t)
+      );
+
+      toast.success(`"${tech.name}" enviada a scouting para revisión`);
+    } catch (error) {
+      console.error('Error sending to scouting:', error);
+      toast.error('Error al enviar a scouting');
+    } finally {
+      setSendingToScouting(null);
+    }
+  };
+
+  const sendAllNewToScouting = async () => {
+    const newTechs = technologies.filter(t => t.status === 'new');
+    if (newTechs.length === 0) {
+      toast.info('No hay tecnologías nuevas para enviar');
+      return;
+    }
+
+    for (const tech of newTechs) {
+      await sendToScouting(tech);
+    }
   };
 
   const handleSave = async (status: 'draft' | 'approved') => {
@@ -939,9 +1016,22 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
 
           {/* SECCIÓN: Tecnologías Identificadas */}
           <section className="space-y-4">
-            <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-              Tecnologías Identificadas
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                Tecnologías Identificadas ({technologies.length})
+              </h4>
+              {technologies.filter(t => t.status === 'new').length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={sendAllNewToScouting}
+                  className="text-xs"
+                >
+                  <Send className="h-3 w-3 mr-1" />
+                  Enviar todas a Scouting ({technologies.filter(t => t.status === 'new').length})
+                </Button>
+              )}
+            </div>
             
             {technologies.length > 0 && (
               <div className="space-y-2">
@@ -950,39 +1040,73 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                     key={tech.id}
                     className="flex items-center justify-between p-3 rounded-lg bg-muted/50 group"
                   >
-                    <div className="flex items-center gap-3">
-                      <div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium">{tech.name}</p>
-                        {tech.provider && (
-                          <p className="text-xs text-muted-foreground">{tech.provider}</p>
+                        {/* Badge de estado */}
+                        <Badge 
+                          variant="outline"
+                          className={
+                            tech.status === 'linked' 
+                              ? 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' 
+                              : tech.status === 'sent_to_scouting'
+                              ? 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700'
+                              : 'bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700'
+                          }
+                        >
+                          {tech.status === 'linked' ? '🟢 En DB' : tech.status === 'sent_to_scouting' ? '📤 En Scouting' : '🆕 Nueva'}
+                        </Badge>
+                        <Badge variant={tech.role === 'Recomendada' ? 'default' : 'secondary'}>
+                          {tech.role}
+                        </Badge>
+                        {tech.trl && (
+                          <Badge variant="outline" className="text-xs">TRL {tech.trl}</Badge>
                         )}
                       </div>
-                      {/* Badge de estado de vinculación */}
-                      <Badge 
-                        variant="outline"
-                        className={
-                          tech.status === 'linked' 
-                            ? 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' 
-                            : 'bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600'
-                        }
-                      >
-                        {tech.status === 'linked' ? '🟢 Vinculada' : '⚪ Nueva'}
-                      </Badge>
-                      <Badge variant={tech.role === 'Recomendada' ? 'default' : 'secondary'}>
-                        {tech.role}
-                      </Badge>
+                      {tech.provider && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{tech.provider}</p>
+                      )}
+                      {tech.description && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tech.description}</p>
+                      )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeTechnology(tech.id)}
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1 ml-2">
+                      {tech.status === 'new' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => sendToScouting(tech)}
+                          disabled={sendingToScouting === tech.id}
+                          className="text-xs text-primary hover:text-primary"
+                        >
+                          {sendingToScouting === tech.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Send className="h-3 w-3 mr-1" />
+                              A Scouting
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeTechnology(tech.id)}
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
+            )}
+            
+            {technologies.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No se identificaron tecnologías en este caso de estudio
+              </p>
             )}
             
             <div className="p-3 border border-dashed rounded-lg space-y-2">
