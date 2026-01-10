@@ -168,9 +168,14 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       console.log('Sending files to Railway for job:', job.id);
       
       // Call Railway API
-      const railwayUrl = import.meta.env.VITE_RAILWAY_CASE_STUDY_URL || 'https://case-study-processor.railway.app/process';
+      const railwayUrl = import.meta.env.VITE_RAILWAY_CASE_STUDY_URL || 'https://watertech-scouting-production.up.railway.app/api/case-study/upload-and-process';
+      const railwaySyncSecret = import.meta.env.VITE_RAILWAY_SYNC_SECRET || 'VandarumSync2024!';
+      
       const response = await fetch(railwayUrl, {
         method: 'POST',
+        headers: {
+          'X-Sync-Secret': railwaySyncSecret,
+        },
         body: formData,
       });
       
