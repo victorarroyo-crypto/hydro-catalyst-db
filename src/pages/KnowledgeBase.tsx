@@ -1155,6 +1155,56 @@ export default function KnowledgeBase() {
   };
 
   // Confirm upload from modal
+  // Process parts with concurrency limit to avoid overwhelming Railway
+  const processWithConcurrencyLimit = async (
+    parts: Array<{ blob: Blob; name: string; pageRange: string }>,
+    concurrencyLimit: number = 3
+  ): Promise<{ processed: number; failed: number }> => {
+    const queue = [...parts];
+    let processed = 0;
+    let failed = 0;
+    const inProgress: Promise<void>[] = [];
+
+    const processOne = async (part: typeof parts[0], index: number) => {
+      try {
+        console.log(`[KB-UPLOAD-HANDLER] Processing part ${index + 1}/${parts.length}: ${part.name}`);
+        const partFile = new File([part.blob], part.name, { type: "application/pdf" });
+        await uploadMutation.mutateAsync({ 
+          file: partFile, 
+          description: index === 0 ? uploadDescription : undefined 
+        });
+        processed++;
+        console.log(`[KB-UPLOAD-HANDLER] Part ${index + 1} completed successfully`);
+      } catch (error) {
+        failed++;
+        console.error(`[KB-UPLOAD-HANDLER] Part ${index + 1} failed:`, error);
+      }
+      setUploadProgress({ current: processed + failed, total: parts.length });
+    };
+
+    let partIndex = 0;
+
+    while (queue.length > 0 || inProgress.length > 0) {
+      // Fill up to concurrency limit
+      while (inProgress.length < concurrencyLimit && queue.length > 0) {
+        const part = queue.shift()!;
+        const currentIndex = partIndex++;
+        const promise = processOne(part, currentIndex).finally(() => {
+          const idx = inProgress.indexOf(promise);
+          if (idx !== -1) inProgress.splice(idx, 1);
+        });
+        inProgress.push(promise);
+      }
+
+      // Wait for at least one to finish before continuing
+      if (inProgress.length > 0) {
+        await Promise.race(inProgress);
+      }
+    }
+
+    return { processed, failed };
+  };
+
   const handleConfirmUpload = async () => {
     if (!selectedFile) return;
 
@@ -1169,28 +1219,22 @@ export default function KnowledgeBase() {
       console.log("[KB-UPLOAD-HANDLER] Split result:", { parts: parts.length, totalPages, wasSplit });
       
       if (wasSplit) {
-        toast.info(`Documento dividido en ${parts.length} partes (${totalPages} páginas total)`);
+        toast.info(`Documento dividido en ${parts.length} partes (${totalPages} páginas total). Procesando con límite de 3 concurrentes...`);
       }
       
       setUploadProgress({ current: 0, total: parts.length });
       
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        console.log(`[KB-UPLOAD-HANDLER] Uploading part ${i + 1}/${parts.length}:`, part.name);
-        setUploadProgress({ current: i + 1, total: parts.length });
-        const partFile = new File([part.blob], part.name, { type: "application/pdf" });
-        // Pass description only for the first part (or all parts share same description)
-        await uploadMutation.mutateAsync({ 
-          file: partFile, 
-          description: i === 0 ? uploadDescription : undefined 
-        });
-        console.log(`[KB-UPLOAD-HANDLER] Part ${i + 1} uploaded successfully`);
-      }
+      // Use concurrency-limited processing for multi-part documents
+      const { processed, failed } = await processWithConcurrencyLimit(parts, 3);
       
       if (wasSplit) {
-        toast.success(`${parts.length} partes subidas correctamente`);
+        if (failed > 0) {
+          toast.warning(`${processed} partes procesadas, ${failed} fallidas. Puedes reintentar las fallidas más tarde.`);
+        } else {
+          toast.success(`${parts.length} partes subidas y en proceso correctamente`);
+        }
       }
-      console.log("[KB-UPLOAD-HANDLER] All parts uploaded successfully");
+      console.log("[KB-UPLOAD-HANDLER] All parts uploaded:", { processed, failed });
     } catch (error) {
       console.error("[KB-UPLOAD-HANDLER] Upload error:", error);
       const message = error instanceof Error ? error.message : "Error desconocido al procesar el documento";
