@@ -744,15 +744,15 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(90vh-4rem)] p-6">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden p-6">
       {/* Header */}
       <div className="flex items-center gap-2 pb-4 border-b shrink-0">
         <Sparkles className="h-5 w-5 text-primary" />
         <h3 className="font-semibold">Revisar y Completar</h3>
       </div>
 
-      {/* Scrollable Form */}
-      <ScrollArea className="flex-1 min-h-0 py-4">
+      {/* Scrollable Form - using native overflow for reliability */}
+      <div className="flex-1 min-h-0 overflow-y-auto py-4">
         <div className="space-y-6 pr-4">
           {/* SECCIÓN: Información General */}
           <section className="space-y-4">
@@ -1197,7 +1197,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             </div>
           </section>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Footer */}
       <div className="pt-4 border-t space-y-3 shrink-0">
