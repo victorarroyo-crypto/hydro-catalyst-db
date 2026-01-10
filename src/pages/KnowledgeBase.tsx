@@ -2439,7 +2439,7 @@ export default function KnowledgeBase() {
                   </p>
                 )}
                 
-                <ScrollArea className="max-h-[300px]">
+                <ScrollArea className="max-h-[500px]">
                   <div className="space-y-3">
                     {aiSourceResults.map((source, idx) => (
                       <div 
