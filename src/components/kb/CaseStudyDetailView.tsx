@@ -282,17 +282,15 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
             )}
             Descargar Word
           </Button>
+          <Button variant="outline" onClick={onEdit}>
+            <Edit className="h-4 w-4 mr-2" />
+            Editar
+          </Button>
           {canManage && (
-            <>
-              <Button variant="outline" onClick={onEdit}>
-                <Edit className="h-4 w-4 mr-2" />
-                Editar
-              </Button>
-              <Button variant="outline" onClick={handleArchive}>
-                <Archive className="h-4 w-4 mr-2" />
-                Archivar
-              </Button>
-            </>
+            <Button variant="outline" onClick={handleArchive}>
+              <Archive className="h-4 w-4 mr-2" />
+              Archivar
+            </Button>
           )}
         </div>
       </div>
