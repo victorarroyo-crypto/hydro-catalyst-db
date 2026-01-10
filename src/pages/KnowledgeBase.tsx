@@ -895,7 +895,7 @@ export default function KnowledgeBase() {
                     <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           {editingDocId === doc.id ? (
                             <div className="flex items-center gap-2">
                               <Input
@@ -913,7 +913,10 @@ export default function KnowledgeBase() {
                           ) : (
                             <p className="font-medium truncate">{doc.name}</p>
                           )}
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {doc.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{doc.description}</p>
+                          )}
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                             <span>{formatFileSize(doc.file_size)}</span>
                             <span>•</span>
                             <span>{doc.chunk_count} chunks</span>
@@ -922,6 +925,33 @@ export default function KnowledgeBase() {
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusBadge(doc.status)}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button size="sm" variant="ghost" onClick={() => handleDownloadDocument(doc)}>
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Descargar</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {canManage && (doc.status === 'processed' || doc.status === 'error') && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={() => reprocessMutation.mutate(doc.id)}
+                                  disabled={reprocessMutation.isPending}
+                                >
+                                  <RotateCcw className={`h-4 w-4 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Reprocesar con PyMuPDF</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
                         {canManage && (
                           <>
                             <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>

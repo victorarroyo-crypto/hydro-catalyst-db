@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.sync-reconcile]
 verify_jwt = false
+
+[functions.kb-process-webhook]
+verify_jwt = false
