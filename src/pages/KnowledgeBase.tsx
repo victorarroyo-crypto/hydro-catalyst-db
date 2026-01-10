@@ -391,6 +391,38 @@ export default function KnowledgeBase() {
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
   const isAdmin = userRole === "admin";
 
+  // Real-time subscription for document status updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('doc-status-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'knowledge_documents',
+        },
+        (payload) => {
+          const newDoc = payload.new as KnowledgeDocument;
+          const oldDoc = payload.old as Partial<KnowledgeDocument>;
+          
+          // Show toast when a document finishes processing
+          if (oldDoc.status !== 'processed' && newDoc.status === 'processed') {
+            toast.success(`"${newDoc.name}" procesado correctamente`, { duration: 4000 });
+            queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+          } else if (oldDoc.status !== 'failed' && newDoc.status === 'failed') {
+            toast.error(`"${newDoc.name}" falló al procesar`, { duration: 4000 });
+            queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { 
+      supabase.removeChannel(channel); 
+    };
+  }, [queryClient]);
+
   // Get current model for knowledge base
   const { data: modelConfig } = useQuery({
     queryKey: ['knowledge-base-model'],
@@ -1007,17 +1039,41 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Reprocess document with Railway/PyMuPDF - now with granular state
+  // Track recently sent parts for visual feedback (shows "Enviado" badge for 10s)
+  const [recentlySentParts, setRecentlySentParts] = useState<Set<string>>(new Set());
+
+  // Reprocess document with Railway/PyMuPDF - now with granular state and better feedback
   const handleSingleReprocess = async (docId: string, docName: string) => {
     console.log('[KB] Reprocess single', docId, docName);
+    console.log(`[KB] ✅ Solo "${docName}" enviado. Otras partes NO afectadas.`);
     setReprocessingDocId(docId);
+    
+    // Toast inicial más informativo
+    toast.info(`Enviando "${docName}" a procesar...`, { duration: 2000 });
+    
     try {
       const { error } = await supabase.functions.invoke('process-knowledge-document', {
         body: { documentId: docId, forceReprocess: true }
       });
       if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
-      toast.success(`"${docName}" enviada a reprocesar`);
+      
+      // Mark as recently sent for visual feedback
+      setRecentlySentParts(prev => new Set(prev).add(docId));
+      setTimeout(() => {
+        setRecentlySentParts(prev => {
+          const next = new Set(prev);
+          next.delete(docId);
+          return next;
+        });
+      }, 10000); // Mantener indicador 10 segundos
+      
+      // Silent refetch to avoid visual confusion
+      queryClient.refetchQueries({ queryKey: ["knowledge-documents"], type: 'active' });
+      
+      toast.success(
+        `✓ "${docName}" enviado a procesar. El estado se actualizará automáticamente.`,
+        { duration: 4000 }
+      );
     } catch (error) {
       toast.error(`Error al reprocesar: ${(error as Error).message}`);
     } finally {
@@ -1774,6 +1830,40 @@ export default function KnowledgeBase() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Tip for stuck documents */}
+              {(() => {
+                const groupedDocs = groupDocumentParts(documents || []);
+                const hasStuck = groupedDocs.some(g => g.stuckCount > 0);
+                const hasFailed = groupedDocs.some(g => g.failedCount > 0);
+                
+                if (hasStuck || hasFailed) {
+                  return (
+                    <InstructionTip 
+                      variant="amber" 
+                      icon="warning"
+                      dismissible={false}
+                      className="mb-4"
+                    >
+                      <strong>Atención:</strong> Hay documentos {hasStuck ? 'atascados (+30 min procesando)' : ''}{hasStuck && hasFailed ? ' o ' : ''}{hasFailed ? 'con errores' : ''}. 
+                      Expande el grupo (▶) y usa el menú de 3 puntos (⋮) para <strong>"Reprocesar solo esta parte"</strong>.
+                    </InstructionTip>
+                  );
+                }
+                return null;
+              })()}
+              
+              {/* Tip for how to use individual reprocessing */}
+              <InstructionTip 
+                variant="orange" 
+                icon="lightbulb" 
+                dismissible={true}
+                persistKey="kb-reprocess-tip"
+                className="mb-4"
+              >
+                <strong>Tip:</strong> Expande un grupo de partes (▶) para ver cada trozo. 
+                Usa el menú de 3 puntos (⋮) para reprocesar solo esa parte sin afectar las demás.
+              </InstructionTip>
+              
               {/* Multi-part upload progress card with pause/continue */}
               {isProcessingMultiPart && uploadProgress && uploadProgress.total > 1 && (
                 <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 mb-4">
@@ -1906,6 +1996,12 @@ export default function KnowledgeBase() {
                         {/* Loading indicator for this specific part */}
                         {isThisReprocessing && (
                           <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                        )}
+                        {/* Recently sent badge */}
+                        {recentlySentParts.has(doc.id) && !isThisReprocessing && (
+                          <Badge className="bg-blue-500 animate-pulse text-xs">
+                            ⏳ Enviado
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
