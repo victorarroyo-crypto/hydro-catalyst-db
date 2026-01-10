@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NewCaseStudyModal } from './NewCaseStudyModal';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -137,6 +137,7 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
   onDeleteCase,
 }) => {
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
   const isAdmin = profile?.role === 'admin';
   const canManage = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
@@ -150,13 +151,6 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [sectorFilter, setSectorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-
-  // Handle process files
-  const handleProcessFiles = (files: File[]) => {
-    console.log('Processing files:', files);
-    // TODO: Implement AI processing
-    setIsNewCaseModalOpen(false);
-  };
 
   // Fetch case studies with new fields
   const { data: caseStudies, isLoading } = useQuery({
@@ -559,7 +553,11 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
       <NewCaseStudyModal
         open={isNewCaseModalOpen}
         onOpenChange={setIsNewCaseModalOpen}
-        onProcess={handleProcessFiles}
+        onCompleted={(jobId) => {
+          console.log('Case study job completed:', jobId);
+          // Refresh case studies list after processing completes
+          queryClient.invalidateQueries({ queryKey: ['case-studies'] });
+        }}
       />
     </div>
   );
