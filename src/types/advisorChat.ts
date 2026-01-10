@@ -1,10 +1,11 @@
 // Types for AI Advisor Chat functionality
 
 export interface Source {
-  nombre: string;
-  proveedor: string;
-  trl: number;
+  name: string;
+  type: string;
   similarity: number;
+  trl?: number | null;
+  provider?: string | null;
 }
 
 export interface TechnologySheet {
