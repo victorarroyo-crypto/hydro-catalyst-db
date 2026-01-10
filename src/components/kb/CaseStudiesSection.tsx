@@ -772,15 +772,10 @@ export const CaseStudiesSection: React.FC = () => {
           }
         }}
       >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Revisar Extracción
-            </DialogTitle>
-          </DialogHeader>
-          {reviewJobId && (
-            <CaseStudyFormView
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[90vh] p-0 overflow-hidden flex flex-col">
+          <div className="flex flex-col flex-1 min-h-0">
+            {reviewJobId && (
+              <CaseStudyFormView
               jobId={reviewJobId}
               existingCaseId={reviewCaseId || undefined}
               onBack={() => {
@@ -794,8 +789,9 @@ export const CaseStudiesSection: React.FC = () => {
                 queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
                 queryClient.invalidateQueries({ queryKey: ['case-study-jobs-map'] });
               }}
-            />
-          )}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
