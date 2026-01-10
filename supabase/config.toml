@@ -101,3 +101,6 @@ verify_jwt = false
 
 [functions.generate-document-description]
 verify_jwt = false
+
+[functions.case-study-webhook]
+verify_jwt = false
