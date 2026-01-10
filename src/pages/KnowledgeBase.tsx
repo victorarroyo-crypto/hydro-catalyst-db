@@ -1073,6 +1073,35 @@ export default function KnowledgeBase() {
     }
   };
 
+  // Generate AI description for an existing document
+  const handleGenerateDescriptionForDoc = async (doc: KnowledgeDocument) => {
+    setGeneratingDescId(doc.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-document-description', {
+        body: {
+          fileName: doc.name,
+          category: doc.category,
+          sector: doc.sector,
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      setEditingDescription(data.description || '');
+      toast.success("Descripción generada");
+    } catch (error) {
+      console.error('Generate description error:', error);
+      toast.error("Error al generar descripción");
+    } finally {
+      setGeneratingDescId(null);
+    }
+  };
+
   // Confirm upload from modal
   const handleConfirmUpload = async () => {
     if (!selectedFile) return;
@@ -1731,7 +1760,7 @@ export default function KnowledgeBase() {
                                       className="min-h-[80px] text-sm"
                                       placeholder="Descripción del documento..."
                                     />
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       <Button 
                                         size="sm" 
                                         onClick={() => updateDescriptionMutation.mutate({ docId: doc.id, description: editingDescription })}
@@ -1743,6 +1772,19 @@ export default function KnowledgeBase() {
                                           <Check className="h-3 w-3 mr-1" />
                                         )}
                                         Guardar
+                                      </Button>
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline"
+                                        onClick={() => handleGenerateDescriptionForDoc(doc)}
+                                        disabled={generatingDescId === doc.id}
+                                      >
+                                        {generatingDescId === doc.id ? (
+                                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                        ) : (
+                                          <Sparkles className="h-3 w-3 mr-1" />
+                                        )}
+                                        Generar con IA
                                       </Button>
                                       <Button size="sm" variant="ghost" onClick={() => setEditingDescDocId(null)}>
                                         Cancelar
@@ -1844,7 +1886,7 @@ export default function KnowledgeBase() {
                                   className="min-h-[80px] text-sm"
                                   placeholder="Descripción del documento..."
                                 />
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <Button 
                                     size="sm" 
                                     onClick={() => updateDescriptionMutation.mutate({ docId: doc.id, description: editingDescription })}
@@ -1856,6 +1898,19 @@ export default function KnowledgeBase() {
                                       <Check className="h-3 w-3 mr-1" />
                                     )}
                                     Guardar
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => handleGenerateDescriptionForDoc(doc)}
+                                    disabled={generatingDescId === doc.id}
+                                  >
+                                    {generatingDescId === doc.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                    ) : (
+                                      <Sparkles className="h-3 w-3 mr-1" />
+                                    )}
+                                    Generar con IA
                                   </Button>
                                   <Button size="sm" variant="ghost" onClick={() => setEditingDescDocId(null)}>
                                     Cancelar
