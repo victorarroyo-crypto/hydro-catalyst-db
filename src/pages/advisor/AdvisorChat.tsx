@@ -343,11 +343,16 @@ export default function AdvisorChat() {
                     <CollapsibleContent className="mt-2 space-y-2">
                       {message.sources.map((source, idx) => (
                         <div key={idx} className="text-xs bg-background/50 rounded-lg p-2 border">
-                          <div className="font-medium">{source.nombre}</div>
+                          <div className="font-medium">{source.name}</div>
                           <div className="text-muted-foreground flex items-center gap-2 mt-1">
-                            <span>{source.proveedor}</span>
-                            <Badge variant="outline" className="text-[10px] h-4 px-1">
-                              TRL {source.trl}
+                            {source.provider && <span>{source.provider}</span>}
+                            {source.trl != null && (
+                              <Badge variant="outline" className="text-[10px] h-4 px-1">
+                                TRL {source.trl}
+                              </Badge>
+                            )}
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                              {source.type}
                             </Badge>
                             <span className="ml-auto">{Math.round(source.similarity * 100)}% relevancia</span>
                           </div>
