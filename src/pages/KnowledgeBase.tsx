@@ -572,6 +572,46 @@ export default function KnowledgeBase() {
     },
   });
 
+  // Reprocess document with Railway/PyMuPDF
+  const reprocessMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const { error } = await supabase.functions.invoke('process-knowledge-document', {
+        body: { documentId: docId, forceReprocess: true }
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      toast.success("Documento enviado a reprocesar con PyMuPDF");
+    },
+    onError: (error: Error) => {
+      toast.error(`Error al reprocesar: ${error.message}`);
+    },
+  });
+
+  // Download document handler
+  const handleDownloadDocument = async (doc: KnowledgeDocument) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('knowledge-documents')
+        .download(doc.file_path);
+      
+      if (error) throw error;
+      
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error('Error al descargar el documento');
+    }
+  };
+
   // File upload handler
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
