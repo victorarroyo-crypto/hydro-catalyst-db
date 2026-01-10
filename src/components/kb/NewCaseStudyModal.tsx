@@ -24,16 +24,17 @@ import {
 } from 'lucide-react';
 import { useCaseStudyFiles } from '@/hooks/useCaseStudyFiles';
 import { CaseStudyProcessingView } from './CaseStudyProcessingView';
+import { CaseStudyFormView } from './CaseStudyFormView';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface NewCaseStudyModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCompleted?: (jobId: string) => void;
+  onCompleted?: () => void;
 }
 
-type ModalStep = 'upload' | 'processing';
+type ModalStep = 'upload' | 'processing' | 'form';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ACCEPTED_TYPES = {
@@ -164,17 +165,23 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   };
 
   const handleProcessingCompleted = async (jobId: string) => {
-    // Clear files from IndexedDB after successful processing
-    await clearFiles();
-    
+    // Move to form step instead of closing
+    setCurrentJobId(jobId);
+    setStep('form');
+  };
+
+  const handleFormBack = () => {
+    // Go back to upload step
+    setStep('upload');
+    setCurrentJobId(null);
+  };
+
+  const handleFormSaved = async () => {
+    // Close modal and refresh
     if (onCompleted) {
-      onCompleted(jobId);
+      onCompleted();
     }
-    
-    // Close modal after a brief delay
-    setTimeout(() => {
-      handleClose();
-    }, 1500);
+    handleClose();
   };
 
   const handleCancel = async () => {
@@ -201,15 +208,18 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
 
   const canProcess = pendingFiles.length > 0;
 
+  // Dynamic modal size based on step
+  const modalSizeClass = step === 'form' ? 'sm:max-w-2xl' : 'sm:max-w-xl';
+
   return (
     <Dialog open={open} onOpenChange={(value) => {
-      if (!value && step === 'processing') {
-        // Prevent closing during processing by clicking outside
+      if (!value && (step === 'processing' || step === 'form')) {
+        // Prevent closing during processing/form by clicking outside
         return;
       }
       handleClose();
     }}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className={modalSizeClass}>
         {step === 'upload' ? (
           <>
             <DialogHeader>
@@ -351,7 +361,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
               </Button>
             </DialogFooter>
           </>
-        ) : (
+        ) : step === 'processing' ? (
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -369,6 +379,15 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
               />
             )}
           </>
+        ) : (
+          /* Form step */
+          currentJobId && (
+            <CaseStudyFormView
+              jobId={currentJobId}
+              onBack={handleFormBack}
+              onSaved={handleFormSaved}
+            />
+          )
         )}
       </DialogContent>
     </Dialog>
