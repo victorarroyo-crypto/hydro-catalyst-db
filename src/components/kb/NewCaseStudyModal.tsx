@@ -169,7 +169,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       
       // Call Railway API
       const railwayUrl = import.meta.env.VITE_RAILWAY_CASE_STUDY_URL || 'https://watertech-scouting-production.up.railway.app/api/case-study/upload-and-process';
-      const railwaySyncSecret = import.meta.env.VITE_RAILWAY_SYNC_SECRET || 'VandarumSync2024!';
+      const railwaySyncSecret = import.meta.env.VITE_RAILWAY_SYNC_SECRET || 'wt-sync-2026-secure';
       
       const response = await fetch(railwayUrl, {
         method: 'POST',
