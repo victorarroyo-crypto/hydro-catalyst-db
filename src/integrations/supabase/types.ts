@@ -343,6 +343,68 @@ export type Database = {
         }
         Relationships: []
       }
+      case_study_jobs: {
+        Row: {
+          case_study_id: string | null
+          completed_at: string | null
+          created_at: string
+          current_phase: string | null
+          documents_count: number | null
+          error_message: string | null
+          id: string
+          progress_percentage: number
+          quality_score: number | null
+          result_data: Json | null
+          started_at: string | null
+          status: string
+          technologies_found: number | null
+          technologies_new: number | null
+          updated_at: string
+        }
+        Insert: {
+          case_study_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_phase?: string | null
+          documents_count?: number | null
+          error_message?: string | null
+          id?: string
+          progress_percentage?: number
+          quality_score?: number | null
+          result_data?: Json | null
+          started_at?: string | null
+          status?: string
+          technologies_found?: number | null
+          technologies_new?: number | null
+          updated_at?: string
+        }
+        Update: {
+          case_study_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_phase?: string | null
+          documents_count?: number | null
+          error_message?: string | null
+          id?: string
+          progress_percentage?: number
+          quality_score?: number | null
+          result_data?: Json | null
+          started_at?: string | null
+          status?: string
+          technologies_found?: number | null
+          technologies_new?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_study_jobs_case_study_id_fkey"
+            columns: ["case_study_id"]
+            isOneToOne: false
+            referencedRelation: "casos_de_estudio"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_study_technologies: {
         Row: {
           case_study_id: string
