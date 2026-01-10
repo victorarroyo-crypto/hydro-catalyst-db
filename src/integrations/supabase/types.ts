@@ -1791,6 +1791,51 @@ export type Database = {
           },
         ]
       }
+      sync_queue: {
+        Row: {
+          attempts: number | null
+          created_at: string | null
+          id: string
+          last_error: string | null
+          max_attempts: number | null
+          next_retry_at: string | null
+          operation: string
+          payload: Json
+          processed_at: string | null
+          record_id: string
+          status: string | null
+          table_name: string
+        }
+        Insert: {
+          attempts?: number | null
+          created_at?: string | null
+          id?: string
+          last_error?: string | null
+          max_attempts?: number | null
+          next_retry_at?: string | null
+          operation: string
+          payload: Json
+          processed_at?: string | null
+          record_id: string
+          status?: string | null
+          table_name: string
+        }
+        Update: {
+          attempts?: number | null
+          created_at?: string | null
+          id?: string
+          last_error?: string | null
+          max_attempts?: number | null
+          next_retry_at?: string | null
+          operation?: string
+          payload?: Json
+          processed_at?: string | null
+          record_id?: string
+          status?: string | null
+          table_name?: string
+        }
+        Relationships: []
+      }
       taxonomy_sectores: {
         Row: {
           descripcion: string | null
