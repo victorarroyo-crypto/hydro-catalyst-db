@@ -901,6 +901,7 @@ export type Database = {
       scouting_queue: {
         Row: {
           "Aplicación principal": string | null
+          case_study_id: string | null
           "Casos de referencia": string | null
           "Comentarios del analista": string | null
           created_at: string
@@ -937,6 +938,7 @@ export type Database = {
         }
         Insert: {
           "Aplicación principal"?: string | null
+          case_study_id?: string | null
           "Casos de referencia"?: string | null
           "Comentarios del analista"?: string | null
           created_at?: string
@@ -973,6 +975,7 @@ export type Database = {
         }
         Update: {
           "Aplicación principal"?: string | null
+          case_study_id?: string | null
           "Casos de referencia"?: string | null
           "Comentarios del analista"?: string | null
           created_at?: string
@@ -1008,6 +1011,13 @@ export type Database = {
           "Web de la empresa"?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "scouting_queue_case_study_id_fkey"
+            columns: ["case_study_id"]
+            isOneToOne: false
+            referencedRelation: "casos_de_estudio"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "scouting_queue_sector_id_fkey"
             columns: ["sector_id"]

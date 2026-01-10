@@ -122,6 +122,7 @@ interface CaseStudyTechnology {
   provider: string | null;
   role: string;
   technology_id: string | null;
+  scouting_queue_id: string | null;
 }
 
 export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
@@ -158,13 +159,36 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('case_study_technologies')
-        .select('id, technology_name, provider, role, technology_id')
+        .select('id, technology_name, provider, role, technology_id, scouting_queue_id')
         .eq('case_study_id', caseStudyId);
 
       if (error) throw error;
       return data as CaseStudyTechnology[];
     },
   });
+
+  // Helper para obtener el badge de estado de vinculación
+  const getTechStatusBadge = (tech: CaseStudyTechnology) => {
+    if (tech.technology_id) {
+      return (
+        <Badge className="bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700">
+          🟢 Vinculada
+        </Badge>
+      );
+    }
+    if (tech.scouting_queue_id) {
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700">
+          🟡 En revisión
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600">
+        ⚪ Sin vincular
+      </Badge>
+    );
+  };
 
   const getSectorLabel = (sectorValue: string | null): string => {
     if (!sectorValue) return 'Sin sector';
@@ -561,11 +585,14 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                       key={tech.id}
                       className="flex items-center justify-between p-2 rounded-md bg-accent/5 border border-accent/20"
                     >
-                      <div>
-                        <p className="text-sm font-medium">{tech.technology_name}</p>
-                        {tech.provider && (
-                          <p className="text-xs text-muted-foreground">{tech.provider}</p>
-                        )}
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="text-sm font-medium">{tech.technology_name}</p>
+                          {tech.provider && (
+                            <p className="text-xs text-muted-foreground">{tech.provider}</p>
+                          )}
+                        </div>
+                        {getTechStatusBadge(tech)}
                       </div>
                       {tech.technology_id && (
                         <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
@@ -583,12 +610,15 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
             {evaluatedTechs.length > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground mb-2">Evaluadas</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-2">
                   {evaluatedTechs.map((tech) => (
-                    <Badge key={tech.id} variant="outline" className="py-1">
-                      {tech.technology_name}
-                      {tech.provider && ` (${tech.provider})`}
-                    </Badge>
+                    <div key={tech.id} className="flex items-center gap-2">
+                      <Badge variant="outline" className="py-1">
+                        {tech.technology_name}
+                        {tech.provider && ` (${tech.provider})`}
+                      </Badge>
+                      {getTechStatusBadge(tech)}
+                    </div>
                   ))}
                 </div>
               </div>

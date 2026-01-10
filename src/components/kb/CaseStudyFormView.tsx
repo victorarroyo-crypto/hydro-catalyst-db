@@ -61,6 +61,8 @@ interface Technology {
   name: string;
   provider: string;
   role: 'Recomendada' | 'Evaluada';
+  status?: 'new' | 'linked';  // Estado de vinculación
+  linkedTechId?: string;       // ID de tecnología existente en DB
 }
 
 // Nested structure from Railway
@@ -343,20 +345,53 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
     setTreatmentTrain(train => train.filter((_, i) => i !== index));
   };
 
-  const addTechnology = () => {
+  const [isSearchingTech, setIsSearchingTech] = useState(false);
+
+  const addTechnology = async () => {
     if (newTechName.trim()) {
-      setTechnologies([
-        ...technologies,
-        {
-          id: String(Date.now()),
-          name: newTechName.trim(),
-          provider: newTechProvider.trim(),
-          role: newTechRole,
-        },
-      ]);
-      setNewTechName('');
-      setNewTechProvider('');
-      setNewTechRole('Evaluada');
+      setIsSearchingTech(true);
+      try {
+        // Buscar match en technologies por nombre similar
+        const { data: match } = await supabase
+          .from('technologies')
+          .select('id, "Nombre de la tecnología"')
+          .ilike('"Nombre de la tecnología"', `%${newTechName.trim()}%`)
+          .limit(1)
+          .maybeSingle();
+
+        setTechnologies([
+          ...technologies,
+          {
+            id: String(Date.now()),
+            name: newTechName.trim(),
+            provider: newTechProvider.trim(),
+            role: newTechRole,
+            status: match ? 'linked' : 'new',
+            linkedTechId: match?.id,
+          },
+        ]);
+        setNewTechName('');
+        setNewTechProvider('');
+        setNewTechRole('Evaluada');
+      } catch (error) {
+        console.error('Error searching for technology:', error);
+        // En caso de error, añadir como nueva
+        setTechnologies([
+          ...technologies,
+          {
+            id: String(Date.now()),
+            name: newTechName.trim(),
+            provider: newTechProvider.trim(),
+            role: newTechRole,
+            status: 'new',
+          },
+        ]);
+        setNewTechName('');
+        setNewTechProvider('');
+        setNewTechRole('Evaluada');
+      } finally {
+        setIsSearchingTech(false);
+      }
     }
   };
 
@@ -440,22 +475,67 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
 
       if (insertError) throw insertError;
 
-      // Insert technologies if any
+      // Insert technologies with hybrid logic
       if (technologies.length > 0 && caseStudy?.id) {
-        const techInserts = technologies.map(t => ({
-          case_study_id: caseStudy.id,
-          technology_name: t.name,
-          provider: t.provider || null,
-          role: t.role,
-        }));
+        for (const tech of technologies) {
+          if (tech.linkedTechId) {
+            // CASO A: Tecnología ya existe → vincular directamente
+            const { error: techError } = await supabase
+              .from('case_study_technologies')
+              .insert({
+                case_study_id: caseStudy.id,
+                technology_name: tech.name,
+                provider: tech.provider || null,
+                role: tech.role,
+                technology_id: tech.linkedTechId,
+              });
 
-        const { error: techError } = await supabase
-          .from('case_study_technologies')
-          .insert(techInserts);
+            if (techError) {
+              console.error('Error inserting linked technology:', techError);
+            }
+          } else {
+            // CASO B: Tecnología nueva → enviar a scouting_queue para revisión
+            const { data: scoutingItem, error: scoutingError } = await supabase
+              .from('scouting_queue')
+              .insert({
+                'Nombre de la tecnología': tech.name,
+                'Proveedor / Empresa': tech.provider || null,
+                'Tipo de tecnología': 'Por clasificar',
+                'Sector y subsector': sector,
+                source: 'case_study',
+                case_study_id: caseStudy.id,
+                queue_status: 'review',
+                notes: `Extraída del caso: ${title}`,
+              })
+              .select('id')
+              .single();
 
-        if (techError) {
-          console.error('Error inserting technologies:', techError);
-          // Don't fail the whole operation for this
+            if (scoutingError) {
+              console.error('Error inserting to scouting_queue:', scoutingError);
+              // Aún así insertar en case_study_technologies sin referencia
+              await supabase.from('case_study_technologies').insert({
+                case_study_id: caseStudy.id,
+                technology_name: tech.name,
+                provider: tech.provider || null,
+                role: tech.role,
+              });
+            } else {
+              // Insertar en case_study_technologies con referencia a scouting_queue
+              const { error: techError } = await supabase
+                .from('case_study_technologies')
+                .insert({
+                  case_study_id: caseStudy.id,
+                  technology_name: tech.name,
+                  provider: tech.provider || null,
+                  role: tech.role,
+                  scouting_queue_id: scoutingItem?.id,
+                });
+
+              if (techError) {
+                console.error('Error inserting technology with scouting_queue_id:', techError);
+              }
+            }
+          }
         }
       }
 
@@ -830,6 +910,17 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                           <p className="text-xs text-muted-foreground">{tech.provider}</p>
                         )}
                       </div>
+                      {/* Badge de estado de vinculación */}
+                      <Badge 
+                        variant="outline"
+                        className={
+                          tech.status === 'linked' 
+                            ? 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' 
+                            : 'bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600'
+                        }
+                      >
+                        {tech.status === 'linked' ? '🟢 Vinculada' : '⚪ Nueva'}
+                      </Badge>
                       <Badge variant={tech.role === 'Recomendada' ? 'default' : 'secondary'}>
                         {tech.role}
                       </Badge>
@@ -874,11 +965,15 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={addTechnology}
-                  disabled={!newTechName.trim()}
+                  disabled={!newTechName.trim() || isSearchingTech}
                   className="gap-1"
                 >
-                  <Plus className="h-3 w-3" />
-                  Añadir tecnología
+                  {isSearchingTech ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Plus className="h-3 w-3" />
+                  )}
+                  {isSearchingTech ? 'Buscando...' : 'Añadir tecnología'}
                 </Button>
               </div>
             </div>
