@@ -534,6 +534,10 @@ export default function KnowledgeBase() {
 
   const deleteMutation = useMutation({
     mutationFn: async (doc: KnowledgeDocument) => {
+      // Delete associated chunks first
+      await supabase.from("knowledge_chunks").delete().eq("document_id", doc.id);
+      
+      // Delete from storage
       await supabase.storage.from("knowledge-documents").remove([doc.file_path]);
 
       const { error } = await supabase
@@ -549,6 +553,34 @@ export default function KnowledgeBase() {
     },
     onError: () => {
       toast.error("Error al eliminar el documento");
+    },
+  });
+
+  // Mutation to delete all parts of a multi-part document group
+  const deleteGroupMutation = useMutation({
+    mutationFn: async (parts: KnowledgeDocument[]) => {
+      for (const part of parts) {
+        // Delete associated chunks
+        await supabase.from("knowledge_chunks").delete().eq("document_id", part.id);
+        
+        // Delete from storage
+        await supabase.storage.from("knowledge-documents").remove([part.file_path]);
+
+        // Delete document record
+        const { error } = await supabase
+          .from("knowledge_documents")
+          .delete()
+          .eq("id", part.id);
+
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      toast.success("Grupo de documentos eliminado");
+    },
+    onError: () => {
+      toast.error("Error al eliminar el grupo de documentos");
     },
   });
 
@@ -1801,15 +1833,37 @@ export default function KnowledgeBase() {
                             <TooltipContent>Categorizar</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                        {isAdmin && !group.isMultiPart && (
+                        {isAdmin && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
-                                  <Trash2 className="h-4 w-4" />
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="text-destructive" 
+                                  onClick={() => {
+                                    if (group.isMultiPart) {
+                                      if (window.confirm(`¿Eliminar "${group.baseName}" y sus ${group.totalParts} partes? Esta acción no se puede deshacer.`)) {
+                                        deleteGroupMutation.mutate(group.parts);
+                                      }
+                                    } else {
+                                      if (window.confirm(`¿Eliminar "${doc.name}"? Esta acción no se puede deshacer.`)) {
+                                        deleteMutation.mutate(doc);
+                                      }
+                                    }
+                                  }}
+                                  disabled={deleteMutation.isPending || deleteGroupMutation.isPending}
+                                >
+                                  {(deleteMutation.isPending || deleteGroupMutation.isPending) ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Eliminar</TooltipContent>
+                              <TooltipContent>
+                                {group.isMultiPart ? `Eliminar ${group.totalParts} partes` : 'Eliminar'}
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}
@@ -2256,15 +2310,37 @@ export default function KnowledgeBase() {
                                 </Tooltip>
                               </TooltipProvider>
                             )}
-                            {isAdmin && !group.isMultiPart && (
+                            {isAdmin && (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
-                                      <Trash2 className="h-3 w-3" />
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost" 
+                                      className="text-destructive" 
+                                      onClick={() => {
+                                        if (group.isMultiPart) {
+                                          if (window.confirm(`¿Eliminar "${group.baseName}" y sus ${group.totalParts} partes?`)) {
+                                            deleteGroupMutation.mutate(group.parts);
+                                          }
+                                        } else {
+                                          if (window.confirm(`¿Eliminar "${doc.name}"?`)) {
+                                            deleteMutation.mutate(doc);
+                                          }
+                                        }
+                                      }}
+                                      disabled={deleteMutation.isPending || deleteGroupMutation.isPending}
+                                    >
+                                      {(deleteMutation.isPending || deleteGroupMutation.isPending) ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3 w-3" />
+                                      )}
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Eliminar</TooltipContent>
+                                  <TooltipContent>
+                                    {group.isMultiPart ? `Eliminar ${group.totalParts} partes` : 'Eliminar'}
+                                  </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             )}
