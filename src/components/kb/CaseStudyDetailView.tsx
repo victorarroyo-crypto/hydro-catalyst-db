@@ -24,8 +24,13 @@ import {
   Target,
   Lightbulb,
   Cpu,
+  Calendar,
+  Building2,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { generateCaseStudyWordDocument } from '@/lib/generateCaseStudyWordDocument';
+import { toast } from 'sonner';
 
 // Sector options (same as in CaseStudiesSection)
 const SECTOR_OPTIONS = [
@@ -171,9 +176,21 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     }).format(value);
   };
 
-  const handleDownloadWord = () => {
-    // TODO: Implement Word download
-    console.log('Download Word document');
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadWord = async () => {
+    if (!caseStudy) return;
+    
+    setIsDownloading(true);
+    try {
+      await generateCaseStudyWordDocument(caseStudy, technologies || []);
+      toast.success('Documento descargado correctamente');
+    } catch (error) {
+      console.error('Error generating Word document:', error);
+      toast.error('Error al generar el documento');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleArchive = async () => {
@@ -257,8 +274,12 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
         </div>
         
         <div className="flex items-center gap-2 ml-12 sm:ml-0">
-          <Button variant="outline" onClick={handleDownloadWord}>
-            <Download className="h-4 w-4 mr-2" />
+          <Button variant="outline" onClick={handleDownloadWord} disabled={isDownloading}>
+            {isDownloading ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
             Descargar Word
           </Button>
           {canManage && (
@@ -281,11 +302,11 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-primary" />
-            Resumen
+            Resumen del Proyecto
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
@@ -294,15 +315,37 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
               <p className="font-medium">{caseStudy.country || '—'}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Sector</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Building2 className="h-3 w-3" />
+                Sector
+              </p>
               <p className="font-medium">{getSectorLabel(caseStudy.sector)}</p>
             </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                Fecha de Creación
+              </p>
+              <p className="font-medium">{new Date(caseStudy.created_at).toLocaleDateString('es-ES')}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Puntuación de Calidad</p>
+              <div className="flex items-center gap-2">
+                <Progress value={caseStudy.quality_score || 0} className="h-2 flex-1" />
+                <span className="text-sm font-medium">{caseStudy.quality_score || 0}/100</span>
+              </div>
+            </div>
+          </div>
+          
+          <Separator className="my-4" />
+          
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <TrendingUp className="h-3 w-3" />
                 ROI
               </p>
-              <p className="font-medium text-accent">
+              <p className="font-semibold text-lg text-accent">
                 {caseStudy.roi_percent !== null ? `${caseStudy.roi_percent}%` : '—'}
               </p>
             </div>
@@ -311,23 +354,29 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 <DollarSign className="h-3 w-3" />
                 CAPEX
               </p>
-              <p className="font-medium">{formatCurrency(caseStudy.capex)}</p>
+              <p className="font-semibold text-lg">{formatCurrency(caseStudy.capex)}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <DollarSign className="h-3 w-3" />
+                OPEX Anual
+              </p>
+              <p className="font-semibold text-lg">{formatCurrency(caseStudy.opex_year)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 Payback
               </p>
-              <p className="font-medium">
+              <p className="font-semibold text-lg">
                 {caseStudy.payback_months !== null ? `${caseStudy.payback_months} meses` : '—'}
               </p>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Quality Score</p>
-              <div className="flex items-center gap-2">
-                <Progress value={caseStudy.quality_score || 0} className="h-2 flex-1" />
-                <span className="text-sm font-medium">{caseStudy.quality_score || 0}</span>
-              </div>
+              <p className="text-xs text-muted-foreground">Tecnologías</p>
+              <p className="font-semibold text-lg text-primary">
+                {(technologies?.length || 0)} asociadas
+              </p>
             </div>
           </div>
         </CardContent>
@@ -513,6 +562,44 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
         </Card>
       </div>
 
+      {/* Additional Info Cards */}
+      {(caseStudy.roi_rationale || caseStudy.lessons_learned) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* ROI Rationale */}
+          {caseStudy.roi_rationale && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-accent" />
+                  Justificación del ROI
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {caseStudy.roi_rationale}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* Lessons Learned */}
+          {caseStudy.lessons_learned && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5 text-warning" />
+                  Lecciones Aprendidas
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {caseStudy.lessons_learned}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
       {/* Download CTA Card */}
       <Card className="border-primary/30 bg-primary/5">
         <CardContent className="py-6">
@@ -528,8 +615,12 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 </p>
               </div>
             </div>
-            <Button size="lg" onClick={handleDownloadWord} className="gap-2">
-              <Download className="h-5 w-5" />
+            <Button size="lg" onClick={handleDownloadWord} disabled={isDownloading} className="gap-2">
+              {isDownloading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Download className="h-5 w-5" />
+              )}
               Descargar Caso de Estudio Completo
             </Button>
           </div>
