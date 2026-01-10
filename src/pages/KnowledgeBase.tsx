@@ -2863,17 +2863,7 @@ export default function KnowledgeBase() {
 
         {/* CASES SECTION */}
         {activeSection === 'cases' && (
-          <CaseStudiesSection
-            onViewCase={(cs) => setSelectedCase(cs as any)}
-            onEditCase={(cs) => {
-              // TODO: Implement edit case modal
-              toast.info('Funcionalidad de edición en desarrollo');
-            }}
-            onDeleteCase={(cs) => {
-              // TODO: Implement delete confirmation
-              toast.info('Funcionalidad de eliminación en desarrollo');
-            }}
-          />
+          <CaseStudiesSection />
         )}
 
         {/* TRENDS SECTION */}
