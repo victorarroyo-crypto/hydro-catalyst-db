@@ -16,7 +16,8 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured')
     }
 
-    const { prompt, filters } = await req.json()
+    const { prompt, filters, model } = await req.json()
+    const selectedModel = model || 'google/gemini-2.5-pro'
 
     if (!prompt || prompt.trim().length < 5) {
       return new Response(
@@ -26,6 +27,7 @@ serve(async (req) => {
     }
 
     console.log('[SEARCH-SOURCES] Prompt:', prompt)
+    console.log('[SEARCH-SOURCES] Model:', selectedModel)
     console.log('[SEARCH-SOURCES] Filters:', filters)
 
     // Build context from filters
@@ -43,7 +45,7 @@ serve(async (req) => {
 Tu tarea es sugerir fuentes útiles para descubrir nuevas tecnologías del agua basándote en la solicitud del usuario.
 
 IMPORTANTE:
-- Sugiere entre 5 y 10 fuentes relevantes
+- Sugiere hasta 25 fuentes relevantes (cuantas más mejor, siempre que sean de calidad)
 - Prioriza fuentes actuales, activas y verificables
 - Incluye URLs reales que existan
 - Varía los tipos de fuentes: webs, directorios, ferias, aceleradoras, newsletters, etc.
@@ -77,7 +79,7 @@ ${prompt}${filterString}`
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: selectedModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage }

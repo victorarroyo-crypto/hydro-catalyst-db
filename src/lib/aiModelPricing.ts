@@ -7,16 +7,49 @@ export interface ModelPricing {
   output: number; // USD por millón de tokens de salida
 }
 
+export interface AIModel {
+  id: string;
+  name: string;
+  tier: 'económico' | 'estándar' | 'premium';
+  speed: 'muy rápido' | 'rápido' | 'moderado';
+}
+
+// Modelos disponibles en Lovable AI
+export const AI_MODELS: AIModel[] = [
+  // Google Gemini - Premium
+  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'premium', speed: 'moderado' },
+  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro', tier: 'premium', speed: 'moderado' },
+  
+  // Google Gemini - Estándar
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'estándar', speed: 'rápido' },
+  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash', tier: 'estándar', speed: 'rápido' },
+  
+  // Google Gemini - Económico
+  { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', tier: 'económico', speed: 'muy rápido' },
+  
+  // OpenAI GPT - Premium
+  { id: 'openai/gpt-5', name: 'GPT-5', tier: 'premium', speed: 'moderado' },
+  { id: 'openai/gpt-5.2', name: 'GPT-5.2', tier: 'premium', speed: 'moderado' },
+  
+  // OpenAI GPT - Estándar
+  { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', tier: 'estándar', speed: 'rápido' },
+  
+  // OpenAI GPT - Económico
+  { id: 'openai/gpt-5-nano', name: 'GPT-5 Nano', tier: 'económico', speed: 'muy rápido' },
+];
+
 export const MODEL_PRICING: Record<string, ModelPricing> = {
   // Google Gemini
   'google/gemini-2.5-flash-lite': { input: 0.075, output: 0.30 },
   'google/gemini-2.5-flash': { input: 0.15, output: 0.60 },
+  'google/gemini-3-flash-preview': { input: 0.15, output: 0.60 },
   'google/gemini-2.5-pro': { input: 1.25, output: 5.00 },
   'google/gemini-3-pro-preview': { input: 1.50, output: 6.00 },
   'google/gemini-3-pro-image-preview': { input: 1.50, output: 6.00 },
   
   // OpenAI GPT
   'openai/gpt-5': { input: 5.00, output: 15.00 },
+  'openai/gpt-5.2': { input: 6.00, output: 18.00 },
   'openai/gpt-5-mini': { input: 0.40, output: 1.60 },
   'openai/gpt-5-nano': { input: 0.10, output: 0.40 },
 };
