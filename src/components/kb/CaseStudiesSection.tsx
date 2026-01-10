@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NewCaseStudyModal } from './NewCaseStudyModal';
 import { CaseStudyDetailView } from './CaseStudyDetailView';
+import { CaseStudyEditView } from './CaseStudyEditView';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -147,6 +148,9 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
   
   // Detail view state
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  
+  // Edit mode state
+  const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
 
   // View mode
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -282,6 +286,20 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
     </DropdownMenu>
   );
 
+  // If editing a case, show edit view
+  if (editingCaseId) {
+    return (
+      <CaseStudyEditView
+        caseStudyId={editingCaseId}
+        onBack={() => setEditingCaseId(null)}
+        onSaved={() => {
+          setEditingCaseId(null);
+          queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
+        }}
+      />
+    );
+  }
+
   // If a case is selected, show detail view
   if (selectedCaseId) {
     return (
@@ -289,8 +307,8 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
         caseStudyId={selectedCaseId}
         onBack={() => setSelectedCaseId(null)}
         onEdit={() => {
-          // TODO: Open edit modal
-          console.log('Edit case:', selectedCaseId);
+          setEditingCaseId(selectedCaseId);
+          setSelectedCaseId(null);
         }}
       />
     );
