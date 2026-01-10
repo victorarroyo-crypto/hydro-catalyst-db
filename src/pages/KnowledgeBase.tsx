@@ -46,7 +46,31 @@ interface KnowledgeDocument {
   chunk_count: number;
   created_at: string;
   description: string | null;
+  category: string | null;
+  sector: string | null;
 }
+
+// Document category and sector options
+const DOCUMENT_CATEGORY_OPTIONS = [
+  { value: 'technical_guide', label: 'Guía Técnica', icon: '📖' },
+  { value: 'regulation', label: 'Normativa', icon: '📋' },
+];
+
+const DOCUMENT_SECTOR_OPTIONS = [
+  { value: 'general', label: 'General', icon: '🌐' },
+  { value: 'food_beverage', label: 'Alimentación y Bebidas', icon: '🍔' },
+  { value: 'pulp_paper', label: 'Celulosa y Papel', icon: '📜' },
+  { value: 'textile', label: 'Textil', icon: '👕' },
+  { value: 'chemical', label: 'Química', icon: '⚗️' },
+  { value: 'pharma', label: 'Farmacéutica', icon: '💊' },
+  { value: 'oil_gas', label: 'Oil & Gas', icon: '⛽' },
+  { value: 'metal', label: 'Metal-Mecánica', icon: '🔩' },
+  { value: 'mining', label: 'Minería', icon: '⛏️' },
+  { value: 'power', label: 'Energía', icon: '⚡' },
+  { value: 'electronics', label: 'Electrónica/Semiconductores', icon: '💻' },
+  { value: 'automotive', label: 'Automoción', icon: '🚗' },
+  { value: 'cosmetics', label: 'Cosmética', icon: '🧴' },
+];
 
 interface ScoutingSource {
   id: string;
@@ -153,6 +177,19 @@ export default function KnowledgeBase() {
   const [editingDescription, setEditingDescription] = useState("");
   const [generatingDescId, setGeneratingDescId] = useState<string | null>(null);
   const [lastQueryCost, setLastQueryCost] = useState<number | null>(null);
+  
+  // Document filters state
+  const [docCategoryFilter, setDocCategoryFilter] = useState<string>('all');
+  const [docSectorFilter, setDocSectorFilter] = useState<string>('all');
+  
+  // Document upload form state
+  const [uploadCategory, setUploadCategory] = useState<string>('technical_guide');
+  const [uploadSector, setUploadSector] = useState<string>('general');
+  
+  // Edit category modal state
+  const [editingCategoryDocId, setEditingCategoryDocId] = useState<string | null>(null);
+  const [editCategory, setEditCategory] = useState<string>('');
+  const [editSector, setEditSector] = useState<string>('');
   
   // Sources state
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
@@ -307,6 +344,8 @@ export default function KnowledgeBase() {
           file_size: file.size,
           mime_type: file.type,
           status: "pending",
+          category: uploadCategory,
+          sector: uploadSector,
         })
         .select()
         .single();
@@ -740,6 +779,25 @@ export default function KnowledgeBase() {
     },
   });
 
+  // Update document category/sector mutation
+  const updateCategoryMutation = useMutation({
+    mutationFn: async ({ docId, category, sector }: { docId: string; category: string | null; sector: string | null }) => {
+      const { error } = await supabase
+        .from('knowledge_documents')
+        .update({ category, sector, updated_at: new Date().toISOString() })
+        .eq('id', docId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      toast.success("Categoría actualizada");
+      setEditingCategoryDocId(null);
+    },
+    onError: (error: Error) => {
+      toast.error(`Error al actualizar: ${error.message}`);
+    },
+  });
+
   // Download document handler
   const handleDownloadDocument = async (doc: KnowledgeDocument) => {
     try {
@@ -1044,45 +1102,152 @@ export default function KnowledgeBase() {
 
           {/* Documents List */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Documentos Técnicos</CardTitle>
-                <CardDescription>PDFs cargados para consultas con IA</CardDescription>
-              </div>
-              {canManage && (
+            <CardHeader className="space-y-4">
+              <div className="flex flex-row items-center justify-between">
                 <div>
-                  <input
-                    type="file"
-                    id="file-upload"
-                    accept=".pdf"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    disabled={uploading}
-                  />
-                  <label htmlFor="file-upload">
-                    <Button asChild disabled={uploading}>
-                      <span>
-                        {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                        Subir PDF
-                      </span>
-                    </Button>
-                  </label>
+                  <CardTitle>Documentos Técnicos</CardTitle>
+                  <CardDescription>PDFs cargados para consultas con IA</CardDescription>
                 </div>
-              )}
+                {canManage && (
+                  <div className="flex items-center gap-2">
+                    {/* Upload selectors */}
+                    <div className="flex items-center gap-2">
+                      <Select value={uploadCategory} onValueChange={setUploadCategory}>
+                        <SelectTrigger className="w-[140px] h-9">
+                          <SelectValue placeholder="Tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DOCUMENT_CATEGORY_OPTIONS.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.icon} {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={uploadSector} onValueChange={setUploadSector}>
+                        <SelectTrigger className="w-[180px] h-9">
+                          <SelectValue placeholder="Industria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DOCUMENT_SECTOR_OPTIONS.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.icon} {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <input
+                      type="file"
+                      id="file-upload"
+                      accept=".pdf"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                    <label htmlFor="file-upload">
+                      <Button asChild disabled={uploading}>
+                        <span>
+                          {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                          Subir PDF
+                        </span>
+                      </Button>
+                    </label>
+                  </div>
+                )}
+              </div>
+              
+              {/* Tabs and filters */}
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Category tabs */}
+                <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
+                  <Button
+                    variant={docCategoryFilter === 'all' ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setDocCategoryFilter('all')}
+                  >
+                    📚 Todos
+                  </Button>
+                  <Button
+                    variant={docCategoryFilter === 'regulation' ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setDocCategoryFilter('regulation')}
+                  >
+                    📋 Normativa
+                  </Button>
+                  <Button
+                    variant={docCategoryFilter === 'technical_guide' ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setDocCategoryFilter('technical_guide')}
+                  >
+                    📖 Guías Técnicas
+                  </Button>
+                </div>
+                
+                {/* Industry filter dropdown */}
+                <Select value={docSectorFilter} onValueChange={setDocSectorFilter}>
+                  <SelectTrigger className="w-[200px] h-8">
+                    <SelectValue placeholder="Filtrar por industria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las industrias</SelectItem>
+                    {DOCUMENT_SECTOR_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.icon} {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {/* View mode toggle */}
+                <div className="ml-auto flex items-center gap-1">
+                  <Button
+                    variant={viewMode.documents === 'list' ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-7"
+                    onClick={() => setViewMode(prev => ({ ...prev, documents: 'list' }))}
+                  >
+                    <List className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={viewMode.documents === 'grid' ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-7"
+                    onClick={() => setViewMode(prev => ({ ...prev, documents: 'grid' }))}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {loadingDocs ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin" />
                 </div>
-              ) : documents?.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No hay documentos cargados</p>
-                </div>
-              ) : viewMode.documents === 'list' ? (
+              ) : (() => {
+                // Filter documents
+                const filteredDocs = documents?.filter(doc => {
+                  if (docCategoryFilter !== 'all' && doc.category !== docCategoryFilter) return false;
+                  if (docSectorFilter !== 'all' && doc.sector !== docSectorFilter) return false;
+                  return true;
+                }) || [];
+                
+                if (filteredDocs.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>{documents?.length === 0 ? 'No hay documentos cargados' : 'No hay documentos con estos filtros'}</p>
+                    </div>
+                  );
+                }
+                
+                return viewMode.documents === 'list' ? (
                 <div className="space-y-2">
-                  {documents?.map((doc) => (
+                  {filteredDocs.map((doc) => (
                     <div key={doc.id} className="flex items-start justify-between p-3 border rounded-lg hover:bg-muted/50">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
                         <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
@@ -1159,6 +1324,24 @@ export default function KnowledgeBase() {
                             <span>•</span>
                             <span>{doc.chunk_count} chunks</span>
                           </div>
+                          
+                          {/* Category/Sector badges */}
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {doc.category ? (
+                              <Badge variant="secondary" className="text-xs">
+                                {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.icon || '📄'}{' '}
+                                {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.label || doc.category}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">Sin tipo</Badge>
+                            )}
+                            {doc.sector ? (
+                              <Badge variant="outline" className="text-xs">
+                                {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.icon || '🌐'}{' '}
+                                {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.label || doc.sector}
+                              </Badge>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -1210,6 +1393,24 @@ export default function KnowledgeBase() {
                                 <TooltipContent>Renombrar</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    onClick={() => { 
+                                      setEditingCategoryDocId(doc.id); 
+                                      setEditCategory(doc.category || ''); 
+                                      setEditSector(doc.sector || ''); 
+                                    }}
+                                  >
+                                    📁
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Categorizar</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             {isAdmin && (
                               <TooltipProvider>
                                 <Tooltip>
@@ -1230,7 +1431,7 @@ export default function KnowledgeBase() {
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {documents?.map((doc) => (
+                  {filteredDocs.map((doc) => (
                     <Card key={doc.id} className="relative">
                       <CardHeader className="pb-2">
                         <div className="flex items-start justify-between gap-2">
@@ -1246,6 +1447,24 @@ export default function KnowledgeBase() {
                           <span>{formatFileSize(doc.file_size)}</span>
                           <span>•</span>
                           <span>{doc.chunk_count} chunks</span>
+                        </div>
+                        
+                        {/* Category/Sector badges */}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {doc.category ? (
+                            <Badge variant="secondary" className="text-xs">
+                              {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.icon || '📄'}{' '}
+                              {DOCUMENT_CATEGORY_OPTIONS.find(c => c.value === doc.category)?.label || doc.category}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">Sin tipo</Badge>
+                          )}
+                          {doc.sector ? (
+                            <Badge variant="outline" className="text-xs">
+                              {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.icon || '🌐'}{' '}
+                              {DOCUMENT_SECTOR_OPTIONS.find(s => s.value === doc.sector)?.label || doc.sector}
+                            </Badge>
+                          ) : null}
                         </div>
                         
                         {/* Editable description */}
@@ -1343,6 +1562,26 @@ export default function KnowledgeBase() {
                               </Tooltip>
                             </TooltipProvider>
                           )}
+                          {canManage && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    onClick={() => { 
+                                      setEditingCategoryDocId(doc.id); 
+                                      setEditCategory(doc.category || ''); 
+                                      setEditSector(doc.sector || ''); 
+                                    }}
+                                  >
+                                    📁
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Categorizar</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                           {isAdmin && (
                             <TooltipProvider>
                               <Tooltip>
@@ -1360,7 +1599,8 @@ export default function KnowledgeBase() {
                     </Card>
                   ))}
                 </div>
-              )}
+              );
+              })()}
             </CardContent>
           </Card>
           </>
@@ -2196,6 +2436,81 @@ export default function KnowledgeBase() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Category Modal */}
+      <Dialog open={!!editingCategoryDocId} onOpenChange={(open) => !open && setEditingCategoryDocId(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              📁 Categorizar Documento
+            </DialogTitle>
+            <DialogDescription>
+              Asigna un tipo y sector al documento para facilitar su consulta
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Tipo de documento</Label>
+              <Select value={editCategory || "_none"} onValueChange={(v) => setEditCategory(v === "_none" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Sin categorizar</SelectItem>
+                  {DOCUMENT_CATEGORY_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.icon} {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Industria</Label>
+              <Select value={editSector || "_none"} onValueChange={(v) => setEditSector(v === "_none" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una industria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Sin asignar</SelectItem>
+                  {DOCUMENT_SECTOR_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.icon} {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingCategoryDocId(null)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={() => {
+                if (editingCategoryDocId) {
+                  updateCategoryMutation.mutate({
+                    docId: editingCategoryDocId,
+                    category: editCategory || null,
+                    sector: editSector || null
+                  });
+                }
+              }}
+              disabled={updateCategoryMutation.isPending}
+            >
+              {updateCategoryMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Check className="h-4 w-4 mr-2" />
+              )}
+              Guardar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
