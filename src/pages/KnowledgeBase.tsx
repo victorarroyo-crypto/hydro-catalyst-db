@@ -2007,14 +2007,14 @@ export default function KnowledgeBase() {
               <div>
                 <Label className="text-sm">Tipo de fuente</Label>
                 <Select 
-                  value={aiSourceFilters.tipo} 
-                  onValueChange={(v) => setAiSourceFilters(prev => ({ ...prev, tipo: v }))}
+                  value={aiSourceFilters.tipo || "_all"} 
+                  onValueChange={(v) => setAiSourceFilters(prev => ({ ...prev, tipo: v === "_all" ? "" : v }))}
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Cualquiera" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Cualquiera</SelectItem>
+                    <SelectItem value="_all">Cualquiera</SelectItem>
                     <SelectItem value="web">Web</SelectItem>
                     <SelectItem value="directorio">Directorio</SelectItem>
                     <SelectItem value="feria">Feria/Congreso</SelectItem>
@@ -2029,14 +2029,14 @@ export default function KnowledgeBase() {
               <div>
                 <Label className="text-sm">Región</Label>
                 <Select 
-                  value={aiSourceFilters.region} 
-                  onValueChange={(v) => setAiSourceFilters(prev => ({ ...prev, region: v }))}
+                  value={aiSourceFilters.region || "_all"} 
+                  onValueChange={(v) => setAiSourceFilters(prev => ({ ...prev, region: v === "_all" ? "" : v }))}
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Global" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Global</SelectItem>
+                    <SelectItem value="_all">Global</SelectItem>
                     <SelectItem value="España">España</SelectItem>
                     <SelectItem value="Europa">Europa</SelectItem>
                     <SelectItem value="LATAM">Latinoamérica</SelectItem>
@@ -2049,14 +2049,14 @@ export default function KnowledgeBase() {
               <div>
                 <Label className="text-sm">Sector</Label>
                 <Select 
-                  value={aiSourceFilters.sector} 
-                  onValueChange={(v) => setAiSourceFilters(prev => ({ ...prev, sector: v }))}
+                  value={aiSourceFilters.sector || "_all"} 
+                  onValueChange={(v) => setAiSourceFilters(prev => ({ ...prev, sector: v === "_all" ? "" : v }))}
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Todos" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos</SelectItem>
+                    <SelectItem value="_all">Todos</SelectItem>
                     <SelectItem value="municipal">Municipal</SelectItem>
                     <SelectItem value="industrial">Industrial</SelectItem>
                     <SelectItem value="agricola">Agrícola</SelectItem>
