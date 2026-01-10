@@ -63,14 +63,15 @@ interface GroupedDocument {
 
 // Function to group document parts
 function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
-  const partRegex = /^(.+)_parte(\d+)de(\d+)\.pdf$/i;
+  // Flexible regex: supports "_parteXdeY.pdf" or " parteXdeY.pdf" (space or underscore)
+  const partRegex = /^(.+?)[\s_]parte(\d+)de(\d+)\.pdf$/i;
   const groups: Map<string, KnowledgeDocument[]> = new Map();
   const standalone: KnowledgeDocument[] = [];
   
   docs.forEach(doc => {
     const match = doc.name.match(partRegex);
     if (match) {
-      const baseName = match[1];
+      const baseName = match[1].trim();
       if (!groups.has(baseName)) {
         groups.set(baseName, []);
       }
@@ -80,14 +81,31 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
     }
   });
   
+  // Check if any standalone doc is actually the "base" of a group (without parteXdeY suffix)
+  // For example: "Document.pdf" could be part 1 of "Document parteXdeY.pdf" series
+  const standaloneToRemove: Set<string> = new Set();
+  standalone.forEach(doc => {
+    const docBaseName = doc.name.replace(/\.pdf$/i, '').trim();
+    if (groups.has(docBaseName)) {
+      // This standalone doc is the base document - add it as "part 1" to the group
+      const parts = groups.get(docBaseName)!;
+      parts.unshift(doc); // Add at the beginning
+      standaloneToRemove.add(doc.id);
+    }
+  });
+  
   const result: GroupedDocument[] = [];
   
   // Add grouped documents
   groups.forEach((parts, baseName) => {
-    // Sort parts by part number
+    // Sort parts: first the base doc (no parteXdeY), then by part number
     parts.sort((a, b) => {
       const matchA = a.name.match(partRegex);
       const matchB = b.name.match(partRegex);
+      // Base doc (no match) comes first
+      if (!matchA && matchB) return -1;
+      if (matchA && !matchB) return 1;
+      if (!matchA && !matchB) return 0;
       const numA = matchA ? parseInt(matchA[2]) : 0;
       const numB = matchB ? parseInt(matchB[2]) : 0;
       return numA - numB;
@@ -100,15 +118,16 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
       baseName,
       isMultiPart: true,
       totalParts: parts.length,
-      mainDoc: parts[0], // First part has the description
+      mainDoc: parts[0], // First part (or base doc) has the description
       parts,
       processedCount,
       totalChunks
     });
   });
   
-  // Add standalone documents
+  // Add remaining standalone documents (those not merged into groups)
   standalone.forEach(doc => {
+    if (standaloneToRemove.has(doc.id)) return;
     result.push({
       baseName: doc.name.replace(/\.pdf$/i, ''),
       isMultiPart: false,
