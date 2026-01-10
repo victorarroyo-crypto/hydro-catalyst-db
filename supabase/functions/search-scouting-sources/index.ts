@@ -1,8 +1,27 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Function to normalize URLs for comparison
+function normalizeUrl(url: string): string {
+  return url
+    .toLowerCase()
+    .replace(/^https?:\/\/(www\.)?/, '')
+    .replace(/\/+$/, '')
+    .replace(/\/en\/?$/, '')
+    .replace(/\/es\/?$/, '')
+}
+
+// Function to normalize names for comparison
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
 }
 
 serve(async (req) => {
@@ -15,6 +34,11 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured')
     }
+
+    // Create Supabase client to fetch existing sources
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     const { prompt, filters, model } = await req.json()
     const selectedModel = model || 'google/gemini-2.5-pro'
@@ -29,6 +53,23 @@ serve(async (req) => {
     console.log('[SEARCH-SOURCES] Prompt:', prompt)
     console.log('[SEARCH-SOURCES] Model:', selectedModel)
     console.log('[SEARCH-SOURCES] Filters:', filters)
+
+    // Fetch existing sources from database
+    const { data: existingSources, error: fetchError } = await supabase
+      .from('scouting_sources')
+      .select('nombre, url')
+    
+    if (fetchError) {
+      console.error('[SEARCH-SOURCES] Error fetching existing sources:', fetchError)
+    }
+
+    console.log(`[SEARCH-SOURCES] Found ${existingSources?.length || 0} existing sources in database`)
+
+    // Build exclusion list for the AI prompt
+    const existingNames = existingSources?.map(s => s.nombre).filter(Boolean) || []
+    const excludeListText = existingNames.length > 0 
+      ? `\n\nIMPORTANTE - NO sugieras estas fuentes que ya tenemos en la base de datos:\n${existingNames.join('\n')}\n`
+      : ''
 
     // Build context from filters
     const filterContext = []
@@ -50,6 +91,7 @@ IMPORTANTE:
 - Incluye URLs reales que existan
 - Varía los tipos de fuentes: webs, directorios, ferias, aceleradoras, newsletters, etc.
 - Para ferias y eventos, menciona si son anuales y su próxima edición si es conocida
+- NO repitas fuentes que ya estén en la lista de exclusión${excludeListText}
 
 Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta (sin markdown, sin texto adicional):
 {
@@ -144,7 +186,7 @@ ${prompt}${filterString}`
     }
 
     // Clean and validate sources
-    const validSources = parsedResult.sources
+    const allSources = parsedResult.sources
       .filter((s: any) => s.nombre && s.url)
       .map((s: any) => ({
         nombre: s.nombre?.trim() || '',
@@ -155,13 +197,41 @@ ${prompt}${filterString}`
         sector_foco: s.sector_foco || 'general',
       }))
 
-    console.log(`[SEARCH-SOURCES] Found ${validSources.length} valid sources`)
+    // Filter out sources that already exist in the database (double check)
+    const existingUrlsNormalized = new Set(
+      (existingSources || []).map(s => normalizeUrl(s.url))
+    )
+    const existingNamesNormalized = new Set(
+      (existingSources || []).map(s => normalizeName(s.nombre))
+    )
+
+    const newSources: any[] = []
+    const existingFoundSources: any[] = []
+
+    for (const source of allSources) {
+      const normalizedUrl = normalizeUrl(source.url)
+      const normalizedName = normalizeName(source.nombre)
+      
+      if (existingUrlsNormalized.has(normalizedUrl) || existingNamesNormalized.has(normalizedName)) {
+        existingFoundSources.push({ ...source, alreadyExists: true })
+      } else {
+        newSources.push({ ...source, alreadyExists: false })
+      }
+    }
+
+    console.log(`[SEARCH-SOURCES] AI suggested ${allSources.length} sources`)
+    console.log(`[SEARCH-SOURCES] New sources: ${newSources.length}, Already exist: ${existingFoundSources.length}`)
+
+    // Return both new and existing sources with flag
+    const combinedSources = [...newSources, ...existingFoundSources]
 
     return new Response(
       JSON.stringify({
         success: true,
-        sources: validSources,
-        explanation: parsedResult.explanation || `Se encontraron ${validSources.length} fuentes relevantes.`,
+        sources: combinedSources,
+        newCount: newSources.length,
+        existingCount: existingFoundSources.length,
+        explanation: parsedResult.explanation || `Se encontraron ${newSources.length} fuentes nuevas${existingFoundSources.length > 0 ? ` (${existingFoundSources.length} ya en tu lista)` : ''}.`,
         prompt_used: prompt,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

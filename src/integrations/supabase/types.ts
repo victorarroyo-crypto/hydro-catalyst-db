@@ -2339,6 +2339,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      normalize_source_url: { Args: { url: string }; Returns: string }
       normalize_tech_name: { Args: { input_text: string }; Returns: string }
       reject_scouting_to_rejected: {
         Args: { category?: string; reason: string; scouting_id: string }
