@@ -20,9 +20,17 @@ import {
   AlertCircle, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, 
   RefreshCw, DollarSign, Info, Globe, TrendingUp, Star, MapPin, 
   Building2, ExternalLink, Calendar, Plus, RotateCcw, Edit, LayoutGrid, List,
-  Database, ArrowRight, Lightbulb, Send, Play, ChevronDown, ChevronRight, Pause
+  Database, ArrowRight, Lightbulb, Send, Play, ChevronDown, ChevronRight, Pause,
+  MoreVertical
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
@@ -36,6 +44,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { InstructionTip } from "@/components/ui/instruction-tip";
 
 // Types
 interface KnowledgeDocument {
@@ -998,7 +1007,25 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Reprocess document with Railway/PyMuPDF
+  // Reprocess document with Railway/PyMuPDF - now with granular state
+  const handleSingleReprocess = async (docId: string, docName: string) => {
+    console.log('[KB] Reprocess single', docId, docName);
+    setReprocessingDocId(docId);
+    try {
+      const { error } = await supabase.functions.invoke('process-knowledge-document', {
+        body: { documentId: docId, forceReprocess: true }
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      toast.success(`"${docName}" enviada a reprocesar`);
+    } catch (error) {
+      toast.error(`Error al reprocesar: ${(error as Error).message}`);
+    } finally {
+      setReprocessingDocId(null);
+    }
+  };
+
+  // Legacy mutation for compatibility (uses granular state now)
   const reprocessMutation = useMutation({
     mutationFn: async (docId: string) => {
       const { error } = await supabase.functions.invoke('process-knowledge-document', {
@@ -1323,6 +1350,14 @@ export default function KnowledgeBase() {
   // Helpers
   // State for batch reprocessing
   const [batchReprocessing, setBatchReprocessing] = useState<string | null>(null);
+  // State for individual reprocessing (granular spinner)
+  const [reprocessingDocId, setReprocessingDocId] = useState<string | null>(null);
+  // State for batch reprocess confirmation dialog
+  const [batchConfirmDialog, setBatchConfirmDialog] = useState<{ open: boolean; group: GroupedDocument | null; count: number }>({
+    open: false,
+    group: null,
+    count: 0,
+  });
 
   const getStatusBadge = (status: string, doc?: KnowledgeDocument) => {
     // Check for stuck processing first
@@ -1357,8 +1392,8 @@ export default function KnowledgeBase() {
     }
   };
 
-  // Batch reprocess all failed/stuck parts
-  const handleBatchReprocess = async (group: GroupedDocument) => {
+  // Open batch reprocess confirmation dialog
+  const handleBatchReprocess = (group: GroupedDocument) => {
     const toReprocess = group.parts.filter(p => 
       p.status === 'failed' || 
       p.status === 'error' || 
@@ -1370,6 +1405,24 @@ export default function KnowledgeBase() {
       toast.info("No hay partes para reprocesar");
       return;
     }
+    
+    console.log('[KB] Batch reprocess requested', group.baseName, toReprocess.length);
+    setBatchConfirmDialog({ open: true, group, count: toReprocess.length });
+  };
+
+  // Execute batch reprocess after confirmation
+  const confirmBatchReprocess = async () => {
+    const group = batchConfirmDialog.group;
+    if (!group) return;
+    
+    setBatchConfirmDialog({ open: false, group: null, count: 0 });
+    
+    const toReprocess = group.parts.filter(p => 
+      p.status === 'failed' || 
+      p.status === 'error' || 
+      p.status === 'pending' ||
+      isStuckProcessing(p)
+    );
     
     setBatchReprocessing(group.baseName);
     toast.info(`Reprocesando ${toReprocess.length} partes...`);
@@ -1401,6 +1454,25 @@ export default function KnowledgeBase() {
       toast.success(`${successCount} partes enviadas a reprocesar`);
     } else {
       toast.warning(`${successCount} enviadas, ${errorCount} errores`);
+    }
+  };
+
+  // Preview document in new tab
+  const handlePreviewDocument = async (doc: KnowledgeDocument) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('knowledge-documents')
+        .download(doc.file_path);
+      
+      if (error) throw error;
+      
+      const url = URL.createObjectURL(data);
+      window.open(url, '_blank');
+      // Note: We don't revoke immediately as the new tab needs the URL
+      // Browser will clean up when tab is closed
+    } catch (error) {
+      console.error('Preview error:', error);
+      toast.error('Error al previsualizar el documento');
     }
   };
 
@@ -1525,10 +1597,10 @@ export default function KnowledgeBase() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground p-2 bg-muted/50 rounded-lg">
-                <DollarSign className="w-3 h-3" />
-                <span>Coste estimado: ~${estimatedCostMin.toFixed(4)}-${estimatedCostMax.toFixed(4)}/consulta</span>
-              </div>
+              <InstructionTip variant="green" icon="lightbulb" persistKey="kb-query-tip">
+                Escribe tu pregunta y la IA buscará respuestas en los documentos cargados. 
+                Coste estimado: ~${estimatedCostMin.toFixed(4)}-${estimatedCostMax.toFixed(4)}/consulta.
+              </InstructionTip>
               
               <div className="flex gap-2">
                 <Textarea
@@ -1766,9 +1838,14 @@ export default function KnowledgeBase() {
                     </div>
                     
                     {isPaused && (
-                      <div className="mt-2 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
-                        <Pause className="h-3 w-3" />
-                        Pausado - Presiona "Continuar" para reanudar
+                      <InstructionTip variant="amber" icon="info" dismissible={false} className="mt-2">
+                        Pausado - Presiona "Continuar" para reanudar. Las partes en curso terminarán.
+                      </InstructionTip>
+                    )}
+                    
+                    {!isPaused && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        💡 Se procesan máximo 3 partes a la vez para evitar saturar el servidor.
                       </div>
                     )}
                   </CardContent>
@@ -1799,69 +1876,98 @@ export default function KnowledgeBase() {
                 // Group document parts
                 const groupedDocs = groupDocumentParts(filteredDocs);
                 
-                // Helper to render a single document row (for parts inside collapsible)
-                const renderDocumentPartRow = (doc: KnowledgeDocument, partNumber?: number, totalParts?: number) => (
-                  <div key={doc.id} className="flex items-center justify-between py-2 px-3 ml-6 border-l-2 border-muted hover:bg-muted/30">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        └─ Parte {partNumber} de {totalParts}
-                      </span>
-                      {getStatusBadge(doc.status, doc)}
-                      <span className="text-xs text-muted-foreground">
-                        {doc.chunk_count || 0} chunks
-                      </span>
-                      {/* Show error message if available */}
-                      {(doc.status === 'failed' || doc.status === 'error') && doc.description?.startsWith('Error:') && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <AlertCircle className="h-3 w-3 text-destructive cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                              <p className="text-xs">{doc.description}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDownloadDocument(doc)}>
-                              <Download className="h-3 w-3" />
+                // Helper to render a single document row (for parts inside collapsible) with dropdown menu
+                const renderDocumentPartRow = (doc: KnowledgeDocument, partNumber?: number, totalParts?: number) => {
+                  const isThisReprocessing = reprocessingDocId === doc.id;
+                  
+                  return (
+                    <div key={doc.id} className="flex items-center justify-between py-2 px-3 ml-6 border-l-2 border-muted hover:bg-muted/30">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          └─ Parte {partNumber} de {totalParts}
+                        </span>
+                        {getStatusBadge(doc.status, doc)}
+                        <span className="text-xs text-muted-foreground">
+                          {doc.chunk_count || 0} chunks
+                        </span>
+                        {/* Show error message if available */}
+                        {(doc.status === 'failed' || doc.status === 'error') && doc.description?.startsWith('Error:') && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertCircle className="h-3 w-3 text-destructive cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p className="text-xs">{doc.description}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {/* Loading indicator for this specific part */}
+                        {isThisReprocessing && (
+                          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {/* Dropdown menu with all actions */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="h-7 w-7 p-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Descargar</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      {canManage && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                size="sm" 
-                                variant="ghost"
-                                className="h-7 w-7 p-0"
-                                onClick={() => reprocessMutation.mutate(doc.id)}
-                                disabled={reprocessMutation.isPending}
-                              >
-                                {doc.status === 'pending' ? (
-                                  <Play className="h-3 w-3" />
-                                ) : (
-                                  <RotateCcw className={`h-3 w-3 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
-                                )}
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {doc.status === 'pending' ? 'Procesar' : 'Reprocesar'}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePreviewDocument(doc);
+                              }}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              Ver/Previsualizar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadDocument(doc);
+                              }}
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Descargar
+                            </DropdownMenuItem>
+                            {canManage && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSingleReprocess(doc.id, doc.name);
+                                  }}
+                                  disabled={isThisReprocessing}
+                                  className="text-orange-600 focus:text-orange-600"
+                                >
+                                  {isThisReprocessing ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : doc.status === 'pending' ? (
+                                    <Play className="h-4 w-4 mr-2" />
+                                  ) : (
+                                    <RotateCcw className="h-4 w-4 mr-2" />
+                                  )}
+                                  {doc.status === 'pending' ? 'Procesar solo esta parte' : 'Reprocesar solo esta parte'}
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
-                  </div>
-                );
+                  );
+                };
                 
                 // Helper to render document group actions
                 const renderGroupActions = (group: GroupedDocument, doc: KnowledgeDocument) => {
@@ -3589,6 +3695,40 @@ export default function KnowledgeBase() {
                 <Check className="h-4 w-4 mr-2" />
               )}
               Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Reprocess Confirmation Dialog */}
+      <Dialog open={batchConfirmDialog.open} onOpenChange={(open) => !open && setBatchConfirmDialog({ open: false, group: null, count: 0 })}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertCircle className="h-5 w-5" />
+              Confirmar reprocesado en lote
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              Vas a reprocesar <strong>{batchConfirmDialog.count} partes</strong> del documento 
+              <strong> "{batchConfirmDialog.group?.baseName}"</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <InstructionTip variant="amber" icon="warning" dismissible={false} className="my-2">
+            Esto puede tardar varios minutos y consumir recursos del servidor. 
+            Las partes en proceso no se pueden cancelar una vez iniciadas.
+          </InstructionTip>
+          
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setBatchConfirmDialog({ open: false, group: null, count: 0 })}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={confirmBatchReprocess}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reprocesar {batchConfirmDialog.count} partes
             </Button>
           </DialogFooter>
         </DialogContent>
