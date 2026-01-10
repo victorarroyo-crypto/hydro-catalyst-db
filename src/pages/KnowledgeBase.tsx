@@ -333,19 +333,33 @@ export default function KnowledgeBase() {
   // Document mutations
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
+      console.log("[KB-UPLOAD] Starting upload for:", file.name, "Size:", (file.size / 1024 / 1024).toFixed(2), "MB");
+      
       const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Usuario no autenticado');
+      if (authError) {
+        console.error("[KB-UPLOAD] Auth error:", authError);
+        throw new Error(`Error de autenticación: ${authError.message}`);
+      }
+      if (!authData.user) {
+        console.error("[KB-UPLOAD] No user found");
+        throw new Error('Usuario no autenticado');
+      }
+      console.log("[KB-UPLOAD] User authenticated:", authData.user.id);
 
       // Store under user folder so paths are unique and consistent
       const filePath = `${authData.user.id}/${Date.now()}-${file.name}`;
+      console.log("[KB-UPLOAD] Uploading to path:", filePath);
 
       // IMPORTANT: bucket used by the backend processor
       const { error: uploadError } = await supabase.storage
         .from("knowledge-documents")
         .upload(filePath, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("[KB-UPLOAD] Storage upload error:", uploadError);
+        throw new Error(`Error al subir archivo: ${uploadError.message}`);
+      }
+      console.log("[KB-UPLOAD] File uploaded to storage successfully");
 
       const { data: doc, error: docError } = await supabase
         .from("knowledge_documents")
@@ -362,16 +376,23 @@ export default function KnowledgeBase() {
         .select()
         .single();
 
-      if (docError) throw docError;
+      if (docError) {
+        console.error("[KB-UPLOAD] DB insert error:", docError);
+        throw new Error(`Error al registrar documento: ${docError.message}`);
+      }
+      console.log("[KB-UPLOAD] Document registered in DB:", doc.id);
 
+      console.log("[KB-UPLOAD] Invoking process-knowledge-document function...");
       const { error: processError } = await supabase.functions.invoke(
         "process-knowledge-document",
         { body: { documentId: doc.id } }
       );
 
       if (processError) {
-        console.error("Processing error:", processError);
+        console.error("[KB-UPLOAD] Processing error:", processError);
         toast.error("Documento subido pero hubo un error al procesarlo");
+      } else {
+        console.log("[KB-UPLOAD] Processing initiated successfully");
       }
 
       return doc;
@@ -381,8 +402,9 @@ export default function KnowledgeBase() {
       toast.success("Documento subido y en proceso");
     },
     onError: (error) => {
-      console.error("Upload error:", error);
-      toast.error("Error al subir el documento");
+      console.error("[KB-UPLOAD] Upload mutation error:", error);
+      const message = error instanceof Error ? error.message : "Error desconocido";
+      toast.error(`Error: ${message}`);
     },
   });
 
@@ -874,8 +896,10 @@ export default function KnowledgeBase() {
     setUploadProgress(null);
     
     try {
+      console.log("[KB-UPLOAD-HANDLER] Starting file upload process:", file.name);
       toast.info("Analizando documento...");
       const { parts, totalPages, wasSplit } = await splitPdfIfNeeded(file);
+      console.log("[KB-UPLOAD-HANDLER] Split result:", { parts: parts.length, totalPages, wasSplit });
       
       if (wasSplit) {
         toast.info(`Documento dividido en ${parts.length} partes (${totalPages} páginas total)`);
@@ -885,17 +909,21 @@ export default function KnowledgeBase() {
       
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
+        console.log(`[KB-UPLOAD-HANDLER] Uploading part ${i + 1}/${parts.length}:`, part.name);
         setUploadProgress({ current: i + 1, total: parts.length });
         const partFile = new File([part.blob], part.name, { type: "application/pdf" });
         await uploadMutation.mutateAsync(partFile);
+        console.log(`[KB-UPLOAD-HANDLER] Part ${i + 1} uploaded successfully`);
       }
       
       if (wasSplit) {
         toast.success(`${parts.length} partes subidas correctamente`);
       }
+      console.log("[KB-UPLOAD-HANDLER] All parts uploaded successfully");
     } catch (error) {
-      console.error("Upload error:", error);
-      toast.error("Error al procesar el documento");
+      console.error("[KB-UPLOAD-HANDLER] Upload error:", error);
+      const message = error instanceof Error ? error.message : "Error desconocido al procesar el documento";
+      toast.error(message);
     } finally {
       setUploading(false);
       setUploadProgress(null);
