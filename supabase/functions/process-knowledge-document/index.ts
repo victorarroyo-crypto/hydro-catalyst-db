@@ -76,15 +76,28 @@ serve(async (req) => {
 
     if (signedError || !signedUrlData?.signedUrl) {
       console.error(`[KB-PROCESS] Error creating signed URL:`, signedError)
+      console.error(`[KB-PROCESS] File path attempted: ${document.file_path}`)
+      
+      const errorMessage = signedError?.message?.includes('Object not found')
+        ? `Archivo no encontrado en storage: ${document.file_path}. El documento debe ser subido de nuevo.`
+        : `Error creating signed URL: ${signedError?.message}`
       
       await supabase
         .from('knowledge_documents')
-        .update({ status: 'error', updated_at: new Date().toISOString() })
+        .update({ 
+          status: 'error', 
+          description: errorMessage,
+          updated_at: new Date().toISOString() 
+        })
         .eq('id', documentId)
       
       return new Response(
-        JSON.stringify({ error: `Error creating signed URL: ${signedError?.message}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          error: errorMessage,
+          file_path: document.file_path,
+          suggestion: 'El archivo PDF no existe en el storage. Elimina este registro y sube el documento de nuevo.'
+        }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
