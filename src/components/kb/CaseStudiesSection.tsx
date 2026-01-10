@@ -302,26 +302,6 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Casos de Estudio</h1>
         <div className="flex items-center gap-2">
-          {/* View toggle */}
-          <div className="flex items-center border rounded-lg p-1">
-            <Button
-              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-8 px-3"
-              onClick={() => setViewMode('grid')}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'table' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-8 px-3"
-              onClick={() => setViewMode('table')}
-            >
-              <List className="h-4 w-4" />
-            </Button>
-          </div>
-          
           {canManage && (
             <Button onClick={() => setIsNewCaseModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
@@ -379,6 +359,26 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
                 Limpiar filtros
               </Button>
             )}
+
+            {/* View toggle */}
+            <div className="flex items-center border rounded-lg p-1 ml-auto">
+              <Button
+                variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 px-3"
+                onClick={() => setViewMode('grid')}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 px-3"
+                onClick={() => setViewMode('table')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
