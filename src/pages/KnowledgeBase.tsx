@@ -222,6 +222,7 @@ export default function KnowledgeBase() {
     tipo: string;
     pais: string;
     sector_foco: string;
+    alreadyExists?: boolean;
   }>>([]);
   const [aiSourceExplanation, setAiSourceExplanation] = useState('');
   const [isSearchingAI, setIsSearchingAI] = useState(false);
@@ -565,8 +566,15 @@ export default function KnowledgeBase() {
       setAiSourceResults(data.sources || []);
       setAiSourceExplanation(data.explanation || '');
       
+      const newCount = data.newCount ?? data.sources?.filter((s: any) => !s.alreadyExists).length ?? 0;
+      const existingCount = data.existingCount ?? data.sources?.filter((s: any) => s.alreadyExists).length ?? 0;
+      
       if (data.sources?.length > 0) {
-        toast.success(`Se encontraron ${data.sources.length} fuentes`);
+        if (existingCount > 0) {
+          toast.success(`Se encontraron ${newCount} fuentes nuevas (${existingCount} ya en tu lista)`);
+        } else {
+          toast.success(`Se encontraron ${newCount} fuentes nuevas`);
+        }
       } else {
         toast.info("No se encontraron fuentes con esos criterios");
       }
@@ -616,6 +624,12 @@ export default function KnowledgeBase() {
         }
       }
 
+      // Check if already exists (based on alreadyExists flag)
+      if (source.alreadyExists) {
+        toast.info(`"${source.nombre}" ya está en tu lista de fuentes`);
+        return;
+      }
+
       const { error } = await supabase
         .from("scouting_sources")
         .insert({
@@ -629,7 +643,15 @@ export default function KnowledgeBase() {
           activo: true,
         });
 
-      if (error) throw error;
+      if (error) {
+        // Handle unique constraint violation
+        if (error.code === '23505') {
+          toast.info(`"${source.nombre}" ya existe en tu lista (URL duplicada)`);
+          setAiSourceResults(prev => prev.filter(s => s.url !== source.url));
+          return;
+        }
+        throw error;
+      }
 
       queryClient.invalidateQueries({ queryKey: ["scouting-sources"] });
       toast.success(`"${source.nombre}" añadida a las fuentes`);
@@ -2450,7 +2472,12 @@ export default function KnowledgeBase() {
                           <div className="flex items-center gap-2 mb-1">
                             <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
                             <span className="font-medium truncate">{source.nombre}</span>
-                            {source.tipo && (
+                            {source.alreadyExists && (
+                              <Badge variant="outline" className="text-xs shrink-0 bg-amber-50 text-amber-700 border-amber-200">
+                                Ya en tu lista
+                              </Badge>
+                            )}
+                            {source.tipo && !source.alreadyExists && (
                               <Badge variant="secondary" className="text-xs shrink-0">
                                 {source.tipo}
                               </Badge>
@@ -2473,14 +2500,21 @@ export default function KnowledgeBase() {
                             {source.sector_foco && <span>🎯 {source.sector_foco}</span>}
                           </div>
                         </div>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => addAISourceToDb(source)}
-                        >
-                          <Plus className="h-3 w-3 mr-1" />
-                          Añadir
-                        </Button>
+                        {source.alreadyExists ? (
+                          <Badge variant="outline" className="text-xs shrink-0 text-muted-foreground">
+                            <Check className="h-3 w-3 mr-1" />
+                            Guardada
+                          </Badge>
+                        ) : (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => addAISourceToDb(source)}
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Añadir
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
