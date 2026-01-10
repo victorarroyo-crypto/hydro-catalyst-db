@@ -20,7 +20,7 @@ import {
   AlertCircle, HardDrive, Eye, Download, Pencil, Check, X, Sparkles, 
   RefreshCw, DollarSign, Info, Globe, TrendingUp, Star, MapPin, 
   Building2, ExternalLink, Calendar, Plus, RotateCcw, Edit, LayoutGrid, List,
-  Database, ArrowRight, Lightbulb, Send
+  Database, ArrowRight, Lightbulb, Send, Play
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
@@ -975,7 +975,7 @@ export default function KnowledgeBase() {
                             <TooltipContent>Descargar</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                        {canManage && (doc.status === 'processed' || doc.status === 'error') && (
+                        {canManage && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -985,10 +985,18 @@ export default function KnowledgeBase() {
                                   onClick={() => reprocessMutation.mutate(doc.id)}
                                   disabled={reprocessMutation.isPending}
                                 >
-                                  <RotateCcw className={`h-4 w-4 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
+                                  {doc.status === 'pending' ? (
+                                    <Play className="h-4 w-4" />
+                                  ) : (
+                                    <RotateCcw className={`h-4 w-4 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
+                                  )}
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Reprocesar con PyMuPDF</TooltipContent>
+                              <TooltipContent>
+                                {doc.status === 'pending' ? 'Procesar documento' : 
+                                 doc.status === 'processing' ? 'Reintentar procesamiento' : 
+                                 'Reprocesar con PyMuPDF'}
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}
