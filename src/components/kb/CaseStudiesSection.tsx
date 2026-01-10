@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { NewCaseStudyModal } from './NewCaseStudyModal';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -125,14 +126,12 @@ const getStatusBadge = (status: string | null) => {
 };
 
 interface CaseStudiesSectionProps {
-  onNewCase?: () => void;
   onViewCase?: (caseStudy: CaseStudy) => void;
   onEditCase?: (caseStudy: CaseStudy) => void;
   onDeleteCase?: (caseStudy: CaseStudy) => void;
 }
 
 export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
-  onNewCase,
   onViewCase,
   onEditCase,
   onDeleteCase,
@@ -141,6 +140,9 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
   const isAdmin = profile?.role === 'admin';
   const canManage = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
+  // Modal state
+  const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
+
   // View mode
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
@@ -148,6 +150,13 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [sectorFilter, setSectorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Handle process files
+  const handleProcessFiles = (files: File[]) => {
+    console.log('Processing files:', files);
+    // TODO: Implement AI processing
+    setIsNewCaseModalOpen(false);
+  };
 
   // Fetch case studies with new fields
   const { data: caseStudies, isLoading } = useQuery({
@@ -302,7 +311,7 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
           </div>
           
           {canManage && (
-            <Button onClick={onNewCase}>
+            <Button onClick={() => setIsNewCaseModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Nuevo Caso
             </Button>
@@ -545,6 +554,13 @@ export const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
           Mostrando {filteredCases.length} de {caseStudies?.length || 0} casos
         </p>
       )}
+
+      {/* New Case Study Modal */}
+      <NewCaseStudyModal
+        open={isNewCaseModalOpen}
+        onOpenChange={setIsNewCaseModalOpen}
+        onProcess={handleProcessFiles}
+      />
     </div>
   );
 };
