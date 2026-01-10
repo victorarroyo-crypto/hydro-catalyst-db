@@ -149,6 +149,8 @@ export default function KnowledgeBase() {
   const [querying, setQuerying] = useState(false);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [editingDescDocId, setEditingDescDocId] = useState<string | null>(null);
+  const [editingDescription, setEditingDescription] = useState("");
   const [generatingDescId, setGeneratingDescId] = useState<string | null>(null);
   const [lastQueryCost, setLastQueryCost] = useState<number | null>(null);
   
@@ -589,6 +591,26 @@ export default function KnowledgeBase() {
     },
   });
 
+  // Update document description
+  const updateDescriptionMutation = useMutation({
+    mutationFn: async ({ docId, description }: { docId: string; description: string }) => {
+      const { error } = await supabase
+        .from('knowledge_documents')
+        .update({ description, updated_at: new Date().toISOString() })
+        .eq('id', docId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      toast.success("Descripción actualizada");
+      setEditingDescDocId(null);
+      setEditingDescription("");
+    },
+    onError: (error: Error) => {
+      toast.error(`Error al actualizar: ${error.message}`);
+    },
+  });
+
   // Download document handler
   const handleDownloadDocument = async (doc: KnowledgeDocument) => {
     try {
@@ -932,10 +954,10 @@ export default function KnowledgeBase() {
               ) : viewMode.documents === 'list' ? (
                 <div className="space-y-2">
                   {documents?.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                        <div className="min-w-0 flex-1">
+                    <div key={doc.id} className="flex items-start justify-between p-3 border rounded-lg hover:bg-muted/50">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1 space-y-2">
                           {editingDocId === doc.id ? (
                             <div className="flex items-center gap-2">
                               <Input
@@ -953,26 +975,73 @@ export default function KnowledgeBase() {
                           ) : (
                             <p className="font-medium truncate">{doc.name}</p>
                           )}
-                          {doc.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{doc.description}</p>
-                          )}
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                          
+                          {/* Editable description */}
+                          {editingDescDocId === doc.id ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={editingDescription}
+                                onChange={(e) => setEditingDescription(e.target.value)}
+                                className="min-h-[80px] text-sm"
+                                placeholder="Descripción del documento..."
+                              />
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => updateDescriptionMutation.mutate({ docId: doc.id, description: editingDescription })}
+                                  disabled={updateDescriptionMutation.isPending}
+                                >
+                                  {updateDescriptionMutation.isPending ? (
+                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                  ) : (
+                                    <Check className="h-3 w-3 mr-1" />
+                                  )}
+                                  Guardar
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => setEditingDescDocId(null)}>
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : doc.description ? (
+                            <div 
+                              className="text-xs text-muted-foreground cursor-pointer hover:bg-muted/50 p-1 rounded group"
+                              onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(doc.description || ''); }}
+                            >
+                              <p className="line-clamp-2">{doc.description}</p>
+                              <span className="text-[10px] text-muted-foreground/50 group-hover:text-primary">
+                                Clic para editar
+                              </span>
+                            </div>
+                          ) : canManage ? (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-xs h-6 px-2"
+                              onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(''); }}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Añadir descripción
+                            </Button>
+                          ) : null}
+                          
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{formatFileSize(doc.file_size)}</span>
                             <span>•</span>
                             <span>{doc.chunk_count} chunks</span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 shrink-0">
                         {getStatusBadge(doc.status)}
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button size="sm" variant="ghost" onClick={() => handleDownloadDocument(doc)}>
+                              <Button size="sm" variant="outline" onClick={() => handleDownloadDocument(doc)}>
                                 <Download className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Descargar</TooltipContent>
+                            <TooltipContent>Descargar PDF</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                         {canManage && (
@@ -981,7 +1050,7 @@ export default function KnowledgeBase() {
                               <TooltipTrigger asChild>
                                 <Button 
                                   size="sm" 
-                                  variant="ghost" 
+                                  variant="outline"
                                   onClick={() => reprocessMutation.mutate(doc.id)}
                                   disabled={reprocessMutation.isPending}
                                 >
@@ -1002,13 +1071,27 @@ export default function KnowledgeBase() {
                         )}
                         {canManage && (
                           <>
-                            <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
-                              <Pencil className="h-4 w-4" />
-                            </Button>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Renombrar</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             {isAdmin && (
-                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Eliminar</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                           </>
                         )}
@@ -1029,27 +1112,119 @@ export default function KnowledgeBase() {
                           {getStatusBadge(doc.status)}
                         </div>
                       </CardHeader>
-                      <CardContent className="pt-0">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+                      <CardContent className="pt-0 space-y-3">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span>{formatFileSize(doc.file_size)}</span>
                           <span>•</span>
                           <span>{doc.chunk_count} chunks</span>
                         </div>
-                        {doc.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{doc.description}</p>
-                        )}
-                        <div className="flex items-center gap-2">
-                          {canManage && (
-                            <>
-                              <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
-                                <Pencil className="h-3 w-3" />
+                        
+                        {/* Editable description */}
+                        {editingDescDocId === doc.id ? (
+                          <div className="space-y-2">
+                            <Textarea
+                              value={editingDescription}
+                              onChange={(e) => setEditingDescription(e.target.value)}
+                              className="min-h-[60px] text-sm"
+                              placeholder="Descripción del documento..."
+                            />
+                            <div className="flex items-center gap-2">
+                              <Button 
+                                size="sm" 
+                                onClick={() => updateDescriptionMutation.mutate({ docId: doc.id, description: editingDescription })}
+                                disabled={updateDescriptionMutation.isPending}
+                              >
+                                {updateDescriptionMutation.isPending ? (
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                ) : (
+                                  <Check className="h-3 w-3 mr-1" />
+                                )}
+                                Guardar
                               </Button>
-                              {isAdmin && (
-                                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
-                                  <Trash2 className="h-3 w-3" />
+                              <Button size="sm" variant="ghost" onClick={() => setEditingDescDocId(null)}>
+                                Cancelar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : doc.description ? (
+                          <div 
+                            className="text-sm text-muted-foreground cursor-pointer hover:bg-muted/50 p-1 rounded group"
+                            onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(doc.description || ''); }}
+                          >
+                            <p className="line-clamp-2">{doc.description}</p>
+                            <span className="text-[10px] text-muted-foreground/50 group-hover:text-primary">
+                              Clic para editar
+                            </span>
+                          </div>
+                        ) : canManage ? (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-xs h-6 px-2"
+                            onClick={() => { setEditingDescDocId(doc.id); setEditingDescription(''); }}
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Añadir descripción
+                          </Button>
+                        ) : null}
+                        
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button size="sm" variant="outline" onClick={() => handleDownloadDocument(doc)}>
+                                  <Download className="h-3 w-3" />
                                 </Button>
-                              )}
-                            </>
+                              </TooltipTrigger>
+                              <TooltipContent>Descargar PDF</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          {canManage && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => reprocessMutation.mutate(doc.id)}
+                                    disabled={reprocessMutation.isPending}
+                                  >
+                                    {doc.status === 'pending' ? (
+                                      <Play className="h-3 w-3" />
+                                    ) : (
+                                      <RotateCcw className={`h-3 w-3 ${reprocessMutation.isPending ? 'animate-spin' : ''}`} />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {doc.status === 'pending' ? 'Procesar' : 'Reprocesar'}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          {canManage && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Renombrar</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          {isAdmin && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(doc)}>
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Eliminar</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                         </div>
                       </CardContent>
