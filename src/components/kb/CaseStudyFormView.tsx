@@ -33,6 +33,14 @@ import {
   Globe,
   Lightbulb,
   Tag,
+  MapPin,
+  Mail,
+  FileText,
+  Trophy,
+  Zap,
+  DollarSign,
+  Clock,
+  ExternalLink,
 } from 'lucide-react';
 import {
   Dialog,
@@ -72,12 +80,31 @@ interface Technology {
   name: string;
   provider: string;
   role: 'Recomendada' | 'Evaluada';
-  status?: 'new' | 'linked' | 'sent_to_scouting';  // Estado de vinculación
-  linkedTechId?: string;       // ID de tecnología existente en DB
-  description?: string;        // Descripción de la tecnología
-  trl?: number;                // TRL estimado
-  type?: string;               // Tipo sugerido
-  web?: string;                // URL de la empresa/tecnología
+  status?: 'new' | 'linked' | 'sent_to_scouting';
+  linkedTechId?: string;
+  
+  // Campos principales de Railway
+  description?: string;
+  trl?: number;
+  type?: string;
+  subcategory?: string;
+  sector?: string;
+  web?: string;
+  email?: string;
+  country?: string;
+  
+  // Campos técnicos extendidos
+  mainApplication?: string;
+  innovationAdvantages?: string;
+  references?: string;
+  capacity?: string;
+  removalEfficiency?: string;
+  footprint?: string;
+  powerConsumption?: string;
+  priceRange?: string;
+  businessModel?: string;
+  leadTime?: string;
+  rationale?: string;
 }
 
 // Nested structure from Railway
@@ -109,14 +136,43 @@ interface ExtractedData {
   lessons_learned?: string;
 }
 
-// Technologies structure from Railway
+// Technologies structure from Railway - Complete fields
 interface RailwayTechnologyItem {
   name: string;
   provider?: string;
+  provider_url?: string;
+  provider_email?: string;
+  provider_country?: string;
   role?: string;
-  description?: string;
-  trl_estimated?: number;
+  
+  // Classification
   type_suggested?: string;
+  subcategory_suggested?: string;
+  sector_suggested?: string;
+  
+  // Description & Innovation
+  technical_description?: string;
+  main_application?: string;
+  innovation_advantages?: string;
+  references?: string;
+  
+  // Technical specs
+  capacity?: string;
+  removal_efficiency?: string;
+  footprint?: string;
+  power_consumption?: string;
+  
+  // Commercial
+  price_range?: string;
+  business_model?: string;
+  lead_time?: string;
+  
+  // Metadata
+  trl_estimated?: number;
+  rationale?: string;
+  
+  // Legacy fields for backward compatibility
+  description?: string;
   web?: string;
   url?: string;
   website?: string;
@@ -156,6 +212,40 @@ interface ResultData {
   lessonsLearned?: string;
   qualityScore?: number;
 }
+
+// Helper component for displaying info rows with icon and optional link
+const InfoRow: React.FC<{
+  icon: React.ElementType;
+  label: string;
+  value: string | null | undefined;
+  isLink?: boolean;
+}> = ({ icon: Icon, label, value, isLink = false }) => {
+  const displayValue = value != null && String(value).trim().length > 0 ? String(value) : null;
+  
+  return (
+    <div className="flex items-start gap-3 py-1">
+      <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+        {!displayValue ? (
+          <p className="text-sm text-muted-foreground/50 italic">Sin información</p>
+        ) : isLink ? (
+          <a 
+            href={displayValue.startsWith('http') ? displayValue : `https://${displayValue}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-secondary hover:underline flex items-center gap-1 break-all"
+          >
+            {displayValue}
+            <ExternalLink className="w-3 h-3 shrink-0" />
+          </a>
+        ) : (
+          <p className="text-sm text-foreground">{displayValue}</p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 interface CaseStudyFormViewProps {
   jobId: string;
@@ -355,7 +445,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
               techArray = data.technologies;
             }
             
-            // Map to form format with role translation
+            // Map to form format with full Railway fields
             if (techArray.length > 0) {
               console.log('[CaseStudyForm] Setting technologies:', techArray.length);
               setTechnologies(techArray.map((t: any, i) => {
@@ -374,10 +464,37 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                   provider: t.provider || '',
                   role: mappedRole,
                   status: t.status || 'new',
-                  description: t.description || '',
-                  trl: t.trl_estimated || t.trl || null,
+                  
+                  // Classification
                   type: t.type_suggested || t.type || '',
-                  web: t.web || t.url || t.website || '',
+                  subcategory: t.subcategory_suggested || '',
+                  sector: t.sector_suggested || '',
+                  
+                  // Description & Innovation
+                  description: t.technical_description || t.description || '',
+                  mainApplication: t.main_application || '',
+                  innovationAdvantages: t.innovation_advantages || '',
+                  references: t.references || '',
+                  
+                  // Contact & Location
+                  web: t.provider_url || t.web || t.url || t.website || '',
+                  email: t.provider_email || '',
+                  country: t.provider_country || '',
+                  
+                  // Technical specs
+                  trl: t.trl_estimated || t.trl || null,
+                  capacity: t.capacity || '',
+                  removalEfficiency: t.removal_efficiency || '',
+                  footprint: t.footprint || '',
+                  powerConsumption: t.power_consumption || '',
+                  
+                  // Commercial
+                  priceRange: t.price_range || '',
+                  businessModel: t.business_model || '',
+                  leadTime: t.lead_time || '',
+                  
+                  // Metadata
+                  rationale: t.rationale || '',
                 };
               }));
             }
@@ -510,19 +627,27 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         return;
       }
 
-      // Insertar en scouting_queue
+      // Insertar en scouting_queue con todos los campos disponibles
       const { error } = await supabase
         .from('scouting_queue')
         .insert({
           'Nombre de la tecnología': tech.name,
           'Proveedor / Empresa': tech.provider || null,
+          'Web de la empresa': tech.web || null,
+          'Email de contacto': tech.email || null,
+          'País de origen': tech.country || null,
           'Descripción técnica breve': tech.description || null,
+          'Aplicación principal': tech.mainApplication || null,
+          'Ventaja competitiva clave': tech.innovationAdvantages || null,
+          'Casos de referencia': tech.references || null,
           'Grado de madurez (TRL)': tech.trl || null,
           'Tipo de tecnología': tech.type || 'Por clasificar',
+          Subcategoría: tech.subcategory || null,
+          'Sector y subsector': tech.sector || null,
           source: 'case_study',
           queue_status: 'pending',
           priority: tech.role === 'Recomendada' ? 'high' : 'medium',
-          notes: `Extraída de caso de estudio: ${title}`,
+          notes: `Extraída de caso de estudio: ${title}. ${tech.rationale ? `Justificación IA: ${tech.rationale}` : ''}`,
         });
 
       if (error) throw error;
@@ -1282,10 +1407,10 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         </div>
       </div>
 
-      {/* Technology Detail Modal */}
+      {/* Technology Detail Modal - Full Information */}
       <Dialog open={!!selectedTech} onOpenChange={(open) => !open && setSelectedTech(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Lightbulb className="h-5 w-5 text-primary" />
               {selectedTech?.name || 'Detalle de Tecnología'}
@@ -1293,7 +1418,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
           </DialogHeader>
           
           {selectedTech && (
-            <div className="space-y-4 py-4">
+            <div className="flex-1 overflow-y-auto space-y-6 py-4 pr-2">
               {/* Status & Role Badges */}
               <div className="flex flex-wrap gap-2">
                 <Badge 
@@ -1316,76 +1441,108 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 )}
               </div>
 
-              {/* Provider - Always show */}
-              <div className="flex items-start gap-3">
-                <Building2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground">Proveedor / Empresa</p>
-                  {selectedTech.provider ? (
-                    <p className="text-sm">{selectedTech.provider}</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground/50 italic">Sin información</p>
-                  )}
-                </div>
+              {/* INFORMACIÓN GENERAL */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground border-b border-border pb-2 flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-primary" />
+                  INFORMACIÓN GENERAL
+                </h3>
+                
+                <InfoRow icon={Building2} label="Proveedor / Empresa" value={selectedTech.provider} />
+                <InfoRow icon={MapPin} label="País de origen" value={selectedTech.country} />
+                <InfoRow icon={Globe} label="Web de la empresa" value={selectedTech.web} isLink />
+                <InfoRow icon={Mail} label="Email de contacto" value={selectedTech.email} />
               </div>
 
-              {/* Web/URL - Always show */}
-              <div className="flex items-start gap-3">
-                <Globe className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground">Web de la empresa</p>
-                  {selectedTech.web ? (
-                    <a 
-                      href={selectedTech.web.startsWith('http') ? selectedTech.web : `https://${selectedTech.web}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-secondary hover:underline flex items-center gap-1 break-all"
-                    >
-                      {selectedTech.web}
-                      <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
-                  ) : (
-                    <p className="text-sm text-muted-foreground/50 italic">Sin información</p>
-                  )}
-                </div>
+              {/* CLASIFICACIÓN */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground border-b border-border pb-2 flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-primary" />
+                  CLASIFICACIÓN
+                </h3>
+                
+                <InfoRow icon={Tag} label="Tipo de tecnología" value={selectedTech.type} />
+                <InfoRow icon={Tag} label="Subcategoría" value={selectedTech.subcategory} />
+                <InfoRow icon={Tag} label="Sector" value={selectedTech.sector} />
+                <InfoRow icon={FileText} label="Aplicación principal" value={selectedTech.mainApplication} />
               </div>
 
-              {/* Type - Always show */}
-              <div className="flex items-start gap-3">
-                <Tag className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground">Tipo Sugerido</p>
-                  {selectedTech.type ? (
-                    <p className="text-sm">{selectedTech.type}</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground/50 italic">Sin información</p>
-                  )}
-                </div>
+              {/* DESCRIPCIÓN TÉCNICA */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground border-b border-border pb-2 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  DESCRIPCIÓN TÉCNICA
+                </h3>
+                <p className={`text-sm ${selectedTech.description ? 'text-foreground' : 'text-muted-foreground/50 italic'}`}>
+                  {selectedTech.description || 'Sin información'}
+                </p>
               </div>
 
-              {/* Description - Always show */}
-              <div className="flex items-start gap-3">
-                <Lightbulb className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground">Descripción Técnica</p>
-                  {selectedTech.description ? (
-                    <p className="text-sm whitespace-pre-wrap">{selectedTech.description}</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground/50 italic">Sin información</p>
-                  )}
-                </div>
+              {/* INNOVACIÓN Y VENTAJAS */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground border-b border-border pb-2 flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4 text-primary" />
+                  INNOVACIÓN Y VENTAJAS
+                </h3>
+                
+                <InfoRow icon={Trophy} label="Ventaja competitiva clave" value={selectedTech.innovationAdvantages} />
               </div>
+
+              {/* ESPECIFICACIONES TÉCNICAS */}
+              {(selectedTech.capacity || selectedTech.removalEfficiency || selectedTech.footprint || selectedTech.powerConsumption) && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground border-b border-border pb-2 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-primary" />
+                    ESPECIFICACIONES TÉCNICAS
+                  </h3>
+                  
+                  <InfoRow icon={Zap} label="Capacidad" value={selectedTech.capacity} />
+                  <InfoRow icon={Zap} label="Eficiencia de eliminación" value={selectedTech.removalEfficiency} />
+                  <InfoRow icon={Zap} label="Huella / Footprint" value={selectedTech.footprint} />
+                  <InfoRow icon={Zap} label="Consumo energético" value={selectedTech.powerConsumption} />
+                </div>
+              )}
+
+              {/* INFORMACIÓN COMERCIAL */}
+              {(selectedTech.priceRange || selectedTech.businessModel || selectedTech.leadTime) && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground border-b border-border pb-2 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-primary" />
+                    INFORMACIÓN COMERCIAL
+                  </h3>
+                  
+                  <InfoRow icon={DollarSign} label="Rango de precios" value={selectedTech.priceRange} />
+                  <InfoRow icon={DollarSign} label="Modelo de negocio" value={selectedTech.businessModel} />
+                  <InfoRow icon={Clock} label="Tiempo de entrega" value={selectedTech.leadTime} />
+                </div>
+              )}
+
+              {/* REFERENCIAS */}
+              {selectedTech.references && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground border-b border-border pb-2 flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-primary" />
+                    REFERENCIAS
+                  </h3>
+                  <p className="text-sm text-foreground">{selectedTech.references}</p>
+                </div>
+              )}
+
+              {/* JUSTIFICACIÓN IA */}
+              {selectedTech.rationale && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground border-b border-border pb-2 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    JUSTIFICACIÓN IA
+                  </h3>
+                  <p className="text-sm text-foreground italic">{selectedTech.rationale}</p>
+                </div>
+              )}
 
               {/* Linked Tech ID - Only if linked */}
               {selectedTech.linkedTechId && (
-                <div className="flex items-start gap-3 pt-2 border-t">
-                  <Tag className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">ID en Base de Datos</p>
-                    <p className="text-sm font-mono text-xs">{selectedTech.linkedTechId}</p>
-                  </div>
+                <div className="pt-2 border-t">
+                  <InfoRow icon={Tag} label="ID en Base de Datos" value={selectedTech.linkedTechId} />
                 </div>
               )}
             </div>
