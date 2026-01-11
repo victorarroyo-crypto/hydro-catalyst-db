@@ -772,10 +772,9 @@ export const CaseStudiesSection: React.FC = () => {
           }
         }}
       >
-        <DialogContent className="sm:max-w-4xl w-[95vw] h-[90vh] p-0 overflow-hidden flex flex-col">
-          <div className="flex flex-col flex-1 min-h-0">
-            {reviewJobId && (
-              <CaseStudyFormView
+        <DialogContent className="sm:max-w-4xl w-[95vw] max-h-[90vh] p-0 flex flex-col min-h-0 overflow-hidden">
+          {reviewJobId && (
+            <CaseStudyFormView
               jobId={reviewJobId}
               existingCaseId={reviewCaseId || undefined}
               onBack={() => {
@@ -789,9 +788,8 @@ export const CaseStudiesSection: React.FC = () => {
                 queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
                 queryClient.invalidateQueries({ queryKey: ['case-study-jobs-map'] });
               }}
-              />
-            )}
-          </div>
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

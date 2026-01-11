@@ -956,16 +956,18 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden p-6">
-      {/* Header */}
-      <div className="flex items-center gap-2 pb-4 border-b shrink-0">
-        <Sparkles className="h-5 w-5 text-primary" />
-        <h3 className="font-semibold">Revisar y Completar</h3>
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      {/* Header - Fixed */}
+      <div className="shrink-0 px-6 pt-6 pb-4 border-b bg-background">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold">Revisar y Completar</h3>
+        </div>
       </div>
 
-      {/* Scrollable Form - using native overflow for reliability */}
-      <div className="flex-1 min-h-0 overflow-y-auto py-4">
-        <div className="space-y-6 pr-4">
+      {/* Scrollable Form Body */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+        <div className="space-y-6">
           {/* SECCIÓN: Información General */}
           <section className="space-y-4">
             <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
@@ -1421,8 +1423,8 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="pt-4 border-t space-y-3 shrink-0">
+      {/* Footer - Fixed */}
+      <div className="shrink-0 px-6 py-4 border-t bg-background space-y-3">
         {/* Quality Score */}
         {qualityScore > 0 && (
           <div className="flex items-center gap-3">
