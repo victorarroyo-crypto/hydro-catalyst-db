@@ -75,6 +75,11 @@ interface Parameter {
   unit: string;
 }
 
+// Helper function to map Spanish role to DB constraint values
+const mapRoleToDb = (role: string): 'recommended' | 'evaluated' => {
+  return role === 'Recomendada' ? 'recommended' : 'evaluated';
+};
+
 interface Technology {
   id: string;
   name: string;
@@ -652,7 +657,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
       const { data: existingInQueue } = await supabase
         .from('scouting_queue')
         .select('id')
-        .ilike('"Nombre de la tecnología"', tech.name)
+        .ilike('Nombre de la tecnología', tech.name)
         .limit(1)
         .maybeSingle();
 
@@ -824,7 +829,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 case_study_id: caseStudyId,
                 technology_name: tech.name,
                 provider: tech.provider || null,
-                role: tech.role,
+                role: mapRoleToDb(tech.role),
                 technology_id: tech.linkedTechId || null,
                 application_data: applicationData,
               });
@@ -837,7 +842,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             const { data: existingScouting } = await supabase
               .from('scouting_queue')
               .select('id')
-              .ilike('"Nombre de la tecnología"', tech.name)
+              .ilike('Nombre de la tecnología', tech.name)
               .limit(1)
               .maybeSingle();
 
@@ -847,7 +852,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 case_study_id: caseStudyId,
                 technology_name: tech.name,
                 provider: tech.provider || null,
-                role: tech.role,
+                role: mapRoleToDb(tech.role),
                 scouting_queue_id: existingScouting?.id || null,
                 application_data: applicationData,
               });
@@ -891,7 +896,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 case_study_id: caseStudyId,
                 technology_name: tech.name,
                 provider: tech.provider || null,
-                role: tech.role,
+                role: mapRoleToDb(tech.role),
                 application_data: applicationData,
               });
             } else {
@@ -902,7 +907,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                   case_study_id: caseStudyId,
                   technology_name: tech.name,
                   provider: tech.provider || null,
-                  role: tech.role,
+                  role: mapRoleToDb(tech.role),
                   scouting_queue_id: scoutingItem?.id,
                   application_data: applicationData,
                 });
