@@ -10,13 +10,28 @@ import {
   FileSearch,
   KeyRound,
   ShieldCheck,
-  CheckCheck,
-  Cpu,
+  Database,
   RefreshCw,
+  Save,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
-type ProcessingPhase = 'extracting' | 'reviewing' | 'anonymizing' | 'quality' | 'checking_tech' | 'completed' | 'failed';
+// All phases that Railway sends
+type ProcessingPhase = 
+  | 'pending'
+  | 'uploading'
+  | 'extracting' 
+  | 'extraction_complete'
+  | 'reviewing' 
+  | 'review_complete'
+  | 'checking_technologies'
+  | 'tech_check_complete'
+  | 'matching'
+  | 'matching_complete'
+  | 'saving'
+  | 'completed' 
+  | 'failed';
+
 type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 interface CaseStudyJob {
@@ -34,17 +49,36 @@ interface CaseStudyProcessingViewProps {
   onRetry: () => void;
 }
 
-const PROCESSING_STEPS: { phase: ProcessingPhase; label: string; icon: React.ReactNode }[] = [
+// Define visible steps (we group intermediate phases into these)
+const PROCESSING_STEPS: { phase: string; label: string; icon: React.ReactNode }[] = [
   { phase: 'extracting', label: 'Extrayendo texto de documentos', icon: <FileSearch className="h-4 w-4" /> },
-  { phase: 'reviewing', label: 'Identificando información clave', icon: <KeyRound className="h-4 w-4" /> },
-  { phase: 'anonymizing', label: 'Anonimizando datos sensibles', icon: <ShieldCheck className="h-4 w-4" /> },
-  { phase: 'quality', label: 'Verificando calidad', icon: <CheckCheck className="h-4 w-4" /> },
-  { phase: 'checking_tech', label: 'Identificando tecnologías', icon: <Cpu className="h-4 w-4" /> },
+  { phase: 'reviewing', label: 'Revisando y estructurando contenido', icon: <KeyRound className="h-4 w-4" /> },
+  { phase: 'matching', label: 'Buscando tecnologías en base de datos', icon: <Database className="h-4 w-4" /> },
+  { phase: 'saving', label: 'Guardando resultados', icon: <Save className="h-4 w-4" /> },
+  { phase: 'completed', label: 'Procesamiento completado', icon: <ShieldCheck className="h-4 w-4" /> },
 ];
+
+// Map all phases to their corresponding visible step
+const PHASE_TO_STEP_MAP: Record<string, string> = {
+  'pending': 'extracting',
+  'uploading': 'extracting',
+  'extracting': 'extracting',
+  'extraction_complete': 'extracting',
+  'reviewing': 'reviewing',
+  'review_complete': 'reviewing',
+  'checking_technologies': 'matching',
+  'tech_check_complete': 'matching',
+  'matching': 'matching',
+  'matching_complete': 'matching',
+  'saving': 'saving',
+  'completed': 'completed',
+  'failed': 'failed',
+};
 
 const getPhaseIndex = (phase: ProcessingPhase | null): number => {
   if (!phase) return -1;
-  return PROCESSING_STEPS.findIndex(step => step.phase === phase);
+  const mappedPhase = PHASE_TO_STEP_MAP[phase] || phase;
+  return PROCESSING_STEPS.findIndex(step => step.phase === mappedPhase);
 };
 
 const getStepStatus = (stepIndex: number, currentPhaseIndex: number, jobStatus: JobStatus): 'completed' | 'processing' | 'pending' | 'failed' => {
@@ -94,6 +128,7 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
       if (error) {
         console.error('Error fetching job:', error);
       } else if (data) {
+        console.log('[ProcessingView] Initial job state:', data);
         setJob(data as CaseStudyJob);
         if (data.status === 'completed') {
           onCompleted(data.id);
@@ -107,6 +142,8 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
 
   // Subscribe to realtime updates
   useEffect(() => {
+    console.log(`[ProcessingView] Subscribing to realtime updates for job ${jobId}`);
+    
     const channel = supabase
       .channel(`case_study_job_${jobId}`)
       .on(
@@ -118,18 +155,22 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
           filter: `id=eq.${jobId}`,
         },
         (payload) => {
-          console.log('Job update received:', payload);
+          console.log('[ProcessingView] Realtime update received:', payload.new);
           const newData = payload.new as CaseStudyJob;
           setJob(newData);
           
           if (newData.status === 'completed') {
+            console.log('[ProcessingView] Job completed, calling onCompleted');
             onCompleted(newData.id);
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`[ProcessingView] Subscription status: ${status}`);
+      });
 
     return () => {
+      console.log(`[ProcessingView] Unsubscribing from job ${jobId}`);
       supabase.removeChannel(channel);
     };
   }, [jobId, onCompleted]);
@@ -179,6 +220,11 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
             </>
           )}
         </h3>
+        {job.current_phase && !isCompleted && !isFailed && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Fase actual: {job.current_phase}
+          </p>
+        )}
       </div>
 
       {/* Progress bar */}
