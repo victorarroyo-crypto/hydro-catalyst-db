@@ -76,8 +76,10 @@ interface Parameter {
 }
 
 // Helper function to map Spanish role to DB constraint values
-const mapRoleToDb = (role: string): 'recommended' | 'evaluated' => {
-  return role === 'Recomendada' ? 'recommended' : 'evaluated';
+const mapRoleToDb = (role: string): 'recommended' | 'evaluated' | 'mentioned' => {
+  if (role === 'Recomendada') return 'recommended';
+  if (role === 'Mencionada') return 'mentioned';
+  return 'evaluated';
 };
 
 interface Technology {
@@ -570,7 +572,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         const { data: match } = await supabase
           .from('technologies')
           .select('id, "Nombre de la tecnología"')
-          .ilike('"Nombre de la tecnología"', `%${newTechName.trim()}%`)
+          .ilike('Nombre de la tecnología', `%${newTechName.trim()}%`)
           .limit(1)
           .maybeSingle();
 
