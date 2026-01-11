@@ -208,8 +208,17 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
 
               if (scoutingError || !insertResult?.success) {
                 console.error('[CaseStudyEditView] Error sending tech to scouting:', tech.technology_name, scoutingError || insertResult?.error);
-              } else {
-                console.log('[CaseStudyEditView] Successfully sent to scouting:', tech.technology_name);
+              } else if (insertResult.data?.id) {
+                // Successfully inserted - update scouting_queue_id to mark as sent
+                await supabase
+                  .from('case_study_technologies')
+                  .update({ scouting_queue_id: insertResult.data.id })
+                  .eq('id', tech.id);
+                
+                console.log('[CaseStudyEditView] Successfully sent and linked:', tech.technology_name, insertResult.data.id);
+              } else if (insertResult.skipped) {
+                // Technology already exists in external DB, silently skip
+                console.log('[CaseStudyEditView] Skipped (already exists in scouting):', tech.technology_name);
               }
             } catch (err) {
               console.error('[CaseStudyEditView] Exception sending tech to scouting:', tech.technology_name, err);
