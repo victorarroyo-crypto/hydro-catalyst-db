@@ -287,7 +287,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       }
       handleClose();
     }}>
-      <DialogContent className={modalSizeClass}>
+      <DialogContent className={`max-h-[90vh] w-[95vw] ${modalSizeClass} p-0 flex flex-col min-h-0 overflow-hidden`}>
         {step === 'upload' ? (
           <>
             <DialogHeader>
