@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
 import {
   Upload,
   FileText,
@@ -21,8 +22,10 @@ import {
   AlertCircle,
   Loader2,
   Info,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
-import { useCaseStudyFiles } from '@/hooks/useCaseStudyFiles';
+import { useCaseStudyFiles, type PendingFile } from '@/hooks/useCaseStudyFiles';
 import { CaseStudyProcessingView } from './CaseStudyProcessingView';
 import { CaseStudyFormView } from './CaseStudyFormView';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,7 +37,15 @@ interface NewCaseStudyModalProps {
   onCompleted?: () => void;
 }
 
-type ModalStep = 'upload' | 'processing' | 'form';
+type ModalStep = 'upload' | 'uploading' | 'processing' | 'form';
+
+interface UploadProgress {
+  current: number;
+  total: number;
+  completed: number;
+  failed: number;
+  currentFileName?: string;
+}
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ACCEPTED_TYPES = {
@@ -42,6 +53,9 @@ const ACCEPTED_TYPES = {
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
   'application/vnd.ms-excel': ['.xls'],
 };
+
+// Rate limiting: máximo 2 documentos concurrentes para Case Studies
+const MAX_CONCURRENT_UPLOADS = 2;
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B';
@@ -80,6 +94,12 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   const [isRemoving, setIsRemoving] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
   const [isStartingProcess, setIsStartingProcess] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({
+    current: 0,
+    total: 0,
+    completed: 0,
+    failed: 0,
+  });
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     // Filter oversized files
@@ -129,16 +149,116 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
     }
   };
 
+  // Rate-limited file upload function
+  const processFilesWithLimit = async (
+    files: PendingFile[],
+    jobId: string,
+    limit: number = MAX_CONCURRENT_UPLOADS
+  ): Promise<{ completed: number; failed: number }> => {
+    const railwayUrl = import.meta.env.VITE_RAILWAY_CASE_STUDY_URL || 'https://watertech-scouting-production.up.railway.app/api/case-study/upload-and-process';
+    const railwaySyncSecret = import.meta.env.VITE_RAILWAY_SYNC_SECRET || 'wt-sync-2026-secure';
+    
+    const queue = [...files];
+    let completed = 0;
+    let failed = 0;
+    let processed = 0;
+    const inProgress: Promise<void>[] = [];
+
+    const processOne = async (file: PendingFile, index: number): Promise<void> => {
+      const fileName = file.name;
+      setUploadProgress(prev => ({
+        ...prev,
+        currentFileName: fileName,
+      }));
+
+      try {
+        console.log(`[CaseStudy] Processing file ${index + 1}/${files.length}: ${fileName}`);
+        
+        const formData = new FormData();
+        formData.append('job_id', jobId);
+        formData.append('file_index', String(index));
+        formData.append('total_files', String(files.length));
+        formData.append('webhook_url', 'https://bdmpshiqspkxcisnnlyr.supabase.co/functions/v1/case-study-webhook');
+        formData.append('webhook_secret', 'AquaTechWebhook26');
+        formData.append('files', file.file!, fileName);
+
+        const response = await fetch(railwayUrl, {
+          method: 'POST',
+          headers: {
+            'X-Sync-Secret': railwaySyncSecret,
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[CaseStudy] File ${index + 1} error:`, errorText);
+          throw new Error(`Error: ${response.status}`);
+        }
+
+        console.log(`[CaseStudy] File ${index + 1} uploaded successfully`);
+        completed++;
+        processed++;
+        setUploadProgress(prev => ({
+          ...prev,
+          completed: prev.completed + 1,
+          current: processed,
+        }));
+      } catch (error) {
+        console.error(`[CaseStudy] File ${index + 1} failed:`, error);
+        failed++;
+        processed++;
+        setUploadProgress(prev => ({
+          ...prev,
+          failed: prev.failed + 1,
+          current: processed,
+        }));
+      }
+    };
+
+    let fileIndex = 0;
+
+    // Process with concurrency limit
+    while (queue.length > 0 || inProgress.length > 0) {
+      // Fill up to the limit
+      while (inProgress.length < limit && queue.length > 0) {
+        const file = queue.shift()!;
+        const currentIndex = fileIndex++;
+        const promise = processOne(file, currentIndex).finally(() => {
+          const idx = inProgress.indexOf(promise);
+          if (idx !== -1) inProgress.splice(idx, 1);
+        });
+        inProgress.push(promise);
+      }
+
+      // Wait for at least one to complete before continuing
+      if (inProgress.length > 0) {
+        await Promise.race(inProgress);
+      }
+    }
+
+    return { completed, failed };
+  };
+
   const handleStartProcessing = async () => {
     console.log('[CaseStudy] handleStartProcessing called');
     console.log('[CaseStudy] pendingFiles count:', pendingFiles.length);
     
-    if (pendingFiles.length === 0) {
-      console.log('[CaseStudy] No pending files, returning early');
+    const filesToProcess = pendingFiles.filter(f => f.file);
+    
+    if (filesToProcess.length === 0) {
+      console.log('[CaseStudy] No pending files with file objects, returning early');
+      toast.error('No hay archivos válidos para procesar');
       return;
     }
     
     setIsStartingProcess(true);
+    setUploadProgress({
+      current: 0,
+      total: filesToProcess.length,
+      completed: 0,
+      failed: 0,
+    });
     
     try {
       console.log('[CaseStudy] Creating job in case_study_jobs...');
@@ -148,9 +268,9 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
         .from('case_study_jobs')
         .insert({
           status: 'processing',
-          current_phase: 'extracting',
+          current_phase: 'uploading',
           progress_percentage: 0,
-          documents_count: pendingFiles.length,
+          documents_count: filesToProcess.length,
         })
         .select('id')
         .single();
@@ -162,58 +282,54 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
 
       console.log('[CaseStudy] Job created with ID:', job.id);
       setCurrentJobId(job.id);
+      setStep('uploading');
+      
+      // Process files with rate limiting (max 2 concurrent)
+      console.log(`[CaseStudy] Starting rate-limited upload (max ${MAX_CONCURRENT_UPLOADS} concurrent)...`);
+      const { completed, failed } = await processFilesWithLimit(
+        filesToProcess,
+        job.id,
+        MAX_CONCURRENT_UPLOADS
+      );
+      
+      console.log(`[CaseStudy] Upload complete: ${completed} OK, ${failed} failed`);
+      
+      if (failed > 0 && completed === 0) {
+        // All failed
+        toast.error('Todos los documentos fallaron al subir');
+        await supabase
+          .from('case_study_jobs')
+          .update({ 
+            status: 'failed', 
+            error_message: `Todos los ${failed} documentos fallaron al subir` 
+          })
+          .eq('id', job.id);
+        setStep('upload');
+        return;
+      }
+      
+      if (failed > 0) {
+        toast.warning(`${completed} documentos subidos, ${failed} fallidos`);
+      } else {
+        toast.success(`${completed} documentos subidos correctamente`);
+      }
+      
+      // Update job phase to extracting and move to processing view
+      await supabase
+        .from('case_study_jobs')
+        .update({ 
+          current_phase: 'extracting',
+          progress_percentage: 10,
+        })
+        .eq('id', job.id);
+      
       setStep('processing');
-      
-      // Send files to Railway for processing
-      console.log('[CaseStudy] Building FormData...');
-      const formData = new FormData();
-      formData.append('job_id', job.id);
-      formData.append('webhook_url', 'https://bdmpshiqspkxcisnnlyr.supabase.co/functions/v1/case-study-webhook');
-      formData.append('webhook_secret', 'AquaTechWebhook26');
-      
-      // Append each file to FormData
-      let filesAppended = 0;
-      for (const pendingFile of pendingFiles) {
-        console.log('[CaseStudy] Processing file:', pendingFile.name, 'has file object:', !!pendingFile.file);
-        if (pendingFile.file) {
-          formData.append('files', pendingFile.file, pendingFile.name);
-          filesAppended++;
-        }
-      }
-      
-      console.log('[CaseStudy] Files appended to FormData:', filesAppended);
-      
-      // Call Railway API
-      const railwayUrl = import.meta.env.VITE_RAILWAY_CASE_STUDY_URL || 'https://watertech-scouting-production.up.railway.app/api/case-study/upload-and-process';
-      const railwaySyncSecret = import.meta.env.VITE_RAILWAY_SYNC_SECRET || 'wt-sync-2026-secure';
-      
-      console.log('[CaseStudy] Railway URL:', railwayUrl);
-      console.log('[CaseStudy] About to call fetch...');
-      
-      const response = await fetch(railwayUrl, {
-        method: 'POST',
-        headers: {
-          'X-Sync-Secret': railwaySyncSecret,
-        },
-        body: formData,
-      });
-      
-      console.log('[CaseStudy] Fetch completed, status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[CaseStudy] Railway error response:', errorText);
-        throw new Error(`Error al enviar a Railway: ${response.status}`);
-      }
-      
-      const responseData = await response.text();
-      console.log('[CaseStudy] Railway success response:', responseData);
       
     } catch (error) {
       console.error('[CaseStudy] Error in handleStartProcessing:', error);
       toast.error('Error al iniciar el procesamiento');
       
-      // If Railway call failed, update job status
+      // If job was created but failed, update status
       if (currentJobId) {
         console.log('[CaseStudy] Updating job status to failed...');
         await supabase
@@ -224,6 +340,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
           })
           .eq('id', currentJobId);
       }
+      setStep('upload');
     } finally {
       console.log('[CaseStudy] handleStartProcessing finished');
       setIsStartingProcess(false);
@@ -281,8 +398,8 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={(value) => {
-      if (!value && step === 'processing') {
-        // Only prevent closing during processing (not form step)
+      if (!value && (step === 'processing' || step === 'uploading')) {
+        // Prevent closing during uploading or processing
         return;
       }
       handleClose();
@@ -428,6 +545,66 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
                 Procesar con IA
               </Button>
             </DialogFooter>
+          </>
+        ) : step === 'uploading' ? (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                Subiendo Documentos
+              </DialogTitle>
+              <DialogDescription>
+                Máximo {MAX_CONCURRENT_UPLOADS} documentos simultáneos para evitar sobrecarga
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-6 px-6">
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="font-medium">Progreso de subida</span>
+                  <span className="text-muted-foreground">
+                    {uploadProgress.current}/{uploadProgress.total}
+                  </span>
+                </div>
+                
+                <Progress 
+                  value={(uploadProgress.current / Math.max(uploadProgress.total, 1)) * 100} 
+                  className="h-2"
+                />
+                
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-4">
+                    <span className="flex items-center gap-1 text-green-600">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {uploadProgress.completed} completados
+                    </span>
+                    {uploadProgress.failed > 0 && (
+                      <span className="flex items-center gap-1 text-destructive">
+                        <XCircle className="h-3.5 w-3.5" />
+                        {uploadProgress.failed} fallidos
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                {uploadProgress.currentFileName && (
+                  <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50 border">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-sm truncate flex-1">
+                      {uploadProgress.currentFileName}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <Alert className="border-muted bg-muted/30">
+                <Info className="h-4 w-4 text-muted-foreground" />
+                <AlertDescription className="text-xs text-muted-foreground">
+                  Los documentos se suben de forma controlada para evitar saturar el servidor.
+                  No cierres esta ventana.
+                </AlertDescription>
+              </Alert>
+            </div>
           </>
         ) : step === 'processing' ? (
           <>
