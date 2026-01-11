@@ -693,7 +693,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
           // Campos adicionales de scouting
           source: 'case_study',
           queue_status: 'pending',
-          priority: tech.role === 'Recomendada' ? 'high' : 'medium',
+          priority: tech.role === 'Recomendada' ? 'high' : 'normal',
           notes: buildScoutingNotes(tech, title),
         });
 
@@ -890,7 +890,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                   source: 'case_study',
                   case_study_id: caseStudyId,
                   queue_status: 'pending',
-                  priority: tech.role === 'Recomendada' ? 'high' : 'medium',
+                  priority: tech.role === 'Recomendada' ? 'high' : 'normal',
                   notes: buildScoutingNotes(tech, title),
                 })
                 .select('id')
