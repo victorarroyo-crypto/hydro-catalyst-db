@@ -82,6 +82,15 @@ const mapRoleToDb = (role: string): 'recommended' | 'evaluated' | 'mentioned' =>
   return 'evaluated';
 };
 
+// Helper to safely convert any value to string (handles objects, null, undefined)
+const ensureString = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  // For objects/arrays, return empty string (data already saved in external DB)
+  return '';
+};
+
 interface Technology {
   id: string;
   name: string;
@@ -344,15 +353,13 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
           if (extracted) {
             console.log('Loading from nested Railway structure:', extracted);
             
-            if (extracted.title) setTitle(extracted.title);
-            if (extracted.sector) setSector(extracted.sector);
-            if (extracted.country) setCountry(extracted.country);
-            if (extracted.subsector) setSubsector(extracted.subsector);
+            setTitle(ensureString(extracted.title));
+            setSector(ensureString(extracted.sector));
+            setCountry(ensureString(extracted.country));
+            setSubsector(ensureString(extracted.subsector));
             
             // Problem
-            if (extracted.problem?.description) {
-              setProblemDescription(extracted.problem.description);
-            }
+            setProblemDescription(ensureString(extracted.problem?.description));
             if (extracted.problem?.parameters && extracted.problem.parameters.length > 0) {
               setProblemParameters(extracted.problem.parameters.map((p, i) => ({
                 id: String(i + 1),
@@ -363,17 +370,13 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             }
             
             // Solution
-            if (extracted.solution?.description) {
-              setSolutionDescription(extracted.solution.description);
-            }
-            if (extracted.solution?.treatment_train) {
+            setSolutionDescription(ensureString(extracted.solution?.description));
+            if (extracted.solution?.treatment_train && Array.isArray(extracted.solution.treatment_train)) {
               setTreatmentTrain(extracted.solution.treatment_train);
             }
             
             // Results
-            if (extracted.results?.description) {
-              setResultsDescription(extracted.results.description);
-            }
+            setResultsDescription(ensureString(extracted.results?.description));
             if (extracted.results?.dqo_final) {
               setDqoFinal(String(extracted.results.dqo_final));
             }
@@ -387,35 +390,36 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
               if (extracted.economic.opex) setOpex(String(extracted.economic.opex));
               if (extracted.economic.payback) setPayback(String(extracted.economic.payback));
               if (extracted.economic.roi) setRoi(String(extracted.economic.roi));
-              if (extracted.economic.roi_justification) setRoiJustification(extracted.economic.roi_justification);
+              setRoiJustification(ensureString(extracted.economic.roi_justification));
               setEconomicOpen(true);
             }
             
-            // Lessons learned
-            if (extracted.lessons_learned) {
-              setLessonsLearned(extracted.lessons_learned);
+            // Lessons learned - can be string or object from Railway
+            const lessonsValue = ensureString(extracted.lessons_learned);
+            if (lessonsValue) {
+              setLessonsLearned(lessonsValue);
               setLessonsOpen(true);
             }
           } else {
             // Fallback to legacy flat structure
             console.log('Loading from flat legacy structure:', data);
             
-            if (data.title) setTitle(data.title);
-            if (data.sector) setSector(data.sector);
-            if (data.country) setCountry(data.country);
-            if (data.subsector) setSubsector(data.subsector);
-            if (data.problemDescription) setProblemDescription(data.problemDescription);
-            if (data.solutionDescription) setSolutionDescription(data.solutionDescription);
-            if (data.resultsDescription) setResultsDescription(data.resultsDescription);
+            setTitle(ensureString(data.title));
+            setSector(ensureString(data.sector));
+            setCountry(ensureString(data.country));
+            setSubsector(ensureString(data.subsector));
+            setProblemDescription(ensureString(data.problemDescription));
+            setSolutionDescription(ensureString(data.solutionDescription));
+            setResultsDescription(ensureString(data.resultsDescription));
             if (data.dqoFinal) setDqoFinal(String(data.dqoFinal));
             if (data.reduction) setReduction(String(data.reduction));
             if (data.capex) setCapex(String(data.capex));
             if (data.opex) setOpex(String(data.opex));
             if (data.payback) setPayback(String(data.payback));
             if (data.roi) setRoi(String(data.roi));
-            if (data.roiJustification) setRoiJustification(data.roiJustification);
-            if (data.lessonsLearned) setLessonsLearned(data.lessonsLearned);
-            if (data.treatmentTrain) setTreatmentTrain(data.treatmentTrain);
+            setRoiJustification(ensureString(data.roiJustification));
+            setLessonsLearned(ensureString(data.lessonsLearned));
+            if (data.treatmentTrain && Array.isArray(data.treatmentTrain)) setTreatmentTrain(data.treatmentTrain);
             
             if (data.problemParameters && data.problemParameters.length > 0) {
               setProblemParameters(data.problemParameters.map((p, i) => ({
@@ -728,8 +732,8 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
   };
 
   const handleSave = async (status: 'draft' | 'approved') => {
-    // Validation
-    if (!title.trim()) {
+    // Validation - use String() for safety in case value is not a string
+    if (!String(title || '').trim()) {
       toast.error('El título es obligatorio');
       return;
     }
@@ -741,15 +745,15 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
       toast.error('El país es obligatorio');
       return;
     }
-    if (!problemDescription.trim()) {
+    if (!String(problemDescription || '').trim()) {
       toast.error('La descripción del problema es obligatoria');
       return;
     }
-    if (!solutionDescription.trim()) {
+    if (!String(solutionDescription || '').trim()) {
       toast.error('La descripción de la solución es obligatoria');
       return;
     }
-    if (!resultsDescription.trim()) {
+    if (!String(resultsDescription || '').trim()) {
       toast.error('La descripción de resultados es obligatoria');
       return;
     }
@@ -775,24 +779,24 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
       }
 
       const caseData = {
-        name: title.trim(),
+        name: String(title || '').trim(),
         sector,
         country,
-        description: problemDescription.trim(),
+        description: String(problemDescription || '').trim(),
         problem_parameters: problemParamsJson,
-        solution_applied: solutionDescription.trim(),
+        solution_applied: String(solutionDescription || '').trim(),
         treatment_train: treatmentTrain.length > 0 ? treatmentTrain : null,
-        results_achieved: resultsDescription.trim(),
+        results_achieved: String(resultsDescription || '').trim(),
         results_parameters: Object.keys(resultsParamsJson).length > 0 ? resultsParamsJson : null,
         capex: capex ? parseFloat(capex) : null,
         opex_year: opex ? parseFloat(opex) : null,
         payback_months: payback ? parseFloat(payback) : null,
         roi_percent: roi ? parseFloat(roi) : null,
-        roi_rationale: roiJustification.trim() || null,
-        lessons_learned: lessonsLearned.trim() || null,
+        roi_rationale: String(roiJustification || '').trim() || null,
+        lessons_learned: String(lessonsLearned || '').trim() || null,
         quality_score: qualityScore || null,
         status,
-        original_data: subsector.trim() ? { subsector: subsector.trim() } : null,
+        original_data: String(subsector || '').trim() ? { subsector: String(subsector || '').trim() } : null,
       };
 
       let caseStudyId: string;
