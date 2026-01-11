@@ -83,25 +83,30 @@ interface Technology {
   status?: 'new' | 'linked' | 'sent_to_scouting';
   linkedTechId?: string;
   
-  // Campos principales de Railway
-  description?: string;
-  trl?: number;
-  type?: string;
-  subcategory?: string;
-  sector?: string;
-  web?: string;
-  email?: string;
-  country?: string;
+  // Campos principales de Railway → Mapean a ficha estándar
+  description?: string;           // → "Descripción técnica breve"
+  trl?: number;                   // → "Grado de madurez (TRL)"
+  type?: string;                  // → "Tipo de tecnología"
+  subcategory?: string;           // → "Subcategoría"
+  sector?: string;                // → "Sector y subsector"
+  web?: string;                   // → "Web de la empresa"
+  email?: string;                 // → "Email de contacto"
+  country?: string;               // → "País de origen"
   
-  // Campos técnicos extendidos
-  mainApplication?: string;
-  innovationAdvantages?: string;
-  references?: string;
+  // Campos técnicos extendidos → Mapean a ficha estándar
+  mainApplication?: string;       // → "Aplicación principal"
+  innovationAdvantages?: string;  // → "Ventaja competitiva clave"
+  references?: string;            // → "Casos de referencia"
+  
+  // Campos que van a application_data (JSONB)
+  countriesActive?: string;       // Países donde opera
   capacity?: string;
   removalEfficiency?: string;
   footprint?: string;
   powerConsumption?: string;
+  otherSpecs?: Record<string, any>;
   priceRange?: string;
+  opexEstimate?: string;
   businessModel?: string;
   leadTime?: string;
   rationale?: string;
@@ -143,6 +148,7 @@ interface RailwayTechnologyItem {
   provider_url?: string;
   provider_email?: string;
   provider_country?: string;
+  provider_countries_active?: string;
   role?: string;
   
   // Classification
@@ -161,9 +167,11 @@ interface RailwayTechnologyItem {
   removal_efficiency?: string;
   footprint?: string;
   power_consumption?: string;
+  other_specs?: Record<string, any>;
   
   // Commercial
   price_range?: string;
+  opex_estimate?: string;
   business_model?: string;
   lead_time?: string;
   
@@ -465,35 +473,36 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                   role: mappedRole,
                   status: t.status || 'new',
                   
-                  // Classification
+                  // Classification → Ficha estándar
                   type: t.type_suggested || t.type || '',
                   subcategory: t.subcategory_suggested || '',
                   sector: t.sector_suggested || '',
                   
-                  // Description & Innovation
+                  // Description & Innovation → Ficha estándar
                   description: t.technical_description || t.description || '',
                   mainApplication: t.main_application || '',
                   innovationAdvantages: t.innovation_advantages || '',
                   references: t.references || '',
                   
-                  // Contact & Location
+                  // Contact & Location → Ficha estándar
                   web: t.provider_url || t.web || t.url || t.website || '',
                   email: t.provider_email || '',
                   country: t.provider_country || '',
                   
-                  // Technical specs
+                  // TRL → Ficha estándar
                   trl: t.trl_estimated || t.trl || null,
+                  
+                  // Campos para application_data (no van a ficha estándar)
+                  countriesActive: t.provider_countries_active || '',
                   capacity: t.capacity || '',
                   removalEfficiency: t.removal_efficiency || '',
                   footprint: t.footprint || '',
                   powerConsumption: t.power_consumption || '',
-                  
-                  // Commercial
+                  otherSpecs: t.other_specs || null,
                   priceRange: t.price_range || '',
+                  opexEstimate: t.opex_estimate || '',
                   businessModel: t.business_model || '',
                   leadTime: t.lead_time || '',
-                  
-                  // Metadata
                   rationale: t.rationale || '',
                 };
               }));
@@ -600,6 +609,35 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
     setTechnologies(techs => techs.filter(t => t.id !== id));
   };
 
+  // Helper: Construir application_data JSONB para case_study_technologies
+  const buildApplicationData = (tech: Technology): Record<string, any> | null => {
+    const data: Record<string, any> = {};
+    
+    // Datos que NO van a la ficha estándar
+    if (tech.countriesActive) data.provider_countries_active = tech.countriesActive;
+    if (tech.capacity) data.capacity = tech.capacity;
+    if (tech.removalEfficiency) data.removal_efficiency = tech.removalEfficiency;
+    if (tech.footprint) data.footprint = tech.footprint;
+    if (tech.powerConsumption) data.power_consumption = tech.powerConsumption;
+    if (tech.otherSpecs) data.other_specs = tech.otherSpecs;
+    if (tech.priceRange) data.price_range = tech.priceRange;
+    if (tech.opexEstimate) data.opex_estimate = tech.opexEstimate;
+    if (tech.businessModel) data.business_model = tech.businessModel;
+    if (tech.leadTime) data.lead_time = tech.leadTime;
+    if (tech.rationale) data.rationale = tech.rationale;
+    
+    return Object.keys(data).length > 0 ? data : null;
+  };
+
+  // Helper: Construir notas para scouting_queue
+  const buildScoutingNotes = (tech: Technology, caseTitle: string): string => {
+    const parts = [`Extraída de caso de estudio: ${caseTitle}`];
+    if (tech.rationale) parts.push(`Justificación IA: ${tech.rationale}`);
+    if (tech.priceRange) parts.push(`Rango de precio: ${tech.priceRange}`);
+    if (tech.businessModel) parts.push(`Modelo de negocio: ${tech.businessModel}`);
+    return parts.join('. ');
+  };
+
   const [sendingToScouting, setSendingToScouting] = useState<string | null>(null);
 
   const sendToScouting = async (tech: Technology) => {
@@ -627,27 +665,29 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         return;
       }
 
-      // Insertar en scouting_queue con todos los campos disponibles
+      // Insertar en scouting_queue con mapeo a ficha estándar
       const { error } = await supabase
         .from('scouting_queue')
         .insert({
+          // Mapeo a ficha estándar de technologies
           'Nombre de la tecnología': tech.name,
           'Proveedor / Empresa': tech.provider || null,
           'Web de la empresa': tech.web || null,
           'Email de contacto': tech.email || null,
           'País de origen': tech.country || null,
-          'Descripción técnica breve': tech.description || null,
-          'Aplicación principal': tech.mainApplication || null,
-          'Ventaja competitiva clave': tech.innovationAdvantages || null,
-          'Casos de referencia': tech.references || null,
-          'Grado de madurez (TRL)': tech.trl || null,
           'Tipo de tecnología': tech.type || 'Por clasificar',
           Subcategoría: tech.subcategory || null,
           'Sector y subsector': tech.sector || null,
+          'Descripción técnica breve': tech.description || null,
+          'Aplicación principal': tech.mainApplication || null,
+          'Ventaja competitiva clave': tech.innovationAdvantages || null,
+          'Grado de madurez (TRL)': tech.trl || null,
+          'Casos de referencia': tech.references || null,
+          // Campos adicionales de scouting
           source: 'case_study',
           queue_status: 'pending',
           priority: tech.role === 'Recomendada' ? 'high' : 'medium',
-          notes: `Extraída de caso de estudio: ${title}. ${tech.rationale ? `Justificación IA: ${tech.rationale}` : ''}`,
+          notes: buildScoutingNotes(tech, title),
         });
 
       if (error) throw error;
@@ -771,9 +811,11 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         console.log('[CaseStudyForm] Created new case:', caseStudyId);
       }
 
-      // Insert technologies with hybrid logic
+      // Insert technologies with hybrid logic + application_data
       if (technologies.length > 0 && caseStudyId) {
         for (const tech of technologies) {
+          const applicationData = buildApplicationData(tech);
+          
           if (tech.linkedTechId || tech.status === 'linked') {
             // CASO A: Tecnología ya existe en DB → vincular directamente
             const { error: techError } = await supabase
@@ -784,6 +826,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 provider: tech.provider || null,
                 role: tech.role,
                 technology_id: tech.linkedTechId || null,
+                application_data: applicationData,
               });
 
             if (techError) {
@@ -791,7 +834,6 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             }
           } else if (tech.status === 'sent_to_scouting') {
             // CASO B: Ya fue enviada a scouting → solo crear link sin duplicar en scouting
-            // Buscar el ID en scouting_queue
             const { data: existingScouting } = await supabase
               .from('scouting_queue')
               .select('id')
@@ -807,6 +849,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 provider: tech.provider || null,
                 role: tech.role,
                 scouting_queue_id: existingScouting?.id || null,
+                application_data: applicationData,
               });
 
             if (techError) {
@@ -817,17 +860,26 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             const { data: scoutingItem, error: scoutingError } = await supabase
               .from('scouting_queue')
               .insert({
+                // Mapeo a ficha estándar
                 'Nombre de la tecnología': tech.name,
                 'Proveedor / Empresa': tech.provider || null,
-                'Descripción técnica breve': tech.description || null,
-                'Grado de madurez (TRL)': tech.trl || null,
+                'Web de la empresa': tech.web || null,
+                'Email de contacto': tech.email || null,
+                'País de origen': tech.country || null,
                 'Tipo de tecnología': tech.type || 'Por clasificar',
-                'Sector y subsector': sector,
+                Subcategoría: tech.subcategory || null,
+                'Sector y subsector': tech.sector || sector,
+                'Descripción técnica breve': tech.description || null,
+                'Aplicación principal': tech.mainApplication || null,
+                'Ventaja competitiva clave': tech.innovationAdvantages || null,
+                'Grado de madurez (TRL)': tech.trl || null,
+                'Casos de referencia': tech.references || null,
+                // Campos de scouting
                 source: 'case_study',
                 case_study_id: caseStudyId,
                 queue_status: 'pending',
                 priority: tech.role === 'Recomendada' ? 'high' : 'medium',
-                notes: `Extraída del caso: ${title}`,
+                notes: buildScoutingNotes(tech, title),
               })
               .select('id')
               .single();
@@ -840,6 +892,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                 technology_name: tech.name,
                 provider: tech.provider || null,
                 role: tech.role,
+                application_data: applicationData,
               });
             } else {
               // Insertar en case_study_technologies con referencia a scouting_queue
@@ -851,6 +904,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                   provider: tech.provider || null,
                   role: tech.role,
                   scouting_queue_id: scoutingItem?.id,
+                  application_data: applicationData,
                 });
 
               if (techError) {
