@@ -79,6 +79,7 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
   const [country, setCountry] = useState('');
   const [sector, setSector] = useState('');
   const [status, setStatus] = useState('draft');
+  const [originalStatus, setOriginalStatus] = useState<string | null>(null);
   const [solutionApplied, setSolutionApplied] = useState('');
   const [treatmentTrain, setTreatmentTrain] = useState<string[]>([]);
   const [resultsAchieved, setResultsAchieved] = useState('');
@@ -120,6 +121,7 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
       setCountry(caseStudy.country || '');
       setSector(caseStudy.sector || '');
       setStatus(caseStudy.status || 'draft');
+      setOriginalStatus(caseStudy.status || 'draft');
       setSolutionApplied(caseStudy.solution_applied || '');
       setTreatmentTrain(caseStudy.treatment_train || []);
       setResultsAchieved(caseStudy.results_achieved || '');
@@ -157,11 +159,76 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
         .eq('id', caseStudyId);
 
       if (error) throw error;
+
+      // If status changed from draft to approved, send technologies to external scouting
+      if (originalStatus === 'draft' && status === 'approved') {
+        console.log('[CaseStudyEditView] Publishing case study, checking for technologies to send to scouting');
+        
+        // Fetch associated technologies that don't have a scouting_queue_id yet
+        const { data: techs, error: techError } = await supabase
+          .from('case_study_technologies')
+          .select('*')
+          .eq('case_study_id', caseStudyId)
+          .is('scouting_queue_id', null);
+
+        if (techError) {
+          console.error('[CaseStudyEditView] Error fetching technologies:', techError);
+        } else if (techs && techs.length > 0) {
+          console.log(`[CaseStudyEditView] Sending ${techs.length} technologies to external scouting`);
+          
+          for (const tech of techs) {
+            const appData = (tech.application_data as Record<string, unknown>) || {};
+            
+            try {
+              const { data: insertResult, error: scoutingError } = await supabase.functions.invoke('external-scouting-queue', {
+                body: {
+                  action: 'insert',
+                  record: {
+                    nombre: tech.technology_name,
+                    proveedor: tech.provider || null,
+                    pais: appData.country || country || null,
+                    web: appData.web || null,
+                    email: appData.email || null,
+                    descripcion: appData.description || null,
+                    tipo_sugerido: appData.type || 'Por clasificar',
+                    subcategoria_sugerida: appData.subcategory || null,
+                    trl_estimado: appData.trl || null,
+                    ventaja_competitiva: appData.innovationAdvantages || null,
+                    aplicacion_principal: appData.mainApplication || null,
+                    sector: sector || null,
+                    source: 'case_study',
+                    case_study_id: caseStudyId,
+                    relevance_score: tech.role === 'recommended' ? 90 : 50,
+                    relevance_reason: tech.selection_rationale || `Tecnología de caso de estudio: ${name}`,
+                    status: 'review'
+                  }
+                }
+              });
+
+              if (scoutingError || !insertResult?.success) {
+                console.error('[CaseStudyEditView] Error sending tech to scouting:', tech.technology_name, scoutingError || insertResult?.error);
+              } else {
+                console.log('[CaseStudyEditView] Successfully sent to scouting:', tech.technology_name);
+              }
+            } catch (err) {
+              console.error('[CaseStudyEditView] Exception sending tech to scouting:', tech.technology_name, err);
+            }
+          }
+        } else {
+          console.log('[CaseStudyEditView] No new technologies to send to scouting');
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
       queryClient.invalidateQueries({ queryKey: ['case-study', caseStudyId] });
-      toast.success('Caso de estudio guardado correctamente');
+      
+      const wasPublished = originalStatus === 'draft' && status === 'approved';
+      toast.success(
+        wasPublished 
+          ? 'Caso publicado y tecnologías enviadas a scouting' 
+          : 'Caso de estudio guardado correctamente'
+      );
       onSaved();
     },
     onError: (error) => {
