@@ -863,46 +863,69 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
               console.error('Error inserting sent_to_scouting technology:', techError);
             }
           } else {
-            // CASO C: Tecnología nueva → enviar a scouting_queue para revisión
-            const { data: scoutingItem, error: scoutingError } = await supabase
-              .from('scouting_queue')
-              .insert({
-                // Mapeo a ficha estándar
-                'Nombre de la tecnología': tech.name,
-                'Proveedor / Empresa': tech.provider || null,
-                'Web de la empresa': tech.web || null,
-                'Email de contacto': tech.email || null,
-                'País de origen': tech.country || null,
-                'Tipo de tecnología': tech.type || 'Por clasificar',
-                Subcategoría: tech.subcategory || null,
-                'Sector y subsector': tech.sector || sector,
-                'Descripción técnica breve': tech.description || null,
-                'Aplicación principal': tech.mainApplication || null,
-                'Ventaja competitiva clave': tech.innovationAdvantages || null,
-                'Grado de madurez (TRL)': tech.trl || null,
-                'Casos de referencia': tech.references || null,
-                // Campos de scouting
-                source: 'case_study',
-                case_study_id: caseStudyId,
-                queue_status: 'pending',
-                priority: tech.role === 'Recomendada' ? 'high' : 'medium',
-                notes: buildScoutingNotes(tech, title),
-              })
-              .select('id')
-              .single();
+            // CASO C: Tecnología nueva
+            // Solo enviar a scouting_queue si se está PUBLICANDO (status === 'approved')
+            // Para borradores, solo guardar en case_study_technologies sin crear entrada en scouting
+            
+            if (status === 'approved') {
+              // Publicando → crear entrada en scouting_queue para revisión
+              const { data: scoutingItem, error: scoutingError } = await supabase
+                .from('scouting_queue')
+                .insert({
+                  // Mapeo a ficha estándar
+                  'Nombre de la tecnología': tech.name,
+                  'Proveedor / Empresa': tech.provider || null,
+                  'Web de la empresa': tech.web || null,
+                  'Email de contacto': tech.email || null,
+                  'País de origen': tech.country || null,
+                  'Tipo de tecnología': tech.type || 'Por clasificar',
+                  Subcategoría: tech.subcategory || null,
+                  'Sector y subsector': tech.sector || sector,
+                  'Descripción técnica breve': tech.description || null,
+                  'Aplicación principal': tech.mainApplication || null,
+                  'Ventaja competitiva clave': tech.innovationAdvantages || null,
+                  'Grado de madurez (TRL)': tech.trl || null,
+                  'Casos de referencia': tech.references || null,
+                  // Campos de scouting
+                  source: 'case_study',
+                  case_study_id: caseStudyId,
+                  queue_status: 'pending',
+                  priority: tech.role === 'Recomendada' ? 'high' : 'medium',
+                  notes: buildScoutingNotes(tech, title),
+                })
+                .select('id')
+                .single();
 
-            if (scoutingError) {
-              console.error('Error inserting to scouting_queue:', scoutingError);
-              // Aún así insertar en case_study_technologies sin referencia
-              await supabase.from('case_study_technologies').insert({
-                case_study_id: caseStudyId,
-                technology_name: tech.name,
-                provider: tech.provider || null,
-                role: mapRoleToDb(tech.role),
-                application_data: applicationData,
-              });
+              if (scoutingError) {
+                console.error('Error inserting to scouting_queue:', scoutingError);
+                // Aún así insertar en case_study_technologies sin referencia
+                await supabase.from('case_study_technologies').insert({
+                  case_study_id: caseStudyId,
+                  technology_name: tech.name,
+                  provider: tech.provider || null,
+                  role: mapRoleToDb(tech.role),
+                  application_data: applicationData,
+                });
+              } else {
+                // Insertar en case_study_technologies con referencia a scouting_queue
+                const { error: techError } = await supabase
+                  .from('case_study_technologies')
+                  .insert({
+                    case_study_id: caseStudyId,
+                    technology_name: tech.name,
+                    provider: tech.provider || null,
+                    role: mapRoleToDb(tech.role),
+                    scouting_queue_id: scoutingItem?.id,
+                    application_data: applicationData,
+                  });
+
+                if (techError) {
+                  console.error('Error inserting technology with scouting_queue_id:', techError);
+                }
+              }
             } else {
-              // Insertar en case_study_technologies con referencia a scouting_queue
+              // Borrador → solo guardar en case_study_technologies sin enviar a scouting
+              // Esto evita crear tecnologías huérfanas si el borrador se elimina
               const { error: techError } = await supabase
                 .from('case_study_technologies')
                 .insert({
@@ -910,12 +933,12 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
                   technology_name: tech.name,
                   provider: tech.provider || null,
                   role: mapRoleToDb(tech.role),
-                  scouting_queue_id: scoutingItem?.id,
                   application_data: applicationData,
+                  // No scouting_queue_id - se creará cuando se publique
                 });
 
               if (techError) {
-                console.error('Error inserting technology with scouting_queue_id:', techError);
+                console.error('Error inserting draft technology:', techError);
               }
             }
           }
