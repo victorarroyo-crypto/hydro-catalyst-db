@@ -32,6 +32,7 @@ import {
   Beaker,
   Target,
   Lightbulb,
+  Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PAISES } from '@/constants/taxonomyData';
@@ -274,14 +275,47 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
             <p className="text-sm text-muted-foreground">Modifica los datos del caso</p>
           </div>
         </div>
-        <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !name}>
-          {saveMutation.isPending ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        <div className="flex items-center gap-2">
+          {status === 'draft' ? (
+            <>
+              <Button 
+                variant="outline"
+                onClick={() => saveMutation.mutate()} 
+                disabled={saveMutation.isPending || !name}
+              >
+                {saveMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Guardar Borrador
+              </Button>
+              <Button 
+                onClick={() => {
+                  setStatus('approved');
+                  setTimeout(() => saveMutation.mutate(), 50);
+                }} 
+                disabled={saveMutation.isPending || !name}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Send className="h-4 w-4 mr-2" />
+                Publicar
+              </Button>
+            </>
           ) : (
-            <Save className="h-4 w-4 mr-2" />
+            <Button 
+              onClick={() => saveMutation.mutate()} 
+              disabled={saveMutation.isPending || !name}
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Guardar Cambios
+            </Button>
           )}
-          Guardar Cambios
-        </Button>
+        </div>
       </div>
 
       <ScrollArea className="h-[calc(100vh-180px)]">
