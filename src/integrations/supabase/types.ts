@@ -407,6 +407,7 @@ export type Database = {
       }
       case_study_technologies: {
         Row: {
+          application_data: Json | null
           case_study_id: string
           created_at: string
           economic_analysis: Json | null
@@ -419,6 +420,7 @@ export type Database = {
           technology_name: string
         }
         Insert: {
+          application_data?: Json | null
           case_study_id: string
           created_at?: string
           economic_analysis?: Json | null
@@ -431,6 +433,7 @@ export type Database = {
           technology_name: string
         }
         Update: {
+          application_data?: Json | null
           case_study_id?: string
           created_at?: string
           economic_analysis?: Json | null
