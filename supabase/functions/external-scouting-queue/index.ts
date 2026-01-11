@@ -16,11 +16,11 @@ interface RequestBody {
 // External DB uses 'status' column, not 'queue_status'
 // Status mapping for external database - maps UI filter names to external DB values
 const STATUS_MAPPING: Record<string, string[]> = {
-  'review': ['pending', 'new', 'reviewing', 'in_review', 'review'], // Added 'review' as possible value
+  'review': ['pending', 'pendiente', 'new', 'reviewing', 'in_review', 'review'],
   'pending_approval': ['pending_approval'],
-  'approved': ['approved'],
-  'rejected': ['rejected'],
-  'active': ['pending', 'new', 'reviewing', 'in_review', 'review', 'pending_approval'],
+  'approved': ['approved', 'aprobado'],
+  'rejected': ['rejected', 'rechazado'],
+  'active': ['pending', 'pendiente', 'new', 'reviewing', 'in_review', 'review', 'pending_approval'],
 };
 
 // Map from local field names to external field names
@@ -75,13 +75,16 @@ const EXTERNAL_TO_LOCAL_FIELD: Record<string, string> = {
 // Status value mapping from external to local UI values
 const STATUS_VALUE_MAPPING: Record<string, string> = {
   'pending': 'review',
+  'pendiente': 'review',
   'new': 'review', 
   'reviewing': 'review',
   'in_review': 'review',
-  'review': 'review', // External DB may use 'review' directly
+  'review': 'review',
   'pending_approval': 'pending_approval',
   'approved': 'approved',
+  'aprobado': 'approved',
   'rejected': 'rejected',
+  'rechazado': 'rejected',
 };
 
 // Transform external record to local format
@@ -267,7 +270,7 @@ Deno.serve(async (req) => {
         externalSupabase
           .from('scouting_queue')
           .select('id', { count: 'exact', head: true })
-          .in('status', ['pending', 'new', 'reviewing', 'in_review', 'review']),
+          .in('status', ['pending', 'pendiente', 'new', 'reviewing', 'in_review', 'review']),
         externalSupabase
           .from('scouting_queue')
           .select('id', { count: 'exact', head: true })
@@ -317,9 +320,10 @@ Deno.serve(async (req) => {
       console.log('[external-scouting-queue] Insert action with record:', record);
       
       // Fields already come with external DB names from frontend
+      // IMPORTANT: External DB uses 'pendiente' not 'pending' (check constraint)
       const insertData = {
         ...record,
-        status: record.status || 'pending',
+        status: 'pendiente',
         created_at: new Date().toISOString(),
       };
       
