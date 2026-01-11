@@ -316,38 +316,40 @@ Deno.serve(async (req) => {
     }
 
     // INSERT action - insert technology into external scouting_queue
-    // Uses UPSERT to handle duplicate nombre+proveedor constraint
+    // Uses UPSERT with ignoreDuplicates to skip technologies that already exist
     if (action === 'insert' && record) {
-      console.log('[external-scouting-queue] Insert/Upsert action with record:', record);
+      console.log('[external-scouting-queue] Insert action with record:', record);
       
-      // Fields already come with external DB names from frontend
-      // IMPORTANT: External DB check constraint expects status values like 'review'
       const insertData = {
         ...record,
         status: 'review',
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       };
       
-      // Use upsert with onConflict to handle duplicate nombre+proveedor
+      // Use upsert with ignoreDuplicates: true to silently skip existing records
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .upsert(insertData, { 
           onConflict: 'nombre,proveedor',
-          ignoreDuplicates: false  // Update existing record
+          ignoreDuplicates: true  // Skip if already exists, don't update
         })
-        .select()
-        .single();
+        .select();
 
       if (error) {
-        console.error('[external-scouting-queue] Upsert error:', error);
+        console.error('[external-scouting-queue] Insert error:', error);
         throw error;
       }
 
-      console.log('[external-scouting-queue] Upserted successfully:', data?.id);
+      // data will be empty array if record was skipped due to duplicate
+      const inserted = data && data.length > 0;
+      console.log(`[external-scouting-queue] ${inserted ? 'Inserted' : 'Skipped (duplicate)'}: ${record.nombre}`);
 
       return new Response(
-        JSON.stringify({ success: true, data: transformToLocal(data) }),
+        JSON.stringify({ 
+          success: true, 
+          data: inserted ? transformToLocal(data[0]) : null,
+          skipped: !inserted 
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
