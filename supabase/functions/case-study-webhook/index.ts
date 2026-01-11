@@ -6,14 +6,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
 }
 
+// All possible events that Railway can send
 type WebhookEvent = 
+  | 'pending'
+  | 'uploading'
   | 'extracting' 
   | 'extraction_complete' 
   | 'reviewing' 
   | 'review_complete' 
   | 'checking_technologies' 
-  | 'tech_check_complete' 
-  | 'completed' 
+  | 'tech_check_complete'
+  | 'matching'
+  | 'matching_complete'
+  | 'saving'
+  | 'complete'    // Railway uses 'complete' without 'd'
+  | 'completed'   // Keep for compatibility
   | 'failed'
 
 interface WebhookPayload {
@@ -51,12 +58,15 @@ serve(async (req) => {
     const payload: WebhookPayload = await req.json()
     const { event, job_id, data, timestamp } = payload
 
-    console.log(`[CASE-STUDY-WEBHOOK] Received event: ${event} for job: ${job_id}`)
-    console.log(`[CASE-STUDY-WEBHOOK] Data:`, JSON.stringify(data))
+    console.log(`[CASE-STUDY-WEBHOOK] ==========================================`)
+    console.log(`[CASE-STUDY-WEBHOOK] Received event: "${event}" for job: ${job_id}`)
+    console.log(`[CASE-STUDY-WEBHOOK] Progress: ${data?.progress}`)
+    console.log(`[CASE-STUDY-WEBHOOK] Full data:`, JSON.stringify(data))
     console.log(`[CASE-STUDY-WEBHOOK] Timestamp: ${timestamp}`)
 
     // Validate required fields
     if (!event) {
+      console.error('[CASE-STUDY-WEBHOOK] Missing event field')
       return new Response(
         JSON.stringify({ error: 'event is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -64,6 +74,7 @@ serve(async (req) => {
     }
 
     if (!job_id) {
+      console.error('[CASE-STUDY-WEBHOOK] Missing job_id field')
       return new Response(
         JSON.stringify({ error: 'job_id is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -74,10 +85,11 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Map event to status
+    // Map event to status - handle both 'complete' and 'completed'
     let status: string
     switch (event) {
       case 'completed':
+      case 'complete':
         status = 'completed'
         break
       case 'failed':
@@ -87,9 +99,12 @@ serve(async (req) => {
         status = 'processing'
     }
 
+    // Normalize event name for database (convert 'complete' to 'completed')
+    const normalizedPhase = event === 'complete' ? 'completed' : event
+
     // Build update object
     const updateData: Record<string, unknown> = {
-      current_phase: event,
+      current_phase: normalizedPhase,
       updated_at: new Date().toISOString(),
       status,
     }
@@ -125,41 +140,51 @@ serve(async (req) => {
     }
 
     // Set completed_at for terminal states
-    if (event === 'completed' || event === 'failed') {
+    if (event === 'completed' || event === 'complete' || event === 'failed') {
       updateData.completed_at = timestamp || new Date().toISOString()
       
-      // Set started_at if not already set (edge case)
-      if (event === 'completed') {
+      if (event === 'completed' || event === 'complete') {
         updateData.progress_percentage = 100
       }
     }
 
-    console.log(`[CASE-STUDY-WEBHOOK] Updating job ${job_id} with:`, JSON.stringify(updateData))
+    console.log(`[CASE-STUDY-WEBHOOK] Will update job ${job_id} with:`, JSON.stringify(updateData))
 
-    const { error: updateError } = await supabase
+    // Perform the update
+    const { data: updatedJob, error: updateError } = await supabase
       .from('case_study_jobs')
       .update(updateData)
       .eq('id', job_id)
+      .select('id, progress_percentage, current_phase, status')
+      .single()
 
     if (updateError) {
       console.error('[CASE-STUDY-WEBHOOK] Error updating job:', updateError)
+      console.error('[CASE-STUDY-WEBHOOK] Error code:', updateError.code)
+      console.error('[CASE-STUDY-WEBHOOK] Error details:', updateError.details)
       throw updateError
     }
 
-    console.log(`[CASE-STUDY-WEBHOOK] Job ${job_id} updated successfully - event: ${event}, status: ${status}`)
+    console.log(`[CASE-STUDY-WEBHOOK] Job ${job_id} updated successfully:`)
+    console.log(`[CASE-STUDY-WEBHOOK]   - Progress: ${updatedJob?.progress_percentage}%`)
+    console.log(`[CASE-STUDY-WEBHOOK]   - Phase: ${updatedJob?.current_phase}`)
+    console.log(`[CASE-STUDY-WEBHOOK]   - Status: ${updatedJob?.status}`)
+    console.log(`[CASE-STUDY-WEBHOOK] ==========================================`)
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         job_id, 
         event,
-        status 
+        normalized_phase: normalizedPhase,
+        status,
+        updated_progress: updatedJob?.progress_percentage
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error('[CASE-STUDY-WEBHOOK] Error:', error)
+    console.error('[CASE-STUDY-WEBHOOK] Unhandled error:', error)
     const message = error instanceof Error ? error.message : 'Unknown error'
     return new Response(
       JSON.stringify({ error: message }),
