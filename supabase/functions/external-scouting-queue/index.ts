@@ -316,8 +316,9 @@ Deno.serve(async (req) => {
     }
 
     // INSERT action - insert technology into external scouting_queue
+    // Uses UPSERT to handle duplicate nombre+proveedor constraint
     if (action === 'insert' && record) {
-      console.log('[external-scouting-queue] Insert action with record:', record);
+      console.log('[external-scouting-queue] Insert/Upsert action with record:', record);
       
       // Fields already come with external DB names from frontend
       // IMPORTANT: External DB check constraint expects status values like 'review'
@@ -325,20 +326,25 @@ Deno.serve(async (req) => {
         ...record,
         status: 'review',
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       
+      // Use upsert with onConflict to handle duplicate nombre+proveedor
       const { data, error } = await externalSupabase
         .from('scouting_queue')
-        .insert(insertData)
+        .upsert(insertData, { 
+          onConflict: 'nombre,proveedor',
+          ignoreDuplicates: false  // Update existing record
+        })
         .select()
         .single();
 
       if (error) {
-        console.error('[external-scouting-queue] Insert error:', error);
+        console.error('[external-scouting-queue] Upsert error:', error);
         throw error;
       }
 
-      console.log('[external-scouting-queue] Inserted successfully:', data?.id);
+      console.log('[external-scouting-queue] Upserted successfully:', data?.id);
 
       return new Response(
         JSON.stringify({ success: true, data: transformToLocal(data) }),
