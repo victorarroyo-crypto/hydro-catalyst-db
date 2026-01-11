@@ -320,10 +320,10 @@ Deno.serve(async (req) => {
       console.log('[external-scouting-queue] Insert action with record:', record);
       
       // Fields already come with external DB names from frontend
-      // IMPORTANT: External DB uses 'pendiente' not 'pending' (check constraint)
+      // IMPORTANT: External DB check constraint expects status values like 'review'
       const insertData = {
         ...record,
-        status: 'pendiente',
+        status: 'review',
         created_at: new Date().toISOString(),
       };
       
@@ -349,7 +349,10 @@ Deno.serve(async (req) => {
     throw new Error(`Unknown action: ${action}`);
 
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : (error as any)?.message || JSON.stringify(error);
     console.error('[external-scouting-queue] Error:', error);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
