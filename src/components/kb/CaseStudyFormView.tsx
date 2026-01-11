@@ -655,49 +655,51 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
 
     setSendingToScouting(tech.id);
     try {
-      // Verificar si ya existe en scouting_queue
-      const { data: existingInQueue } = await supabase
-        .from('scouting_queue')
-        .select('id')
-        .ilike('Nombre de la tecnología', tech.name)
-        .limit(1)
-        .maybeSingle();
+      // Verificar duplicados en BD Externa via edge function
+      const { data: listResult } = await supabase.functions.invoke('external-scouting-queue', {
+        body: { action: 'list', status: 'all' }
+      });
+
+      const existingInQueue = listResult?.data?.find(
+        (item: any) => item['Nombre de la tecnología']?.toLowerCase() === tech.name.toLowerCase()
+      );
 
       if (existingInQueue) {
         toast.warning(`"${tech.name}" ya está en la cola de scouting`);
-        // Marcar como enviada
         setTechnologies(techs =>
           techs.map(t => t.id === tech.id ? { ...t, status: 'sent_to_scouting' as const } : t)
         );
         return;
       }
 
-      // Insertar en scouting_queue con mapeo a ficha estándar
-      const { error } = await supabase
-        .from('scouting_queue')
-        .insert({
-          // Mapeo a ficha estándar de technologies
-          'Nombre de la tecnología': tech.name,
-          'Proveedor / Empresa': tech.provider || null,
-          'Web de la empresa': tech.web || null,
-          'Email de contacto': tech.email || null,
-          'País de origen': tech.country || null,
-          'Tipo de tecnología': tech.type || 'Por clasificar',
-          Subcategoría: tech.subcategory || null,
-          'Sector y subsector': tech.sector || null,
-          'Descripción técnica breve': tech.description || null,
-          'Aplicación principal': tech.mainApplication || null,
-          'Ventaja competitiva clave': tech.innovationAdvantages || null,
-          'Grado de madurez (TRL)': tech.trl || null,
-          'Casos de referencia': tech.references || null,
-          // Campos adicionales de scouting
-          source: 'case_study',
-          queue_status: 'pending',
-          priority: tech.role === 'Recomendada' ? 'high' : 'normal',
-          notes: buildScoutingNotes(tech, title),
-        });
+      // Insertar en BD Externa via edge function (campos con nombres externos)
+      const { data: insertResult, error } = await supabase.functions.invoke('external-scouting-queue', {
+        body: {
+          action: 'insert',
+          record: {
+            nombre: tech.name,
+            proveedor: tech.provider || null,
+            pais: tech.country || null,
+            web: tech.web || null,
+            email: tech.email || null,
+            descripcion: tech.description || null,
+            tipo_sugerido: tech.type || 'Por clasificar',
+            subcategoria_sugerida: tech.subcategory || null,
+            trl_estimado: tech.trl || null,
+            ventaja_competitiva: tech.innovationAdvantages || null,
+            aplicacion_principal: tech.mainApplication || null,
+            sector: tech.sector || null,
+            source: 'case_study',
+            relevance_score: tech.role === 'Recomendada' ? 90 : 50,
+            relevance_reason: buildScoutingNotes(tech, title),
+            status: 'pending'
+          }
+        }
+      });
 
-      if (error) throw error;
+      if (error || !insertResult?.success) {
+        throw new Error(insertResult?.error || error?.message || 'Error insertando tecnología');
+      }
 
       // Actualizar estado local
       setTechnologies(techs =>
@@ -868,60 +870,48 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             // Para borradores, solo guardar en case_study_technologies sin crear entrada en scouting
             
             if (status === 'approved') {
-              // Publicando → crear entrada en scouting_queue para revisión
-              const { data: scoutingItem, error: scoutingError } = await supabase
-                .from('scouting_queue')
-                .insert({
-                  // Mapeo a ficha estándar
-                  'Nombre de la tecnología': tech.name,
-                  'Proveedor / Empresa': tech.provider || null,
-                  'Web de la empresa': tech.web || null,
-                  'Email de contacto': tech.email || null,
-                  'País de origen': tech.country || null,
-                  'Tipo de tecnología': tech.type || 'Por clasificar',
-                  Subcategoría: tech.subcategory || null,
-                  'Sector y subsector': tech.sector || sector,
-                  'Descripción técnica breve': tech.description || null,
-                  'Aplicación principal': tech.mainApplication || null,
-                  'Ventaja competitiva clave': tech.innovationAdvantages || null,
-                  'Grado de madurez (TRL)': tech.trl || null,
-                  'Casos de referencia': tech.references || null,
-                  // Campos de scouting
-                  source: 'case_study',
-                  case_study_id: caseStudyId,
-                  queue_status: 'pending',
-                  priority: tech.role === 'Recomendada' ? 'high' : 'normal',
-                  notes: buildScoutingNotes(tech, title),
-                })
-                .select('id')
-                .single();
+              // Publicando → insertar en BD Externa via edge function
+              const { data: insertResult, error: scoutingError } = await supabase.functions.invoke('external-scouting-queue', {
+                body: {
+                  action: 'insert',
+                  record: {
+                    nombre: tech.name,
+                    proveedor: tech.provider || null,
+                    pais: tech.country || null,
+                    web: tech.web || null,
+                    email: tech.email || null,
+                    descripcion: tech.description || null,
+                    tipo_sugerido: tech.type || 'Por clasificar',
+                    subcategoria_sugerida: tech.subcategory || null,
+                    trl_estimado: tech.trl || null,
+                    ventaja_competitiva: tech.innovationAdvantages || null,
+                    aplicacion_principal: tech.mainApplication || null,
+                    sector: tech.sector || sector,
+                    source: 'case_study',
+                    relevance_score: tech.role === 'Recomendada' ? 90 : 50,
+                    relevance_reason: buildScoutingNotes(tech, title),
+                    status: 'pending'
+                  }
+                }
+              });
 
-              if (scoutingError) {
-                console.error('Error inserting to scouting_queue:', scoutingError);
-                // Aún así insertar en case_study_technologies sin referencia
-                await supabase.from('case_study_technologies').insert({
+              if (scoutingError || !insertResult?.success) {
+                console.error('Error inserting to external scouting_queue:', scoutingError || insertResult?.error);
+              }
+
+              // Insertar en case_study_technologies local (tracking interno)
+              const { error: techError } = await supabase
+                .from('case_study_technologies')
+                .insert({
                   case_study_id: caseStudyId,
                   technology_name: tech.name,
                   provider: tech.provider || null,
                   role: mapRoleToDb(tech.role),
                   application_data: applicationData,
                 });
-              } else {
-                // Insertar en case_study_technologies con referencia a scouting_queue
-                const { error: techError } = await supabase
-                  .from('case_study_technologies')
-                  .insert({
-                    case_study_id: caseStudyId,
-                    technology_name: tech.name,
-                    provider: tech.provider || null,
-                    role: mapRoleToDb(tech.role),
-                    scouting_queue_id: scoutingItem?.id,
-                    application_data: applicationData,
-                  });
 
-                if (techError) {
-                  console.error('Error inserting technology with scouting_queue_id:', techError);
-                }
+              if (techError) {
+                console.error('Error inserting to case_study_technologies:', techError);
               }
             } else {
               // Borrador → solo guardar en case_study_technologies sin enviar a scouting

@@ -6,10 +6,11 @@ const corsHeaders = {
 };
 
 interface RequestBody {
-  action: 'list' | 'get' | 'update' | 'count' | 'count_by_session';
+  action: 'list' | 'get' | 'update' | 'count' | 'count_by_session' | 'insert';
   status?: string;
   id?: string;
   updates?: Record<string, unknown>;
+  record?: Record<string, unknown>;  // For insert action
 }
 
 // External DB uses 'status' column, not 'queue_status'
@@ -175,7 +176,7 @@ Deno.serve(async (req) => {
     });
 
     const body: RequestBody = await req.json();
-    const { action, status, id, updates } = body;
+    const { action, status, id, updates, record } = body;
 
     console.log(`[external-scouting-queue] Action: ${action}, Status: ${status}, ID: ${id}`);
 
@@ -307,6 +308,36 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, data: counts }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // INSERT action - insert technology into external scouting_queue
+    if (action === 'insert' && record) {
+      console.log('[external-scouting-queue] Insert action with record:', record);
+      
+      // Fields already come with external DB names from frontend
+      const insertData = {
+        ...record,
+        status: record.status || 'pending',
+        created_at: new Date().toISOString(),
+      };
+      
+      const { data, error } = await externalSupabase
+        .from('scouting_queue')
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[external-scouting-queue] Insert error:', error);
+        throw error;
+      }
+
+      console.log('[external-scouting-queue] Inserted successfully:', data?.id);
+
+      return new Response(
+        JSON.stringify({ success: true, data: transformToLocal(data) }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
