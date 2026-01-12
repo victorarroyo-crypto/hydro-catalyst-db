@@ -1,33 +1,30 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 
-// Nueva interfaz basada en respuesta de Railway /api/models
+const RAILWAY_API_URL = 'https://watertech-scouting-production.up.railway.app';
+
 export interface LLMModel {
-  key: string;           // Value para el selector (ej: "claude-sonnet")
-  name: string;          // Display name (ej: "Claude Sonnet 4.5")
-  cost_per_query: number; // Costo por consulta (ej: 0.031)
-  is_default: boolean;   // Si es el modelo por defecto
-  is_recommended: boolean; // Si es recomendado
+  key: string;
+  name: string;
+  cost_per_query: number;
+  is_default?: boolean;
+  is_recommended?: boolean;
+  is_free?: boolean;
 }
 
 export interface LLMModelsResponse {
   models: LLMModel[];
+  default: string;
+  free_models: string[];
 }
 
-const FREE_TIER_THRESHOLD = 0.01;
-
 async function fetchLLMModels(): Promise<LLMModelsResponse> {
-  const { data, error } = await supabase.functions.invoke('study-proxy', {
-    body: { endpoint: '/api/models', method: 'GET' },
-  });
-
-  if (error) throw new Error(error.message);
-
-  if (!data?.success) {
-    throw new Error(data?.error || 'Error fetching LLM models');
+  const response = await fetch(`${RAILWAY_API_URL}/api/advisor/models`);
+  
+  if (!response.ok) {
+    throw new Error('Error fetching LLM models');
   }
-
-  return data.data as LLMModelsResponse;
+  
+  return response.json();
 }
 
 export function useLLMModels() {
@@ -39,13 +36,25 @@ export function useLLMModels() {
   });
 }
 
-// Helper functions
-export function getDefaultModel(models: LLMModel[]): LLMModel | undefined {
-  return models.find(m => m.is_default) || models[0];
+// Helper functions - accepts both LLMModelsResponse or LLMModel[]
+export function getDefaultModel(data: LLMModelsResponse | LLMModel[]): LLMModel | undefined {
+  // If it's an array, use the old logic
+  if (Array.isArray(data)) {
+    return data.find(m => m.is_default) || data[0];
+  }
+  
+  // If it's the full response, use the default key
+  if (data.default) {
+    const defaultModel = data.models.find(m => m.key === data.default);
+    if (defaultModel) return defaultModel;
+  }
+  
+  // Fallback to is_default flag
+  return data.models.find(m => m.is_default) || data.models[0];
 }
 
 export function isFreeModel(model: LLMModel): boolean {
-  return model.cost_per_query < FREE_TIER_THRESHOLD;
+  return model.is_free === true;
 }
 
 export function formatModelCost(cost: number): string {

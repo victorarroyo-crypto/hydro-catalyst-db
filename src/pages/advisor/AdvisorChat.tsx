@@ -76,11 +76,11 @@ export default function AdvisorChat() {
   
   // Set default model when models load
   useEffect(() => {
-    if (models.length > 0 && !selectedModel) {
-      const defaultModel = getDefaultModel(models);
+    if (llmData && !selectedModel) {
+      const defaultModel = getDefaultModel(llmData);
       if (defaultModel) setSelectedModel(defaultModel.key);
     }
-  }, [models, selectedModel]);
+  }, [llmData, selectedModel]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -198,26 +198,28 @@ export default function AdvisorChat() {
 
             {/* Model Selector */}
             <Select value={selectedModel} onValueChange={setSelectedModel} disabled={modelsLoading}>
-              <SelectTrigger className="w-[220px]">
+              <SelectTrigger className="w-[260px]">
                 <SelectValue placeholder={modelsLoading ? "Cargando..." : "Seleccionar modelo"} />
               </SelectTrigger>
               <SelectContent>
                 {models.map((model) => (
-                  <SelectItem 
-                    key={model.key} 
-                    value={model.key}
-                  >
-                    <div className="flex items-center gap-2">
+                  <SelectItem key={model.key} value={model.key}>
+                    <span className="flex items-center gap-2">
                       <span>{model.name}</span>
+                      {model.is_free && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-500/30">
+                          Gratis
+                        </Badge>
+                      )}
                       {model.is_recommended && (
-                        <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                           Recomendado
                         </Badge>
                       )}
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground ml-1">
                         {formatModelCost(model.cost_per_query)}
                       </span>
-                    </div>
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
