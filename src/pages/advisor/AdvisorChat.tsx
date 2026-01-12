@@ -331,35 +331,7 @@ export default function AdvisorChat() {
                   <WaterAnalysisCard analysis={message.metadata.water_analysis} />
                 )}
 
-                {/* Sources */}
-                {message.role === 'assistant' && message.sources && message.sources.length > 0 && (
-                  <Collapsible className="mt-4">
-                    <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="sm" className="gap-1 h-8 px-2">
-                        <span className="text-xs">Ver fuentes ({message.sources.length})</span>
-                        <ChevronDown className="w-3 h-3" />
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-2 space-y-2">
-                      {message.sources.map((source, idx) => (
-                        <div key={idx} className="text-xs bg-background/50 rounded-lg p-2 border">
-                          <div className="font-medium">{source.name}</div>
-                          <div className="text-muted-foreground flex items-center gap-2 mt-1">
-                            {source.provider && <span>{source.provider}</span>}
-                            {source.trl != null && (
-                              <Badge variant="outline" className="text-[10px] h-4 px-1">
-                                TRL {source.trl}
-                              </Badge>
-                            )}
-                            <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                              {source.type}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
+                {/* Sources - hidden by default, only shown if user explicitly asks */}
 
                 {/* Credits used indicator */}
                 {message.role === 'assistant' && message.credits_used !== undefined && (
