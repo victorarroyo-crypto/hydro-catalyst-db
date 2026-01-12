@@ -164,6 +164,39 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               {children}
             </blockquote>
           ),
+          // Tables with clean styling
+          table: ({ children }) => (
+            <div className="my-4 overflow-x-auto rounded-lg border border-border/50">
+              <table className="w-full text-sm">
+                {children}
+              </table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="bg-muted/50 border-b border-border/50">
+              {children}
+            </thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="divide-y divide-border/30">
+              {children}
+            </tbody>
+          ),
+          tr: ({ children }) => (
+            <tr className="hover:bg-muted/30 transition-colors">
+              {children}
+            </tr>
+          ),
+          th: ({ children }) => (
+            <th className="px-3 py-2 text-left font-medium text-foreground/90 text-xs uppercase tracking-wide">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="px-3 py-2 text-foreground/80">
+              {children}
+            </td>
+          ),
         }}
       >
         {displayedText}
