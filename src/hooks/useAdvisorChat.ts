@@ -10,13 +10,105 @@ import type {
 
 const RAILWAY_API_URL = 'https://watertech-scouting-production.up.railway.app';
 
+// Attachment upload limits and validation
+const ATTACHMENT_LIMITS = {
+  MAX_FILES: 5,
+  MAX_SIZE_BYTES: 10 * 1024 * 1024, // 10MB
+  ALLOWED_EXTENSIONS: ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'docx', 'xlsx', 'xls', 'csv', 'txt']
+};
+
+interface UploadedAttachment {
+  url: string;
+  name: string;
+  type: string;
+}
+
+// Upload single file to Storage and get signed URL
+async function uploadAndGetSignedUrl(
+  file: File,
+  userId: string
+): Promise<UploadedAttachment | null> {
+  try {
+    // Validate extension
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!ext || !ATTACHMENT_LIMITS.ALLOWED_EXTENSIONS.includes(ext)) {
+      console.warn(`Tipo no permitido: ${file.name}`);
+      return null;
+    }
+
+    // Validate size
+    if (file.size > ATTACHMENT_LIMITS.MAX_SIZE_BYTES) {
+      console.warn(`Archivo muy grande: ${file.name}`);
+      return null;
+    }
+
+    // Generate unique path (same pattern as KB)
+    const timestamp = Date.now();
+    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filePath = `advisor/${userId}/${timestamp}_${safeName}`;
+
+    // Upload to Storage
+    const { data, error } = await supabase.storage
+      .from('knowledge-docs')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Error subiendo archivo:', error);
+      return null;
+    }
+
+    // Generate signed URL (valid 4 hours, same as KB)
+    const { data: signedData, error: signedError } = await supabase.storage
+      .from('knowledge-docs')
+      .createSignedUrl(filePath, 4 * 60 * 60); // 4 hours
+
+    if (signedError || !signedData?.signedUrl) {
+      console.error('Error generando URL firmada:', signedError);
+      return null;
+    }
+
+    return {
+      url: signedData.signedUrl,
+      name: file.name,
+      type: file.type
+    };
+  } catch (error) {
+    console.error('Error en upload:', error);
+    return null;
+  }
+}
+
+// Upload multiple files sequentially
+async function uploadAllAttachments(
+  files: File[],
+  userId: string
+): Promise<UploadedAttachment[]> {
+  const uploaded: UploadedAttachment[] = [];
+
+  // Limit quantity
+  const filesToProcess = files.slice(0, ATTACHMENT_LIMITS.MAX_FILES);
+
+  // Upload sequentially (don't saturate)
+  for (const file of filesToProcess) {
+    const result = await uploadAndGetSignedUrl(file, userId);
+    if (result) {
+      uploaded.push(result);
+    }
+  }
+
+  return uploaded;
+}
+
 export function useAdvisorChat(userId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
-  const [uploadedFiles, setUploadedFiles] = useState<Map<string, string>>(new Map()); // id -> base64
+  const [pendingFiles, setPendingFiles] = useState<Map<string, File>>(new Map()); // id -> File
 
   const loadChat = useCallback(async (existingChatId: string) => {
     if (!userId) return;
@@ -44,13 +136,8 @@ export function useAdvisorChat(userId: string | undefined) {
     for (const file of files) {
       const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
-      // Convert to base64 for sending to API
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        setUploadedFiles(prev => new Map(prev).set(id, base64));
-      };
-      reader.readAsDataURL(file);
+      // Store the file for later upload
+      setPendingFiles(prev => new Map(prev).set(id, file));
       
       const attachment: AttachmentInfo = {
         id,
@@ -65,7 +152,7 @@ export function useAdvisorChat(userId: string | undefined) {
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments(prev => prev.filter(a => a.id !== id));
-    setUploadedFiles(prev => {
+    setPendingFiles(prev => {
       const newMap = new Map(prev);
       newMap.delete(id);
       return newMap;
@@ -74,7 +161,7 @@ export function useAdvisorChat(userId: string | undefined) {
 
   const clearAttachments = useCallback(() => {
     setAttachments([]);
-    setUploadedFiles(new Map());
+    setPendingFiles(new Map());
   }, []);
 
   const sendMessage = useCallback(async (message: string, model: string = 'gpt-4o-mini') => {
@@ -82,16 +169,16 @@ export function useAdvisorChat(userId: string | undefined) {
 
     setIsLoading(true);
 
-    // Prepare attachments data
-    const attachmentsData = attachments.map(att => ({
-      id: att.id,
-      name: att.name,
-      type: att.type,
-      size: att.size,
-      data: uploadedFiles.get(att.id) || '',
-    }));
+    // Get pending files to upload
+    const filesToUpload: File[] = [];
+    for (const att of attachments) {
+      const file = pendingFiles.get(att.id);
+      if (file) {
+        filesToUpload.push(file);
+      }
+    }
 
-    // Add user message optimistically
+    // Add user message optimistically (with attachment info for display)
     const tempUserMsg: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
@@ -102,9 +189,19 @@ export function useAdvisorChat(userId: string | undefined) {
     setMessages(prev => [...prev, tempUserMsg]);
 
     // Clear attachments after adding to message
+    const attachmentsCopy = [...attachments];
     clearAttachments();
 
     try {
+      // 1. Upload files to Storage and get signed URLs
+      let uploadedAttachments: UploadedAttachment[] = [];
+      if (filesToUpload.length > 0) {
+        console.log(`Subiendo ${filesToUpload.length} archivos a Storage...`);
+        uploadedAttachments = await uploadAllAttachments(filesToUpload, userId);
+        console.log(`Subidos ${uploadedAttachments.length} archivos con URLs firmadas`);
+      }
+
+      // 2. Send to Railway API with URLs (not base64)
       const response = await fetch(`${RAILWAY_API_URL}/api/advisor/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,7 +210,7 @@ export function useAdvisorChat(userId: string | undefined) {
           message,
           chat_id: chatId,
           model,
-          attachments: attachmentsData.length > 0 ? attachmentsData : undefined,
+          attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
         }),
       });
 
@@ -154,7 +251,7 @@ export function useAdvisorChat(userId: string | undefined) {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, chatId, attachments, uploadedFiles, clearAttachments]);
+  }, [userId, chatId, attachments, pendingFiles, clearAttachments]);
 
   const startNewChat = useCallback(() => {
     setMessages([]);
