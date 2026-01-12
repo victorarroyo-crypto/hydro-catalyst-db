@@ -22,6 +22,7 @@ import {
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
+import { useAdvisorServices } from '@/hooks/useAdvisorServices';
 import { useLLMModels, getDefaultModel, isFreeModel, formatModelCost } from '@/hooks/useLLMModels';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -31,7 +32,12 @@ import { ComparisonTableCard } from '@/components/advisor/ComparisonTableCard';
 import { WaterAnalysisCard } from '@/components/advisor/WaterAnalysisCard';
 import { ToolCard } from '@/components/advisor/ToolCard';
 import { AdvisorMessage } from '@/components/advisor/AdvisorMessage';
-import type { AttachmentInfo } from '@/types/advisorChat';
+import { ServicesBar } from '@/components/advisor/ServicesBar';
+import { ComparadorModal, type ComparadorData } from '@/components/advisor/modals/ComparadorModal';
+import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/ChecklistModal';
+import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
+import { PresupuestoModal, type PresupuestoData } from '@/components/advisor/modals/PresupuestoModal';
+import type { AttachmentInfo, Message } from '@/types/advisorChat';
 import type { ToolMetadata } from '@/types/advisorTools';
 
 const EXAMPLE_QUERIES = [
@@ -61,6 +67,7 @@ export default function AdvisorChat() {
     isLoading, 
     sendMessage, 
     startNewChat, 
+    chatId,
     attachments, 
     addAttachment, 
     removeAttachment 
@@ -73,8 +80,22 @@ export default function AdvisorChat() {
   
   const [inputValue, setInputValue] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [activeModal, setActiveModal] = useState<'comparador' | 'checklist' | 'ficha' | 'presupuesto' | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Hook for special services
+  const { callService, isLoading: serviceLoading } = useAdvisorServices(
+    advisorUser?.id,
+    chatId,
+    () => {
+      // We refetch credits after service call
+      refetchCredits();
+    },
+    (newCredits) => {
+      // Credits updated callback - refetch will handle this
+    }
+  );
   
   // Set default model when models load
   useEffect(() => {
@@ -96,6 +117,42 @@ export default function AdvisorChat() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Detect service redirect from backend and auto-open modal
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (
+        lastMessage.role === 'assistant' &&
+        lastMessage.metadata?.type === 'service_redirect' &&
+        lastMessage.metadata?.redirect_to_service
+      ) {
+        // Open modal after showing the message
+        const timer = setTimeout(() => {
+          setActiveModal(lastMessage.metadata!.redirect_to_service!);
+        }, 1500);
+        
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [messages]);
+
+  // Service handlers
+  const handleComparadorSubmit = async (data: ComparadorData) => {
+    await callService('comparador', data);
+  };
+
+  const handleChecklistSubmit = async (data: ChecklistData) => {
+    await callService('checklist', data);
+  };
+
+  const handleFichaSubmit = async (data: FichaData) => {
+    await callService('ficha', data);
+  };
+
+  const handlePresupuestoSubmit = async (data: PresupuestoData) => {
+    await callService('presupuesto', data);
+  };
 
   const handleSend = async () => {
     if ((!inputValue.trim() && attachments.length === 0) || isLoading) return;
@@ -243,6 +300,12 @@ export default function AdvisorChat() {
           </div>
         </div>
       </header>
+
+      {/* Services Bar */}
+      <ServicesBar 
+        onServiceClick={setActiveModal} 
+        userCredits={balance} 
+      />
 
       {/* Messages Area */}
       <ScrollArea className="flex-1 px-4" ref={scrollRef}>
@@ -466,6 +529,31 @@ export default function AdvisorChat() {
           </div>
         </div>
       </div>
+
+      {/* Service Modals */}
+      <ComparadorModal
+        isOpen={activeModal === 'comparador'}
+        onClose={() => setActiveModal(null)}
+        onSubmit={handleComparadorSubmit}
+        userCredits={balance}
+      />
+      <ChecklistModal
+        isOpen={activeModal === 'checklist'}
+        onClose={() => setActiveModal(null)}
+        onSubmit={handleChecklistSubmit}
+        userCredits={balance}
+      />
+      <FichaModal
+        isOpen={activeModal === 'ficha'}
+        onClose={() => setActiveModal(null)}
+        onSubmit={handleFichaSubmit}
+        userCredits={balance}
+      />
+      <PresupuestoModal
+        isOpen={activeModal === 'presupuesto'}
+        onClose={() => setActiveModal(null)}
+        onSubmit={handlePresupuestoSubmit}
+      />
     </div>
   );
 }
