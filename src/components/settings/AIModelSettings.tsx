@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLLMModels, formatModelCost } from '@/hooks/useLLMModels';
+import { useLLMModels, formatModelCost, isFreeModel } from '@/hooks/useLLMModels';
 
 interface ActionConfig {
   id: string;
@@ -51,7 +51,6 @@ export const AIModelSettings: React.FC = () => {
   // Fetch LLM models from Railway
   const { data: llmData, isLoading: modelsLoading } = useLLMModels();
   const models = llmData?.models ?? [];
-  const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -157,76 +156,59 @@ export const AIModelSettings: React.FC = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-          {settings.map((setting) => {
-            const currentModel = getModelInfo(setting.model);
-            const currentPrice = getModelPrice(setting.model);
-            return (
-              <div key={setting.action_type} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium text-foreground">{setting.label}</h4>
-                    <p className="text-sm text-muted-foreground">{setting.description}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {currentModel && getTierBadge(currentModel.tier)}
+        {settings.map((setting) => {
+          const currentModel = getModelInfo(setting.model);
+          return (
+            <div key={setting.action_type} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium text-foreground">{setting.label}</h4>
+                  <p className="text-sm text-muted-foreground">{setting.description}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {currentModel?.is_recommended && (
+                    <Badge variant="secondary" className="text-[10px]">Recomendado</Badge>
+                  )}
+                  {currentModel && isFreeModel(currentModel) && (
+                    <Badge variant="outline" className="text-[10px] text-green-600 border-green-600">Gratis</Badge>
+                  )}
+                  {currentModel && (
                     <Badge variant="outline" className="text-xs font-mono">
                       <DollarSign className="w-3 h-3 mr-0.5" />
-                      {currentPrice}
+                      {formatModelCost(currentModel.cost_per_query)}
                     </Badge>
-                  </div>
+                  )}
                 </div>
+              </div>
               <Select
                 value={setting.model}
                 onValueChange={(value) => handleModelChange(setting.action_type, value)}
+                disabled={modelsLoading}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecciona un modelo" />
+                  <SelectValue placeholder={modelsLoading ? "Cargando modelos..." : "Selecciona un modelo"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                    Google Gemini
-                  </div>
-                  {AVAILABLE_MODELS.filter((m) => m.id.startsWith('google/')).map((model) => {
-                    const modelPrice = getModelPricing(model.id);
-                    return (
-                      <SelectItem key={model.id} value={model.id}>
-                        <div className="flex items-center gap-2">
-                          {model.icon}
-                          <div className="flex-1">
-                            <span className="font-medium">{model.name}</span>
-                            <span className="text-muted-foreground text-xs ml-2">
-                              {model.description}
-                            </span>
-                          </div>
-                          <span className="text-xs text-green-600 font-mono">
-                            ${modelPrice.input.toFixed(2)}/M
-                          </span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
-                    OpenAI GPT
-                  </div>
-                  {AVAILABLE_MODELS.filter((m) => m.id.startsWith('openai/')).map((model) => {
-                    const modelPrice = getModelPricing(model.id);
-                    return (
-                      <SelectItem key={model.id} value={model.id}>
-                        <div className="flex items-center gap-2">
-                          {model.icon}
-                          <div className="flex-1">
-                            <span className="font-medium">{model.name}</span>
-                            <span className="text-muted-foreground text-xs ml-2">
-                              {model.description}
-                            </span>
-                          </div>
-                          <span className="text-xs text-green-600 font-mono">
-                            ${modelPrice.input.toFixed(2)}/M
-                          </span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
+                  {models.map((model) => (
+                    <SelectItem key={model.key} value={model.key}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{model.name}</span>
+                        {model.is_recommended && (
+                          <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                            Recomendado
+                          </Badge>
+                        )}
+                        {isFreeModel(model) && (
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 text-green-600 border-green-600">
+                            Gratis
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {formatModelCost(model.cost_per_query)}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
