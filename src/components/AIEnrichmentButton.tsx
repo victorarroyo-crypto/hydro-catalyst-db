@@ -96,22 +96,6 @@ export const AIEnrichmentButton: React.FC<AIEnrichmentButtonProps> = ({
     }
   };
 
-  const handleFieldToggle = (fieldId: string) => {
-    setSelectedFields(prev => 
-      prev.includes(fieldId) 
-        ? prev.filter(f => f !== fieldId)
-        : [...prev, fieldId]
-    );
-  };
-
-  const handleSelectAll = () => {
-    if (selectedFields.length === ENRICHABLE_FIELDS.length) {
-      setSelectedFields([]);
-    } else {
-      setSelectedFields(ENRICHABLE_FIELDS.map(f => f.id));
-    }
-  };
-
   const handleEnrich = async () => {
     if (selectedFields.length === 0) {
       toast.error('Selecciona al menos un campo para enriquecer');
