@@ -126,7 +126,6 @@ ${prompt}${filterString}`
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage }
         ],
-        temperature: 0.7,
       }),
     })
 
