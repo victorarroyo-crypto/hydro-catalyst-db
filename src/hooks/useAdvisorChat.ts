@@ -119,7 +119,9 @@ export function useAdvisorChat(userId: string | undefined) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Error al enviar mensaje');
+        const errorMessage = error.detail?.message || error.detail || error.error || error.message || 'Error al enviar mensaje';
+        console.error('Railway API Error:', error);
+        throw new Error(errorMessage);
       }
 
       const data: ChatResponse = await response.json();
