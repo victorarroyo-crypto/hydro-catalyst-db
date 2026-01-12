@@ -1,6 +1,44 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap');
 
 @tailwind base;
+
+/* Advisor Message Styles */
+.advisor-message {
+  font-size: 0.938rem;
+  line-height: 1.65;
+  color: hsl(var(--foreground));
+}
+
+.advisor-message p {
+  margin-bottom: 0.75rem;
+}
+
+.advisor-message p:last-child {
+  margin-bottom: 0;
+}
+
+.advisor-message strong {
+  font-weight: 500;
+}
+
+.advisor-message ul,
+.advisor-message ol {
+  margin-left: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.advisor-message li {
+  margin-bottom: 0.25rem;
+}
+
+.advisor-message a {
+  color: hsl(var(--primary));
+  text-decoration: none;
+}
+
+.advisor-message a:hover {
+  text-decoration: underline;
+}
 @tailwind components;
 @tailwind utilities;
 
