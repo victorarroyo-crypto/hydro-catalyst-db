@@ -58,9 +58,12 @@ import { cn } from '@/lib/utils';
 const mainNavItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   { title: 'Consultar Tecnologías', url: '/technologies', icon: Search },
-  { title: 'Estudios', url: '/studies', icon: GraduationCap },
-  { title: 'Mis Proyectos', url: '/projects', icon: FolderOpen },
   { title: 'Favoritos', url: '/favorites', icon: Star },
+];
+
+const projectsSubItems = [
+  { title: 'Scouting Completo', url: '/studies', icon: GraduationCap },
+  { title: 'Scouting', url: '/projects', icon: FolderOpen },
 ];
 
 const scoutingSubItems = [
@@ -125,6 +128,9 @@ export function AppSidebar() {
   const [advisorOpen, setAdvisorOpen] = useState(
     advisorSubItems.some((item) => location.pathname.startsWith('/advisor'))
   );
+  const [projectsOpen, setProjectsOpen] = useState(
+    projectsSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/studies/'))
+  );
 
   const isActive = (path: string) => location.pathname === path;
   const isKnowledgeBaseActive = location.pathname === '/knowledge-base';
@@ -132,6 +138,7 @@ export function AppSidebar() {
   const isAuditActive = auditSubItems.some((item) => location.pathname === item.url);
   const isScoutingActive = scoutingSubItems.some((item) => location.pathname === item.url);
   const isAdvisorActive = advisorSubItems.some((item) => location.pathname === item.url);
+  const isProjectsActive = projectsSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/studies/'));
 
   return (
     <Sidebar className={cn('border-r-0', collapsed ? 'w-16' : 'w-64')} collapsible="icon">
@@ -177,6 +184,60 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+
+              {/* Proyectos Submenu */}
+              <Collapsible
+                open={projectsOpen}
+                onOpenChange={setProjectsOpen}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      className={cn(
+                        'transition-all duration-200 w-full',
+                        isProjectsActive
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                      )}
+                    >
+                      <FolderOpen className="w-5 h-5" />
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 text-left">Proyectos</span>
+                          <ChevronDown className={cn(
+                            "w-4 h-4 transition-transform duration-200",
+                            projectsOpen && "rotate-180"
+                          )} />
+                        </>
+                      )}
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {projectsSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isActive(item.url) || location.pathname.startsWith(item.url + '/')}
+                            className={cn(
+                              'transition-all duration-200',
+                              (isActive(item.url) || location.pathname.startsWith(item.url + '/'))
+                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                            )}
+                          >
+                            <Link to={item.url} className="flex items-center gap-2">
+                              <item.icon className="w-4 h-4" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
 
               {/* Scouting Submenu */}
               <Collapsible
