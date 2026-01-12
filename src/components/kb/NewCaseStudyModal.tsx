@@ -24,6 +24,7 @@ import {
   Info,
   CheckCircle2,
   XCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { useCaseStudyFiles, type PendingFile } from '@/hooks/useCaseStudyFiles';
 import { CaseStudyProcessingView } from './CaseStudyProcessingView';
@@ -39,12 +40,21 @@ interface NewCaseStudyModalProps {
 
 type ModalStep = 'upload' | 'uploading' | 'processing' | 'form';
 
+interface FailedFile {
+  name: string;
+  error: string;
+}
+
 interface UploadProgress {
   current: number;
   total: number;
   completed: number;
   failed: number;
   currentFileName?: string;
+  retrying?: boolean;
+  currentAttempt?: number;
+  maxAttempts?: number;
+  failedFiles: FailedFile[];
 }
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -54,8 +64,14 @@ const ACCEPTED_TYPES = {
   'application/vnd.ms-excel': ['.xls'],
 };
 
-// Rate limiting: máximo 2 documentos concurrentes para Case Studies
-const MAX_CONCURRENT_UPLOADS = 2;
+// Rate limiting: 1 documento a la vez para Case Studies (son muy pesados)
+const MAX_CONCURRENT_UPLOADS = 1;
+// Timeout de 5 minutos por documento
+const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+// Máximo reintentos por documento
+const MAX_RETRIES = 3;
+// Pausa entre documentos (ms)
+const INTER_DOCUMENT_PAUSE_MS = 2000;
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B';
@@ -94,11 +110,13 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   const [isRemoving, setIsRemoving] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
   const [isStartingProcess, setIsStartingProcess] = useState(false);
+  const [isRetryingFailed, setIsRetryingFailed] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress>({
     current: 0,
     total: 0,
     completed: 0,
     failed: 0,
+    failedFiles: [],
   });
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -149,35 +167,36 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
     }
   };
 
-  // Rate-limited file upload function
-  const processFilesWithLimit = async (
-    files: PendingFile[],
+  // Upload single file with retry and exponential backoff
+  const uploadFileWithRetry = async (
+    file: PendingFile,
+    index: number,
     jobId: string,
-    limit: number = MAX_CONCURRENT_UPLOADS
-  ): Promise<{ completed: number; failed: number }> => {
-    const railwayUrl = import.meta.env.VITE_RAILWAY_CASE_STUDY_URL || 'https://watertech-scouting-production.up.railway.app/api/case-study/upload-and-process';
-    const railwaySyncSecret = import.meta.env.VITE_RAILWAY_SYNC_SECRET || 'wt-sync-2026-secure';
-    
-    const queue = [...files];
-    let completed = 0;
-    let failed = 0;
-    let processed = 0;
-    const inProgress: Promise<void>[] = [];
+    totalFiles: number,
+    railwayUrl: string,
+    railwaySyncSecret: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const fileName = file.name;
 
-    const processOne = async (file: PendingFile, index: number): Promise<void> => {
-      const fileName = file.name;
-      setUploadProgress(prev => ({
-        ...prev,
-        currentFileName: fileName,
-      }));
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
 
       try {
-        console.log(`[CaseStudy] Processing file ${index + 1}/${files.length}: ${fileName}`);
+        console.log(`[CaseStudy] Intento ${attempt}/${MAX_RETRIES}: ${fileName}`);
         
+        setUploadProgress(prev => ({
+          ...prev,
+          currentFileName: fileName,
+          retrying: attempt > 1,
+          currentAttempt: attempt,
+          maxAttempts: MAX_RETRIES,
+        }));
+
         const formData = new FormData();
         formData.append('job_id', jobId);
         formData.append('file_index', String(index));
-        formData.append('total_files', String(files.length));
+        formData.append('total_files', String(totalFiles));
         formData.append('webhook_url', 'https://bdmpshiqspkxcisnnlyr.supabase.co/functions/v1/case-study-webhook');
         formData.append('webhook_secret', 'AquaTechWebhook26');
         formData.append('files', file.file!, fileName);
@@ -188,37 +207,108 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
             'X-Sync-Secret': railwaySyncSecret,
           },
           body: formData,
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const errorText = await response.text();
           console.error(`[CaseStudy] File ${index + 1} error:`, errorText);
-          throw new Error(`Error: ${response.status}`);
+          throw new Error(`HTTP ${response.status}`);
         }
 
-        console.log(`[CaseStudy] File ${index + 1} uploaded successfully`);
+        console.log(`[CaseStudy] ✅ ${fileName} procesado en intento ${attempt}`);
+        return { success: true };
+
+      } catch (error) {
+        clearTimeout(timeoutId);
+        const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
+        const isAborted = error instanceof Error && error.name === 'AbortError';
+        
+        console.error(`[CaseStudy] ❌ Fallo intento ${attempt}: ${isAborted ? 'Timeout (5 min)' : errorMsg}`);
+
+        if (attempt < MAX_RETRIES) {
+          // Backoff exponencial: 5s, 15s, 45s
+          const delay = 5000 * Math.pow(3, attempt - 1);
+          console.log(`[CaseStudy] Esperando ${delay / 1000}s antes de reintentar...`);
+          
+          setUploadProgress(prev => ({
+            ...prev,
+            currentFileName: `${fileName} - esperando ${delay / 1000}s para reintentar...`,
+          }));
+          
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          return { 
+            success: false, 
+            error: isAborted ? 'Timeout (5 min)' : errorMsg 
+          };
+        }
+      }
+    }
+
+    return { success: false, error: 'Max retries exceeded' };
+  };
+
+  // Rate-limited file upload function with retries
+  const processFilesWithLimit = async (
+    files: PendingFile[],
+    jobId: string,
+    limit: number = MAX_CONCURRENT_UPLOADS
+  ): Promise<{ completed: number; failed: number; failedFiles: FailedFile[] }> => {
+    const railwayUrl = import.meta.env.VITE_RAILWAY_CASE_STUDY_URL || 'https://watertech-scouting-production.up.railway.app/api/case-study/upload-and-process';
+    const railwaySyncSecret = import.meta.env.VITE_RAILWAY_SYNC_SECRET || 'wt-sync-2026-secure';
+    
+    const queue = [...files];
+    let completed = 0;
+    let failed = 0;
+    let processed = 0;
+    const failedFiles: FailedFile[] = [];
+    const inProgress: Promise<void>[] = [];
+
+    const processOne = async (file: PendingFile, index: number): Promise<void> => {
+      const result = await uploadFileWithRetry(
+        file,
+        index,
+        jobId,
+        files.length,
+        railwayUrl,
+        railwaySyncSecret
+      );
+
+      processed++;
+
+      if (result.success) {
         completed++;
-        processed++;
         setUploadProgress(prev => ({
           ...prev,
           completed: prev.completed + 1,
           current: processed,
         }));
-      } catch (error) {
-        console.error(`[CaseStudy] File ${index + 1} failed:`, error);
+        toast.success(`✅ ${file.name} procesado`);
+      } else {
         failed++;
-        processed++;
+        failedFiles.push({ name: file.name, error: result.error || 'Error desconocido' });
         setUploadProgress(prev => ({
           ...prev,
           failed: prev.failed + 1,
           current: processed,
+          failedFiles: [...prev.failedFiles, { name: file.name, error: result.error || 'Error desconocido' }],
         }));
+        toast.error(`❌ ${file.name} falló después de ${MAX_RETRIES} intentos`);
+      }
+
+      // Pausa entre documentos para evitar saturación
+      if (queue.length > 0 || inProgress.length > 1) {
+        console.log(`[CaseStudy] Pausa de ${INTER_DOCUMENT_PAUSE_MS / 1000}s antes del siguiente documento...`);
+        await new Promise(resolve => setTimeout(resolve, INTER_DOCUMENT_PAUSE_MS));
       }
     };
 
     let fileIndex = 0;
 
-    // Process with concurrency limit
+    // Process with concurrency limit (sequential for Case Studies)
     while (queue.length > 0 || inProgress.length > 0) {
       // Fill up to the limit
       while (inProgress.length < limit && queue.length > 0) {
@@ -237,7 +327,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       }
     }
 
-    return { completed, failed };
+    return { completed, failed, failedFiles };
   };
 
   const handleStartProcessing = async () => {
@@ -258,6 +348,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       total: filesToProcess.length,
       completed: 0,
       failed: 0,
+      failedFiles: [],
     });
     
     try {
@@ -284,9 +375,9 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       setCurrentJobId(job.id);
       setStep('uploading');
       
-      // Process files with rate limiting (max 2 concurrent)
-      console.log(`[CaseStudy] Starting rate-limited upload (max ${MAX_CONCURRENT_UPLOADS} concurrent)...`);
-      const { completed, failed } = await processFilesWithLimit(
+      // Process files with rate limiting (1 concurrent) and retries
+      console.log(`[CaseStudy] Starting robust upload (${MAX_CONCURRENT_UPLOADS} concurrent, ${MAX_RETRIES} retries, ${UPLOAD_TIMEOUT_MS / 1000}s timeout)...`);
+      const { completed, failed, failedFiles } = await processFilesWithLimit(
         filesToProcess,
         job.id,
         MAX_CONCURRENT_UPLOADS
@@ -304,12 +395,12 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
             error_message: `Todos los ${failed} documentos fallaron al subir` 
           })
           .eq('id', job.id);
-        setStep('upload');
+        // Stay in uploading step to allow retry
         return;
       }
       
       if (failed > 0) {
-        toast.warning(`${completed} documentos subidos, ${failed} fallidos`);
+        toast.warning(`${completed} documentos subidos, ${failed} fallidos. Puedes reintentar los fallidos.`);
       } else {
         toast.success(`${completed} documentos subidos correctamente`);
       }
@@ -344,6 +435,58 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
     } finally {
       console.log('[CaseStudy] handleStartProcessing finished');
       setIsStartingProcess(false);
+    }
+  };
+
+  // Retry only failed files
+  const handleRetryFailed = async () => {
+    if (!currentJobId || uploadProgress.failedFiles.length === 0) return;
+    
+    const failedNames = uploadProgress.failedFiles.map(f => f.name);
+    const filesToRetry = pendingFiles.filter(f => failedNames.includes(f.name) && f.file);
+    
+    if (filesToRetry.length === 0) {
+      toast.error('No se encontraron los archivos originales para reintentar');
+      return;
+    }
+    
+    setIsRetryingFailed(true);
+    
+    // Reset failed count but keep completed
+    const previousCompleted = uploadProgress.completed;
+    setUploadProgress(prev => ({
+      ...prev,
+      current: previousCompleted,
+      total: previousCompleted + filesToRetry.length,
+      failed: 0,
+      failedFiles: [],
+    }));
+    
+    console.log(`[CaseStudy] Retrying ${filesToRetry.length} failed files...`);
+    
+    const { completed, failed, failedFiles } = await processFilesWithLimit(
+      filesToRetry,
+      currentJobId,
+      MAX_CONCURRENT_UPLOADS
+    );
+    
+    setIsRetryingFailed(false);
+    
+    if (failed === 0) {
+      toast.success('Todos los documentos reintentados exitosamente');
+      
+      // Move to processing if all are now done
+      await supabase
+        .from('case_study_jobs')
+        .update({ 
+          current_phase: 'extracting',
+          progress_percentage: 10,
+        })
+        .eq('id', currentJobId);
+      
+      setStep('processing');
+    } else {
+      toast.warning(`${completed} OK, ${failed} siguen fallando`);
     }
   };
 
@@ -388,6 +531,13 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   const handleClose = () => {
     setStep('upload');
     setCurrentJobId(null);
+    setUploadProgress({
+      current: 0,
+      total: 0,
+      completed: 0,
+      failed: 0,
+      failedFiles: [],
+    });
     onOpenChange(false);
   };
 
@@ -554,7 +704,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
                 Subiendo Documentos
               </DialogTitle>
               <DialogDescription>
-                Máximo {MAX_CONCURRENT_UPLOADS} documentos simultáneos para evitar sobrecarga
+                1 documento a la vez con reintentos automáticos (hasta {MAX_RETRIES} intentos)
               </DialogDescription>
             </DialogHeader>
 
@@ -587,23 +737,87 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
                   </div>
                 </div>
                 
+                {/* Current file with retry indicator */}
                 {uploadProgress.currentFileName && (
                   <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50 border">
-                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    {uploadProgress.retrying ? (
+                      <RotateCcw className="h-4 w-4 animate-spin text-yellow-600" />
+                    ) : (
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    )}
                     <span className="text-sm truncate flex-1">
                       {uploadProgress.currentFileName}
+                      {uploadProgress.retrying && uploadProgress.currentAttempt && (
+                        <span className="text-yellow-600 ml-2">
+                          (intento {uploadProgress.currentAttempt}/{uploadProgress.maxAttempts})
+                        </span>
+                      )}
                     </span>
                   </div>
                 )}
               </div>
 
+              {/* Failed files list */}
+              {uploadProgress.failedFiles.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-destructive">
+                    Documentos fallidos ({uploadProgress.failedFiles.length}):
+                  </p>
+                  <ScrollArea className="h-24 rounded-md border border-destructive/30">
+                    <div className="p-2 space-y-1">
+                      {uploadProgress.failedFiles.map((f, i) => (
+                        <div key={i} className="text-xs text-destructive flex items-start gap-1">
+                          <XCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                          <span className="truncate">{f.name}: {f.error}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleRetryFailed}
+                    disabled={isRetryingFailed}
+                    className="w-full"
+                  >
+                    {isRetryingFailed ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                    )}
+                    Reintentar {uploadProgress.failedFiles.length} fallidos
+                  </Button>
+                </div>
+              )}
+
               <Alert className="border-muted bg-muted/30">
                 <Info className="h-4 w-4 text-muted-foreground" />
                 <AlertDescription className="text-xs text-muted-foreground">
-                  Los documentos se suben de forma controlada para evitar saturar el servidor.
-                  No cierres esta ventana.
+                  Procesando 1 documento a la vez. Reintentos automáticos con backoff (5s, 15s, 45s).
+                  Timeout: 5 minutos por documento. No cierres esta ventana.
                 </AlertDescription>
               </Alert>
+
+              {/* Continue button when some succeeded */}
+              {uploadProgress.completed > 0 && uploadProgress.current >= uploadProgress.total && (
+                <Button 
+                  onClick={async () => {
+                    if (currentJobId) {
+                      await supabase
+                        .from('case_study_jobs')
+                        .update({ 
+                          current_phase: 'extracting',
+                          progress_percentage: 10,
+                        })
+                        .eq('id', currentJobId);
+                      setStep('processing');
+                    }
+                  }}
+                  className="w-full"
+                >
+                  Continuar con {uploadProgress.completed} documentos subidos
+                </Button>
+              )}
             </div>
           </>
         ) : step === 'processing' ? (
