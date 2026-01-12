@@ -6,6 +6,7 @@ export interface Source {
   similarity: number;
   trl?: number | null;
   provider?: string | null;
+  url?: string | null;
 }
 
 export interface TechnologySheet {

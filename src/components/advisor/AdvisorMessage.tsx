@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ExternalLink, Wrench, FileText, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
+import { fixMarkdownTables } from '@/utils/fixMarkdownTables';
 
 interface AdvisorMessageProps {
   content: string;
@@ -12,7 +14,8 @@ interface AdvisorMessageProps {
 
 // Clean excessive markdown before rendering
 function cleanMarkdown(text: string): string {
-  return text
+  const fixed = fixMarkdownTables(text);
+  return fixed
     .replace(/^#{3,6}\s+/gm, '') // Remove ### #### etc (keep h1, h2)
     .replace(/\*{3,}/g, '**') // *** or more → **
     .replace(/\n{3,}/g, '\n\n') // Multiple empty lines → 2
@@ -78,6 +81,7 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
   return (
     <div className="advisor-message">
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
           // Subtle headers - no borders, just size increase
           h1: ({ children }) => (
@@ -224,13 +228,26 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
                 </p>
                 <div className="space-y-1.5">
                   {externalSources.map((source, idx) => (
-                    <div
-                      key={`ext-${idx}`}
-                      className="flex items-start gap-2 text-sm text-foreground/90 bg-muted/40 rounded-lg px-3 py-2"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-primary" />
-                      <span>{source.name}</span>
-                    </div>
+                    source.url ? (
+                      <a
+                        key={`ext-${idx}`}
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-start gap-2 text-sm text-foreground/90 bg-muted/40 rounded-lg px-3 py-2 hover:bg-muted/60 transition-colors group"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-primary" />
+                        <span className="group-hover:underline">{source.name}</span>
+                      </a>
+                    ) : (
+                      <div
+                        key={`ext-${idx}`}
+                        className="flex items-start gap-2 text-sm text-foreground/70 bg-muted/30 rounded-lg px-3 py-2"
+                      >
+                        <Globe className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                        <span>{source.name}</span>
+                      </div>
+                    )
                   ))}
                 </div>
               </div>
