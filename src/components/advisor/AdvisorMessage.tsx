@@ -175,28 +175,60 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
       )}
       
       {/* Sources section */}
-      {sources && sources.length > 0 && !isTyping && (
-        <div className="mt-4 pt-3 border-t border-border/50">
-          <p className="text-xs text-muted-foreground mb-2">Fuentes:</p>
-          <div className="flex flex-wrap gap-1.5">
-            {sources.map((source, idx) => (
-              <div
-                key={idx}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs",
-                  "bg-muted/80 text-foreground/80"
-                )}
-              >
-                {getSourceIcon(source.type)}
-                <span className="max-w-[120px] truncate">{source.name || getSourceLabel(source.type)}</span>
-                {source.provider && (
-                  <span className="text-muted-foreground">· {source.provider}</span>
-                )}
+      {sources && sources.length > 0 && !isTyping && (() => {
+        // Separate internal vs external sources
+        const internalSources = sources.filter(s => s.type === 'technology' || s.type === 'case_study');
+        const externalSources = sources.filter(s => s.type !== 'technology' && s.type !== 'case_study');
+        
+        return (
+          <div className="mt-4 pt-3 border-t border-border/50 space-y-3">
+            {/* External sources - prominent display */}
+            {externalSources.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                  <Globe className="w-3 h-3" />
+                  Fuentes externas:
+                </p>
+                <div className="space-y-1.5">
+                  {externalSources.map((source, idx) => (
+                    <div
+                      key={`ext-${idx}`}
+                      className="flex items-start gap-2 text-sm text-foreground/90 bg-muted/40 rounded-lg px-3 py-2"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-primary" />
+                      <span>{source.name}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
+            
+            {/* Internal sources - compact chips */}
+            {internalSources.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Base de conocimiento:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {internalSources.map((source, idx) => (
+                    <div
+                      key={`int-${idx}`}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs",
+                        "bg-muted/80 text-foreground/80"
+                      )}
+                    >
+                      {getSourceIcon(source.type)}
+                      <span className="max-w-[120px] truncate">{source.name || getSourceLabel(source.type)}</span>
+                      {source.provider && (
+                        <span className="text-muted-foreground">· {source.provider}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
