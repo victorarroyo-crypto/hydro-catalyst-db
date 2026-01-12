@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Save, Cpu, Sparkles, Zap, Brain, Rocket, DollarSign } from 'lucide-react';
+import { Loader2, Save, Cpu, DollarSign } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -12,77 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getModelPricing, formatPricePerMillion } from '@/lib/aiModelPricing';
-
-interface AIModel {
-  id: string;
-  name: string;
-  description: string;
-  icon: React.ReactNode;
-  tier: 'fast' | 'balanced' | 'premium';
-}
-
-const AVAILABLE_MODELS: AIModel[] = [
-  // Google Gemini - Económicos
-  {
-    id: 'google/gemini-2.5-flash-lite',
-    name: 'Gemini 2.5 Flash Lite',
-    description: 'El más rápido y económico.',
-    icon: <Zap className="w-4 h-4" />,
-    tier: 'fast',
-  },
-  {
-    id: 'google/gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    description: 'Equilibrio entre velocidad y calidad.',
-    icon: <Sparkles className="w-4 h-4" />,
-    tier: 'balanced',
-  },
-  // Google Gemini - Premium
-  {
-    id: 'google/gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
-    description: 'Máxima calidad en razonamiento.',
-    icon: <Brain className="w-4 h-4" />,
-    tier: 'premium',
-  },
-  {
-    id: 'google/gemini-3-pro-preview',
-    name: 'Gemini 3 Pro (Preview)',
-    description: 'Próxima generación. Experimental.',
-    icon: <Rocket className="w-4 h-4" />,
-    tier: 'premium',
-  },
-  {
-    id: 'google/gemini-3-pro-image-preview',
-    name: 'Gemini 3 Pro Image (Preview)',
-    description: 'Generación de imágenes con IA.',
-    icon: <Rocket className="w-4 h-4" />,
-    tier: 'premium',
-  },
-  // OpenAI GPT
-  {
-    id: 'openai/gpt-5',
-    name: 'GPT-5',
-    description: 'Modelo premium de OpenAI.',
-    icon: <Brain className="w-4 h-4" />,
-    tier: 'premium',
-  },
-  {
-    id: 'openai/gpt-5-mini',
-    name: 'GPT-5 Mini',
-    description: 'Buen balance costo-rendimiento.',
-    icon: <Sparkles className="w-4 h-4" />,
-    tier: 'balanced',
-  },
-  {
-    id: 'openai/gpt-5-nano',
-    name: 'GPT-5 Nano',
-    description: 'El más rápido de OpenAI.',
-    icon: <Zap className="w-4 h-4" />,
-    tier: 'fast',
-  },
-];
+import { useLLMModels, formatModelCost } from '@/hooks/useLLMModels';
 
 interface ActionConfig {
   id: string;
@@ -116,6 +46,11 @@ export const AIModelSettings: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [settings, setSettings] = useState<ActionConfig[]>([]);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Fetch LLM models from Railway
+  const { data: llmData, isLoading: modelsLoading } = useLLMModels();
+  const models = llmData?.models ?? [];
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
@@ -195,26 +130,8 @@ export const AIModelSettings: React.FC = () => {
     }
   };
 
-  const getModelInfo = (modelId: string) => {
-    return AVAILABLE_MODELS.find((m) => m.id === modelId);
-  };
-
-  const getTierBadge = (tier: string) => {
-    switch (tier) {
-      case 'fast':
-        return <Badge variant="secondary" className="bg-green-500/10 text-green-600">Económico</Badge>;
-      case 'balanced':
-        return <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">Equilibrado</Badge>;
-      case 'premium':
-        return <Badge variant="secondary" className="bg-purple-500/10 text-purple-600">Premium</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const getModelPrice = (modelId: string) => {
-    const pricing = getModelPricing(modelId);
-    return `$${pricing.input.toFixed(2)}/$${pricing.output.toFixed(2)}/M`;
+  const getModelInfo = (modelKey: string) => {
+    return models.find((m) => m.key === modelKey);
   };
 
   if (isLoading) {
@@ -333,13 +250,13 @@ export const AIModelSettings: React.FC = () => {
         </div>
 
         <div className="mt-4 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
-          <p className="font-medium mb-1">Recomendaciones:</p>
+          <p className="font-medium mb-1">Modelos disponibles:</p>
           <ul className="list-disc list-inside space-y-1">
-            <li><strong>Clasificación:</strong> Gemini 2.5 Flash (~$0.001/tecnología) o Pro para mayor precisión.</li>
-            <li><strong>Búsqueda:</strong> Gemini 2.5 Flash es ideal para respuestas rápidas (~$0.002/consulta).</li>
-            <li><strong>Base de Conocimiento:</strong> Gemini Pro o GPT-5 para contextos largos (~$0.01/consulta).</li>
+            <li><strong>DeepSeek V3.2:</strong> El más económico ($0.002/query) - ideal para tareas simples.</li>
+            <li><strong>Claude Sonnet 4.5:</strong> Recomendado - buen equilibrio calidad/precio ($0.031/query).</li>
+            <li><strong>Claude Opus 4.5:</strong> Máxima calidad ($0.157/query) - para análisis complejos.</li>
           </ul>
-          <p className="text-xs mt-2 italic">* Precios por millón de tokens (input/output). Costes reales pueden variar.</p>
+          <p className="text-xs mt-2 italic">* Los modelos se cargan dinámicamente desde Railway.</p>
         </div>
       </CardContent>
     </Card>

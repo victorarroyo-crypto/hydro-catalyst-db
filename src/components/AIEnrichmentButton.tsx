@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,9 +18,10 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Loader2, Brain, Zap, Rocket } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useLLMModels, getDefaultModel, formatModelCost } from '@/hooks/useLLMModels';
 
 interface AIEnrichmentButtonProps {
   technology: {
@@ -45,66 +46,6 @@ interface AIEnrichmentButtonProps {
   disabled?: boolean;
 }
 
-interface AIModel {
-  id: string;
-  name: string;
-  description: string;
-  icon: React.ReactNode;
-  tier: 'fast' | 'balanced' | 'premium';
-}
-
-const AVAILABLE_MODELS: AIModel[] = [
-  {
-    id: 'google/gemini-2.5-flash-lite',
-    name: 'Gemini Flash Lite',
-    description: 'Rápido y económico',
-    icon: <Zap className="w-4 h-4" />,
-    tier: 'fast',
-  },
-  {
-    id: 'google/gemini-2.5-flash',
-    name: 'Gemini Flash',
-    description: 'Equilibrio velocidad/calidad',
-    icon: <Sparkles className="w-4 h-4" />,
-    tier: 'balanced',
-  },
-  {
-    id: 'google/gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
-    description: 'Máxima calidad',
-    icon: <Brain className="w-4 h-4" />,
-    tier: 'premium',
-  },
-  {
-    id: 'google/gemini-3-pro-preview',
-    name: 'Gemini 3 Pro (Preview)',
-    description: 'Próxima generación',
-    icon: <Rocket className="w-4 h-4" />,
-    tier: 'premium',
-  },
-  {
-    id: 'openai/gpt-5',
-    name: 'GPT-5',
-    description: 'Premium OpenAI',
-    icon: <Brain className="w-4 h-4" />,
-    tier: 'premium',
-  },
-  {
-    id: 'openai/gpt-5-mini',
-    name: 'GPT-5 Mini',
-    description: 'Buen balance',
-    icon: <Sparkles className="w-4 h-4" />,
-    tier: 'balanced',
-  },
-  {
-    id: 'openai/gpt-5-nano',
-    name: 'GPT-5 Nano',
-    description: 'Más rápido OpenAI',
-    icon: <Zap className="w-4 h-4" />,
-    tier: 'fast',
-  },
-];
-
 const ENRICHABLE_FIELDS = [
   { id: 'descripcion', label: 'Descripción técnica breve' },
   { id: 'aplicacion_principal', label: 'Aplicación principal' },
@@ -115,32 +56,6 @@ const ENRICHABLE_FIELDS = [
   { id: 'comentarios_analista', label: 'Comentarios del analista' },
 ];
 
-const getTierColor = (tier: string) => {
-  switch (tier) {
-    case 'fast':
-      return 'bg-green-500/20 text-green-700 border-green-500/30';
-    case 'balanced':
-      return 'bg-blue-500/20 text-blue-700 border-blue-500/30';
-    case 'premium':
-      return 'bg-purple-500/20 text-purple-700 border-purple-500/30';
-    default:
-      return 'bg-muted text-muted-foreground';
-  }
-};
-
-const getTierLabel = (tier: string) => {
-  switch (tier) {
-    case 'fast':
-      return 'Rápido';
-    case 'balanced':
-      return 'Equilibrado';
-    case 'premium':
-      return 'Premium';
-    default:
-      return tier;
-  }
-};
-
 export const AIEnrichmentButton: React.FC<AIEnrichmentButtonProps> = ({
   technology,
   onEnrichmentComplete,
@@ -148,10 +63,38 @@ export const AIEnrichmentButton: React.FC<AIEnrichmentButtonProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('google/gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const [selectedFields, setSelectedFields] = useState<string[]>(
     ENRICHABLE_FIELDS.map(f => f.id)
   );
+
+  // Fetch LLM models from Railway
+  const { data: llmData, isLoading: modelsLoading } = useLLMModels();
+  const models = llmData?.models ?? [];
+
+  // Set default model when models load
+  useEffect(() => {
+    if (models.length > 0 && !selectedModel) {
+      const defaultModel = getDefaultModel(models);
+      if (defaultModel) setSelectedModel(defaultModel.key);
+    }
+  }, [models, selectedModel]);
+
+  const handleFieldToggle = (fieldId: string) => {
+    setSelectedFields(prev => 
+      prev.includes(fieldId) 
+        ? prev.filter(f => f !== fieldId)
+        : [...prev, fieldId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedFields.length === ENRICHABLE_FIELDS.length) {
+      setSelectedFields([]);
+    } else {
+      setSelectedFields(ENRICHABLE_FIELDS.map(f => f.id));
+    }
+  };
 
   const handleFieldToggle = (fieldId: string) => {
     setSelectedFields(prev => 
@@ -228,7 +171,7 @@ export const AIEnrichmentButton: React.FC<AIEnrichmentButtonProps> = ({
     }
   };
 
-  const selectedModelInfo = AVAILABLE_MODELS.find(m => m.id === selectedModel);
+  const currentModel = models.find(m => m.key === selectedModel);
 
   return (
     <>
@@ -259,30 +202,31 @@ export const AIEnrichmentButton: React.FC<AIEnrichmentButtonProps> = ({
             {/* Model Selection */}
             <div className="space-y-2">
               <Label>Modelo de IA</Label>
-              <Select value={selectedModel} onValueChange={setSelectedModel}>
+              <Select value={selectedModel} onValueChange={setSelectedModel} disabled={modelsLoading}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder={modelsLoading ? "Cargando..." : "Seleccionar modelo"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {AVAILABLE_MODELS.map(model => (
-                    <SelectItem key={model.id} value={model.id}>
+                  {models.map(model => (
+                    <SelectItem key={model.key} value={model.key}>
                       <div className="flex items-center gap-2">
-                        {model.icon}
                         <span>{model.name}</span>
-                        <Badge 
-                          variant="outline" 
-                          className={`ml-2 text-xs ${getTierColor(model.tier)}`}
-                        >
-                          {getTierLabel(model.tier)}
-                        </Badge>
+                        {model.is_recommended && (
+                          <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                            Recomendado
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {formatModelCost(model.cost_per_query)}
+                        </span>
                       </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {selectedModelInfo && (
+              {currentModel && (
                 <p className="text-xs text-muted-foreground">
-                  {selectedModelInfo.description}
+                  Costo por consulta: {formatModelCost(currentModel.cost_per_query)}
                 </p>
               )}
             </div>

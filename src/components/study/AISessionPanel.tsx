@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,9 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -25,7 +23,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { AIStudySessionState } from '@/hooks/useAIStudySession';
-import { useLLMModels } from '@/hooks/useLLMModels';
+import { useLLMModels, getDefaultModel, formatModelCost } from '@/hooks/useLLMModels';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -69,36 +67,23 @@ export default function AISessionPanel({
   const [selectedModel, setSelectedModel] = useState<string>('');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch LLM models
-  const { data: llmModelsData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useLLMModels();
+  // Fetch LLM models from Railway
+  const { data: llmData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useLLMModels();
+  const models = llmData?.models ?? [];
 
-  const modelsByProvider = llmModelsData ?? {};
-
-  const availableModelValues = useMemo(() => {
-    const values: string[] = [];
-    for (const [providerKey, providerData] of Object.entries(modelsByProvider)) {
-      for (const model of providerData.models) values.push(`${providerKey}/${model.id}`);
-    }
-    return values;
-  }, [modelsByProvider]);
-
-  // Ensure selectedModel is valid
+  // Set default model when models load
   useEffect(() => {
-    if (llmModelsLoading) return;
-    if (availableModelValues.length === 0) return;
-    if (selectedModel && availableModelValues.includes(selectedModel)) return;
-    // Prefer groq or openai as default
-    const preferred = availableModelValues.find((v) => v.startsWith('groq/')) 
-      ?? availableModelValues.find((v) => v.startsWith('openai/')) 
-      ?? availableModelValues[0];
-    setSelectedModel(preferred);
-  }, [llmModelsLoading, availableModelValues, selectedModel]);
+    if (llmModelsLoading || models.length === 0) return;
+    if (selectedModel && models.some(m => m.key === selectedModel)) return;
+    
+    const defaultModel = getDefaultModel(models);
+    if (defaultModel) setSelectedModel(defaultModel.key);
+  }, [llmModelsLoading, models, selectedModel]);
 
   const handleStartClick = () => {
     if (!selectedModel) return;
-    const [provider, ...modelParts] = selectedModel.split('/');
-    const model = modelParts.join('/');
-    onStart(provider, model);
+    // Send the model key directly - backend knows what to do
+    onStart('', selectedModel);
   };
 
   const statusConfig = STATUS_CONFIG[state.status] || STATUS_CONFIG.idle;
@@ -188,24 +173,24 @@ export default function AISessionPanel({
                   <SelectValue placeholder="Selecciona un modelo" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50">
-                  {Object.entries(modelsByProvider).map(([providerKey, providerData]) => (
-                    <SelectGroup key={providerKey}>
-                      <SelectLabel className="capitalize">{providerData.name}</SelectLabel>
-                      {providerData.models.map((model) => (
-                        <SelectItem
-                          key={`${providerKey}/${model.id}`}
-                          value={`${providerKey}/${model.id}`}
-                          className="py-2"
-                        >
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-medium">{model.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {model.description} • ${model.cost_per_1m_tokens}/1M tokens
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
+                  {models.map((model) => (
+                    <SelectItem
+                      key={model.key}
+                      value={model.key}
+                      className="py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{model.name}</span>
+                        {model.is_recommended && (
+                          <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                            Recomendado
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {formatModelCost(model.cost_per_query)}
+                        </span>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
