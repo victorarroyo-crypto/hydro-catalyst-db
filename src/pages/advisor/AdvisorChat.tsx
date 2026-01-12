@@ -5,11 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Send, 
   Loader2, 
-  ChevronDown, 
   Plus, 
   CreditCard,
   History,
@@ -24,13 +22,14 @@ import {
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
-import { useLLMModels, getDefaultModel, isFreeModel, formatModelCost, LLMModel } from '@/hooks/useLLMModels';
+import { useLLMModels, getDefaultModel, isFreeModel, formatModelCost } from '@/hooks/useLLMModels';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
 import { TechSheetCard } from '@/components/advisor/TechSheetCard';
 import { ComparisonTableCard } from '@/components/advisor/ComparisonTableCard';
 import { WaterAnalysisCard } from '@/components/advisor/WaterAnalysisCard';
+import { AdvisorMessage } from '@/components/advisor/AdvisorMessage';
 import type { AttachmentInfo } from '@/types/advisorChat';
 
 const EXAMPLE_QUERIES = [
@@ -323,9 +322,15 @@ export default function AdvisorChat() {
                   </div>
                 )}
 
-                <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                  {message.content}
-                </div>
+                {/* Message Content */}
+                {message.role === 'user' ? (
+                  <div className="whitespace-pre-wrap">{message.content}</div>
+                ) : (
+                  <AdvisorMessage 
+                    content={message.content} 
+                    sources={message.sources}
+                  />
+                )}
 
                 {/* Tech Sheet Card */}
                 {message.role === 'assistant' && message.metadata?.type === 'tech_sheet' && message.metadata.tech_sheet && (
@@ -342,12 +347,10 @@ export default function AdvisorChat() {
                   <WaterAnalysisCard analysis={message.metadata.water_analysis} />
                 )}
 
-                {/* Sources - hidden by default, only shown if user explicitly asks */}
-
                 {/* Credits used indicator */}
                 {message.role === 'assistant' && message.credits_used !== undefined && (
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    {message.credits_used} créditos utilizados
+                  <div className="mt-3 pt-2 border-t border-border/30 text-xs text-muted-foreground">
+                    {message.credits_used.toFixed(3)} créditos
                   </div>
                 )}
               </div>
