@@ -68,7 +68,7 @@ const projectsSubItems = [
 
 const scoutingSubItems = [
   { title: 'Cola de Revisión', url: '/scouting', icon: Radar },
-  { title: 'Nuevo Scouting', url: '/scouting/new', icon: Rocket },
+  { title: 'Nuevo BD Scouting', url: '/scouting/new', icon: Rocket },
   { title: 'Monitor', url: '/scouting-monitor', icon: Radio },
 ];
 
@@ -258,7 +258,7 @@ export function AppSidebar() {
                       <Radar className="w-5 h-5" />
                       {!collapsed && (
                         <>
-                          <span className="flex-1 text-left">Scouting</span>
+                          <span className="flex-1 text-left">BD Scouting</span>
                           <ChevronDown className={cn(
                             "w-4 h-4 transition-transform duration-200",
                             scoutingOpen && "rotate-180"
