@@ -53,13 +53,19 @@ export interface WaterAnalysisResult {
 
 export interface MessageMetadata {
   type: 'standard' | 'tech_sheet' | 'comparison' | 'water_analysis' | 
-        'ficha_tecnica' | 'comparador_ofertas' | 'checklist_analisis' | 'presupuesto_vandarum';
+        'ficha_tecnica' | 'comparador_ofertas' | 'checklist_analisis' | 'presupuesto_vandarum' | 
+        'service_redirect';
   tech_sheet?: TechnologySheet;
   comparison?: ComparisonTable;
   water_analysis?: WaterAnalysisResult;
   credits_cost?: number;
   // Tool-specific data for new tool types
   tool_data?: ToolMetadata;
+  // For service redirection
+  redirect_to_service?: 'comparador' | 'checklist' | 'ficha' | 'presupuesto';
+  service_name?: string;
+  service_icon?: string;
+  description?: string;
 }
 
 export interface Message {
