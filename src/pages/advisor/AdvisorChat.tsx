@@ -29,8 +29,10 @@ import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
 import { TechSheetCard } from '@/components/advisor/TechSheetCard';
 import { ComparisonTableCard } from '@/components/advisor/ComparisonTableCard';
 import { WaterAnalysisCard } from '@/components/advisor/WaterAnalysisCard';
+import { ToolCard } from '@/components/advisor/ToolCard';
 import { AdvisorMessage } from '@/components/advisor/AdvisorMessage';
 import type { AttachmentInfo } from '@/types/advisorChat';
+import type { ToolMetadata } from '@/types/advisorTools';
 
 const EXAMPLE_QUERIES = [
   "¿Qué tecnología me recomiendas para tratar agua con alto contenido en metales pesados?",
@@ -347,6 +349,11 @@ export default function AdvisorChat() {
                 {/* Water Analysis */}
                 {message.role === 'assistant' && message.metadata?.type === 'water_analysis' && message.metadata.water_analysis && (
                   <WaterAnalysisCard analysis={message.metadata.water_analysis} />
+                )}
+
+                {/* Tool Cards (new special tools) */}
+                {message.role === 'assistant' && message.metadata?.tool_data && (
+                  <ToolCard metadata={message.metadata.tool_data} />
                 )}
 
                 {/* Credits used indicator */}

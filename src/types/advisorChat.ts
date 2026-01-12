@@ -1,5 +1,7 @@
 // Types for AI Advisor Chat functionality
 
+import { ToolMetadata } from './advisorTools';
+
 export interface Source {
   name: string;
   type: string;
@@ -50,11 +52,14 @@ export interface WaterAnalysisResult {
 }
 
 export interface MessageMetadata {
-  type: 'standard' | 'tech_sheet' | 'comparison' | 'water_analysis';
+  type: 'standard' | 'tech_sheet' | 'comparison' | 'water_analysis' | 
+        'ficha_tecnica' | 'comparador_ofertas' | 'checklist_analisis' | 'presupuesto_vandarum';
   tech_sheet?: TechnologySheet;
   comparison?: ComparisonTable;
   water_analysis?: WaterAnalysisResult;
   credits_cost?: number;
+  // Tool-specific data for new tool types
+  tool_data?: ToolMetadata;
 }
 
 export interface Message {
