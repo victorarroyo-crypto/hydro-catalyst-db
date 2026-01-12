@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { 
   Rocket,
   Loader2,
@@ -10,33 +10,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-
-// LLM Models types
-interface LLMModel {
-  id: string;
-  name: string;
-  description: string;
-  cost_per_1m_tokens: number;
-  recommended: boolean;
-}
-
-interface LLMProviderData {
-  name: string;
-  models: LLMModel[];
-}
-
-type LLMModelsResponse = Record<string, LLMProviderData>;
+import { useLLMModels, getDefaultModel, formatModelCost } from '@/hooks/useLLMModels';
 
 // Proxy helper - calls to Railway backend
 async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): Promise<T> {
@@ -56,18 +40,12 @@ async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): 
 }
 
 // API functions via proxy
-const fetchLLMModels = async (): Promise<LLMModelsResponse> => {
-  return proxyFetch<LLMModelsResponse>('/api/llm/models');
-};
-
 const runScouting = async (params: { 
   config: { keywords: string[]; tipo: string; trl_min: number | null; instructions?: string };
-  provider: string;
   model: string;
 }) => {
   return proxyFetch<{ job_id: string }>('/api/scouting/run', 'POST', {
     config: params.config,
-    provider: params.provider,
     model: params.model,
   });
 };
@@ -80,33 +58,18 @@ const ScoutingNew = () => {
   const [instructions, setInstructions] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>('');
 
-  // LLM Models
-  const { data: llmModelsData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useQuery({
-    queryKey: ['llm-models'],
-    queryFn: fetchLLMModels,
-    retry: 2,
-    staleTime: 5 * 60 * 1000,
-  });
+  // LLM Models from Railway
+  const { data: llmData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useLLMModels();
+  const models = llmData?.models ?? [];
 
-  // Models by provider
-  const modelsByProvider = llmModelsData ?? {};
-
-  const availableModelValues = useMemo(() => {
-    const values: string[] = [];
-    for (const [providerKey, providerData] of Object.entries(modelsByProvider)) {
-      for (const model of providerData.models) values.push(`${providerKey}/${model.id}`);
-    }
-    return values;
-  }, [modelsByProvider]);
-
-  // Ensure selectedModel is valid
+  // Set default model when models load
   useEffect(() => {
-    if (llmModelsLoading) return;
-    if (availableModelValues.length === 0) return;
-    if (selectedModel && availableModelValues.includes(selectedModel)) return;
-    const preferred = availableModelValues.find((v) => v.startsWith('openai/')) ?? availableModelValues[0];
-    setSelectedModel(preferred);
-  }, [llmModelsLoading, availableModelValues, selectedModel]);
+    if (llmModelsLoading || models.length === 0) return;
+    if (selectedModel && models.some(m => m.key === selectedModel)) return;
+    
+    const defaultModel = getDefaultModel(models);
+    if (defaultModel) setSelectedModel(defaultModel.key);
+  }, [llmModelsLoading, models, selectedModel]);
 
   // Scouting mutation
   const scoutingMutation = useMutation({
@@ -129,8 +92,7 @@ const ScoutingNew = () => {
                 tipo: tipo === 'all' ? '' : tipo,
                 trl_min: trlMin === 'none' ? null : parseInt(trlMin),
                 instructions: instructions || undefined,
-                provider: selectedModel.split('/')[0],
-                model: selectedModel.split('/').slice(1).join('/'),
+                model: selectedModel,
               },
             },
           });
@@ -181,9 +143,6 @@ const ScoutingNew = () => {
       return;
     }
     
-    const [provider, ...modelParts] = selectedModel.split('/');
-    const model = modelParts.join('/');
-    
     scoutingMutation.mutate({
       config: {
         keywords: keywordList,
@@ -191,8 +150,7 @@ const ScoutingNew = () => {
         trl_min: trlMin === 'none' ? null : parseInt(trlMin),
         instructions: instructions || undefined,
       },
-      provider,
-      model,
+      model: selectedModel,
     });
   };
 
@@ -304,24 +262,24 @@ const ScoutingNew = () => {
                   <SelectValue placeholder="Selecciona un modelo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(modelsByProvider).map(([providerKey, providerData]) => (
-                    <SelectGroup key={providerKey}>
-                      <SelectLabel className="capitalize">{providerData.name}</SelectLabel>
-                      {providerData.models.map((model) => (
-                        <SelectItem
-                          key={`${providerKey}/${model.id}`}
-                          value={`${providerKey}/${model.id}`}
-                          className="py-2"
-                        >
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-medium">{model.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {model.description} • ${model.cost_per_1m_tokens}/1M tokens
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
+                  {models.map((model) => (
+                    <SelectItem
+                      key={model.key}
+                      value={model.key}
+                      className="py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{model.name}</span>
+                        {model.is_recommended && (
+                          <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                            Recomendado
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {formatModelCost(model.cost_per_query)}
+                        </span>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

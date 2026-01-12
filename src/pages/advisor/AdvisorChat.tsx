@@ -24,6 +24,7 @@ import {
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
+import { useLLMModels, getDefaultModel, isFreeModel, formatModelCost, LLMModel } from '@/hooks/useLLMModels';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
@@ -31,13 +32,6 @@ import { TechSheetCard } from '@/components/advisor/TechSheetCard';
 import { ComparisonTableCard } from '@/components/advisor/ComparisonTableCard';
 import { WaterAnalysisCard } from '@/components/advisor/WaterAnalysisCard';
 import type { AttachmentInfo } from '@/types/advisorChat';
-
-const AI_MODELS = [
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', price: 0.75, credits: 1.65, freeAllowed: true },
-  { id: 'gpt-4o', name: 'GPT-4o', price: 2.25, credits: 5.0, freeAllowed: false },
-  { id: 'claude-sonnet', name: 'Claude Sonnet', price: 3.00, credits: 6.65, freeAllowed: false },
-  { id: 'claude-opus', name: 'Claude Opus', price: 7.50, credits: 16.65, freeAllowed: false },
-];
 
 const EXAMPLE_QUERIES = [
   "¿Qué tecnología me recomiendas para tratar agua con alto contenido en metales pesados?",
@@ -72,10 +66,22 @@ export default function AdvisorChat() {
   } = useAdvisorChat(advisorUser?.id);
   const { balance, freeRemaining, refetch: refetchCredits } = useAdvisorCredits(advisorUser?.id);
   
+  // Fetch LLM models from Railway
+  const { data: llmData, isLoading: modelsLoading } = useLLMModels();
+  const models = llmData?.models ?? [];
+  
   const [inputValue, setInputValue] = useState('');
-  const [selectedModel, setSelectedModel] = useState('gpt-4o-mini');
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Set default model when models load
+  useEffect(() => {
+    if (models.length > 0 && !selectedModel) {
+      const defaultModel = getDefaultModel(models);
+      if (defaultModel) setSelectedModel(defaultModel.key);
+    }
+  }, [models, selectedModel]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -93,14 +99,15 @@ export default function AdvisorChat() {
   const handleSend = async () => {
     if ((!inputValue.trim() && attachments.length === 0) || isLoading) return;
 
-    const model = AI_MODELS.find(m => m.id === selectedModel);
+    const model = models.find(m => m.key === selectedModel);
     if (!model) return;
 
     // Check if user can send (has free queries or credits)
-    const canUseFree = freeRemaining > 0 && model.freeAllowed;
-    const hasCredits = balance >= model.credits;
+    const canUseFreeModel = freeRemaining > 0 && isFreeModel(model);
+    const creditCost = model.cost_per_query * 100; // Convert to credits (approx)
+    const hasCredits = balance >= creditCost;
 
-    if (!canUseFree && !hasCredits) {
+    if (!canUseFreeModel && !hasCredits) {
       toast.error('No tienes créditos suficientes. Compra un pack para continuar.');
       return;
     }
@@ -167,8 +174,8 @@ export default function AdvisorChat() {
     );
   }
 
-  const currentModel = AI_MODELS.find(m => m.id === selectedModel);
-  const canUseFree = freeRemaining > 0 && currentModel?.freeAllowed;
+  const currentModel = models.find(m => m.key === selectedModel);
+  const canUseFree = freeRemaining > 0 && currentModel && isFreeModel(currentModel);
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -191,21 +198,25 @@ export default function AdvisorChat() {
             </Badge>
 
             {/* Model Selector */}
-            <Select value={selectedModel} onValueChange={setSelectedModel}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue />
+            <Select value={selectedModel} onValueChange={setSelectedModel} disabled={modelsLoading}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder={modelsLoading ? "Cargando..." : "Seleccionar modelo"} />
               </SelectTrigger>
               <SelectContent>
-                {AI_MODELS.map((model) => (
+                {models.map((model) => (
                   <SelectItem 
-                    key={model.id} 
-                    value={model.id}
-                    disabled={!model.freeAllowed && freeRemaining > 0 && balance < model.credits}
+                    key={model.key} 
+                    value={model.key}
                   >
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
                       <span>{model.name}</span>
+                      {model.is_recommended && (
+                        <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                          Recomendado
+                        </Badge>
+                      )}
                       <span className="text-xs text-muted-foreground">
-                        €{model.price.toFixed(2)}
+                        {formatModelCost(model.cost_per_query)}
                       </span>
                     </div>
                   </SelectItem>
@@ -435,7 +446,7 @@ export default function AdvisorChat() {
                 ? 'Análisis de agua: 2 créditos'
                 : canUseFree 
                   ? `Consulta gratuita (${freeRemaining} restantes)`
-                  : `${currentModel?.credits.toFixed(2)} créditos por consulta`
+                  : currentModel ? formatModelCost(currentModel.cost_per_query) : ''
               }
             </span>
             <span className="text-border">•</span>
