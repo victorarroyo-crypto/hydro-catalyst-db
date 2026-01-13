@@ -55,6 +55,9 @@ export const useCaseStudyFiles = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasPendingFiles, setHasPendingFiles] = useState(false);
 
+  // Auto-cleanup files older than 24 hours
+  const MAX_FILE_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
   // Load files from IndexedDB on mount
   const loadFiles = useCallback(async () => {
     try {
@@ -65,9 +68,32 @@ export const useCaseStudyFiles = () => {
       const request = store.getAll();
       
       return new Promise<void>((resolve, reject) => {
-        request.onsuccess = () => {
+        request.onsuccess = async () => {
           const storedFiles: StoredFile[] = request.result || [];
-          const files: PendingFile[] = storedFiles.map(sf => ({
+          const now = Date.now();
+          
+          // Separate recent files from old files
+          const recentFiles = storedFiles.filter(sf => (now - sf.addedAt) < MAX_FILE_AGE_MS);
+          const oldFiles = storedFiles.filter(sf => (now - sf.addedAt) >= MAX_FILE_AGE_MS);
+          
+          // Auto-delete old files (>24h)
+          if (oldFiles.length > 0) {
+            console.log(`[CaseStudyFiles] Auto-cleaning ${oldFiles.length} files older than 24h`);
+            try {
+              const deleteDb = await openDB();
+              const deleteTransaction = deleteDb.transaction(STORE_NAME, 'readwrite');
+              const deleteStore = deleteTransaction.objectStore(STORE_NAME);
+              oldFiles.forEach(sf => deleteStore.delete(sf.id));
+              await new Promise<void>((res, rej) => {
+                deleteTransaction.oncomplete = () => res();
+                deleteTransaction.onerror = () => rej(deleteTransaction.error);
+              });
+            } catch (deleteError) {
+              console.error('Error auto-cleaning old files:', deleteError);
+            }
+          }
+          
+          const files: PendingFile[] = recentFiles.map(sf => ({
             id: sf.id,
             name: sf.name,
             size: sf.size,
