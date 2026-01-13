@@ -16,7 +16,8 @@ interface CaseStudyModelsResponse {
   note?: string;
 }
 
-const RAILWAY_URL = import.meta.env.VITE_RAILWAY_URL || '';
+// Direct Railway URL for case study models
+const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
 // Fallback models in case the API fails
 const FALLBACK_MODELS: CaseStudyModel[] = [
@@ -50,26 +51,44 @@ const FALLBACK_MODELS: CaseStudyModel[] = [
 ];
 
 async function fetchCaseStudyModels(): Promise<CaseStudyModelsResponse> {
-  if (!RAILWAY_URL) {
-    console.warn('VITE_RAILWAY_URL not configured, using fallback models');
+  try {
+    const response = await fetch(`${RAILWAY_URL}/api/case-study/models`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error fetching models: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // Normalize API response to match our interface
+    const normalizedModels: CaseStudyModel[] = (data.models || []).map((model: any) => ({
+      key: model.key,
+      name: model.name,
+      description: model.description || '',
+      provider: model.provider,
+      // Handle both cost_per_query and cost_per_1k_tokens
+      cost_per_query: model.cost_per_query ?? (model.cost_per_1k_tokens ? model.cost_per_1k_tokens * 10 : 0.01),
+      is_default: model.is_default === true || model.key === (data.default_key || data.default),
+      is_recommended: model.is_recommended === true || model.recommended === true,
+    }));
+
+    return {
+      models: normalizedModels.length > 0 ? normalizedModels : FALLBACK_MODELS,
+      default_key: data.default_key || data.default || 'claude-sonnet',
+      note: data.note,
+    };
+  } catch (error) {
+    console.warn('Failed to fetch models from Railway, using fallback:', error);
     return {
       models: FALLBACK_MODELS,
       default_key: 'claude-sonnet',
     };
   }
-
-  const response = await fetch(`${RAILWAY_URL}/api/case-study/models`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Error fetching models: ${response.status}`);
-  }
-
-  return response.json();
 }
 
 export function useCaseStudyModels() {

@@ -49,13 +49,13 @@ export function LLMSelector({ value, onChange }: LLMSelectorProps) {
   const selectedModel = models.find(m => m.key === value);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <Label className="text-sm font-medium">Modelo de IA</Label>
       <Select value={value || defaultKey} onValueChange={onChange}>
-        <SelectTrigger className="w-full">
+        <SelectTrigger className="w-full h-9">
           <SelectValue placeholder="Selecciona un modelo" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="z-[200]">
           {models.map((model) => (
             <SelectItem key={model.key} value={model.key}>
               <div className="flex items-center gap-2 w-full">

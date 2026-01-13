@@ -605,7 +605,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="flex-1 overflow-y-auto space-y-4 py-4 px-6 min-h-0">
               {/* Pending files warning */}
               {hasPendingFiles && !isLoading && (
                 <Alert className="border-warning/50 bg-warning/10">
@@ -683,7 +683,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
                     </Button>
                   </div>
                   
-                  <ScrollArea className="h-[180px] rounded-md border">
+                  <ScrollArea className="h-[150px] rounded-md border">
                     <div className="p-2 space-y-2">
                       {pendingFiles.map((file) => (
                         <div
@@ -721,11 +721,6 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
                 </div>
               ) : null}
 
-              {/* LLM Model Selector - only show when files are selected */}
-              {pendingFiles.length > 0 && (
-                <LLMSelector value={selectedLLM} onChange={setSelectedLLM} />
-              )}
-
               {/* Security notice */}
               <Alert className="border-muted bg-muted/30">
                 <Info className="h-4 w-4 text-muted-foreground" />
@@ -735,7 +730,14 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
               </Alert>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0">
+            {/* LLM Model Selector - OUTSIDE scroll area, always visible when files selected */}
+            {pendingFiles.length > 0 && (
+              <div className="px-6 pb-3 pt-2 border-t bg-background">
+                <LLMSelector value={selectedLLM} onChange={setSelectedLLM} />
+              </div>
+            )}
+
+            <DialogFooter className="gap-2 sm:gap-0 px-6 pb-6">
               <Button variant="outline" onClick={handleClose}>
                 Cancelar
               </Button>
