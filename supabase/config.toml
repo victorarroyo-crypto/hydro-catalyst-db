@@ -104,3 +104,6 @@ verify_jwt = false
 
 [functions.case-study-webhook]
 verify_jwt = false
+
+[functions.get-case-study-models]
+verify_jwt = false
