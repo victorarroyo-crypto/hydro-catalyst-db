@@ -29,6 +29,8 @@ import {
 import { useCaseStudyFiles, type PendingFile } from '@/hooks/useCaseStudyFiles';
 import { CaseStudyProcessingView } from './CaseStudyProcessingView';
 import { CaseStudyFormView } from './CaseStudyFormView';
+import { LLMSelector } from './LLMSelector';
+import { getDefaultModel } from '@/hooks/useCaseStudyModels';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -111,6 +113,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   const [isClearing, setIsClearing] = useState(false);
   const [isStartingProcess, setIsStartingProcess] = useState(false);
   const [isRetryingFailed, setIsRetryingFailed] = useState(false);
+  const [selectedLLM, setSelectedLLM] = useState<string>(getDefaultModel());
   const [uploadProgress, setUploadProgress] = useState<UploadProgress>({
     current: 0,
     total: 0,
@@ -199,6 +202,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
         formData.append('total_files', String(totalFiles));
         formData.append('webhook_url', 'https://bdmpshiqspkxcisnnlyr.supabase.co/functions/v1/case-study-webhook');
         formData.append('webhook_secret', 'AquaTechWebhook26');
+        formData.append('llm_key', selectedLLM);
         formData.append('files', file.file!, fileName);
 
         const response = await fetch(railwayUrl, {
@@ -668,6 +672,11 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
                   </ScrollArea>
                 </div>
               ) : null}
+
+              {/* LLM Model Selector - only show when files are selected */}
+              {pendingFiles.length > 0 && (
+                <LLMSelector value={selectedLLM} onChange={setSelectedLLM} />
+              )}
 
               {/* Security notice */}
               <Alert className="border-muted bg-muted/30">
