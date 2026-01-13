@@ -524,6 +524,17 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
         .update({ status: 'failed', error_message: 'Cancelado por el usuario' })
         .eq('id', currentJobId);
     }
+    
+    // Ask if user wants to clear pending files
+    if (pendingFiles.length > 0) {
+      const shouldClear = window.confirm(
+        '¿Deseas eliminar los archivos seleccionados?\n\nSi dices "Cancelar", podrás continuar donde lo dejaste la próxima vez.'
+      );
+      if (shouldClear) {
+        await clearFiles();
+      }
+    }
+    
     handleClose();
   };
 
@@ -576,8 +587,22 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
               {hasPendingFiles && !isLoading && (
                 <Alert className="border-warning/50 bg-warning/10">
                   <AlertCircle className="h-4 w-4 text-warning" />
-                  <AlertDescription className="text-sm">
-                    Tienes archivos pendientes de procesar. Puedes continuar donde lo dejaste.
+                  <AlertDescription className="flex items-center justify-between w-full text-sm">
+                    <span>Tienes archivos pendientes de una sesión anterior.</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleClearFiles}
+                      disabled={isClearing}
+                      className="ml-2 text-xs h-7 px-2"
+                    >
+                      {isClearing ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      ) : (
+                        <Trash2 className="h-3 w-3 mr-1" />
+                      )}
+                      Limpiar y empezar nuevo
+                    </Button>
                   </AlertDescription>
                 </Alert>
               )}
