@@ -349,9 +349,14 @@ export type Database = {
           completed_at: string | null
           created_at: string
           current_phase: string | null
+          document_type: string | null
           documents_count: number | null
           error_message: string | null
+          error_phase: string | null
           id: string
+          phase_label: string | null
+          problem_title: string | null
+          processing_time_seconds: number | null
           progress_percentage: number
           quality_score: number | null
           result_data: Json | null
@@ -366,9 +371,14 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           current_phase?: string | null
+          document_type?: string | null
           documents_count?: number | null
           error_message?: string | null
+          error_phase?: string | null
           id?: string
+          phase_label?: string | null
+          problem_title?: string | null
+          processing_time_seconds?: number | null
           progress_percentage?: number
           quality_score?: number | null
           result_data?: Json | null
@@ -383,9 +393,14 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           current_phase?: string | null
+          document_type?: string | null
           documents_count?: number | null
           error_message?: string | null
+          error_phase?: string | null
           id?: string
+          phase_label?: string | null
+          problem_title?: string | null
+          processing_time_seconds?: number | null
           progress_percentage?: number
           quality_score?: number | null
           result_data?: Json | null

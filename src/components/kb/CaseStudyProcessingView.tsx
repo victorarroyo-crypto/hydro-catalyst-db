@@ -1,45 +1,96 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Loader2,
   CheckCircle2,
-  Clock,
   XCircle,
   FileSearch,
-  KeyRound,
-  ShieldCheck,
+  Target,
+  GitBranch,
+  Scale,
+  TrendingUp,
+  Lightbulb,
+  List,
+  FileSpreadsheet,
   Database,
-  RefreshCw,
   Save,
+  RefreshCw,
+  XOctagon,
+  AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
 
-// All phases that Railway sends
-type ProcessingPhase = 
-  | 'pending'
-  | 'uploading'
-  | 'extracting' 
-  | 'extraction_complete'
-  | 'reviewing' 
-  | 'review_complete'
-  | 'checking_technologies'
-  | 'tech_check_complete'
-  | 'matching'
-  | 'matching_complete'
-  | 'saving'
-  | 'completed' 
-  | 'failed';
+// 10 fases visuales para v11
+const PHASES = [
+  { id: 'classifying', label: 'Clasificación', icon: FileSearch, range: [0, 10] },
+  { id: 'extracting_context', label: 'Contexto', icon: Target, range: [10, 20] },
+  { id: 'extracting_methodology', label: 'Metodología', icon: GitBranch, range: [20, 28] },
+  { id: 'extracting_analysis', label: 'Análisis', icon: Scale, range: [28, 40] },
+  { id: 'extracting_results', label: 'Resultados', icon: TrendingUp, range: [40, 50] },
+  { id: 'extracting_lessons', label: 'Lecciones', icon: Lightbulb, range: [50, 58] },
+  { id: 'listing_technologies', label: 'Inventario', icon: List, range: [58, 65] },
+  { id: 'enriching_technologies', label: 'Fichas', icon: FileSpreadsheet, range: [65, 85] },
+  { id: 'matching_technologies', label: 'Matching', icon: Database, range: [85, 95] },
+  { id: 'saving', label: 'Guardando', icon: Save, range: [95, 100] },
+] as const;
+
+// Mapeo de todas las fases webhook a steps visuales (incluye legacy v10)
+const PHASE_TO_STEP_MAP: Record<string, string> = {
+  // v11 phases
+  'classifying': 'classifying',
+  'classification_complete': 'extracting_context',
+  'extracting_context': 'extracting_context',
+  'context_complete': 'extracting_methodology',
+  'extracting_methodology': 'extracting_methodology',
+  'methodology_complete': 'extracting_analysis',
+  'extracting_analysis': 'extracting_analysis',
+  'analysis_complete': 'extracting_results',
+  'extracting_results': 'extracting_results',
+  'results_complete': 'extracting_lessons',
+  'extracting_lessons': 'extracting_lessons',
+  'lessons_complete': 'listing_technologies',
+  'listing_technologies': 'listing_technologies',
+  'technologies_listed': 'enriching_technologies',
+  'enriching_technologies': 'enriching_technologies',
+  'technologies_enriched': 'matching_technologies',
+  'matching_technologies': 'matching_technologies',
+  'matching_complete': 'saving',
+  'saving': 'saving',
+  'completed': 'saving',
+  'complete': 'saving',
+  
+  // Legacy v10 mapping
+  'pending': 'classifying',
+  'uploading': 'classifying',
+  'extracting': 'extracting_context',
+  'extraction_complete': 'extracting_analysis',
+  'reviewing': 'extracting_analysis',
+  'review_complete': 'extracting_results',
+  'checking_technologies': 'listing_technologies',
+  'tech_check_complete': 'enriching_technologies',
+  'matching': 'matching_technologies',
+  'processing': 'extracting_context',
+};
 
 type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 interface CaseStudyJob {
   id: string;
   status: JobStatus;
-  current_phase: ProcessingPhase | null;
+  current_phase: string | null;
   progress_percentage: number;
   error_message: string | null;
+  phase_label?: string | null;
+  quality_score?: number | null;
+  technologies_found?: number | null;
+  technologies_new?: number | null;
+  document_type?: string | null;
+  problem_title?: string | null;
+  case_study_id?: string | null;
 }
 
 interface CaseStudyProcessingViewProps {
@@ -49,63 +100,74 @@ interface CaseStudyProcessingViewProps {
   onRetry: () => void;
 }
 
-// Define visible steps (we group intermediate phases into these)
-const PROCESSING_STEPS: { phase: string; label: string; icon: React.ReactNode }[] = [
-  { phase: 'extracting', label: 'Extrayendo texto de documentos', icon: <FileSearch className="h-4 w-4" /> },
-  { phase: 'reviewing', label: 'Revisando y estructurando contenido', icon: <KeyRound className="h-4 w-4" /> },
-  { phase: 'matching', label: 'Buscando tecnologías en base de datos', icon: <Database className="h-4 w-4" /> },
-  { phase: 'saving', label: 'Guardando resultados', icon: <Save className="h-4 w-4" /> },
-  { phase: 'completed', label: 'Procesamiento completado', icon: <ShieldCheck className="h-4 w-4" /> },
-];
+function getPhaseIndex(currentPhase: string | null, progress: number): number {
+  if (!currentPhase) {
+    // Estimate from progress
+    for (let i = PHASES.length - 1; i >= 0; i--) {
+      if (progress >= PHASES[i].range[0]) {
+        return i;
+      }
+    }
+    return 0;
+  }
+  
+  const mappedStep = PHASE_TO_STEP_MAP[currentPhase] || currentPhase;
+  const index = PHASES.findIndex(p => p.id === mappedStep);
+  return index >= 0 ? index : 0;
+}
 
-// Map all phases to their corresponding visible step
-const PHASE_TO_STEP_MAP: Record<string, string> = {
-  'pending': 'extracting',
-  'uploading': 'extracting',
-  'extracting': 'extracting',
-  'extraction_complete': 'extracting',
-  'reviewing': 'reviewing',
-  'review_complete': 'reviewing',
-  'checking_technologies': 'matching',
-  'tech_check_complete': 'matching',
-  'matching': 'matching',
-  'matching_complete': 'matching',
-  'saving': 'saving',
-  'completed': 'completed',
-  'failed': 'failed',
-};
-
-const getPhaseIndex = (phase: ProcessingPhase | null): number => {
-  if (!phase) return -1;
-  const mappedPhase = PHASE_TO_STEP_MAP[phase] || phase;
-  return PROCESSING_STEPS.findIndex(step => step.phase === mappedPhase);
-};
-
-const getStepStatus = (stepIndex: number, currentPhaseIndex: number, jobStatus: JobStatus): 'completed' | 'processing' | 'pending' | 'failed' => {
+function getStepStatus(
+  stepIndex: number, 
+  currentIndex: number, 
+  jobStatus: JobStatus
+): 'completed' | 'processing' | 'pending' | 'failed' {
   if (jobStatus === 'failed') {
-    if (stepIndex < currentPhaseIndex) return 'completed';
-    if (stepIndex === currentPhaseIndex) return 'failed';
+    if (stepIndex < currentIndex) return 'completed';
+    if (stepIndex === currentIndex) return 'failed';
     return 'pending';
   }
-  if (jobStatus === 'completed') return 'completed';
-  if (stepIndex < currentPhaseIndex) return 'completed';
-  if (stepIndex === currentPhaseIndex) return 'processing';
-  return 'pending';
-};
-
-const StepIcon: React.FC<{ status: 'completed' | 'processing' | 'pending' | 'failed' }> = ({ status }) => {
-  switch (status) {
-    case 'completed':
-      return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-    case 'processing':
-      return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
-    case 'failed':
-      return <XCircle className="h-5 w-5 text-destructive" />;
-    case 'pending':
-    default:
-      return <Clock className="h-5 w-5 text-muted-foreground" />;
+  
+  if (jobStatus === 'completed') {
+    return 'completed';
   }
-};
+  
+  if (stepIndex < currentIndex) return 'completed';
+  if (stepIndex === currentIndex) return 'processing';
+  return 'pending';
+}
+
+function StepIcon({ 
+  status, 
+  Icon 
+}: { 
+  status: 'completed' | 'processing' | 'pending' | 'failed';
+  Icon: React.ElementType;
+}) {
+  if (status === 'completed') {
+    return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+  }
+  if (status === 'processing') {
+    return <Loader2 className="h-4 w-4 text-primary animate-spin" />;
+  }
+  if (status === 'failed') {
+    return <XCircle className="h-4 w-4 text-destructive" />;
+  }
+  return <Icon className="h-4 w-4 text-muted-foreground/50" />;
+}
+
+function QualityScoreBadge({ score }: { score: number }) {
+  const colorClass = score >= 70 
+    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+    : score >= 50 
+      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+  
+  return (
+    <Badge className={colorClass}>
+      Calidad: {score}%
+    </Badge>
+  );
+}
 
 export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = ({
   jobId,
@@ -121,12 +183,12 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
     const fetchJob = async () => {
       const { data, error } = await supabase
         .from('case_study_jobs')
-        .select('id, status, current_phase, progress_percentage, error_message')
+        .select('id, status, current_phase, progress_percentage, error_message, phase_label, quality_score, technologies_found, technologies_new, document_type, problem_title, case_study_id')
         .eq('id', jobId)
         .single();
 
       if (error) {
-        console.error('Error fetching job:', error);
+        console.error('[ProcessingView] Error fetching job:', error);
       } else if (data) {
         console.log('[ProcessingView] Initial job state:', data);
         setJob(data as CaseStudyJob);
@@ -177,130 +239,176 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p className="text-sm text-muted-foreground">Cargando...</p>
-      </div>
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
     );
   }
 
   if (!job) {
     return (
-      <Alert variant="destructive">
-        <XCircle className="h-4 w-4" />
-        <AlertTitle>Error</AlertTitle>
-        <AlertDescription>No se pudo cargar el estado del procesamiento.</AlertDescription>
-      </Alert>
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12 gap-4">
+          <AlertTriangle className="h-12 w-12 text-yellow-500" />
+          <p className="text-muted-foreground">No se encontró el trabajo de procesamiento</p>
+          <Button variant="outline" onClick={onCancel}>
+            Volver
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
-  const currentPhaseIndex = getPhaseIndex(job.current_phase);
+  const currentIndex = getPhaseIndex(job.current_phase, job.progress_percentage);
+  const currentPhaseLabel = job.phase_label || PHASES[currentIndex]?.label || 'Procesando...';
   const isFailed = job.status === 'failed';
   const isCompleted = job.status === 'completed';
 
   return (
-    <div className="space-y-6 py-4">
-      {/* Header */}
-      <div className="text-center">
-        <h3 className="text-lg font-semibold flex items-center justify-center gap-2">
-          {isFailed ? (
-            <>
-              <XCircle className="h-5 w-5 text-destructive" />
-              Error en el procesamiento
-            </>
-          ) : isCompleted ? (
-            <>
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-              Procesamiento completado
-            </>
-          ) : (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              Analizando documentos...
-            </>
+    <Card>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            {isFailed ? (
+              <>
+                <XCircle className="h-5 w-5 text-destructive" />
+                Error en el procesamiento
+              </>
+            ) : isCompleted ? (
+              <>
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                Procesamiento completado
+              </>
+            ) : (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                Procesando Caso de Estudio
+              </>
+            )}
+          </CardTitle>
+          {isFailed && (
+            <Badge variant="destructive">Error</Badge>
           )}
-        </h3>
-        {job.current_phase && !isCompleted && !isFailed && (
-          <p className="text-xs text-muted-foreground mt-1">
-            Fase actual: {job.current_phase}
-          </p>
+          {isCompleted && (
+            <Badge className="bg-green-600">Completado</Badge>
+          )}
+        </div>
+        
+        {/* Document info */}
+        {(job.document_type || job.problem_title) && (
+          <div className="mt-2 text-sm text-muted-foreground">
+            {job.document_type && <span className="font-medium">{job.document_type}</span>}
+            {job.document_type && job.problem_title && ' · '}
+            {job.problem_title && <span>{job.problem_title}</span>}
+          </div>
         )}
-      </div>
+      </CardHeader>
+      
+      <CardContent className="space-y-6">
+        {/* Progress bar with percentage and phase label */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{currentPhaseLabel}</span>
+            <span className="font-medium">{job.progress_percentage}%</span>
+          </div>
+          <Progress value={job.progress_percentage} className="h-2" />
+        </div>
 
-      {/* Progress bar */}
-      <div className="space-y-2">
-        <Progress value={job.progress_percentage} className="h-2" />
-        <p className="text-sm text-center text-muted-foreground">
-          {job.progress_percentage}% completado
-        </p>
-      </div>
-
-      {/* Steps list */}
-      <div className="space-y-3">
-        {PROCESSING_STEPS.map((step, index) => {
-          const stepStatus = getStepStatus(index, currentPhaseIndex, job.status);
-          return (
-            <div
-              key={step.phase}
-              className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                stepStatus === 'processing' 
-                  ? 'bg-primary/5 border border-primary/20' 
-                  : stepStatus === 'failed'
-                  ? 'bg-destructive/5 border border-destructive/20'
-                  : 'bg-muted/30'
-              }`}
-            >
-              <StepIcon status={stepStatus} />
-              <div className="flex items-center gap-2 flex-1">
-                <span className="text-muted-foreground">{step.icon}</span>
-                <span className={`text-sm ${
-                  stepStatus === 'completed' ? 'text-muted-foreground' :
-                  stepStatus === 'processing' ? 'font-medium' :
-                  stepStatus === 'failed' ? 'text-destructive' :
-                  'text-muted-foreground'
-                }`}>
-                  {step.label}
+        {/* 10 Phases Grid (2x5) */}
+        <div className="grid grid-cols-5 gap-2">
+          {PHASES.map((phase, index) => {
+            const stepStatus = getStepStatus(index, currentIndex, job.status as JobStatus);
+            const Icon = phase.icon;
+            
+            return (
+              <div
+                key={phase.id}
+                className={cn(
+                  "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors",
+                  stepStatus === 'completed' && "bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800",
+                  stepStatus === 'processing' && "bg-primary/5 border-primary/30",
+                  stepStatus === 'pending' && "bg-muted/30 border-muted",
+                  stepStatus === 'failed' && "bg-destructive/5 border-destructive/20"
+                )}
+              >
+                <StepIcon status={stepStatus} Icon={Icon} />
+                <span className={cn(
+                  "text-xs text-center font-medium",
+                  stepStatus === 'completed' && "text-green-700 dark:text-green-300",
+                  stepStatus === 'processing' && "text-primary",
+                  stepStatus === 'pending' && "text-muted-foreground/60",
+                  stepStatus === 'failed' && "text-destructive"
+                )}>
+                  {phase.label}
                 </span>
               </div>
+            );
+          })}
+        </div>
+
+        {/* Statistics badges (show when progress > 65%) */}
+        {job.progress_percentage > 65 && (job.technologies_found || job.technologies_new || job.quality_score) && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
+            {job.technologies_found !== null && job.technologies_found !== undefined && (
+              <Badge variant="outline" className="gap-1">
+                <Database className="h-3 w-3" />
+                {job.technologies_found} tecnologías
+              </Badge>
+            )}
+            {job.technologies_new !== null && job.technologies_new !== undefined && job.technologies_new > 0 && (
+              <Badge variant="secondary" className="gap-1">
+                <FileSpreadsheet className="h-3 w-3" />
+                {job.technologies_new} nuevas
+              </Badge>
+            )}
+            {job.quality_score !== null && job.quality_score !== undefined && (
+              <QualityScoreBadge score={job.quality_score} />
+            )}
+          </div>
+        )}
+
+        {/* Error message */}
+        {isFailed && job.error_message && (
+          <div className="p-3 bg-destructive/5 border border-destructive/20 rounded-lg">
+            <div className="flex items-start gap-2">
+              <XCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium text-destructive">Error en el procesamiento</p>
+                <p className="mt-1 text-muted-foreground">{job.error_message}</p>
+              </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        )}
 
-      {/* Error message */}
-      {isFailed && job.error_message && (
-        <Alert variant="destructive">
-          <XCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{job.error_message}</AlertDescription>
-        </Alert>
-      )}
+        {/* Estimated time */}
+        {!isFailed && !isCompleted && (
+          <p className="text-center text-sm text-muted-foreground">
+            Tiempo estimado: ~2-3 minutos
+          </p>
+        )}
 
-      {/* Estimated time */}
-      {!isFailed && !isCompleted && (
-        <p className="text-center text-sm text-muted-foreground">
-          Tiempo estimado: ~2 minutos
-        </p>
-      )}
-
-      {/* Actions */}
-      <div className="flex justify-center gap-3 pt-2">
-        {isFailed ? (
-          <>
-            <Button variant="outline" onClick={onCancel}>
+        {/* Action buttons */}
+        <div className="flex items-center justify-center gap-3 pt-2">
+          {isFailed ? (
+            <>
+              <Button variant="outline" onClick={onCancel}>
+                Cancelar
+              </Button>
+              <Button onClick={onRetry} className="gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Reintentar
+              </Button>
+            </>
+          ) : !isCompleted ? (
+            <Button variant="outline" onClick={onCancel} className="gap-2">
+              <XOctagon className="h-4 w-4" />
               Cancelar
             </Button>
-            <Button onClick={onRetry} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
-              Reintentar
-            </Button>
-          </>
-        ) : !isCompleted ? (
-          <Button variant="outline" onClick={onCancel}>
-            Cancelar
-          </Button>
-        ) : null}
-      </div>
-    </div>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
