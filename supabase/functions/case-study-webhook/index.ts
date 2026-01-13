@@ -29,7 +29,7 @@ type WebhookEvent =
   | 'reviewing' | 'review_complete' | 'checking_technologies' 
   | 'tech_check_complete' | 'matching' | 'processing'
 
-// Labels legibles para cada fase
+// Labels legibles para cada fase (usado solo para logs y respuesta, no se guarda en DB)
 const PHASE_LABELS: Record<string, string> = {
   // BLOQUE A: Caso de Estudio (Fases 1-6) - v11
   'classifying': 'Clasificando documento...',
@@ -85,7 +85,7 @@ interface WebhookPayload {
     error?: string
     message?: string
     
-    // v11 campos específicos por evento
+    // v11 campos específicos por evento (recibidos pero no todos guardados en columnas dedicadas)
     document_type?: string       // classification_complete
     sector?: string              // classification_complete
     problem_title?: string       // context_complete
@@ -125,6 +125,7 @@ serve(async (req) => {
     console.log(`[CASE-STUDY-WEBHOOK] ==========================================`)
     console.log(`[CASE-STUDY-WEBHOOK] Received event: "${event}" for job: ${job_id}`)
     console.log(`[CASE-STUDY-WEBHOOK] Progress: ${data?.progress}`)
+    console.log(`[CASE-STUDY-WEBHOOK] Phase label: ${PHASE_LABELS[event] || event}`)
     console.log(`[CASE-STUDY-WEBHOOK] Full data:`, JSON.stringify(data || {}).slice(0, 1000))
     console.log(`[CASE-STUDY-WEBHOOK] Timestamp: ${timestamp}`)
 
@@ -162,32 +163,18 @@ serve(async (req) => {
     // Normalize event name for database (convert 'complete' to 'completed')
     const normalizedPhase = event === 'complete' ? 'completed' : event
 
-    // Build update object
+    // Build update object - ONLY using existing columns in case_study_jobs:
+    // status, current_phase, progress_percentage, quality_score, technologies_found, 
+    // technologies_new, result_data, error_message, completed_at, updated_at
     const updateData: Record<string, unknown> = {
       current_phase: normalizedPhase,
       updated_at: new Date().toISOString(),
       status,
     }
 
-    // Always set phase_label
-    updateData.phase_label = PHASE_LABELS[event] || event
-
     // Add progress if provided
     if (data?.progress !== undefined) {
       updateData.progress_percentage = Math.min(100, Math.max(0, Math.round(data.progress)))
-    }
-
-    // === v11 Event-specific field handling ===
-
-    // Classification complete
-    if (event === 'classification_complete') {
-      if (data?.document_type) updateData.document_type = data.document_type
-      if (data?.sector) updateData.sector = data.sector
-    }
-
-    // Context complete
-    if (event === 'context_complete') {
-      if (data?.problem_title) updateData.problem_title = data.problem_title
     }
 
     // Technologies listed
@@ -213,9 +200,6 @@ serve(async (req) => {
       if (data?.quality_score !== undefined) {
         updateData.quality_score = data.quality_score
       }
-      if (data?.processing_time_seconds !== undefined) {
-        updateData.processing_time_seconds = data.processing_time_seconds
-      }
       if (data?.total_technologies !== undefined) {
         updateData.technologies_found = data.total_technologies
       } else if (data?.technologies_found !== undefined) {
@@ -234,7 +218,6 @@ serve(async (req) => {
     // Failed event
     if (event === 'failed' || event === 'error') {
       updateData.error_message = data?.error || data?.message || 'Unknown error'
-      updateData.error_phase = data?.current_phase || normalizedPhase
     }
 
     // Legacy fields for backward compatibility
@@ -261,7 +244,7 @@ serve(async (req) => {
       .from('case_study_jobs')
       .update(updateData)
       .eq('id', job_id)
-      .select('id, progress_percentage, current_phase, status, phase_label')
+      .select('id, progress_percentage, current_phase, status')
       .single()
 
     if (updateError) {
@@ -275,7 +258,6 @@ serve(async (req) => {
     console.log(`[CASE-STUDY-WEBHOOK]   - Progress: ${updatedJob?.progress_percentage}%`)
     console.log(`[CASE-STUDY-WEBHOOK]   - Phase: ${updatedJob?.current_phase}`)
     console.log(`[CASE-STUDY-WEBHOOK]   - Status: ${updatedJob?.status}`)
-    console.log(`[CASE-STUDY-WEBHOOK]   - Label: ${updatedJob?.phase_label}`)
     console.log(`[CASE-STUDY-WEBHOOK] ==========================================`)
 
     return new Response(
@@ -285,7 +267,7 @@ serve(async (req) => {
         event,
         normalized_phase: normalizedPhase,
         status,
-        phase_label: updateData.phase_label,
+        phase_label: PHASE_LABELS[event] || event,
         updated_progress: updatedJob?.progress_percentage
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

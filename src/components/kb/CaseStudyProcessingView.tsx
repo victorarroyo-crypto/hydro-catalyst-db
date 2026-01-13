@@ -84,12 +84,9 @@ interface CaseStudyJob {
   current_phase: string | null;
   progress_percentage: number;
   error_message: string | null;
-  phase_label?: string | null;
   quality_score?: number | null;
   technologies_found?: number | null;
   technologies_new?: number | null;
-  document_type?: string | null;
-  problem_title?: string | null;
   case_study_id?: string | null;
 }
 
@@ -183,7 +180,7 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
     const fetchJob = async () => {
       const { data, error } = await supabase
         .from('case_study_jobs')
-        .select('id, status, current_phase, progress_percentage, error_message, phase_label, quality_score, technologies_found, technologies_new, document_type, problem_title, case_study_id')
+        .select('id, status, current_phase, progress_percentage, error_message, quality_score, technologies_found, technologies_new, case_study_id')
         .eq('id', jobId)
         .single();
 
@@ -262,7 +259,7 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
   }
 
   const currentIndex = getPhaseIndex(job.current_phase, job.progress_percentage);
-  const currentPhaseLabel = job.phase_label || PHASES[currentIndex]?.label || 'Procesando...';
+  const currentPhaseLabel = PHASES[currentIndex]?.label || 'Procesando...';
   const isFailed = job.status === 'failed';
   const isCompleted = job.status === 'completed';
 
@@ -296,14 +293,6 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
           )}
         </div>
         
-        {/* Document info */}
-        {(job.document_type || job.problem_title) && (
-          <div className="mt-2 text-sm text-muted-foreground">
-            {job.document_type && <span className="font-medium">{job.document_type}</span>}
-            {job.document_type && job.problem_title && ' · '}
-            {job.problem_title && <span>{job.problem_title}</span>}
-          </div>
-        )}
       </CardHeader>
       
       <CardContent className="space-y-6">
