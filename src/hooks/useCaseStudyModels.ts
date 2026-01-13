@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface CaseStudyModel {
   key: string;
@@ -15,9 +16,6 @@ interface CaseStudyModelsResponse {
   default_key: string;
   note?: string;
 }
-
-// Direct Railway URL for case study models
-const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
 // Fallback models in case the API fails
 const FALLBACK_MODELS: CaseStudyModel[] = [
@@ -52,18 +50,18 @@ const FALLBACK_MODELS: CaseStudyModel[] = [
 
 async function fetchCaseStudyModels(): Promise<CaseStudyModelsResponse> {
   try {
-    const response = await fetch(`${RAILWAY_URL}/api/case-study/models`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    // Use Edge Function as proxy to avoid CORS issues
+    const { data, error } = await supabase.functions.invoke('get-case-study-models');
 
-    if (!response.ok) {
-      throw new Error(`Error fetching models: ${response.status}`);
+    if (error) {
+      throw new Error(`Edge function error: ${error.message}`);
     }
 
-    const data = await response.json();
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    console.log('[useCaseStudyModels] Received models from Railway:', data?.models?.length || 0);
     
     // Normalize API response to match our interface
     const normalizedModels: CaseStudyModel[] = (data.models || []).map((model: any) => ({
@@ -83,7 +81,7 @@ async function fetchCaseStudyModels(): Promise<CaseStudyModelsResponse> {
       note: data.note,
     };
   } catch (error) {
-    console.warn('Failed to fetch models from Railway, using fallback:', error);
+    console.warn('[useCaseStudyModels] Failed to fetch models, using fallback:', error);
     return {
       models: FALLBACK_MODELS,
       default_key: 'claude-sonnet',
