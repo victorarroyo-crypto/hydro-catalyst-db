@@ -877,6 +877,17 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
                   Continuar con {uploadProgress.completed} documentos subidos
                 </Button>
               )}
+
+              {/* Close button when ALL uploads failed */}
+              {uploadProgress.completed === 0 && uploadProgress.current >= uploadProgress.total && uploadProgress.failed > 0 && (
+                <Button 
+                  variant="outline"
+                  onClick={handleClose}
+                  className="w-full"
+                >
+                  Cerrar
+                </Button>
+              )}
             </div>
           </>
         ) : step === 'processing' ? (
