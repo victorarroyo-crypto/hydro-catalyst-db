@@ -208,22 +208,59 @@ export const useCaseStudyFiles = () => {
   // Clear all files from IndexedDB
   const clearFiles = useCallback(async () => {
     try {
+      console.log('[CaseStudyFiles] clearFiles: starting...');
       const db = await openDB();
       const transaction = db.transaction(STORE_NAME, 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       store.clear();
       
       await new Promise<void>((resolve, reject) => {
-        transaction.oncomplete = () => resolve();
+        transaction.oncomplete = () => {
+          console.log('[CaseStudyFiles] clearFiles: transaction complete');
+          resolve();
+        };
         transaction.onerror = () => reject(transaction.error);
       });
       
+      // Close db connection to prevent locks
+      db.close();
+      
       setPendingFiles([]);
       setHasPendingFiles(false);
+      console.log('[CaseStudyFiles] clearFiles: done');
     } catch (error) {
       console.error('Error clearing files from IndexedDB:', error);
       throw error;
     }
+  }, []);
+
+  // Hard reset: delete and recreate the entire database
+  const resetDB = useCallback(async () => {
+    console.log('[CaseStudyFiles] resetDB: deleting database...');
+    
+    return new Promise<void>((resolve, reject) => {
+      const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
+      
+      deleteRequest.onsuccess = () => {
+        console.log('[CaseStudyFiles] resetDB: database deleted successfully');
+        setPendingFiles([]);
+        setHasPendingFiles(false);
+        resolve();
+      };
+      
+      deleteRequest.onerror = () => {
+        console.error('[CaseStudyFiles] resetDB: error deleting database', deleteRequest.error);
+        reject(deleteRequest.error);
+      };
+      
+      deleteRequest.onblocked = () => {
+        console.warn('[CaseStudyFiles] resetDB: delete blocked, forcing state reset');
+        // Even if blocked, reset the state so UI is clean
+        setPendingFiles([]);
+        setHasPendingFiles(false);
+        resolve();
+      };
+    });
   }, []);
 
   // Get files for processing
@@ -240,6 +277,7 @@ export const useCaseStudyFiles = () => {
     addFiles,
     removeFile,
     clearFiles,
+    resetDB,
     getFilesForProcessing,
     refreshFiles: loadFiles,
   };

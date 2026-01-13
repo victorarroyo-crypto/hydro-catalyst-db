@@ -105,6 +105,8 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
     addFiles,
     removeFile,
     clearFiles,
+    resetDB,
+    refreshFiles,
   } = useCaseStudyFiles();
 
   const [step, setStep] = useState<ModalStep>('upload');
@@ -161,10 +163,31 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   const handleClearFiles = async () => {
     setIsClearing(true);
     try {
+      console.log('[CaseStudy] handleClearFiles: attempting clearFiles...');
       await clearFiles();
+      
+      // Verify files are actually cleared
+      await refreshFiles();
+      
+      // If still has pending files, do a hard reset
+      if (pendingFiles.length > 0) {
+        console.log('[CaseStudy] handleClearFiles: files still present, doing hard reset...');
+        toast.info('Ejecutando limpieza completa...');
+        await resetDB();
+        await refreshFiles();
+      }
+      
       toast.success('Archivos eliminados');
     } catch (error) {
-      toast.error('Error al limpiar archivos');
+      console.error('[CaseStudy] handleClearFiles error:', error);
+      // Fallback to hard reset on any error
+      try {
+        console.log('[CaseStudy] handleClearFiles: error occurred, trying resetDB...');
+        await resetDB();
+        toast.success('Almacenamiento reiniciado');
+      } catch (resetError) {
+        toast.error('Error al limpiar archivos. Intenta recargar la página.');
+      }
     } finally {
       setIsClearing(false);
     }
