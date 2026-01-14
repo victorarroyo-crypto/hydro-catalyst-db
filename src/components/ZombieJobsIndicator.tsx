@@ -11,7 +11,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-const ZOMBIE_THRESHOLD_MINUTES = 5;
+const ZOMBIE_THRESHOLD_MINUTES = 15;
 
 export const ZombieJobsIndicator: React.FC = () => {
   const { data: zombieCount } = useQuery({
