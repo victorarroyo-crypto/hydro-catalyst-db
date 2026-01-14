@@ -18,7 +18,7 @@ export interface ActiveCaseStudyJob {
  * An active job is one with status 'processing' that was updated within the last 15 minutes.
  */
 export function useCaseStudyActiveJob() {
-  const ZOMBIE_THRESHOLD_MINUTES = 15;
+  const ZOMBIE_THRESHOLD_MINUTES = 20;
   
   const query = useQuery({
     queryKey: ['case-study-active-job'],
