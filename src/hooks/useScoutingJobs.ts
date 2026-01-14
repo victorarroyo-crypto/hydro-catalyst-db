@@ -26,7 +26,7 @@ export interface ScoutingJob {
   duration_seconds: number;
 }
 
-const ZOMBIE_THRESHOLD_MINUTES = 5;
+const ZOMBIE_THRESHOLD_MINUTES = 15;
 
 const calculateDuration = (job: { started_at: string; completed_at: string | null }): number => {
   const start = new Date(job.started_at);
