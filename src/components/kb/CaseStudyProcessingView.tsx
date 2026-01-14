@@ -21,6 +21,7 @@ import {
   XOctagon,
   AlertTriangle,
   GitMerge,
+  Info,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -210,10 +211,8 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
           onCompleted(data.id);
         }
         
-        // Show modal if awaiting user decision
-        if (data.status === 'awaiting_user_decision' && jobData.result_data?.similar_cases) {
-          setShowSimilarModal(true);
-        }
+        // v12.4: similar_found is now INFO only, modal shown post-completion if has_similar_cases
+        // No automatic modal opening during processing
       }
       setIsLoading(false);
     };
@@ -245,11 +244,8 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
             onCompleted(newData.id);
           }
           
-          // Show modal when similar cases are found
-          if (newData.status === 'awaiting_user_decision' && newData.result_data?.similar_cases) {
-            console.log('[ProcessingView] Similar cases detected, showing modal');
-            setShowSimilarModal(true);
-          }
+          // v12.4: similar_found is INFO only, no automatic modal during processing
+          // Modal shown post-completion via has_similar_cases flag
         }
       )
       .subscribe((status) => {
@@ -276,9 +272,11 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
       });
   };
 
-  // Get similar cases data for modal
-  const similarCases = job?.result_data?.similar_cases || [];
-  const currentProblem = job?.result_data?.current_problem;
+  // Get similar cases data for modal - support both completed (similar_cases) and preview (similar_cases_preview)
+  const similarCasesRaw = job?.result_data?.similar_cases || job?.result_data?.similar_cases_preview || [];
+  const similarCases = Array.isArray(similarCasesRaw) ? similarCasesRaw as SimilarCase[] : [];
+  const currentProblem = (job?.result_data?.current_problem || job?.result_data?.current_problem_preview) as string | undefined;
+  const hasSimilarCasesPostCompletion = job?.result_data?.has_similar_cases && similarCases.length > 0;
 
   if (isLoading) {
     return (
@@ -308,7 +306,11 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
   const currentPhaseLabel = PHASES[currentIndex]?.label || 'Procesando...';
   const isFailed = job.status === 'failed';
   const isCompleted = job.status === 'completed';
+  // v12.4: awaiting_user_decision is now legacy, kept for backward compatibility
   const isAwaitingDecision = job.status === 'awaiting_user_decision';
+  // Check if we have similar_cases_preview (during processing) for info banner
+  const previewCases = job?.result_data?.similar_cases_preview;
+  const hasSimilarCasesPreview = !isCompleted && !isFailed && Array.isArray(previewCases) && previewCases.length > 0;
 
   return (
     <>
@@ -395,7 +397,20 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
             })}
           </div>
 
-          {/* Awaiting decision message */}
+          {/* v12.4: Informational banner during processing when similar cases are found */}
+          {hasSimilarCasesPreview && !isAwaitingDecision && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg dark:bg-blue-950 dark:border-blue-800">
+              <div className="flex items-center gap-2">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Se detectaron {previewCases?.length || 0} casos similares. 
+                  Podrás revisarlos cuando termine el procesamiento.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Legacy: Awaiting decision message (backward compatibility for old jobs) */}
           {isAwaitingDecision && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg dark:bg-amber-950 dark:border-amber-800">
               <div className="flex items-start gap-3">
@@ -415,6 +430,32 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
                   >
                     <GitMerge className="h-4 w-4" />
                     Ver opciones
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* v12.4: Post-completion section when has_similar_cases is true */}
+          {isCompleted && hasSimilarCasesPostCompletion && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg dark:bg-amber-950 dark:border-amber-800">
+              <div className="flex items-start gap-3">
+                <GitMerge className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-amber-800 dark:text-amber-200">
+                    Caso creado - Se encontraron casos similares
+                  </p>
+                  <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                    Puedes revisar los casos similares y fusionarlos si corresponde.
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-3 gap-2"
+                    onClick={() => setShowSimilarModal(true)}
+                  >
+                    <GitMerge className="h-4 w-4" />
+                    Ver casos similares ({similarCases.length})
                   </Button>
                 </div>
               </div>

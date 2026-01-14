@@ -34,7 +34,7 @@ interface SimilarCasesModalProps {
   similarCases: SimilarCase[];
   currentProblem?: string;
   onDecisionMade: () => void;
-  onCancelProcess?: () => void;
+  onCancelProcess?: () => void; // Optional in v12.4, case is already created
 }
 
 export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
@@ -49,10 +49,11 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCreateNew = async () => {
+  // v12.4: "Crear nuevo" now means "Keep both" - case is already created
+  const handleKeepBoth = async () => {
     setIsSubmitting(true);
     try {
-      // Call the continue endpoint with no merge target
+      // Call the webhook to record the decision
       const response = await supabase.functions.invoke('case-study-webhook', {
         headers: {
           'X-Webhook-Secret': 'AquaTechWebhook26',
@@ -61,14 +62,14 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
           event: 'user_decision',
           job_id: jobId,
           data: {
-            decision: 'create_new',
+            decision: 'keep_both',
           },
         },
       });
 
       if (response.error) throw response.error;
       
-      toast.success('Se creará un nuevo caso de estudio');
+      toast.success('Ambos casos se mantendrán en la base de datos');
       onDecisionMade();
       onOpenChange(false);
     } catch (error) {
@@ -104,7 +105,7 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
 
       if (response.error) throw response.error;
       
-      toast.success('Se fusionará con el caso seleccionado');
+      toast.success('Fusión programada con el caso seleccionado');
       onDecisionMade();
       onOpenChange(false);
     } catch (error) {
@@ -130,14 +131,14 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
             Casos similares encontrados
           </DialogTitle>
           <DialogDescription>
-            Hemos detectado casos de estudio similares en la base de datos. 
-            ¿Deseas fusionar con uno existente o crear uno nuevo?
+            El caso ha sido creado. Se detectaron casos similares en la base de datos.
+            Puedes fusionar con uno existente o mantener ambos.
           </DialogDescription>
         </DialogHeader>
 
         {currentProblem && (
           <div className="p-3 bg-muted/50 rounded-lg border">
-            <p className="text-sm text-muted-foreground mb-1">Problema actual:</p>
+            <p className="text-sm text-muted-foreground mb-1">Problema del caso nuevo:</p>
             <p className="text-sm font-medium">{currentProblem}</p>
           </div>
         )}
@@ -199,20 +200,8 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button
-            variant="ghost"
-            onClick={() => {
-              onOpenChange(false);
-              onCancelProcess?.();
-            }}
-            disabled={isSubmitting}
-            className="w-full sm:w-auto gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-          >
-            <XCircle className="h-4 w-4" />
-            Cancelar proceso
-          </Button>
-          <Button
             variant="outline"
-            onClick={handleCreateNew}
+            onClick={handleKeepBoth}
             disabled={isSubmitting}
             className="w-full sm:w-auto gap-2"
           >
@@ -221,7 +210,7 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
             ) : (
               <FilePlus className="h-4 w-4" />
             )}
-            Crear nuevo caso
+            Mantener ambos
           </Button>
           <Button
             onClick={handleMerge}

@@ -391,67 +391,77 @@ serve(async (req) => {
       updateData.technologies_new = newForScouting
     }
 
-    // Handle similar_found event - store similar cases for user decision
+    // Handle similar_found event - Railway v12.4+ sends this as INFO only (non-blocking)
+    // Railway CONTINUES processing after sending this, no user decision required before completion
     if (event === 'similar_found') {
       const similarCases = data?.similar_cases as SimilarCase[] | undefined;
       const currentProblem = data?.current_problem;
       
       if (Array.isArray(similarCases) && similarCases.length > 0) {
-        console.log(`[CASE-STUDY-WEBHOOK] similar_found: ${similarCases.length} similar cases detected`);
+        console.log(`[CASE-STUDY-WEBHOOK] similar_found (INFO): ${similarCases.length} similar cases detected`);
         
-        // Store similar cases in result_data for frontend to display modal
-        // Set status to 'awaiting_user_decision' so frontend knows to show modal
-        updateData.status = 'awaiting_user_decision';
-        updateData.result_data = {
-          similar_cases: similarCases,
-          current_problem: currentProblem,
-          awaiting_merge_decision: true,
-        };
-        
-        console.log(`[CASE-STUDY-WEBHOOK] Job status set to 'awaiting_user_decision' - frontend should show modal`);
-        console.log(`[CASE-STUDY-WEBHOOK] Similar cases:`, JSON.stringify(similarCases));
-      }
-      
-      // Also handle legacy technology queuing if technologies are provided
-      const technologies = data?.technologies as RailwayTechnologyNew[] | undefined;
-      if (Array.isArray(technologies) && technologies.length > 0) {
-        const { data: jobData } = await supabase
+        // Get existing job to preserve result_data
+        const { data: existingJob } = await supabase
           .from('case_study_jobs')
-          .select('case_study_id')
+          .select('result_data, case_study_id')
           .eq('id', job_id)
           .single();
         
-        const result = await queueTechnologiesForScouting(
-          supabase,
-          jobData?.case_study_id || null,
-          technologies
-        );
-        console.log(`[CASE-STUDY-WEBHOOK] similar_found: ${result.inserted}/${technologies.length} technologies queued`);
+        const existingResultData = (existingJob?.result_data as Record<string, unknown>) || {};
+        
+        // v12.4: Store as preview info ONLY - DO NOT change status to awaiting_user_decision
+        // Railway continues processing automatically, merge decision happens POST-creation
+        updateData.result_data = {
+          ...existingResultData,
+          similar_cases_preview: similarCases,
+          current_problem_preview: currentProblem,
+          similar_found_at: new Date().toISOString(),
+        };
+        
+        console.log(`[CASE-STUDY-WEBHOOK] similar_found: INFO stored, Railway continues processing`);
+        console.log(`[CASE-STUDY-WEBHOOK] Similar cases preview:`, JSON.stringify(similarCases));
+        
+        // Also handle legacy technology queuing if technologies are provided
+        const technologies = data?.technologies as RailwayTechnologyNew[] | undefined;
+        if (Array.isArray(technologies) && technologies.length > 0) {
+          const result = await queueTechnologiesForScouting(
+            supabase,
+            existingJob?.case_study_id || null,
+            technologies
+          );
+          console.log(`[CASE-STUDY-WEBHOOK] similar_found: ${result.inserted}/${technologies.length} technologies queued`);
+        }
       }
     }
 
-    // Handle user_decision event from frontend
+    // Handle user_decision event from frontend - v12.4: POST-creation merge decision
+    // This is now used for merging AFTER the case has already been created
     if (event === 'user_decision') {
       const decision = data?.decision;
       const mergeTargetId = data?.merge_target_id;
       
-      console.log(`[CASE-STUDY-WEBHOOK] user_decision: ${decision}, merge_target_id: ${mergeTargetId}`);
+      console.log(`[CASE-STUDY-WEBHOOK] user_decision (POST-creation): ${decision}, merge_target_id: ${mergeTargetId}`);
       
-      // Update job to resume processing
-      updateData.status = 'processing';
-      updateData.current_phase = 'saving';
-      updateData.progress_percentage = 95;
+      // Get existing job to preserve result_data
+      const { data: existingJob } = await supabase
+        .from('case_study_jobs')
+        .select('result_data, case_study_id')
+        .eq('id', job_id)
+        .single();
       
-      // Store decision in result_data
+      const existingResultData = (existingJob?.result_data as Record<string, unknown>) || {};
+      
+      // Store the merge decision in result_data (case already exists)
       updateData.result_data = {
-        user_decision: decision,
+        ...existingResultData,
+        merge_decision: decision,
         merge_target_id: mergeTargetId || null,
-        decision_made_at: new Date().toISOString(),
+        merge_decision_made_at: new Date().toISOString(),
       };
       
-      // TODO: If merge, the backend should handle merging with the target case
-      // For now, we just record the decision and continue
-      console.log(`[CASE-STUDY-WEBHOOK] User decided to ${decision === 'merge' ? `merge with ${mergeTargetId}` : 'create new case'}`);
+      // TODO: If merge, implement actual case merging logic
+      // For now, we just record the decision
+      console.log(`[CASE-STUDY-WEBHOOK] POST-creation decision: ${decision === 'merge' ? `merge with ${mergeTargetId}` : 'keep both cases'}`);
     }
 
     // Completed event - full data extraction
