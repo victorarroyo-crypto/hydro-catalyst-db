@@ -362,62 +362,104 @@ serve(async (req) => {
       if (data?.result_data) {
         updateData.result_data = data.result_data
         
-        // Process technologies_new from result_data and queue to scouting
+        // Log para debug - ver estructura completa
+        console.log('[CASE-STUDY-WEBHOOK] result_data keys:', Object.keys(data.result_data));
+        
+        // Get case_study_id from job (only once for both operations)
+        const { data: jobData } = await supabase
+          .from('case_study_jobs')
+          .select('case_study_id')
+          .eq('id', job_id)
+          .single();
+        
+        const caseStudyId = jobData?.case_study_id || null;
+        console.log('[CASE-STUDY-WEBHOOK] case_study_id:', caseStudyId);
+        
+        // ============================================
+        // PROCESO 1: Tecnologías nuevas → scouting_queue  
+        // Ruta: data.result_data.technologies.technologies_new[].ficha
+        // ============================================
         const technologiesData = data.result_data?.technologies as { 
-          technologies_new?: RailwayTechnologyNew[] 
+          technologies_new?: RailwayTechnologyNew[];
+          technologies_existing?: unknown[];
         } | undefined;
+        
+        console.log('[CASE-STUDY-WEBHOOK] technologies object:', technologiesData ? 'found' : 'not found');
+        
+        if (technologiesData?.technologies_new) {
+          console.log('[CASE-STUDY-WEBHOOK] technologies_new count:', technologiesData.technologies_new.length);
+          console.log('[CASE-STUDY-WEBHOOK] First tech sample:', JSON.stringify(technologiesData.technologies_new[0]).slice(0, 500));
+        }
+        
         const technologiesNew = technologiesData?.technologies_new;
         
         if (Array.isArray(technologiesNew) && technologiesNew.length > 0) {
-          // Get case_study_id from job
-          const { data: jobData } = await supabase
-            .from('case_study_jobs')
-            .select('case_study_id')
-            .eq('id', job_id)
-            .single();
-          
           const result = await queueTechnologiesForScouting(
             supabase,
-            jobData?.case_study_id || null,
+            caseStudyId,
             technologiesNew
           );
-          console.log(`[CASE-STUDY-WEBHOOK] Completed: ${result.inserted}/${technologiesNew.length} technologies queued to scouting`);
+          console.log(`[CASE-STUDY-WEBHOOK] ✅ Completed: ${result.inserted}/${technologiesNew.length} technologies queued to scouting`);
+        } else {
+          console.log('[CASE-STUDY-WEBHOOK] ⚠️ No technologies_new found in result_data');
         }
         
-        // Process case_summary and update casos_de_estudio
+        // ============================================
+        // PROCESO 2: Case summary → casos_de_estudio
+        // Ruta: data.result_data.case_summary
+        // ============================================
         const caseSummary = data.result_data?.case_summary as RailwayCaseSummary | undefined;
+        
+        console.log('[CASE-STUDY-WEBHOOK] case_summary:', caseSummary ? 'found' : 'not found');
         if (caseSummary) {
-          // Get case_study_id from job
-          const { data: jobData } = await supabase
-            .from('case_study_jobs')
-            .select('case_study_id')
-            .eq('id', job_id)
-            .single();
+          console.log('[CASE-STUDY-WEBHOOK] case_summary content:', JSON.stringify(caseSummary).slice(0, 500));
+        }
+        
+        if (caseSummary && caseStudyId) {
+          const caseUpdateData: Record<string, unknown> = {
+            updated_at: new Date().toISOString(),
+          };
           
-          if (jobData?.case_study_id) {
-            const caseUpdateData: Record<string, unknown> = {
-              updated_at: new Date().toISOString(),
-            };
-            
-            // Only update fields that have values
-            if (caseSummary.titulo) caseUpdateData.name = caseSummary.titulo;
-            if (caseSummary.cliente) caseUpdateData.entity_type = caseSummary.cliente;
-            if (caseSummary.pais) caseUpdateData.country = caseSummary.pais;
-            if (caseSummary.descripcion) caseUpdateData.description = caseSummary.descripcion;
-            if (caseSummary.soluciones) caseUpdateData.solution_applied = caseSummary.soluciones;
-            if (caseSummary.resultados) caseUpdateData.results_achieved = caseSummary.resultados;
-            
-            const { error: caseError } = await supabase
-              .from('casos_de_estudio')
-              .update(caseUpdateData)
-              .eq('id', jobData.case_study_id);
-            
-            if (caseError) {
-              console.error('[CASE-STUDY-WEBHOOK] Error updating caso de estudio:', caseError.message);
-            } else {
-              console.log('[CASE-STUDY-WEBHOOK] ✅ Caso de estudio actualizado con case_summary');
-            }
+          // Mapear campos individuales - NO concatenar
+          if (caseSummary.titulo) {
+            caseUpdateData.name = caseSummary.titulo;
+            console.log('[CASE-STUDY-WEBHOOK] → name:', caseSummary.titulo);
           }
+          if (caseSummary.cliente) {
+            caseUpdateData.entity_type = caseSummary.cliente;
+            console.log('[CASE-STUDY-WEBHOOK] → entity_type:', caseSummary.cliente);
+          }
+          if (caseSummary.pais) {
+            caseUpdateData.country = caseSummary.pais;
+            console.log('[CASE-STUDY-WEBHOOK] → country:', caseSummary.pais);
+          }
+          if (caseSummary.descripcion) {
+            caseUpdateData.description = caseSummary.descripcion;
+            console.log('[CASE-STUDY-WEBHOOK] → description:', caseSummary.descripcion.slice(0, 100) + '...');
+          }
+          if (caseSummary.soluciones) {
+            caseUpdateData.solution_applied = caseSummary.soluciones;
+            console.log('[CASE-STUDY-WEBHOOK] → solution_applied:', caseSummary.soluciones.slice(0, 100) + '...');
+          }
+          if (caseSummary.resultados) {
+            caseUpdateData.results_achieved = caseSummary.resultados;
+            console.log('[CASE-STUDY-WEBHOOK] → results_achieved:', caseSummary.resultados.slice(0, 100) + '...');
+          }
+          
+          const { error: caseError } = await supabase
+            .from('casos_de_estudio')
+            .update(caseUpdateData)
+            .eq('id', caseStudyId);
+          
+          if (caseError) {
+            console.error('[CASE-STUDY-WEBHOOK] ❌ Error updating caso de estudio:', caseError.message);
+          } else {
+            console.log('[CASE-STUDY-WEBHOOK] ✅ Caso de estudio actualizado con', Object.keys(caseUpdateData).length - 1, 'campos');
+          }
+        } else if (!caseSummary) {
+          console.log('[CASE-STUDY-WEBHOOK] ⚠️ No case_summary found in result_data');
+        } else if (!caseStudyId) {
+          console.log('[CASE-STUDY-WEBHOOK] ⚠️ No case_study_id linked to job');
         }
       }
     }
