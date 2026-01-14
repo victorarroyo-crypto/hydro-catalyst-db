@@ -81,6 +81,15 @@ const PHASE_LABELS: Record<string, string> = {
   'processing': 'Procesando...',
 }
 
+// Interface for similar cases found
+interface SimilarCase {
+  id: string;
+  name: string;
+  similarity: number;
+  sector?: string;
+  country?: string;
+}
+
 interface WebhookPayload {
   event: WebhookEvent
   job_id: string
@@ -110,7 +119,11 @@ interface WebhookPayload {
     processing_time_seconds?: number // completed
     current_phase?: string       // error context
     
-    // similar_found event
+    // similar_found event - for similar CASE STUDIES
+    similar_cases?: SimilarCase[]
+    current_problem?: string
+    
+    // similar_found event - for similar technologies (legacy)
     technologies?: RailwayTechnologyNew[]
   }
   timestamp?: string
@@ -289,11 +302,30 @@ serve(async (req) => {
       updateData.technologies_new = newForScouting
     }
 
-    // Handle similar_found event - queue technologies for scouting
+    // Handle similar_found event - store similar cases for user decision
     if (event === 'similar_found') {
+      const similarCases = data?.similar_cases as SimilarCase[] | undefined;
+      const currentProblem = data?.current_problem;
+      
+      if (Array.isArray(similarCases) && similarCases.length > 0) {
+        console.log(`[CASE-STUDY-WEBHOOK] similar_found: ${similarCases.length} similar cases detected`);
+        
+        // Store similar cases in result_data for frontend to display modal
+        // Set status to 'awaiting_user_decision' so frontend knows to show modal
+        updateData.status = 'awaiting_user_decision';
+        updateData.result_data = {
+          similar_cases: similarCases,
+          current_problem: currentProblem,
+          awaiting_merge_decision: true,
+        };
+        
+        console.log(`[CASE-STUDY-WEBHOOK] Job status set to 'awaiting_user_decision' - frontend should show modal`);
+        console.log(`[CASE-STUDY-WEBHOOK] Similar cases:`, JSON.stringify(similarCases));
+      }
+      
+      // Also handle legacy technology queuing if technologies are provided
       const technologies = data?.technologies as RailwayTechnologyNew[] | undefined;
       if (Array.isArray(technologies) && technologies.length > 0) {
-        // Get case_study_id from job
         const { data: jobData } = await supabase
           .from('case_study_jobs')
           .select('case_study_id')
