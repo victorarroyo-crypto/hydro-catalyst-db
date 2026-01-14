@@ -38,8 +38,11 @@ const PHASES = [
   { id: 'saving', label: 'Guardando', icon: Save, range: [95, 100] },
 ] as const;
 
-// Mapeo de todas las fases webhook a steps visuales (incluye legacy v10)
+// Mapeo de todas las fases webhook a steps visuales (incluye legacy v10 y v12)
 const PHASE_TO_STEP_MAP: Record<string, string> = {
+  // v12: Multi-documento
+  'accumulating': 'classifying',
+  
   // v11 phases
   'classifying': 'classifying',
   'classification_complete': 'extracting_context',
