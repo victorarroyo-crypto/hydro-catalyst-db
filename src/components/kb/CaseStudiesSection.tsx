@@ -189,7 +189,32 @@ export const CaseStudiesSection: React.FC = () => {
     toast.success('Procesamiento completado');
   };
   
-  const handleReconnectCancel = () => {
+  const handleReconnectCancel = async () => {
+    // Actually cancel the job in the database
+    if (activeJob?.id) {
+      try {
+        const { error } = await supabase
+          .from('case_study_jobs')
+          .update({ 
+            status: 'failed', 
+            error_message: 'Cancelado por el usuario',
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', activeJob.id);
+        
+        if (error) {
+          console.error('Error cancelling job:', error);
+          toast.error('Error al cancelar el proceso');
+        } else {
+          toast.success('Proceso cancelado');
+          refetchActiveJob();
+          queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
+        }
+      } catch (error) {
+        console.error('Error cancelling job:', error);
+        toast.error('Error al cancelar el proceso');
+      }
+    }
     setIsReconnectModalOpen(false);
   };
   
