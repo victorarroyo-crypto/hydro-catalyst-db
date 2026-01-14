@@ -2499,6 +2499,10 @@ export type Database = {
           is_duplicate: boolean
         }[]
       }
+      close_zombie_case_study_jobs: {
+        Args: { max_age_minutes?: number }
+        Returns: number
+      }
       close_zombie_jobs: { Args: { max_age_minutes?: number }; Returns: number }
       deduct_advisor_credits: {
         Args: {
