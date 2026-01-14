@@ -533,7 +533,7 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
         similarCases={similarCases}
         currentProblem={currentProblem}
         onDecisionMade={handleSimilarDecisionMade}
-        onCancelProcess={onCancel}
+        sourceCaseId={job?.case_study_id || undefined}
       />
     </>
   );

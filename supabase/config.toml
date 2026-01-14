@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.get-case-study-models]
 verify_jwt = false
+
+[functions.merge-case-studies]
+verify_jwt = false

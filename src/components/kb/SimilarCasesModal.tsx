@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { GitMerge, FilePlus, MapPin, Factory, Percent, Loader2, XCircle } from 'lucide-react';
+import { GitMerge, FilePlus, MapPin, Factory, Percent, Loader2, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -34,7 +35,7 @@ interface SimilarCasesModalProps {
   similarCases: SimilarCase[];
   currentProblem?: string;
   onDecisionMade: () => void;
-  onCancelProcess?: () => void; // Optional in v12.4, case is already created
+  sourceCaseId?: string; // The newly created case ID (to be deleted on merge)
 }
 
 export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
@@ -44,73 +45,65 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
   similarCases,
   currentProblem,
   onDecisionMade,
-  onCancelProcess,
+  sourceCaseId,
 }) => {
+  const navigate = useNavigate();
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // v12.4: "Crear nuevo" now means "Keep both" - case is already created
-  const handleKeepBoth = async () => {
-    setIsSubmitting(true);
-    try {
-      // Call the webhook to record the decision
-      const response = await supabase.functions.invoke('case-study-webhook', {
-        headers: {
-          'X-Webhook-Secret': 'AquaTechWebhook26',
-        },
-        body: {
-          event: 'user_decision',
-          job_id: jobId,
-          data: {
-            decision: 'keep_both',
-          },
-        },
-      });
-
-      if (response.error) throw response.error;
-      
-      toast.success('Ambos casos se mantendrán en la base de datos');
-      onDecisionMade();
-      onOpenChange(false);
-    } catch (error) {
-      console.error('Error sending decision:', error);
-      toast.error('Error al enviar la decisión');
-    } finally {
-      setIsSubmitting(false);
-    }
+  // "Mantener ambos" - just close the modal, case already exists
+  const handleKeepBoth = () => {
+    toast.success('El caso se mantiene como nuevo en la base de datos');
+    onDecisionMade();
+    onOpenChange(false);
   };
 
+  // Merge: move technologies to target, delete source case
   const handleMerge = async () => {
     if (!selectedCaseId) {
       toast.error('Selecciona un caso para fusionar');
       return;
     }
 
+    if (!sourceCaseId) {
+      toast.error('No se encontró el ID del caso fuente');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // Call the continue endpoint with merge target
-      const response = await supabase.functions.invoke('case-study-webhook', {
-        headers: {
-          'X-Webhook-Secret': 'AquaTechWebhook26',
-        },
+      const response = await supabase.functions.invoke('merge-case-studies', {
         body: {
-          event: 'user_decision',
+          source_case_id: sourceCaseId,
+          target_case_id: selectedCaseId,
           job_id: jobId,
-          data: {
-            decision: 'merge',
-            merge_target_id: selectedCaseId,
-          },
         },
       });
 
-      if (response.error) throw response.error;
+      if (response.error) {
+        throw new Error(response.error.message || 'Error en la fusión');
+      }
+
+      const data = response.data;
       
-      toast.success('Fusión programada con el caso seleccionado');
+      if (!data?.success) {
+        throw new Error(data?.error || 'Error desconocido en la fusión');
+      }
+
+      toast.success(
+        `Caso fusionado exitosamente con "${data.data?.target_case_name}". ` +
+        `${data.data?.technologies_moved || 0} tecnologías movidas. Duplicado eliminado.`
+      );
+      
       onDecisionMade();
       onOpenChange(false);
+      
+      // Navigate to the target case
+      navigate(`/knowledge-base?section=cases&view=${selectedCaseId}`);
+      
     } catch (error) {
-      console.error('Error sending merge decision:', error);
-      toast.error('Error al enviar la decisión de fusión');
+      console.error('Error merging cases:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al fusionar los casos');
     } finally {
       setIsSubmitting(false);
     }
@@ -118,9 +111,12 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
 
   const getSimilarityColor = (similarity: number) => {
     if (similarity >= 80) return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-    if (similarity >= 60) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+    if (similarity >= 60) return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200';
     return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
   };
+
+  const selectedCase = similarCases.find(c => (c.case_id || c.id) === selectedCaseId);
+  const selectedCaseName = selectedCase?.case_name || selectedCase?.name || 'el caso seleccionado';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,7 +128,7 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
           </DialogTitle>
           <DialogDescription>
             El caso ha sido creado. Se detectaron casos similares en la base de datos.
-            Puedes fusionar con uno existente o mantener ambos.
+            Puedes fusionarlo con uno existente (el nuevo se eliminará) o mantener ambos.
           </DialogDescription>
         </DialogHeader>
 
@@ -144,7 +140,7 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
         )}
 
         <div className="space-y-4">
-          <p className="text-sm font-medium">Casos similares ({similarCases.length}):</p>
+          <p className="text-sm font-medium">Selecciona un caso para fusionar ({similarCases.length}):</p>
           
           <RadioGroup 
             value={selectedCaseId || ''} 
@@ -169,9 +165,20 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
                   <div className="flex items-start gap-3">
                     <RadioGroupItem value={caseId} id={caseId} className="mt-1" />
                     <div className="flex-1 space-y-2">
-                      <Label htmlFor={caseId} className="font-medium cursor-pointer">
-                        {caseName}
-                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={caseId} className="font-medium cursor-pointer">
+                          {caseName}
+                        </Label>
+                        <a
+                          href={`/knowledge-base?section=cases&view=${caseId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-muted-foreground hover:text-primary"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge className={getSimilarityColor(similarity)}>
                           <Percent className="h-3 w-3 mr-1" />
@@ -205,11 +212,7 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
             disabled={isSubmitting}
             className="w-full sm:w-auto gap-2"
           >
-            {isSubmitting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FilePlus className="h-4 w-4" />
-            )}
+            <FilePlus className="h-4 w-4" />
             Mantener ambos
           </Button>
           <Button
@@ -222,7 +225,7 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
             ) : (
               <GitMerge className="h-4 w-4" />
             )}
-            Fusionar con seleccionado
+            Fusionar con {selectedCaseId ? `"${selectedCaseName}"` : 'seleccionado'}
           </Button>
         </DialogFooter>
       </DialogContent>
