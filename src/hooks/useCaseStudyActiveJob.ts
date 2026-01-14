@@ -15,7 +15,7 @@ export interface ActiveCaseStudyJob {
 
 /**
  * Hook to detect and track active case study processing jobs.
- * An active job is one with status 'processing' that was updated within the last 15 minutes.
+ * An active job is one with status 'processing' or 'awaiting_user_decision' that was updated within the last 15 minutes.
  */
 export function useCaseStudyActiveJob() {
   const ZOMBIE_THRESHOLD_MINUTES = 20;
@@ -27,8 +27,8 @@ export function useCaseStudyActiveJob() {
       
       const { data, error } = await supabase
         .from('case_study_jobs')
-        .select('id, status, current_phase, progress_percentage, error_message, case_study_id, created_at, updated_at')
-        .eq('status', 'processing')
+        .select('id, status, current_phase, progress_percentage, error_message, case_study_id, created_at, updated_at, result_data')
+        .in('status', ['processing', 'awaiting_user_decision'])
         .gte('updated_at', cutoffTime)
         .order('created_at', { ascending: false })
         .limit(1)
