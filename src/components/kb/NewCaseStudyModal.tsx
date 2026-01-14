@@ -57,6 +57,9 @@ interface UploadProgress {
   currentAttempt?: number;
   maxAttempts?: number;
   failedFiles: FailedFile[];
+  // v12: Estado de acumulación multi-documento
+  documentsReceived?: number;
+  isAccumulating?: boolean;
 }
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -243,6 +246,29 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
           const errorText = await response.text();
           console.error(`[CaseStudy] File ${index + 1} error:`, errorText);
           throw new Error(`HTTP ${response.status}`);
+        }
+
+        // v12: Parsear respuesta y manejar estado accumulating
+        const result = await response.json().catch(() => ({ status: 'ok' }));
+        console.log(`[CaseStudy] Server response for ${fileName}:`, result);
+
+        if (result.status === 'accumulating') {
+          // Documento acumulado, esperando más documentos
+          console.log(`[CaseStudy] Documento ${index + 1}/${totalFiles} acumulado (${result.documents_received || index + 1}/${result.documents_total || totalFiles})`);
+          setUploadProgress(prev => ({
+            ...prev,
+            documentsReceived: result.documents_received || index + 1,
+            isAccumulating: true,
+            currentFileName: `Documento ${index + 1}/${totalFiles} recibido`,
+          }));
+        } else if (result.status === 'processing') {
+          // Último documento enviado, procesamiento iniciado
+          console.log(`[CaseStudy] Último documento enviado, procesamiento iniciado`);
+          setUploadProgress(prev => ({
+            ...prev,
+            isAccumulating: false,
+            currentFileName: 'Procesando documentos...',
+          }));
         }
 
         console.log(`[CaseStudy] ✅ ${fileName} procesado en intento ${attempt}`);

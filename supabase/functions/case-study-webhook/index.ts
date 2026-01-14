@@ -6,8 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
 }
 
-// CaseStudyCrew v11.0 events + legacy v10 compatibility
+// CaseStudyCrew v12.0 events + v11 + legacy v10 compatibility
 type WebhookEvent = 
+  // v12: Multi-documento
+  | 'accumulating'
+  
   // BLOQUE A: Caso de Estudio (Fases 1-6) - v11
   | 'classifying' | 'classification_complete'
   | 'extracting_context' | 'context_complete'
@@ -31,6 +34,9 @@ type WebhookEvent =
 
 // Labels legibles para cada fase (usado solo para logs y respuesta, no se guarda en DB)
 const PHASE_LABELS: Record<string, string> = {
+  // v12: Multi-documento
+  'accumulating': 'Recibiendo documentos...',
+  
   // BLOQUE A: Caso de Estudio (Fases 1-6) - v11
   'classifying': 'Clasificando documento...',
   'classification_complete': 'Documento clasificado',
@@ -84,6 +90,10 @@ interface WebhookPayload {
     result_data?: Record<string, unknown>
     error?: string
     message?: string
+    
+    // v12 campos multi-documento
+    documents_received?: number  // accumulating
+    documents_total?: number     // accumulating
     
     // v11 campos específicos por evento (recibidos pero no todos guardados en columnas dedicadas)
     document_type?: string       // classification_complete
@@ -175,6 +185,16 @@ serve(async (req) => {
     // Add progress if provided
     if (data?.progress !== undefined) {
       updateData.progress_percentage = Math.min(100, Math.max(0, Math.round(data.progress)))
+    }
+
+    // v12: Handle accumulating event
+    if (event === 'accumulating') {
+      // Only update progress based on documents received, keep status as 'processing'
+      if (data?.documents_received !== undefined && data?.documents_total !== undefined) {
+        // Accumulating uses 0-10% of progress bar
+        updateData.progress_percentage = Math.min(10, Math.round((data.documents_received / data.documents_total) * 10))
+        console.log(`[CASE-STUDY-WEBHOOK] Accumulating: ${data.documents_received}/${data.documents_total} documents`)
+      }
     }
 
     // Technologies listed
