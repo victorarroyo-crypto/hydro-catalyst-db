@@ -54,6 +54,9 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
     try {
       // Call the continue endpoint with no merge target
       const response = await supabase.functions.invoke('case-study-webhook', {
+        headers: {
+          'X-Webhook-Secret': 'AquaTechWebhook26',
+        },
         body: {
           event: 'user_decision',
           job_id: jobId,
@@ -86,6 +89,9 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
     try {
       // Call the continue endpoint with merge target
       const response = await supabase.functions.invoke('case-study-webhook', {
+        headers: {
+          'X-Webhook-Secret': 'AquaTechWebhook26',
+        },
         body: {
           event: 'user_decision',
           job_id: jobId,
