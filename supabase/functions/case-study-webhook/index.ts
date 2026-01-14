@@ -23,6 +23,7 @@ type WebhookEvent =
   | 'listing_technologies' | 'technologies_listed'
   | 'enriching_technologies' | 'technologies_enriched'
   | 'matching_technologies' | 'matching_complete'
+  | 'similar_found'  // NEW: Tecnologías similares encontradas
   
   // Estados finales
   | 'saving' | 'completed' | 'complete' | 'failed' | 'error'
@@ -58,6 +59,7 @@ const PHASE_LABELS: Record<string, string> = {
   'technologies_enriched': 'Fichas completadas',
   'matching_technologies': 'Verificando en base de datos...',
   'matching_complete': 'Verificación completada',
+  'similar_found': 'Tecnologías similares encontradas',  // NEW
   
   // Estados finales
   'saving': 'Guardando caso de estudio...',
@@ -107,8 +109,83 @@ interface WebhookPayload {
     incomplete_skipped?: number  // matching_complete
     processing_time_seconds?: number // completed
     current_phase?: string       // error context
+    
+    // similar_found event
+    technologies?: RailwayTechnologyNew[]
   }
   timestamp?: string
+}
+
+// Estructura REAL de Railway - campos en ficha anidada
+interface RailwayTechnologyNew {
+  name: string;
+  provider?: string;
+  ficha: {
+    nombre: string;
+    proveedor?: string;
+    web?: string;
+    aplicacion?: string;
+    descripcion?: string;
+    ventaja?: string;
+    innovacion?: string;
+    comentarios?: string;
+    referencias?: string;
+  };
+}
+
+interface RailwayCaseSummary {
+  titulo?: string;
+  cliente?: string;
+  pais?: string;
+  descripcion?: string;
+  soluciones?: string;
+  resultados?: string;
+}
+
+// Function to queue technologies for scouting
+// deno-lint-ignore no-explicit-any
+async function queueTechnologiesForScouting(
+  supabase: any,
+  caseStudyId: string | null,
+  technologies: RailwayTechnologyNew[]
+): Promise<{ inserted: number; failed: number }> {
+  console.log(`[CASE-STUDY-WEBHOOK] Queueing ${technologies.length} technologies for scouting...`);
+  
+  let inserted = 0;
+  let failed = 0;
+
+  for (const tech of technologies) {
+    const ficha = tech.ficha || {};  // Access nested ficha
+    
+    const insertData: Record<string, unknown> = {
+      "Nombre de la tecnología": ficha.nombre || tech.name,
+      "Proveedor / Empresa": ficha.proveedor || tech.provider || null,
+      "Web de la empresa": ficha.web || null,
+      "Aplicación principal": ficha.aplicacion || null,
+      "Descripción técnica breve": ficha.descripcion || null,
+      "Ventaja competitiva clave": ficha.ventaja || null,
+      "Porque es innovadora": ficha.innovacion || null,
+      "Comentarios del analista": ficha.comentarios || `Extraído automáticamente de caso de estudio`,
+      "Casos de referencia": ficha.referencias || null,
+      source: 'case_study',
+      priority: 'medium',
+      queue_status: 'pending',
+      case_study_id: caseStudyId,
+    };
+
+    const { error } = await supabase.from('scouting_queue').insert(insertData);
+    
+    if (error) {
+      console.error(`[CASE-STUDY-WEBHOOK] ❌ Failed to queue "${tech.name}": ${error.message}`);
+      failed++;
+    } else {
+      console.log(`[CASE-STUDY-WEBHOOK] ✅ Queued: "${ficha.nombre || tech.name}"`);
+      inserted++;
+    }
+  }
+
+  console.log(`[CASE-STUDY-WEBHOOK] Scouting queue result: ${inserted} inserted, ${failed} failed`);
+  return { inserted, failed };
 }
 
 serve(async (req) => {
@@ -212,6 +289,26 @@ serve(async (req) => {
       updateData.technologies_new = newForScouting
     }
 
+    // Handle similar_found event - queue technologies for scouting
+    if (event === 'similar_found') {
+      const technologies = data?.technologies as RailwayTechnologyNew[] | undefined;
+      if (Array.isArray(technologies) && technologies.length > 0) {
+        // Get case_study_id from job
+        const { data: jobData } = await supabase
+          .from('case_study_jobs')
+          .select('case_study_id')
+          .eq('id', job_id)
+          .single();
+        
+        const result = await queueTechnologiesForScouting(
+          supabase,
+          jobData?.case_study_id || null,
+          technologies
+        );
+        console.log(`[CASE-STUDY-WEBHOOK] similar_found: ${result.inserted}/${technologies.length} technologies queued`);
+      }
+    }
+
     // Completed event - full data extraction
     if (event === 'completed' || event === 'complete') {
       updateData.completed_at = timestamp || new Date().toISOString()
@@ -232,6 +329,64 @@ serve(async (req) => {
       }
       if (data?.result_data) {
         updateData.result_data = data.result_data
+        
+        // Process technologies_new from result_data and queue to scouting
+        const technologiesData = data.result_data?.technologies as { 
+          technologies_new?: RailwayTechnologyNew[] 
+        } | undefined;
+        const technologiesNew = technologiesData?.technologies_new;
+        
+        if (Array.isArray(technologiesNew) && technologiesNew.length > 0) {
+          // Get case_study_id from job
+          const { data: jobData } = await supabase
+            .from('case_study_jobs')
+            .select('case_study_id')
+            .eq('id', job_id)
+            .single();
+          
+          const result = await queueTechnologiesForScouting(
+            supabase,
+            jobData?.case_study_id || null,
+            technologiesNew
+          );
+          console.log(`[CASE-STUDY-WEBHOOK] Completed: ${result.inserted}/${technologiesNew.length} technologies queued to scouting`);
+        }
+        
+        // Process case_summary and update casos_de_estudio
+        const caseSummary = data.result_data?.case_summary as RailwayCaseSummary | undefined;
+        if (caseSummary) {
+          // Get case_study_id from job
+          const { data: jobData } = await supabase
+            .from('case_study_jobs')
+            .select('case_study_id')
+            .eq('id', job_id)
+            .single();
+          
+          if (jobData?.case_study_id) {
+            const caseUpdateData: Record<string, unknown> = {
+              updated_at: new Date().toISOString(),
+            };
+            
+            // Only update fields that have values
+            if (caseSummary.titulo) caseUpdateData.name = caseSummary.titulo;
+            if (caseSummary.cliente) caseUpdateData.entity_type = caseSummary.cliente;
+            if (caseSummary.pais) caseUpdateData.country = caseSummary.pais;
+            if (caseSummary.descripcion) caseUpdateData.description = caseSummary.descripcion;
+            if (caseSummary.soluciones) caseUpdateData.solution_applied = caseSummary.soluciones;
+            if (caseSummary.resultados) caseUpdateData.results_achieved = caseSummary.resultados;
+            
+            const { error: caseError } = await supabase
+              .from('casos_de_estudio')
+              .update(caseUpdateData)
+              .eq('id', jobData.case_study_id);
+            
+            if (caseError) {
+              console.error('[CASE-STUDY-WEBHOOK] Error updating caso de estudio:', caseError.message);
+            } else {
+              console.log('[CASE-STUDY-WEBHOOK] ✅ Caso de estudio actualizado con case_summary');
+            }
+          }
+        }
       }
     }
 
