@@ -20,9 +20,11 @@ import {
   RefreshCw,
   XOctagon,
   AlertTriangle,
+  GitMerge,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { SimilarCasesModal, SimilarCase } from './SimilarCasesModal';
 
 // 10 fases visuales para v11
 const PHASES = [
@@ -62,6 +64,7 @@ const PHASE_TO_STEP_MAP: Record<string, string> = {
   'technologies_enriched': 'matching_technologies',
   'matching_technologies': 'matching_technologies',
   'matching_complete': 'saving',
+  'similar_found': 'matching_technologies', // Show in matching phase
   'saving': 'saving',
   'completed': 'saving',
   'complete': 'saving',
@@ -79,7 +82,14 @@ const PHASE_TO_STEP_MAP: Record<string, string> = {
   'processing': 'extracting_context',
 };
 
-type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'awaiting_user_decision';
+
+interface ResultData {
+  similar_cases?: SimilarCase[];
+  current_problem?: string;
+  awaiting_merge_decision?: boolean;
+  [key: string]: unknown;
+}
 
 interface CaseStudyJob {
   id: string;
@@ -91,6 +101,7 @@ interface CaseStudyJob {
   technologies_found?: number | null;
   technologies_new?: number | null;
   case_study_id?: string | null;
+  result_data?: ResultData | null;
 }
 
 interface CaseStudyProcessingViewProps {
@@ -119,7 +130,7 @@ function getPhaseIndex(currentPhase: string | null, progress: number): number {
 function getStepStatus(
   stepIndex: number, 
   currentIndex: number, 
-  jobStatus: JobStatus
+  jobStatus: 'completed' | 'processing' | 'failed'
 ): 'completed' | 'processing' | 'pending' | 'failed' {
   if (jobStatus === 'failed') {
     if (stepIndex < currentIndex) return 'completed';
@@ -177,13 +188,14 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
 }) => {
   const [job, setJob] = useState<CaseStudyJob | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSimilarModal, setShowSimilarModal] = useState(false);
 
   // Fetch initial job state
   useEffect(() => {
     const fetchJob = async () => {
       const { data, error } = await supabase
         .from('case_study_jobs')
-        .select('id, status, current_phase, progress_percentage, error_message, quality_score, technologies_found, technologies_new, case_study_id')
+        .select('id, status, current_phase, progress_percentage, error_message, quality_score, technologies_found, technologies_new, case_study_id, result_data')
         .eq('id', jobId)
         .single();
 
@@ -191,9 +203,16 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
         console.error('[ProcessingView] Error fetching job:', error);
       } else if (data) {
         console.log('[ProcessingView] Initial job state:', data);
-        setJob(data as CaseStudyJob);
+        const jobData = data as CaseStudyJob;
+        setJob(jobData);
+        
         if (data.status === 'completed') {
           onCompleted(data.id);
+        }
+        
+        // Show modal if awaiting user decision
+        if (data.status === 'awaiting_user_decision' && jobData.result_data?.similar_cases) {
+          setShowSimilarModal(true);
         }
       }
       setIsLoading(false);
@@ -225,6 +244,12 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
             console.log('[ProcessingView] Job completed, calling onCompleted');
             onCompleted(newData.id);
           }
+          
+          // Show modal when similar cases are found
+          if (newData.status === 'awaiting_user_decision' && newData.result_data?.similar_cases) {
+            console.log('[ProcessingView] Similar cases detected, showing modal');
+            setShowSimilarModal(true);
+          }
         }
       )
       .subscribe((status) => {
@@ -236,6 +261,24 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
       supabase.removeChannel(channel);
     };
   }, [jobId, onCompleted]);
+
+  const handleSimilarDecisionMade = () => {
+    // Refetch job state after decision
+    supabase
+      .from('case_study_jobs')
+      .select('id, status, current_phase, progress_percentage, error_message, quality_score, technologies_found, technologies_new, case_study_id, result_data')
+      .eq('id', jobId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setJob(data as CaseStudyJob);
+        }
+      });
+  };
+
+  // Get similar cases data for modal
+  const similarCases = job?.result_data?.similar_cases || [];
+  const currentProblem = job?.result_data?.current_problem;
 
   if (isLoading) {
     return (
@@ -265,142 +308,191 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
   const currentPhaseLabel = PHASES[currentIndex]?.label || 'Procesando...';
   const isFailed = job.status === 'failed';
   const isCompleted = job.status === 'completed';
+  const isAwaitingDecision = job.status === 'awaiting_user_decision';
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            {isFailed ? (
-              <>
-                <XCircle className="h-5 w-5 text-destructive" />
-                Error en el procesamiento
-              </>
-            ) : isCompleted ? (
-              <>
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-                Procesamiento completado
-              </>
-            ) : (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                Procesando Caso de Estudio
-              </>
+    <>
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              {isFailed ? (
+                <>
+                  <XCircle className="h-5 w-5 text-destructive" />
+                  Error en el procesamiento
+                </>
+              ) : isCompleted ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  Procesamiento completado
+                </>
+              ) : isAwaitingDecision ? (
+                <>
+                  <GitMerge className="h-5 w-5 text-amber-500" />
+                  Acción requerida
+                </>
+              ) : (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  Procesando Caso de Estudio
+                </>
+              )}
+            </CardTitle>
+            {isFailed && (
+              <Badge variant="destructive">Error</Badge>
             )}
-          </CardTitle>
-          {isFailed && (
-            <Badge variant="destructive">Error</Badge>
-          )}
-          {isCompleted && (
-            <Badge className="bg-green-600">Completado</Badge>
-          )}
-        </div>
+            {isCompleted && (
+              <Badge className="bg-green-600">Completado</Badge>
+            )}
+            {isAwaitingDecision && (
+              <Badge className="bg-amber-500">Decisión pendiente</Badge>
+            )}
+          </div>
+          
+        </CardHeader>
         
-      </CardHeader>
-      
-      <CardContent className="space-y-6">
-        {/* Progress bar with percentage and phase label */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">{currentPhaseLabel}</span>
-            <span className="font-medium">{job.progress_percentage}%</span>
+        <CardContent className="space-y-6">
+          {/* Progress bar with percentage and phase label */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                {isAwaitingDecision ? 'Casos similares encontrados' : currentPhaseLabel}
+              </span>
+              <span className="font-medium">{job.progress_percentage}%</span>
+            </div>
+            <Progress value={job.progress_percentage} className="h-2" />
           </div>
-          <Progress value={job.progress_percentage} className="h-2" />
-        </div>
 
-        {/* 10 Phases Grid (2x5) */}
-        <div className="grid grid-cols-5 gap-2">
-          {PHASES.map((phase, index) => {
-            const stepStatus = getStepStatus(index, currentIndex, job.status as JobStatus);
-            const Icon = phase.icon;
-            
-            return (
-              <div
-                key={phase.id}
-                className={cn(
-                  "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors",
-                  stepStatus === 'completed' && "bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800",
-                  stepStatus === 'processing' && "bg-primary/5 border-primary/30",
-                  stepStatus === 'pending' && "bg-muted/30 border-muted",
-                  stepStatus === 'failed' && "bg-destructive/5 border-destructive/20"
-                )}
-              >
-                <StepIcon status={stepStatus} Icon={Icon} />
-                <span className={cn(
-                  "text-xs text-center font-medium",
-                  stepStatus === 'completed' && "text-green-700 dark:text-green-300",
-                  stepStatus === 'processing' && "text-primary",
-                  stepStatus === 'pending' && "text-muted-foreground/60",
-                  stepStatus === 'failed' && "text-destructive"
-                )}>
-                  {phase.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Statistics badges (show when progress > 65%) */}
-        {job.progress_percentage > 65 && (job.technologies_found || job.technologies_new || job.quality_score) && (
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
-            {job.technologies_found !== null && job.technologies_found !== undefined && (
-              <Badge variant="outline" className="gap-1">
-                <Database className="h-3 w-3" />
-                {job.technologies_found} tecnologías
-              </Badge>
-            )}
-            {job.technologies_new !== null && job.technologies_new !== undefined && job.technologies_new > 0 && (
-              <Badge variant="secondary" className="gap-1">
-                <FileSpreadsheet className="h-3 w-3" />
-                {job.technologies_new} nuevas
-              </Badge>
-            )}
-            {job.quality_score !== null && job.quality_score !== undefined && (
-              <QualityScoreBadge score={job.quality_score} />
-            )}
+          {/* 10 Phases Grid (2x5) */}
+          <div className="grid grid-cols-5 gap-2">
+            {PHASES.map((phase, index) => {
+              const stepStatus = getStepStatus(index, currentIndex, isFailed ? 'failed' : isCompleted ? 'completed' : 'processing');
+              const Icon = phase.icon;
+              
+              return (
+                <div
+                  key={phase.id}
+                  className={cn(
+                    "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors",
+                    stepStatus === 'completed' && "bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800",
+                    stepStatus === 'processing' && "bg-primary/5 border-primary/30",
+                    stepStatus === 'pending' && "bg-muted/30 border-muted",
+                    stepStatus === 'failed' && "bg-destructive/5 border-destructive/20"
+                  )}
+                >
+                  <StepIcon status={stepStatus} Icon={Icon} />
+                  <span className={cn(
+                    "text-xs text-center font-medium",
+                    stepStatus === 'completed' && "text-green-700 dark:text-green-300",
+                    stepStatus === 'processing' && "text-primary",
+                    stepStatus === 'pending' && "text-muted-foreground/60",
+                    stepStatus === 'failed' && "text-destructive"
+                  )}>
+                    {phase.label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-        )}
 
-        {/* Error message */}
-        {isFailed && job.error_message && (
-          <div className="p-3 bg-destructive/5 border border-destructive/20 rounded-lg">
-            <div className="flex items-start gap-2">
-              <XCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
-              <div className="text-sm">
-                <p className="font-medium text-destructive">Error en el procesamiento</p>
-                <p className="mt-1 text-muted-foreground">{job.error_message}</p>
+          {/* Awaiting decision message */}
+          {isAwaitingDecision && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg dark:bg-amber-950 dark:border-amber-800">
+              <div className="flex items-start gap-3">
+                <GitMerge className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-amber-800 dark:text-amber-200">
+                    Se encontraron casos de estudio similares
+                  </p>
+                  <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                    Puedes fusionar con uno existente o crear un nuevo caso.
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-3 gap-2"
+                    onClick={() => setShowSimilarModal(true)}
+                  >
+                    <GitMerge className="h-4 w-4" />
+                    Ver opciones
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Estimated time */}
-        {!isFailed && !isCompleted && (
-          <p className="text-center text-sm text-muted-foreground">
-            Tiempo estimado: ~2-3 minutos
-          </p>
-        )}
+          {/* Statistics badges (show when progress > 65%) */}
+          {job.progress_percentage > 65 && (job.technologies_found || job.technologies_new || job.quality_score) && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
+              {job.technologies_found !== null && job.technologies_found !== undefined && (
+                <Badge variant="outline" className="gap-1">
+                  <Database className="h-3 w-3" />
+                  {job.technologies_found} tecnologías
+                </Badge>
+              )}
+              {job.technologies_new !== null && job.technologies_new !== undefined && job.technologies_new > 0 && (
+                <Badge variant="secondary" className="gap-1">
+                  <FileSpreadsheet className="h-3 w-3" />
+                  {job.technologies_new} nuevas
+                </Badge>
+              )}
+              {job.quality_score !== null && job.quality_score !== undefined && (
+                <QualityScoreBadge score={job.quality_score} />
+              )}
+            </div>
+          )}
 
-        {/* Action buttons */}
-        <div className="flex items-center justify-center gap-3 pt-2">
-          {isFailed ? (
-            <>
-              <Button variant="outline" onClick={onCancel}>
+          {/* Error message */}
+          {isFailed && job.error_message && (
+            <div className="p-3 bg-destructive/5 border border-destructive/20 rounded-lg">
+              <div className="flex items-start gap-2">
+                <XCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-destructive">Error en el procesamiento</p>
+                  <p className="mt-1 text-muted-foreground">{job.error_message}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Estimated time */}
+          {!isFailed && !isCompleted && !isAwaitingDecision && (
+            <p className="text-center text-sm text-muted-foreground">
+              Tiempo estimado: ~2-3 minutos
+            </p>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex items-center justify-center gap-3 pt-2">
+            {isFailed ? (
+              <>
+                <Button variant="outline" onClick={onCancel}>
+                  Cancelar
+                </Button>
+                <Button onClick={onRetry} className="gap-2">
+                  <RefreshCw className="h-4 w-4" />
+                  Reintentar
+                </Button>
+              </>
+            ) : !isCompleted && !isAwaitingDecision ? (
+              <Button variant="outline" onClick={onCancel} className="gap-2">
+                <XOctagon className="h-4 w-4" />
                 Cancelar
               </Button>
-              <Button onClick={onRetry} className="gap-2">
-                <RefreshCw className="h-4 w-4" />
-                Reintentar
-              </Button>
-            </>
-          ) : !isCompleted ? (
-            <Button variant="outline" onClick={onCancel} className="gap-2">
-              <XOctagon className="h-4 w-4" />
-              Cancelar
-            </Button>
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Similar Cases Modal */}
+      <SimilarCasesModal
+        open={showSimilarModal}
+        onOpenChange={setShowSimilarModal}
+        jobId={jobId}
+        similarCases={similarCases}
+        currentProblem={currentProblem}
+        onDecisionMade={handleSimilarDecisionMade}
+      />
+    </>
   );
 };

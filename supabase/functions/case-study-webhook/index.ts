@@ -23,7 +23,8 @@ type WebhookEvent =
   | 'listing_technologies' | 'technologies_listed'
   | 'enriching_technologies' | 'technologies_enriched'
   | 'matching_technologies' | 'matching_complete'
-  | 'similar_found'  // NEW: Tecnologías similares encontradas
+  | 'similar_found'  // Casos similares encontrados
+  | 'user_decision'  // Frontend user decision (create new / merge)
   
   // Estados finales
   | 'saving' | 'completed' | 'complete' | 'failed' | 'error'
@@ -122,6 +123,10 @@ interface WebhookPayload {
     // similar_found event - for similar CASE STUDIES
     similar_cases?: SimilarCase[]
     current_problem?: string
+    
+    // user_decision event - frontend user decision
+    decision?: 'create_new' | 'merge'
+    merge_target_id?: string
     
     // ═══════════════════════════════════════════════════════════════
     // v13 ESTRUCTURA PLANA (completed event) - Campos directos en data
@@ -423,6 +428,30 @@ serve(async (req) => {
         );
         console.log(`[CASE-STUDY-WEBHOOK] similar_found: ${result.inserted}/${technologies.length} technologies queued`);
       }
+    }
+
+    // Handle user_decision event from frontend
+    if (event === 'user_decision') {
+      const decision = data?.decision;
+      const mergeTargetId = data?.merge_target_id;
+      
+      console.log(`[CASE-STUDY-WEBHOOK] user_decision: ${decision}, merge_target_id: ${mergeTargetId}`);
+      
+      // Update job to resume processing
+      updateData.status = 'processing';
+      updateData.current_phase = 'saving';
+      updateData.progress_percentage = 95;
+      
+      // Store decision in result_data
+      updateData.result_data = {
+        user_decision: decision,
+        merge_target_id: mergeTargetId || null,
+        decision_made_at: new Date().toISOString(),
+      };
+      
+      // TODO: If merge, the backend should handle merging with the target case
+      // For now, we just record the decision and continue
+      console.log(`[CASE-STUDY-WEBHOOK] User decided to ${decision === 'merge' ? `merge with ${mergeTargetId}` : 'create new case'}`);
     }
 
     // Completed event - full data extraction
