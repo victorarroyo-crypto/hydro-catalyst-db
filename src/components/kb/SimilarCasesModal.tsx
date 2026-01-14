@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { GitMerge, FilePlus, MapPin, Factory, Percent, Loader2 } from 'lucide-react';
+import { GitMerge, FilePlus, MapPin, Factory, Percent, Loader2, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -34,6 +34,7 @@ interface SimilarCasesModalProps {
   similarCases: SimilarCase[];
   currentProblem?: string;
   onDecisionMade: () => void;
+  onCancelProcess?: () => void;
 }
 
 export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
@@ -43,6 +44,7 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
   similarCases,
   currentProblem,
   onDecisionMade,
+  onCancelProcess,
 }) => {
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -190,6 +192,18 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onOpenChange(false);
+              onCancelProcess?.();
+            }}
+            disabled={isSubmitting}
+            className="w-full sm:w-auto gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <XCircle className="h-4 w-4" />
+            Cancelar proceso
+          </Button>
           <Button
             variant="outline"
             onClick={handleCreateNew}
