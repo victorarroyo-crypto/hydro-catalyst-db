@@ -106,7 +106,7 @@ interface WebhookPayload {
     documents_received?: number  // accumulating
     documents_total?: number     // accumulating
     
-    // v11 campos específicos por evento (recibidos pero no todos guardados en columnas dedicadas)
+    // v11 campos específicos por evento
     document_type?: string       // classification_complete
     sector?: string              // classification_complete
     problem_title?: string       // context_complete
@@ -123,13 +123,45 @@ interface WebhookPayload {
     similar_cases?: SimilarCase[]
     current_problem?: string
     
-    // similar_found event - for similar technologies (legacy)
-    technologies?: RailwayTechnologyNew[]
+    // ═══════════════════════════════════════════════════════════════
+    // v13 ESTRUCTURA PLANA (completed event) - Campos directos en data
+    // ═══════════════════════════════════════════════════════════════
+    
+    // Campos del caso (prefijo caso_)
+    caso_titulo?: string
+    caso_cliente?: string
+    caso_pais?: string
+    caso_descripcion_problema?: string
+    caso_solucion_aplicada?: string
+    caso_resultados?: string
+    
+    // Array de tecnologías plano
+    technologies?: RailwayTechnologyFlat[]
+    
+    // IDs y conteos
+    case_study_id?: string  // UUID del caso en Railway
+    technologies_found_in_db?: number
   }
   timestamp?: string
 }
 
-// Estructura REAL de Railway - campos en ficha anidada
+// v13: Estructura PLANA de Railway - campos directamente en el objeto
+interface RailwayTechnologyFlat {
+  nombre: string;
+  proveedor?: string;
+  web?: string;
+  aplicacion?: string;
+  descripcion?: string;
+  ventaja?: string;
+  innovacion?: string;
+  comentarios?: string;
+  referencias?: string;
+  rol?: string;
+  found_in_db?: boolean;
+  technology_id?: string;  // Solo si found_in_db=true
+}
+
+// Legacy: Estructura anidada (para backward compatibility)
 interface RailwayTechnologyNew {
   name: string;
   provider?: string;
@@ -146,6 +178,7 @@ interface RailwayTechnologyNew {
   };
 }
 
+// Legacy: case_summary anidado
 interface RailwayCaseSummary {
   titulo?: string;
   cliente?: string;
@@ -155,20 +188,72 @@ interface RailwayCaseSummary {
   resultados?: string;
 }
 
-// Function to queue technologies for scouting
+// Function to queue FLAT technologies for scouting (v13)
+// deno-lint-ignore no-explicit-any
+async function queueFlatTechnologiesForScouting(
+  supabase: any,
+  caseStudyId: string | null,
+  technologies: RailwayTechnologyFlat[]
+): Promise<{ inserted: number; skipped: number; failed: number }> {
+  console.log(`[CASE-STUDY-WEBHOOK] Queueing ${technologies.length} FLAT technologies...`);
+  
+  let inserted = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const tech of technologies) {
+    // Skip technologies already in DB
+    if (tech.found_in_db) {
+      console.log(`[CASE-STUDY-WEBHOOK] ⏭️ Skipping "${tech.nombre}" - already in DB`);
+      skipped++;
+      continue;
+    }
+    
+    const insertData: Record<string, unknown> = {
+      "Nombre de la tecnología": tech.nombre,
+      "Proveedor / Empresa": tech.proveedor || null,
+      "Web de la empresa": tech.web || null,
+      "Aplicación principal": tech.aplicacion || null,
+      "Descripción técnica breve": tech.descripcion || null,
+      "Ventaja competitiva clave": tech.ventaja || null,
+      "Porque es innovadora": tech.innovacion || null,
+      "Comentarios del analista": tech.comentarios || `Rol: ${tech.rol || 'No especificado'}`,
+      "Casos de referencia": tech.referencias || null,
+      source: 'case_study',
+      priority: 'medium',
+      queue_status: 'pending',
+      case_study_id: caseStudyId,
+    };
+
+    const { error } = await supabase.from('scouting_queue').insert(insertData);
+    
+    if (error) {
+      console.error(`[CASE-STUDY-WEBHOOK] ❌ Failed: "${tech.nombre}": ${error.message}`);
+      failed++;
+    } else {
+      console.log(`[CASE-STUDY-WEBHOOK] ✅ Queued: "${tech.nombre}"`);
+      inserted++;
+    }
+  }
+
+  console.log(`[CASE-STUDY-WEBHOOK] Result: ${inserted} inserted, ${skipped} skipped (in DB), ${failed} failed`);
+  return { inserted, skipped, failed };
+}
+
+// Legacy function for nested structure
 // deno-lint-ignore no-explicit-any
 async function queueTechnologiesForScouting(
   supabase: any,
   caseStudyId: string | null,
   technologies: RailwayTechnologyNew[]
 ): Promise<{ inserted: number; failed: number }> {
-  console.log(`[CASE-STUDY-WEBHOOK] Queueing ${technologies.length} technologies for scouting...`);
+  console.log(`[CASE-STUDY-WEBHOOK] Queueing ${technologies.length} NESTED technologies (legacy)...`);
   
   let inserted = 0;
   let failed = 0;
 
   for (const tech of technologies) {
-    const ficha = tech.ficha || {};  // Access nested ficha
+    const ficha = tech.ficha || {};
     
     const insertData: Record<string, unknown> = {
       "Nombre de la tecnología": ficha.nombre || tech.name,
@@ -178,7 +263,7 @@ async function queueTechnologiesForScouting(
       "Descripción técnica breve": ficha.descripcion || null,
       "Ventaja competitiva clave": ficha.ventaja || null,
       "Porque es innovadora": ficha.innovacion || null,
-      "Comentarios del analista": ficha.comentarios || `Extraído automáticamente de caso de estudio`,
+      "Comentarios del analista": ficha.comentarios || `Extraído de caso de estudio`,
       "Casos de referencia": ficha.referencias || null,
       source: 'case_study',
       priority: 'medium',
@@ -189,7 +274,7 @@ async function queueTechnologiesForScouting(
     const { error } = await supabase.from('scouting_queue').insert(insertData);
     
     if (error) {
-      console.error(`[CASE-STUDY-WEBHOOK] ❌ Failed to queue "${tech.name}": ${error.message}`);
+      console.error(`[CASE-STUDY-WEBHOOK] ❌ Failed: "${tech.name}": ${error.message}`);
       failed++;
     } else {
       console.log(`[CASE-STUDY-WEBHOOK] ✅ Queued: "${ficha.nombre || tech.name}"`);
@@ -197,7 +282,6 @@ async function queueTechnologiesForScouting(
     }
   }
 
-  console.log(`[CASE-STUDY-WEBHOOK] Scouting queue result: ${inserted} inserted, ${failed} failed`);
   return { inserted, failed };
 }
 
@@ -359,109 +443,149 @@ serve(async (req) => {
       } else if (data?.technologies_new !== undefined) {
         updateData.technologies_new = data.technologies_new
       }
-      if (data?.result_data) {
-        updateData.result_data = data.result_data
+      
+      // Store all data in result_data
+      if (data) {
+        updateData.result_data = data
+      }
+      
+      // Log para debug
+      console.log('[CASE-STUDY-WEBHOOK] ═══════════════════════════════════════════');
+      console.log('[CASE-STUDY-WEBHOOK] COMPLETED EVENT - Procesando datos...');
+      console.log('[CASE-STUDY-WEBHOOK] data keys:', data ? Object.keys(data) : 'none');
+      
+      // Get case_study_id from job
+      const { data: jobData } = await supabase
+        .from('case_study_jobs')
+        .select('case_study_id')
+        .eq('id', job_id)
+        .single();
+      
+      const caseStudyId = jobData?.case_study_id || null;
+      console.log('[CASE-STUDY-WEBHOOK] case_study_id:', caseStudyId);
+      
+      // ═══════════════════════════════════════════════════════════════════
+      // v13: DETECTAR ESTRUCTURA PLANA (campos caso_* directos en data)
+      // ═══════════════════════════════════════════════════════════════════
+      const isV13Flat = !!(data?.caso_titulo || data?.caso_descripcion_problema || data?.technologies);
+      console.log('[CASE-STUDY-WEBHOOK] Estructura detectada:', isV13Flat ? 'v13 PLANA' : 'Legacy anidada');
+      
+      if (isV13Flat && data) {
+        // ════════════════════════════════════════════════════════════════
+        // PROCESO 1: Campos del caso (v13 plana)
+        // ════════════════════════════════════════════════════════════════
+        console.log('[CASE-STUDY-WEBHOOK] Procesando campos caso_* (v13)...');
         
-        // Log para debug - ver estructura completa
-        console.log('[CASE-STUDY-WEBHOOK] result_data keys:', Object.keys(data.result_data));
-        
-        // Get case_study_id from job (only once for both operations)
-        const { data: jobData } = await supabase
-          .from('case_study_jobs')
-          .select('case_study_id')
-          .eq('id', job_id)
-          .single();
-        
-        const caseStudyId = jobData?.case_study_id || null;
-        console.log('[CASE-STUDY-WEBHOOK] case_study_id:', caseStudyId);
-        
-        // ============================================
-        // PROCESO 1: Tecnologías nuevas → scouting_queue  
-        // Ruta: data.result_data.technologies.technologies_new[].ficha
-        // ============================================
-        const technologiesData = data.result_data?.technologies as { 
-          technologies_new?: RailwayTechnologyNew[];
-          technologies_existing?: unknown[];
-        } | undefined;
-        
-        console.log('[CASE-STUDY-WEBHOOK] technologies object:', technologiesData ? 'found' : 'not found');
-        
-        if (technologiesData?.technologies_new) {
-          console.log('[CASE-STUDY-WEBHOOK] technologies_new count:', technologiesData.technologies_new.length);
-          console.log('[CASE-STUDY-WEBHOOK] First tech sample:', JSON.stringify(technologiesData.technologies_new[0]).slice(0, 500));
+        if (caseStudyId) {
+          const caseUpdateData: Record<string, unknown> = {
+            updated_at: new Date().toISOString(),
+          };
+          
+          if (data.caso_titulo) {
+            caseUpdateData.name = data.caso_titulo;
+            console.log('[CASE-STUDY-WEBHOOK] → name:', data.caso_titulo.slice(0, 80) + '...');
+          }
+          if (data.caso_cliente) {
+            caseUpdateData.entity_type = data.caso_cliente;
+            console.log('[CASE-STUDY-WEBHOOK] → entity_type:', data.caso_cliente);
+          }
+          if (data.caso_pais) {
+            caseUpdateData.country = data.caso_pais;
+            console.log('[CASE-STUDY-WEBHOOK] → country:', data.caso_pais);
+          }
+          if (data.caso_descripcion_problema) {
+            caseUpdateData.description = data.caso_descripcion_problema;
+            console.log('[CASE-STUDY-WEBHOOK] → description:', data.caso_descripcion_problema.slice(0, 80) + '...');
+          }
+          if (data.caso_solucion_aplicada) {
+            caseUpdateData.solution_applied = data.caso_solucion_aplicada;
+            console.log('[CASE-STUDY-WEBHOOK] → solution_applied:', data.caso_solucion_aplicada.slice(0, 80) + '...');
+          }
+          if (data.caso_resultados) {
+            caseUpdateData.results_achieved = data.caso_resultados;
+            console.log('[CASE-STUDY-WEBHOOK] → results_achieved:', data.caso_resultados.slice(0, 80) + '...');
+          }
+          
+          const fieldsToUpdate = Object.keys(caseUpdateData).length - 1;
+          if (fieldsToUpdate > 0) {
+            const { error: caseError } = await supabase
+              .from('casos_de_estudio')
+              .update(caseUpdateData)
+              .eq('id', caseStudyId);
+            
+            if (caseError) {
+              console.error('[CASE-STUDY-WEBHOOK] ❌ Error actualizando caso:', caseError.message);
+            } else {
+              console.log(`[CASE-STUDY-WEBHOOK] ✅ Caso actualizado: ${fieldsToUpdate} campos`);
+            }
+          }
         }
         
-        const technologiesNew = technologiesData?.technologies_new;
+        // ════════════════════════════════════════════════════════════════
+        // PROCESO 2: Tecnologías (v13 array plano)
+        // ════════════════════════════════════════════════════════════════
+        const flatTechs = data.technologies as RailwayTechnologyFlat[] | undefined;
+        console.log('[CASE-STUDY-WEBHOOK] technologies array:', flatTechs?.length || 0, 'items');
         
+        if (Array.isArray(flatTechs) && flatTechs.length > 0) {
+          console.log('[CASE-STUDY-WEBHOOK] Primera tecnología:', JSON.stringify(flatTechs[0]).slice(0, 400));
+          
+          const result = await queueFlatTechnologiesForScouting(
+            supabase,
+            caseStudyId,
+            flatTechs
+          );
+          console.log(`[CASE-STUDY-WEBHOOK] ✅ Tecnologías: ${result.inserted} nuevas, ${result.skipped} existentes, ${result.failed} fallidas`);
+        } else {
+          console.log('[CASE-STUDY-WEBHOOK] ⚠️ No hay technologies en data');
+        }
+        
+      } else if (data?.result_data) {
+        // ════════════════════════════════════════════════════════════════
+        // LEGACY: Estructura anidada (result_data.technologies.technologies_new)
+        // ════════════════════════════════════════════════════════════════
+        console.log('[CASE-STUDY-WEBHOOK] Procesando estructura LEGACY anidada...');
+        console.log('[CASE-STUDY-WEBHOOK] result_data keys:', Object.keys(data.result_data));
+        
+        // Tecnologías legacy
+        const technologiesData = data.result_data?.technologies as { 
+          technologies_new?: RailwayTechnologyNew[];
+        } | undefined;
+        
+        const technologiesNew = technologiesData?.technologies_new;
         if (Array.isArray(technologiesNew) && technologiesNew.length > 0) {
           const result = await queueTechnologiesForScouting(
             supabase,
             caseStudyId,
             technologiesNew
           );
-          console.log(`[CASE-STUDY-WEBHOOK] ✅ Completed: ${result.inserted}/${technologiesNew.length} technologies queued to scouting`);
-        } else {
-          console.log('[CASE-STUDY-WEBHOOK] ⚠️ No technologies_new found in result_data');
+          console.log(`[CASE-STUDY-WEBHOOK] Legacy: ${result.inserted} queued`);
         }
         
-        // ============================================
-        // PROCESO 2: Case summary → casos_de_estudio
-        // Ruta: data.result_data.case_summary
-        // ============================================
+        // Case summary legacy
         const caseSummary = data.result_data?.case_summary as RailwayCaseSummary | undefined;
-        
-        console.log('[CASE-STUDY-WEBHOOK] case_summary:', caseSummary ? 'found' : 'not found');
-        if (caseSummary) {
-          console.log('[CASE-STUDY-WEBHOOK] case_summary content:', JSON.stringify(caseSummary).slice(0, 500));
-        }
-        
         if (caseSummary && caseStudyId) {
           const caseUpdateData: Record<string, unknown> = {
             updated_at: new Date().toISOString(),
           };
           
-          // Mapear campos individuales - NO concatenar
-          if (caseSummary.titulo) {
-            caseUpdateData.name = caseSummary.titulo;
-            console.log('[CASE-STUDY-WEBHOOK] → name:', caseSummary.titulo);
-          }
-          if (caseSummary.cliente) {
-            caseUpdateData.entity_type = caseSummary.cliente;
-            console.log('[CASE-STUDY-WEBHOOK] → entity_type:', caseSummary.cliente);
-          }
-          if (caseSummary.pais) {
-            caseUpdateData.country = caseSummary.pais;
-            console.log('[CASE-STUDY-WEBHOOK] → country:', caseSummary.pais);
-          }
-          if (caseSummary.descripcion) {
-            caseUpdateData.description = caseSummary.descripcion;
-            console.log('[CASE-STUDY-WEBHOOK] → description:', caseSummary.descripcion.slice(0, 100) + '...');
-          }
-          if (caseSummary.soluciones) {
-            caseUpdateData.solution_applied = caseSummary.soluciones;
-            console.log('[CASE-STUDY-WEBHOOK] → solution_applied:', caseSummary.soluciones.slice(0, 100) + '...');
-          }
-          if (caseSummary.resultados) {
-            caseUpdateData.results_achieved = caseSummary.resultados;
-            console.log('[CASE-STUDY-WEBHOOK] → results_achieved:', caseSummary.resultados.slice(0, 100) + '...');
-          }
+          if (caseSummary.titulo) caseUpdateData.name = caseSummary.titulo;
+          if (caseSummary.cliente) caseUpdateData.entity_type = caseSummary.cliente;
+          if (caseSummary.pais) caseUpdateData.country = caseSummary.pais;
+          if (caseSummary.descripcion) caseUpdateData.description = caseSummary.descripcion;
+          if (caseSummary.soluciones) caseUpdateData.solution_applied = caseSummary.soluciones;
+          if (caseSummary.resultados) caseUpdateData.results_achieved = caseSummary.resultados;
           
-          const { error: caseError } = await supabase
+          await supabase
             .from('casos_de_estudio')
             .update(caseUpdateData)
             .eq('id', caseStudyId);
           
-          if (caseError) {
-            console.error('[CASE-STUDY-WEBHOOK] ❌ Error updating caso de estudio:', caseError.message);
-          } else {
-            console.log('[CASE-STUDY-WEBHOOK] ✅ Caso de estudio actualizado con', Object.keys(caseUpdateData).length - 1, 'campos');
-          }
-        } else if (!caseSummary) {
-          console.log('[CASE-STUDY-WEBHOOK] ⚠️ No case_summary found in result_data');
-        } else if (!caseStudyId) {
-          console.log('[CASE-STUDY-WEBHOOK] ⚠️ No case_study_id linked to job');
+          console.log('[CASE-STUDY-WEBHOOK] Legacy case_summary applied');
         }
       }
+      
+      console.log('[CASE-STUDY-WEBHOOK] ═══════════════════════════════════════════');
     }
 
     // Failed event
