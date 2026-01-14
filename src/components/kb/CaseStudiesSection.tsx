@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { NewCaseStudyModal } from './NewCaseStudyModal';
 import { CaseStudyDetailView } from './CaseStudyDetailView';
 import { CaseStudyEditView } from './CaseStudyEditView';
+import { CaseStudyProcessingView } from './CaseStudyProcessingView';
+import { ActiveJobIndicator } from './ActiveJobIndicator';
+import { useCaseStudyActiveJob } from '@/hooks/useCaseStudyActiveJob';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -48,7 +51,7 @@ import {
   Loader2,
   Sparkles,
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { CaseStudyFormView } from './CaseStudyFormView';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -62,7 +65,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-
 // Extended CaseStudy type with new fields
 interface CaseStudy {
   id: string;
@@ -146,8 +148,14 @@ export const CaseStudiesSection: React.FC = () => {
   const queryClient = useQueryClient();
   const canManage = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
 
+  // Active job hook - detects processing jobs
+  const { activeJob, refetch: refetchActiveJob } = useCaseStudyActiveJob();
+
   // Modal state
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
+  
+  // Active job reconnection modal
+  const [isReconnectModalOpen, setIsReconnectModalOpen] = useState(false);
   
   // Detail view state
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
@@ -171,6 +179,25 @@ export const CaseStudiesSection: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sectorFilter, setSectorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  
+  // Handle reconnection modal callbacks
+  const handleReconnectCompleted = (jobId: string) => {
+    setIsReconnectModalOpen(false);
+    refetchActiveJob();
+    queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
+    queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
+    toast.success('Procesamiento completado');
+  };
+  
+  const handleReconnectCancel = () => {
+    setIsReconnectModalOpen(false);
+  };
+  
+  const handleReconnectRetry = () => {
+    // Just close the modal - user can start a new process
+    setIsReconnectModalOpen(false);
+    setIsNewCaseModalOpen(true);
+  };
 
   // Fetch case studies with new fields
   const { data: caseStudies, isLoading } = useQuery({
@@ -431,6 +458,14 @@ export const CaseStudiesSection: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Active Job Indicator - shows when there's a processing job */}
+      {activeJob && (
+        <ActiveJobIndicator 
+          job={activeJob} 
+          onReconnect={() => setIsReconnectModalOpen(true)} 
+        />
+      )}
+      
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Casos de Estudio</h1>
@@ -788,6 +823,30 @@ export const CaseStudiesSection: React.FC = () => {
                 queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
                 queryClient.invalidateQueries({ queryKey: ['case-study-jobs-map'] });
               }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Reconnect to Active Job Modal */}
+      <Dialog open={isReconnectModalOpen} onOpenChange={setIsReconnectModalOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Procesamiento en Curso
+            </DialogTitle>
+            <DialogDescription>
+              Hay un proceso de extracción activo. Puedes seguir su progreso aquí.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {activeJob && (
+            <CaseStudyProcessingView
+              jobId={activeJob.id}
+              onCompleted={handleReconnectCompleted}
+              onCancel={handleReconnectCancel}
+              onRetry={handleReconnectRetry}
             />
           )}
         </DialogContent>
