@@ -123,6 +123,7 @@ interface WebhookPayload {
     // similar_found event - for similar CASE STUDIES
     similar_cases?: SimilarCase[]
     current_problem?: string
+    has_similar_cases?: boolean  // v12.4: included in completed event
     
     // user_decision event - frontend user decision
     decision?: 'create_new' | 'merge'
@@ -483,9 +484,15 @@ serve(async (req) => {
         updateData.technologies_new = data.technologies_new
       }
       
-      // Store all data in result_data
+      // Store all data in result_data, explicitly including similar_cases
       if (data) {
-        updateData.result_data = data
+        updateData.result_data = {
+          ...data,
+          // Explicitly ensure similar_cases fields are preserved
+          has_similar_cases: data.has_similar_cases ?? false,
+          similar_cases: data.similar_cases || [],
+        }
+        console.log('[CASE-STUDY-WEBHOOK] Saving result_data with has_similar_cases:', data.has_similar_cases, 'similar_cases count:', (data.similar_cases || []).length);
       }
       
       // Log para debug
