@@ -530,7 +530,15 @@ serve(async (req) => {
         };
         
         // Mapear tecnologías Railway → UI (español → inglés)
-        const rawTechnologies = rawData.technologies || [];
+        // ✅ FIX: Verificar que technologies sea un array antes de mapear
+        const rawTechnologies = Array.isArray(rawData.technologies) 
+          ? rawData.technologies 
+          : [];
+        
+        console.log('[WEBHOOK] rawTechnologies type:', typeof rawData.technologies);
+        console.log('[WEBHOOK] rawTechnologies isArray:', Array.isArray(rawData.technologies));
+        console.log('[WEBHOOK] rawTechnologies count:', rawTechnologies.length);
+        
         const mappedTechnologies = rawTechnologies.map((tech: any) => ({
           name: tech.nombre || tech.name || '',
           provider: tech.proveedor || tech.provider || '',
@@ -551,12 +559,19 @@ serve(async (req) => {
           web: tech.web,
         }));
         
+        // ✅ FIX: Verificar que similar_cases sea un array
+        const rawSimilarCases = Array.isArray(rawData.similar_cases) 
+          ? rawData.similar_cases 
+          : [];
+        
         updateData.result_data = {
           ...existingResultData,
           ...rawData,
           // Estructura mapeada para UI
           extracted: extractedForUI,
           technologies: mappedTechnologies,
+          similar_cases: rawSimilarCases,
+          has_similar_cases: rawSimilarCases.length > 0,
         };
 
         // Debug logs
@@ -566,8 +581,8 @@ serve(async (req) => {
           country: extractedForUI.country,
         });
         console.log('[WEBHOOK] Mapped technologies count:', mappedTechnologies.length);
-        console.log('[WEBHOOK] has_similar_cases:', rawData.has_similar_cases);
-        console.log('[WEBHOOK] similar_cases count:', (rawData.similar_cases || []).length);
+        console.log('[WEBHOOK] has_similar_cases:', rawSimilarCases.length > 0);
+        console.log('[WEBHOOK] similar_cases count:', rawSimilarCases.length);
       }
 
       // Log para debug (legacy logs)
