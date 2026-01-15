@@ -336,8 +336,8 @@ serve(async (req) => {
       )
     }
 
-    const supabaseUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_KEY')!
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Map event to status - handle both 'complete' and 'completed'
