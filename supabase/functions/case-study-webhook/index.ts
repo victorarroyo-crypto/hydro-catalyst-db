@@ -226,7 +226,7 @@ async function queueFlatTechnologiesForScouting(
       "Comentarios del analista": tech.comentarios || `Rol: ${tech.rol || 'No especificado'}`,
       "Casos de referencia": tech.referencias || null,
       source: 'case_study',
-      priority: 'medium',
+      priority: 'normal',
       queue_status: 'pending',
       case_study_id: caseStudyId,
     };
@@ -272,7 +272,7 @@ async function queueTechnologiesForScouting(
       "Comentarios del analista": ficha.comentarios || `Extraído de caso de estudio`,
       "Casos de referencia": ficha.referencias || null,
       source: 'case_study',
-      priority: 'medium',
+      priority: 'normal',
       queue_status: 'pending',
       case_study_id: caseStudyId,
     };
