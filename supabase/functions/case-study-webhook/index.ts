@@ -495,16 +495,28 @@ serve(async (req) => {
 
         const existingResultData = (existingJob?.result_data as Record<string, unknown>) || {};
 
-        // ✅ Copy the full Railway payload into result_data (no field filtering)
+        // ✅ FIX: Railway puede enviar data.result_data anidado - aplanarlo
+        // Si data tiene un campo "result_data", extraer su contenido al nivel raíz
+        const nestedResultData = (data as any).result_data as Record<string, unknown> | undefined;
+        
+        // Construir result_data aplanado:
+        // 1. Mantener datos existentes
+        // 2. Copiar campos directos de data (excepto result_data anidado)
+        // 3. Aplanar contenido de data.result_data si existe
+        const { result_data: _nested, ...dataWithoutNested } = data as any;
+        
         updateData.result_data = {
           ...existingResultData,
-          ...data,
+          ...dataWithoutNested,
+          ...(nestedResultData || {}),
         };
 
-        // Debug logs requested
+        // Debug logs
         console.log('[WEBHOOK] completed data keys:', Object.keys(data));
-        console.log('[WEBHOOK] has_similar_cases:', (data as any).has_similar_cases);
-        console.log('[WEBHOOK] technologies count:', (data as any).technologies?.length);
+        console.log('[WEBHOOK] nested result_data keys:', nestedResultData ? Object.keys(nestedResultData) : 'none');
+        console.log('[WEBHOOK] has_similar_cases:', (data as any).has_similar_cases || nestedResultData?.has_similar_cases);
+        console.log('[WEBHOOK] similar_cases count:', ((data as any).similar_cases || nestedResultData?.similar_cases || []).length);
+        console.log('[WEBHOOK] technologies count:', ((data as any).technologies || nestedResultData?.technologies || []).length);
         console.log('[WEBHOOK] caso_titulo:', (data as any).caso_titulo);
       }
 
