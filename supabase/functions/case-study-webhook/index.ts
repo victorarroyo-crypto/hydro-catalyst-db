@@ -512,6 +512,23 @@ serve(async (req) => {
         // ═══════════════════════════════════════════════════════════════════
         const rawData = { ...dataWithoutNested, ...(nestedResultData || {}) };
         
+        // 🔍 DEBUG: Ver estructura exacta de datos recibidos
+        console.log('[WEBHOOK] ============ DEBUG TECHNOLOGIES ============');
+        console.log('[WEBHOOK] dataWithoutNested keys:', Object.keys(dataWithoutNested));
+        console.log('[WEBHOOK] nestedResultData keys:', nestedResultData ? Object.keys(nestedResultData as object) : 'null');
+        console.log('[WEBHOOK] rawData keys:', Object.keys(rawData));
+        console.log('[WEBHOOK] data.technologies type:', typeof (data as any).technologies);
+        console.log('[WEBHOOK] data.technologies isArray:', Array.isArray((data as any).technologies));
+        console.log('[WEBHOOK] rawData.technologies type:', typeof rawData.technologies);
+        console.log('[WEBHOOK] rawData.technologies isArray:', Array.isArray(rawData.technologies));
+        
+        // Log raw structure for debugging
+        if ((data as any).technologies) {
+          console.log('[WEBHOOK] data.technologies preview:', 
+            JSON.stringify((data as any).technologies)?.slice(0, 500) || 'undefined'
+          );
+        }
+        
         const extractedForUI = {
           title: rawData.caso_titulo || '',
           sector: rawData.caso_cliente || '',
@@ -529,16 +546,66 @@ serve(async (req) => {
           },
         };
         
+        // ✅ FIX: Buscar technologies en MÚLTIPLES ubicaciones posibles
+        let rawTechnologies: any[] = [];
+        
+        // 1. Primero buscar directamente en data (prioridad máxima)
+        if (Array.isArray((data as any).technologies)) {
+          rawTechnologies = (data as any).technologies;
+          console.log('[WEBHOOK] ✅ Found technologies in data (flat array):', rawTechnologies.length);
+        }
+        // 2. Si no, buscar en rawData (combinación de data + nestedResultData)
+        else if (Array.isArray(rawData.technologies)) {
+          rawTechnologies = rawData.technologies as any[];
+          console.log('[WEBHOOK] ✅ Found technologies in rawData:', rawTechnologies.length);
+        }
+        // 3. Si es objeto, extraer arrays internos (technologies_found, technologies_new)
+        else if (rawData.technologies && typeof rawData.technologies === 'object') {
+          const techObj = rawData.technologies as any;
+          console.log('[WEBHOOK] technologies is object, keys:', Object.keys(techObj));
+          
+          if (Array.isArray(techObj.technologies_found)) {
+            rawTechnologies = [...rawTechnologies, ...techObj.technologies_found];
+            console.log('[WEBHOOK] Extracted technologies_found:', techObj.technologies_found.length);
+          }
+          if (Array.isArray(techObj.technologies_new)) {
+            rawTechnologies = [...rawTechnologies, ...techObj.technologies_new];
+            console.log('[WEBHOOK] Extracted technologies_new:', techObj.technologies_new.length);
+          }
+          if (Array.isArray(techObj.items)) {
+            rawTechnologies = [...rawTechnologies, ...techObj.items];
+            console.log('[WEBHOOK] Extracted technologies.items:', techObj.items.length);
+          }
+        }
+        // 4. Buscar en nestedResultData directamente
+        else if (nestedResultData && Array.isArray((nestedResultData as any).technologies)) {
+          rawTechnologies = (nestedResultData as any).technologies;
+          console.log('[WEBHOOK] ✅ Found technologies in nestedResultData:', rawTechnologies.length);
+        }
+        // 5. También buscar en data.technologies si es objeto
+        else if ((data as any).technologies && typeof (data as any).technologies === 'object') {
+          const techObj = (data as any).technologies;
+          console.log('[WEBHOOK] data.technologies is object, keys:', Object.keys(techObj));
+          
+          if (Array.isArray(techObj.technologies_found)) {
+            rawTechnologies = [...rawTechnologies, ...techObj.technologies_found];
+          }
+          if (Array.isArray(techObj.technologies_new)) {
+            rawTechnologies = [...rawTechnologies, ...techObj.technologies_new];
+          }
+          if (Array.isArray(techObj.items)) {
+            rawTechnologies = [...rawTechnologies, ...techObj.items];
+          }
+          console.log('[WEBHOOK] Extracted from data.technologies object:', rawTechnologies.length);
+        }
+        
+        console.log('[WEBHOOK] FINAL rawTechnologies count:', rawTechnologies.length);
+        if (rawTechnologies.length > 0) {
+          console.log('[WEBHOOK] First technology sample:', JSON.stringify(rawTechnologies[0])?.slice(0, 300));
+        }
+        console.log('[WEBHOOK] ============================================');
+        
         // Mapear tecnologías Railway → UI (español → inglés)
-        // ✅ FIX: Verificar que technologies sea un array antes de mapear
-        const rawTechnologies = Array.isArray(rawData.technologies) 
-          ? rawData.technologies 
-          : [];
-        
-        console.log('[WEBHOOK] rawTechnologies type:', typeof rawData.technologies);
-        console.log('[WEBHOOK] rawTechnologies isArray:', Array.isArray(rawData.technologies));
-        console.log('[WEBHOOK] rawTechnologies count:', rawTechnologies.length);
-        
         const mappedTechnologies = rawTechnologies.map((tech: any) => ({
           name: tech.nombre || tech.name || '',
           provider: tech.proveedor || tech.provider || '',
@@ -559,10 +626,19 @@ serve(async (req) => {
           web: tech.web,
         }));
         
-        // ✅ FIX: Verificar que similar_cases sea un array
-        const rawSimilarCases = Array.isArray(rawData.similar_cases) 
-          ? rawData.similar_cases 
-          : [];
+        // ✅ FIX: Buscar similar_cases en múltiples ubicaciones
+        let rawSimilarCases: any[] = [];
+        
+        if (Array.isArray((data as any).similar_cases)) {
+          rawSimilarCases = (data as any).similar_cases;
+          console.log('[WEBHOOK] ✅ Found similar_cases in data:', rawSimilarCases.length);
+        } else if (Array.isArray(rawData.similar_cases)) {
+          rawSimilarCases = rawData.similar_cases as any[];
+          console.log('[WEBHOOK] ✅ Found similar_cases in rawData:', rawSimilarCases.length);
+        } else if (nestedResultData && Array.isArray((nestedResultData as any).similar_cases)) {
+          rawSimilarCases = (nestedResultData as any).similar_cases;
+          console.log('[WEBHOOK] ✅ Found similar_cases in nestedResultData:', rawSimilarCases.length);
+        }
         
         updateData.result_data = {
           ...existingResultData,
