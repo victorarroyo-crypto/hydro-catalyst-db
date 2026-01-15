@@ -484,29 +484,42 @@ serve(async (req) => {
         updateData.technologies_new = data.technologies_new
       }
       
-      // Store all data in result_data, explicitly including similar_cases
+      // Store all data in result_data (MERGE with existing), without filtering fields
       if (data) {
+        // Fetch existing job to preserve previous result_data accumulated across events
+        const { data: existingJob } = await supabase
+          .from('case_study_jobs')
+          .select('result_data')
+          .eq('id', job_id)
+          .single();
+
+        const existingResultData = (existingJob?.result_data as Record<string, unknown>) || {};
+
+        // ✅ Copy the full Railway payload into result_data (no field filtering)
         updateData.result_data = {
+          ...existingResultData,
           ...data,
-          // Explicitly ensure similar_cases fields are preserved
-          has_similar_cases: data.has_similar_cases ?? false,
-          similar_cases: data.similar_cases || [],
-        }
-        console.log('[CASE-STUDY-WEBHOOK] Saving result_data with has_similar_cases:', data.has_similar_cases, 'similar_cases count:', (data.similar_cases || []).length);
+        };
+
+        // Debug logs requested
+        console.log('[WEBHOOK] completed data keys:', Object.keys(data));
+        console.log('[WEBHOOK] has_similar_cases:', (data as any).has_similar_cases);
+        console.log('[WEBHOOK] technologies count:', (data as any).technologies?.length);
+        console.log('[WEBHOOK] caso_titulo:', (data as any).caso_titulo);
       }
-      
-      // Log para debug
+
+      // Log para debug (legacy logs)
       console.log('[CASE-STUDY-WEBHOOK] ═══════════════════════════════════════════');
       console.log('[CASE-STUDY-WEBHOOK] COMPLETED EVENT - Procesando datos...');
       console.log('[CASE-STUDY-WEBHOOK] data keys:', data ? Object.keys(data) : 'none');
-      
+
       // Get case_study_id from job
       const { data: jobData } = await supabase
         .from('case_study_jobs')
         .select('case_study_id')
         .eq('id', job_id)
         .single();
-      
+
       const caseStudyId = jobData?.case_study_id || null;
       console.log('[CASE-STUDY-WEBHOOK] case_study_id:', caseStudyId);
       
