@@ -505,19 +505,69 @@ serve(async (req) => {
         // 3. Aplanar contenido de data.result_data si existe
         const { result_data: _nested, ...dataWithoutNested } = data as any;
         
+        // ═══════════════════════════════════════════════════════════════════
+        // MAPEO Railway → UI: Crear estructura "extracted" para CaseStudyFormView
+        // Railway envía: caso_titulo, caso_cliente, caso_pais, etc.
+        // UI espera: extracted.title, extracted.sector, extracted.country, etc.
+        // ═══════════════════════════════════════════════════════════════════
+        const rawData = { ...dataWithoutNested, ...(nestedResultData || {}) };
+        
+        const extractedForUI = {
+          title: rawData.caso_titulo || '',
+          sector: rawData.caso_cliente || '',
+          country: rawData.caso_pais || '',
+          problem: {
+            description: rawData.caso_descripcion_problema || '',
+            parameters: [],
+          },
+          solution: {
+            description: rawData.caso_solucion_aplicada || '',
+            treatment_train: [],
+          },
+          results: {
+            description: rawData.caso_resultados || '',
+          },
+        };
+        
+        // Mapear tecnologías Railway → UI (español → inglés)
+        const rawTechnologies = rawData.technologies || [];
+        const mappedTechnologies = rawTechnologies.map((tech: any) => ({
+          name: tech.nombre || tech.name || '',
+          provider: tech.proveedor || tech.provider || '',
+          website: tech.web || tech.website || '',
+          description: tech.descripcion || tech.description || '',
+          role: tech.rol || tech.role || 'identified',
+          trl: tech.trl || null,
+          application: tech.aplicacion || tech.application || '',
+          advantage: tech.ventaja || tech.advantage || '',
+          innovation: tech.innovacion || tech.innovation || '',
+          references: tech.referencias || tech.references || '',
+          comments: tech.comentarios || tech.comments || '',
+          found_in_db: tech.found_in_db || false,
+          technology_id: tech.technology_id || null,
+          // Mantener campos originales por compatibilidad
+          nombre: tech.nombre,
+          proveedor: tech.proveedor,
+          web: tech.web,
+        }));
+        
         updateData.result_data = {
           ...existingResultData,
-          ...dataWithoutNested,
-          ...(nestedResultData || {}),
+          ...rawData,
+          // Estructura mapeada para UI
+          extracted: extractedForUI,
+          technologies: mappedTechnologies,
         };
 
         // Debug logs
-        console.log('[WEBHOOK] completed data keys:', Object.keys(data));
-        console.log('[WEBHOOK] nested result_data keys:', nestedResultData ? Object.keys(nestedResultData) : 'none');
-        console.log('[WEBHOOK] has_similar_cases:', (data as any).has_similar_cases || nestedResultData?.has_similar_cases);
-        console.log('[WEBHOOK] similar_cases count:', ((data as any).similar_cases || nestedResultData?.similar_cases || []).length);
-        console.log('[WEBHOOK] technologies count:', ((data as any).technologies || nestedResultData?.technologies || []).length);
-        console.log('[WEBHOOK] caso_titulo:', (data as any).caso_titulo);
+        console.log('[WEBHOOK] Mapped extracted for UI:', {
+          title: extractedForUI.title?.slice(0, 50),
+          sector: extractedForUI.sector,
+          country: extractedForUI.country,
+        });
+        console.log('[WEBHOOK] Mapped technologies count:', mappedTechnologies.length);
+        console.log('[WEBHOOK] has_similar_cases:', rawData.has_similar_cases);
+        console.log('[WEBHOOK] similar_cases count:', (rawData.similar_cases || []).length);
       }
 
       // Log para debug (legacy logs)
