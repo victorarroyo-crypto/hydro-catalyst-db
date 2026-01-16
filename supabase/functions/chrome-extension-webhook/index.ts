@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
         descripcion: description?.trim() || null,
         pais: country?.trim() || null,
         tipo_sugerido: 'Por clasificar',
-        status: 'pending',
+        status: 'review',  // Use 'review' - valid value per check constraint
         source: 'chrome_extension',
         source_url: captured_from_url || null,
         review_notes: `Capturado desde Chrome Extension el ${new Date().toLocaleString('es-ES')}`
