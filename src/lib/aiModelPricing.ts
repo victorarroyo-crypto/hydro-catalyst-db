@@ -14,15 +14,15 @@ export interface AIModel {
   speed: 'muy rápido' | 'rápido' | 'moderado';
 }
 
-// Modelos disponibles en Lovable AI
+// Modelos disponibles en Lovable AI (válidos para el gateway)
 export const AI_MODELS: AIModel[] = [
   // Google Gemini - Premium
   { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'premium', speed: 'moderado' },
-  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro', tier: 'premium', speed: 'moderado' },
+  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', tier: 'premium', speed: 'moderado' },
   
   // Google Gemini - Estándar
   { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'estándar', speed: 'rápido' },
-  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash', tier: 'estándar', speed: 'rápido' },
+  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', tier: 'estándar', speed: 'rápido' },
   
   // Google Gemini - Económico
   { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', tier: 'económico', speed: 'muy rápido' },
@@ -37,6 +37,29 @@ export const AI_MODELS: AIModel[] = [
   // OpenAI GPT - Económico
   { id: 'openai/gpt-5-nano', name: 'GPT-5 Nano', tier: 'económico', speed: 'muy rápido' },
 ];
+
+// Mapeo de modelos antiguos/inválidos a modelos válidos
+export const MODEL_MIGRATION_MAP: Record<string, string> = {
+  'gpt-4o': 'google/gemini-3-flash-preview',
+  'gpt-4o-mini': 'openai/gpt-5-mini',
+  'gpt-4': 'openai/gpt-5',
+  'claude-sonnet': 'google/gemini-3-flash-preview',
+  'claude-opus': 'google/gemini-2.5-pro',
+};
+
+// Función para obtener modelo válido (migra modelos antiguos)
+export function getValidModel(model: string): string {
+  if (MODEL_MIGRATION_MAP[model]) {
+    return MODEL_MIGRATION_MAP[model];
+  }
+  // Check if it's already a valid model
+  const validModels = AI_MODELS.map(m => m.id);
+  if (validModels.includes(model)) {
+    return model;
+  }
+  // Default fallback
+  return 'google/gemini-3-flash-preview';
+}
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
   // Google Gemini
