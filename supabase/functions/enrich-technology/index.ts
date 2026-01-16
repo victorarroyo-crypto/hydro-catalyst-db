@@ -74,8 +74,24 @@ serve(async (req) => {
       throw new Error("Technology data with name is required");
     }
 
+    // Valid Lovable AI models
+    const VALID_MODELS = [
+      'openai/gpt-5-mini', 'openai/gpt-5', 'openai/gpt-5-nano', 'openai/gpt-5.2',
+      'google/gemini-2.5-pro', 'google/gemini-2.5-flash', 'google/gemini-2.5-flash-lite',
+      'google/gemini-3-pro-preview', 'google/gemini-3-flash-preview'
+    ];
+    
+    // Model migration map for deprecated models
+    const MODEL_MIGRATION: Record<string, string> = {
+      'gpt-4o': 'google/gemini-3-flash-preview',
+      'gpt-4o-mini': 'openai/gpt-5-mini',
+      'gpt-4': 'openai/gpt-5',
+      'claude-sonnet': 'google/gemini-3-flash-preview',
+      'claude-opus': 'google/gemini-2.5-pro',
+    };
+
     // Get model from settings or use provided/default
-    let aiModel = model;
+    let aiModel: string = model || '';
     if (!aiModel) {
       const { data: modelSettings } = await supabase
         .from('ai_model_settings')
@@ -83,7 +99,19 @@ serve(async (req) => {
         .eq('action_type', 'enrichment')
         .single();
       
-      aiModel = modelSettings?.model || 'google/gemini-2.5-flash';
+      aiModel = modelSettings?.model || 'google/gemini-3-flash-preview';
+    }
+    
+    // Migrate deprecated models to valid ones
+    if (aiModel && MODEL_MIGRATION[aiModel]) {
+      console.log(`Migrating deprecated model ${aiModel} to ${MODEL_MIGRATION[aiModel]}`);
+      aiModel = MODEL_MIGRATION[aiModel];
+    }
+    
+    // Validate model is in allowed list
+    if (!aiModel || !VALID_MODELS.includes(aiModel)) {
+      console.log(`Invalid model ${aiModel}, defaulting to google/gemini-3-flash-preview`);
+      aiModel = 'google/gemini-3-flash-preview';
     }
 
     console.log(`Using AI model for enrichment: ${aiModel}`);
