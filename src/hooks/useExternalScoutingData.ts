@@ -9,6 +9,7 @@ import {
   ScoutingFormData,
   formDataToDbFormat
 } from '@/types/scouting';
+import { syncTechnologyInsert } from '@/lib/syncToExternal';
 
 /**
  * Hook para leer scouting_queue desde la Supabase EXTERNA (Railway)
@@ -227,7 +228,16 @@ export const useApproveExternalToTechnologies = () => {
         throw insertError;
       }
       
-      // Step 3: Mark as approved in EXTERNAL DB and delete from queue
+      // Step 3: Sync to EXTERNAL technologies table
+      try {
+        await syncTechnologyInsert({ ...techData, id: newTech.id });
+        console.log('[useApproveExternalToTechnologies] Synced to external DB');
+      } catch (syncError) {
+        console.error('[useApproveExternalToTechnologies] Sync to external failed:', syncError);
+        // Don't fail the main operation if sync fails
+      }
+      
+      // Step 4: Mark as approved in EXTERNAL scouting_queue
       await callExternalScoutingQueue({
         action: 'update',
         id: scoutingId,

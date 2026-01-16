@@ -12,9 +12,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    // Usar base de datos EXTERNA (Railway) directamente
+    const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')
+    const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_KEY')
+    
+    if (!externalUrl || !externalKey) {
+      console.error('Missing EXTERNAL_SUPABASE_URL or EXTERNAL_SUPABASE_SERVICE_KEY')
+      return new Response(
+        JSON.stringify({ success: false, error: 'Configuración de BD externa no disponible' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const externalSupabase = createClient(externalUrl, externalKey)
 
     const body = await req.json()
     console.log('Received technology from Chrome extension:', body)
@@ -36,15 +46,15 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Check for duplicates by name
-    const { data: existing } = await supabase
+    // Check for duplicates in EXTERNAL DB by name
+    const { data: existing } = await externalSupabase
       .from('scouting_queue')
       .select('id')
       .ilike('Nombre de la tecnología', technology_name.trim())
       .limit(1)
 
     if (existing && existing.length > 0) {
-      console.log('Technology already exists in queue:', technology_name)
+      console.log('Technology already exists in external queue:', technology_name)
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -55,8 +65,8 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Insert into scouting_queue with pending status
-    const { data, error } = await supabase
+    // Insert into EXTERNAL scouting_queue with pending status
+    const { data, error } = await externalSupabase
       .from('scouting_queue')
       .insert({
         'Nombre de la tecnología': technology_name.trim(),
@@ -75,14 +85,14 @@ Deno.serve(async (req) => {
       .single()
 
     if (error) {
-      console.error('Error inserting technology:', error)
+      console.error('Error inserting technology into external DB:', error)
       return new Response(
         JSON.stringify({ success: false, error: error.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log('Technology saved successfully:', data.id)
+    console.log('Technology saved to EXTERNAL DB successfully:', data.id)
 
     return new Response(
       JSON.stringify({ 
