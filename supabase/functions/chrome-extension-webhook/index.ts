@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
 
     // Insert into EXTERNAL scouting_queue with pending status
     // Map to external DB column names (Railway uses different column names)
+    // Only include fields that exist in the external schema
     const { data, error } = await externalSupabase
       .from('scouting_queue')
       .insert({
@@ -80,7 +81,6 @@ Deno.serve(async (req) => {
         status: 'pending',
         source: 'chrome_extension',
         source_url: captured_from_url || null,
-        fecha_scouting: new Date().toISOString().split('T')[0],
         review_notes: `Capturado desde Chrome Extension el ${new Date().toLocaleString('es-ES')}`
       })
       .select()
