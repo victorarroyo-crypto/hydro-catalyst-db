@@ -129,7 +129,7 @@ const EXCLUDED_EXTERNAL_FIELDS = [
   'sector_id',            // Local taxonomy reference
   'tipo_id',              // Local taxonomy reference
   'subcategoria_id',      // Local taxonomy reference
-  'queue_status',         // Mapped to 'status' separately
+  // Note: queue_status is handled specially below, NOT excluded
 ];
 
 // Transform local updates to external format
@@ -137,6 +137,13 @@ function transformUpdatesToExternal(updates: Record<string, unknown>): Record<st
   const transformed: Record<string, unknown> = {};
   
   for (const [key, value] of Object.entries(updates)) {
+    // Special handling: queue_status -> status (external DB field name)
+    if (key === 'queue_status') {
+      transformed['status'] = value;
+      console.log(`[external-scouting-queue] Mapped queue_status="${value}" to status`);
+      continue;
+    }
+    
     // Skip fields that don't exist in external DB
     if (EXCLUDED_EXTERNAL_FIELDS.includes(key)) {
       console.log(`[external-scouting-queue] Skipping field "${key}" (not in external DB)`);
