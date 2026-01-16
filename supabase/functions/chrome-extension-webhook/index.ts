@@ -47,10 +47,11 @@ Deno.serve(async (req) => {
     }
 
     // Check for duplicates in EXTERNAL DB by name
+    // External DB uses 'nombre' column, not 'Nombre de la tecnología'
     const { data: existing } = await externalSupabase
       .from('scouting_queue')
       .select('id')
-      .ilike('Nombre de la tecnología', technology_name.trim())
+      .ilike('nombre', technology_name.trim())
       .limit(1)
 
     if (existing && existing.length > 0) {
@@ -66,20 +67,21 @@ Deno.serve(async (req) => {
     }
 
     // Insert into EXTERNAL scouting_queue with pending status
+    // Map to external DB column names (Railway uses different column names)
     const { data, error } = await externalSupabase
       .from('scouting_queue')
       .insert({
-        'Nombre de la tecnología': technology_name.trim(),
-        'Proveedor / Empresa': provider?.trim() || null,
-        'Web de la empresa': url?.trim() || null,
-        'Descripción técnica breve': description?.trim() || null,
-        'País de origen': country?.trim() || null,
-        'Tipo de tecnología': 'Por clasificar',
-        queue_status: 'pending',
+        nombre: technology_name.trim(),
+        proveedor: provider?.trim() || null,
+        web: url?.trim() || null,
+        descripcion: description?.trim() || null,
+        pais: country?.trim() || null,
+        tipo_sugerido: 'Por clasificar',
+        status: 'pending',
         source: 'chrome_extension',
         source_url: captured_from_url || null,
-        'Fecha de scouting': new Date().toISOString().split('T')[0],
-        notes: `Capturado desde Chrome Extension el ${new Date().toLocaleString('es-ES')}`
+        fecha_scouting: new Date().toISOString().split('T')[0],
+        review_notes: `Capturado desde Chrome Extension el ${new Date().toLocaleString('es-ES')}`
       })
       .select()
       .single()
