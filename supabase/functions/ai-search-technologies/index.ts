@@ -25,6 +25,9 @@ const MAX_CANDIDATES_PER_BLOCK = 80; // Max candidates from each block
 const MAX_STAGE2_CANDIDATES = 300;   // Max candidates for deep analysis
 const MAX_FINAL_RESULTS = 100;       // Max final results
 
+// Use faster model for Stage 1 pre-filtering (less critical, needs speed)
+const STAGE1_MODEL = 'google/gemini-2.5-flash-lite';  // Fastest model for pre-filtering
+
 // Light fields for Stage 1 pre-filtering (faster, less tokens)
 const LIGHT_FIELDS = `
   id, 
@@ -74,28 +77,14 @@ async function processBlock(
     desc: t["Descripción técnica breve"] ?? null
   })).join('\n');
 
-  const prompt = `Eres un experto pre-filtrando tecnologías del sector agua y medio ambiente.
+  // Compact prompt for speed - Stage 1 just needs to be inclusive
+  const prompt = `Pre-filter technologies for: "${query}"
+Include ANY that MIGHT be relevant. Be inclusive. Max ${MAX_CANDIDATES_PER_BLOCK} from this block.
 
-TAREA: Identifica TODOS los candidatos que podrían ser relevantes para: "${query}"
-${filterContext !== 'ninguno' ? `Filtros ya aplicados en BD: ${filterContext}` : ''}
-
-BLOQUE ${blockIndex + 1} - ${blockTechs.length} tecnologías a evaluar
-
-CRITERIOS DE PRE-SELECCIÓN (sé INCLUSIVO, es mejor incluir de más):
-1. Incluye si hay CUALQUIER posibilidad de relevancia
-2. Considera sinónimos y términos relacionados:
-   - "modelado/simulación" = software, herramientas diseño, análisis, EPANET, InfoWorks
-   - "tratamiento" = equipos, procesos, sistemas depuración
-   - "monitorización" = sensores, SCADA, IoT, telemetría
-   - "gestión" = software, plataformas, ERP
-3. Revisa cuidadosamente el campo "desc" (descripción técnica)
-4. Selecciona hasta ${MAX_CANDIDATES_PER_BLOCK} candidatos de este bloque
-
-TECNOLOGÍAS DEL BLOQUE (JSONL):
+Technologies (JSONL):
 ${lightSummary}
 
-RESPUESTA (solo JSON válido, sin markdown):
-{"candidate_ids": ["id1", "id2", ...]}`;
+Reply JSON only: {"candidate_ids": ["id1", ...]}`;
 
   try {
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -163,10 +152,10 @@ async function stage1ParallelBlocks(
   
   console.log(`[Stage 1] Processing ${blocks.length} blocks of ~${BLOCK_SIZE} techs each (${technologies.length} total)...`);
 
-  // Process all blocks in parallel
+  // Process all blocks in parallel using FAST model for Stage 1
   const results = await Promise.all(
     blocks.map((block, index) => 
-      processBlock(block, index, query, filterContext, apiKey, model)
+      processBlock(block, index, query, filterContext, apiKey, STAGE1_MODEL)
     )
   );
 
