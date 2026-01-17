@@ -179,12 +179,9 @@ Deno.serve(async (req) => {
     };
 
     // Link to scouting session if provided
-    // Note: scouting_job_id from Railway maps to a session in scouting_sessions
-    // We could store this in notes or a dedicated field if needed
+    // Store in dedicated scouting_job_id field for proper filtering
     if (payload.scouting_job_id) {
-      scoutingRecord.notes = scoutingRecord.notes 
-        ? `${scoutingRecord.notes} | Session: ${payload.scouting_job_id}`
-        : `Session: ${payload.scouting_job_id}`;
+      scoutingRecord.scouting_job_id = payload.scouting_job_id;
     }
 
     // Insert into scouting_queue
