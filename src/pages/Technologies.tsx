@@ -303,7 +303,7 @@ const Technologies: React.FC = () => {
       setNewProject({ name: '', description: '', status: 'draft', target_date: '', notes: '' });
       toast({ 
         title: 'Proyecto creado', 
-        description: `Se añadieron ${data?.count || 0} tecnologías al proyecto` 
+        description: `Se añadieron las tecnologías al proyecto` 
       });
       navigate(`/projects/${projectId}`);
     },
@@ -312,25 +312,36 @@ const Technologies: React.FC = () => {
     },
   });
 
-  // Get all technology IDs from current search/filter results
-  const getAllFilteredTechnologyIds = (): string[] => {
-    if (!data?.technologies) return [];
-    // If AI search is active, use those IDs
+  // Get technology IDs from current search results
+  // For AI search: use all AI-matched IDs
+  // For filtered search: use current page only (to avoid saving thousands)
+  const getTechnologyIdsToSave = (): string[] => {
+    // AI search returns curated, relevant results - save all of them
     if (aiSearchIds && aiSearchIds.length > 0) {
       return aiSearchIds;
     }
-    // Otherwise get IDs from current filtered data (all pages)
+    // For manual filters, save only current page technologies
+    if (!data?.technologies) return [];
     return data.technologies.map(t => t.id);
   };
 
   const handleSaveAsProject = () => {
     if (!newProject.name.trim()) return;
-    const techIds = getAllFilteredTechnologyIds();
+    const techIds = getTechnologyIdsToSave();
+    if (techIds.length === 0) {
+      toast({ title: 'No hay tecnologías para guardar', variant: 'destructive' });
+      return;
+    }
     createProjectMutation.mutate(techIds);
   };
 
   // Check if there are results to save
   const hasResultsToSave = !isLoading && !isAiSearching && (data?.count || 0) > 0;
+  
+  // Count of technologies that will be saved
+  const techCountToSave = aiSearchIds && aiSearchIds.length > 0 
+    ? aiSearchIds.length 
+    : (data?.technologies?.length || 0);
 
   return (
     <div className="animate-fade-in">
@@ -607,9 +618,14 @@ const Technologies: React.FC = () => {
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Se creará un nuevo proyecto con las{' '}
-            <span className="font-medium text-foreground">{data?.count || 0} tecnologías</span>{' '}
-            encontradas en la búsqueda actual.
+            Se creará un nuevo proyecto con{' '}
+            <span className="font-medium text-foreground">{techCountToSave} tecnologías</span>
+            {aiSearchIds && aiSearchIds.length > 0 ? (
+              <span className="text-primary"> (resultados de búsqueda IA)</span>
+            ) : (
+              <span> de la página actual</span>
+            )}
+            .
           </p>
           <div className="space-y-4">
             <div>
