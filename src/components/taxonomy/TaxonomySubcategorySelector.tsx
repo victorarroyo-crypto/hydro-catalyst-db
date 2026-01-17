@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Star } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 interface TaxonomySubcategoria {
   id: number;
@@ -33,7 +33,7 @@ export const TaxonomySubcategorySelector: React.FC<TaxonomySubcategorySelectorPr
   const { data: allSubcategorias, isLoading } = useQuery({
     queryKey: ['taxonomy-subcategorias'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_subcategorias')
         .select('*')
         .order('codigo');

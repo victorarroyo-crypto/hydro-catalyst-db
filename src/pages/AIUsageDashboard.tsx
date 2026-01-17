@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { 
   BarChart3, 
   Activity, 
@@ -107,7 +107,7 @@ const AIUsageDashboard: React.FC = () => {
   const { data: logs, isLoading, refetch } = useQuery({
     queryKey: ['ai-usage-logs', timeRange],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('ai_usage_logs')
         .select('*')
         .gte('created_at', startDate.toISOString())

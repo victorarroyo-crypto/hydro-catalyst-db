@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Star } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 interface TaxonomyTipo {
   id: number;
@@ -31,7 +31,7 @@ export const TaxonomyTypeSelector: React.FC<TaxonomyTypeSelectorProps> = ({
   const { data: tipos, isLoading } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('*')
         .order('id');

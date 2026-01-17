@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { externalSupabase } from "@/integrations/supabase/externalClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -166,7 +166,7 @@ const Trends = () => {
   const { data: documents, isLoading } = useQuery({
     queryKey: ['trend-documents'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('knowledge_documents')
         .select('*')
         .eq('sector', 'tendencias')
@@ -184,13 +184,13 @@ const Trends = () => {
       const fileName = file instanceof File ? file.name : `document_${Date.now()}.pdf`;
       const filePath = `trends/${Date.now()}_${fileName}`;
       
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await externalSupabase.storage
         .from('knowledge-base')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase
+      const { error: insertError } = await externalSupabase
         .from('knowledge_documents')
         .insert({
           name: fileName,
@@ -226,12 +226,12 @@ const Trends = () => {
   const deleteMutation = useMutation({
     mutationFn: async (doc: TrendDocument) => {
       // Delete from storage
-      await supabase.storage
+      await externalSupabase.storage
         .from('knowledge-base')
         .remove([doc.file_path]);
 
       // Delete from database
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('knowledge_documents')
         .delete()
         .eq('id', doc.id);
@@ -257,7 +257,7 @@ const Trends = () => {
   // Reprocess mutation
   const reprocessMutation = useMutation({
     mutationFn: async (docId: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('knowledge_documents')
         .update({ status: 'pending', chunk_count: null })
         .eq('id', docId);
@@ -307,7 +307,7 @@ const Trends = () => {
     
     setGeneratingDescription(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-document-description', {
+      const { data, error } = await externalSupabase.functions.invoke('generate-document-description', {
         body: {
           fileName: selectedFile.name,
           category: uploadCategory,
@@ -371,7 +371,7 @@ const Trends = () => {
 
   const handleDownload = async (doc: TrendDocument) => {
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await externalSupabase.storage
         .from('knowledge-base')
         .download(doc.file_path);
 

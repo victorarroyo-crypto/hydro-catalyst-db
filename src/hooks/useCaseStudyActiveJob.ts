@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useEffect } from 'react';
 
 export interface ActiveCaseStudyJob {
@@ -25,7 +25,7 @@ export function useCaseStudyActiveJob() {
     queryFn: async () => {
       const cutoffTime = new Date(Date.now() - ZOMBIE_THRESHOLD_MINUTES * 60 * 1000).toISOString();
       
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('case_study_jobs')
         .select('id, status, current_phase, progress_percentage, error_message, case_study_id, created_at, updated_at, result_data')
         .in('status', ['processing', 'awaiting_user_decision'])
@@ -52,7 +52,7 @@ export function useCaseStudyActiveJob() {
   useEffect(() => {
     if (!query.data?.id) return;
 
-    const channel = supabase
+    const channel = externalSupabase
       .channel(`case_study_active_job_${query.data.id}`)
       .on(
         'postgres_changes',
@@ -70,7 +70,7 @@ export function useCaseStudyActiveJob() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      externalSupabase.removeChannel(channel);
     };
   }, [query.data?.id]);
 

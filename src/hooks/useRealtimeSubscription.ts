@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 type TableName = 
   | 'technologies' 
@@ -27,7 +27,7 @@ export const useRealtimeSubscription = ({ tables, queryKeys }: UseRealtimeSubscr
 
   useEffect(() => {
     const channels = tables.map((table, index) => {
-      return supabase
+      return externalSupabase
         .channel(`realtime-${table}`)
         .on(
           'postgres_changes',
@@ -48,7 +48,7 @@ export const useRealtimeSubscription = ({ tables, queryKeys }: UseRealtimeSubscr
 
     return () => {
       channels.forEach(channel => {
-        supabase.removeChannel(channel);
+        externalSupabase.removeChannel(channel);
       });
     };
   }, [tables, queryKeys, queryClient]);
