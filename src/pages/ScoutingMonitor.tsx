@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -208,39 +209,46 @@ export default function ScoutingMonitor() {
     },
   });
 
-  // Fetch scouting queue counts
+  // Fetch scouting queue counts from external DB
   const { data: queueCounts } = useQuery({
     queryKey: ['scouting-queue-counts-monitor'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_queue')
-        .select('queue_status');
+        .select('status');
       
       if (error) throw error;
       
       const counts = {
         total: data?.length || 0,
-        pending: data?.filter(d => d.queue_status === 'pending').length || 0,
-        review: data?.filter(d => d.queue_status === 'review').length || 0,
-        pending_approval: data?.filter(d => d.queue_status === 'pending_approval').length || 0,
+        pending: data?.filter((d: { status: string }) => d.status === 'pending').length || 0,
+        review: data?.filter((d: { status: string }) => d.status === 'review').length || 0,
+        pending_approval: data?.filter((d: { status: string }) => d.status === 'pending_approval').length || 0,
       };
       return counts;
     },
     refetchInterval: 30000,
   });
 
-  // Fetch technology counts per session by calling external-scouting-queue
+  // Fetch technology counts per session directly from external DB
   const { data: techCountsBySession } = useQuery({
     queryKey: ['tech-counts-by-session'],
     queryFn: async () => {
-      // Call the external-scouting-queue edge function to get counts by scouting_job_id
-      const { data, error } = await supabase.functions.invoke('external-scouting-queue', {
-        body: { action: 'count_by_session' }
-      });
+      const { data, error } = await externalSupabase
+        .from('scouting_queue')
+        .select('scouting_job_id');
       
       if (error) throw error;
-      // Expected response: { session_id: count, ... }
-      return (data?.data || {}) as Record<string, number>;
+      
+      // Count by session
+      const counts: Record<string, number> = {};
+      (data || []).forEach((item: { scouting_job_id: string | null }) => {
+        if (item.scouting_job_id) {
+          counts[item.scouting_job_id] = (counts[item.scouting_job_id] || 0) + 1;
+        }
+      });
+      
+      return counts;
     },
     refetchInterval: 30000,
   });
