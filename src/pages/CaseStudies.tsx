@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -100,7 +100,7 @@ const CaseStudies: React.FC = () => {
   const { data: caseStudies, isLoading } = useQuery({
     queryKey: ['case-studies'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('casos_de_estudio')
         .select('*')
         .order('created_at', { ascending: false });
@@ -113,7 +113,7 @@ const CaseStudies: React.FC = () => {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('casos_de_estudio')
         .delete()
         .eq('id', id);
@@ -181,7 +181,7 @@ const CaseStudies: React.FC = () => {
     };
 
     // Insert back into technologies
-    const { data: insertedTech, error: insertError } = await supabase
+    const { data: insertedTech, error: insertError } = await externalSupabase
       .from('technologies')
       .insert([technologyData])
       .select()
@@ -206,7 +206,7 @@ const CaseStudies: React.FC = () => {
     }
 
     // Delete from case studies
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await externalSupabase
       .from('casos_de_estudio')
       .delete()
       .eq('id', selectedCase.id);
@@ -281,7 +281,7 @@ const CaseStudies: React.FC = () => {
       "Descripción técnica breve": editForm.description || null,
     };
     
-    const { error } = await supabase
+    const { error } = await externalSupabase
       .from('casos_de_estudio')
       .update({
         name: editForm.name,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { syncProjectTechnologyDelete, syncProjectTechnologyInsert } from '@/lib/syncToExternal';
@@ -111,7 +111,7 @@ const ProjectDetail: React.FC = () => {
   const { data: project, isLoading: loadingProject } = useQuery({
     queryKey: ['project', id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('projects')
         .select('*')
         .eq('id', id)
@@ -127,7 +127,7 @@ const ProjectDetail: React.FC = () => {
   const { data: projectTechnologies, isLoading: loadingTechs } = useQuery({
     queryKey: ['project-technologies', id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('project_technologies')
         .select(`
           id,
@@ -160,7 +160,7 @@ const ProjectDetail: React.FC = () => {
     queryFn: async () => {
       if (!searchQuery.trim()) return [];
       
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technologies')
         .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Proveedor / Empresa", "Grado de madurez (TRL)"')
         .ilike('"Nombre de la tecnología"', `%${searchQuery}%`)
@@ -175,7 +175,7 @@ const ProjectDetail: React.FC = () => {
   // Update project mutation
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<Project>) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('projects')
         .update(data)
         .eq('id', id);
@@ -196,7 +196,7 @@ const ProjectDetail: React.FC = () => {
   // Add technology to project
   const addTechMutation = useMutation({
     mutationFn: async (technologyId: string) => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('project_technologies')
         .insert({
           project_id: id,
@@ -234,7 +234,7 @@ const ProjectDetail: React.FC = () => {
   // Remove technology from project
   const removeTechMutation = useMutation({
     mutationFn: async (projectTechId: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('project_technologies')
         .delete()
         .eq('id', projectTechId);

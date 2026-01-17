@@ -91,7 +91,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   const { data: userProjects } = useQuery({
     queryKey: ['user-projects-for-add', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('projects')
         .select('id, name, status')
         .in('status', ['draft', 'active', 'on_hold'])
@@ -107,7 +107,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   const { data: tipos } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('id, codigo, nombre');
       if (error) throw error;
@@ -121,7 +121,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     queryKey: ['technology-tipos', technology?.id],
     queryFn: async () => {
       if (!technology?.id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_tipos')
         .select('tipo_id, is_primary')
         .eq('technology_id', technology.id);
@@ -136,7 +136,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     queryKey: ['technology-detail', technology?.id],
     queryFn: async () => {
       if (!technology?.id) return null;
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technologies')
         .select('*')
         .eq('id', technology.id)
@@ -158,7 +158,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     if (!user || !selectedProjectId) return;
     
     setIsAddingToProject(true);
-    const { data, error } = await supabase.from('project_technologies').insert({
+    const { data, error } = await externalSupabase.from('project_technologies').insert({
       project_id: selectedProjectId,
       technology_id: technology.id,
       added_by: user.id,
@@ -206,7 +206,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     if (!user) return;
     
     setIsFavoriting(true);
-    const { error } = await supabase.from('user_favorites').insert({
+    const { error } = await externalSupabase.from('user_favorites').insert({
       user_id: user.id,
       technology_id: technology.id,
     });
@@ -237,7 +237,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     if (!user) return;
     
     setIsSendingToReview(true);
-    const { error } = await supabase
+    const { error } = await externalSupabase
       .from('technologies')
       .update({
         review_status: 'pending',
@@ -310,7 +310,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
       original_data: originalData,
     };
     
-    const { data: insertedTrend, error: insertError } = await supabase
+    const { data: insertedTrend, error: insertError } = await externalSupabase
       .from('technological_trends')
       .insert([trendData])
       .select()
@@ -334,7 +334,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     }
 
     // Then delete from technologies
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await externalSupabase
       .from('technologies')
       .delete()
       .eq('id', technology.id);
@@ -412,7 +412,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
       original_data: originalData,
     };
     
-    const { data: insertedCase, error: insertError } = await supabase
+    const { data: insertedCase, error: insertError } = await externalSupabase
       .from('casos_de_estudio')
       .insert([caseData])
       .select()
@@ -436,7 +436,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     }
 
     // Then delete from technologies
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await externalSupabase
       .from('technologies')
       .delete()
       .eq('id', technology.id);
@@ -619,7 +619,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                     return;
                   }
 
-                  const { error } = await supabase
+                  const { error } = await externalSupabase
                     .from('technologies')
                     .update(updates)
                     .eq('id', t.id);

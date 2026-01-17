@@ -27,7 +27,7 @@ import {
   Code2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import {
   Document,
   Packer,
@@ -219,7 +219,7 @@ export default function AdminDbAudit() {
   const { data: auditData, isLoading: isLoadingAudit, refetch: refetchAudit } = useQuery({
     queryKey: ['db-audit-comparison'],
     queryFn: async (): Promise<AuditResponse> => {
-      const { data, error } = await supabase.functions.invoke('compare-databases', {
+      const { data, error } = await externalSupabase.functions.invoke('compare-databases', {
         body: { detailed: true }
       });
       
@@ -232,7 +232,7 @@ export default function AdminDbAudit() {
   // Sync mutation
   const syncMutation = useMutation({
     mutationFn: async ({ table, action }: { table: string; action: 'sync_missing' | 'update_modified' | 'sync_all' }) => {
-      const { data, error } = await supabase.functions.invoke('sync-databases', {
+      const { data, error } = await externalSupabase.functions.invoke('sync-databases', {
         body: { table, action }
       });
       

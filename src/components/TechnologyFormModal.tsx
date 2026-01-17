@@ -223,7 +223,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   const { data: tipos } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('*')
         .order('id');
@@ -235,7 +235,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   const { data: allSubcategorias } = useQuery({
     queryKey: ['taxonomy-subcategorias'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_subcategorias')
         .select('*')
         .order('codigo');
@@ -247,7 +247,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   const { data: sectores } = useQuery({
     queryKey: ['taxonomy-sectores'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_sectores')
         .select('*')
         .order('id');
@@ -261,7 +261,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     queryKey: ['technology-tipos', technology?.id],
     queryFn: async () => {
       if (!technology?.id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_tipos')
         .select('tipo_id, is_primary')
         .eq('technology_id', technology.id);
@@ -276,7 +276,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     queryKey: ['technology-subcategorias', technology?.id],
     queryFn: async () => {
       if (!technology?.id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_subcategorias')
         .select('subcategoria_id, is_primary')
         .eq('technology_id', technology.id);
@@ -292,7 +292,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     queryFn: async () => {
       const updatedBy = (technology as any)?.updated_by;
       if (!updatedBy) return null;
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('profiles')
         .select('full_name')
         .eq('user_id', updatedBy)
@@ -309,7 +309,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     queryFn: async () => {
       const reviewerId = (technology as any)?.reviewer_id;
       if (!reviewerId) return null;
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('profiles')
         .select('full_name')
         .eq('user_id', reviewerId)
@@ -621,7 +621,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       if (isEditing && technology) {
         if (isAnalyst) {
           // Analysts create edit proposals
-          const { error } = await supabase
+          const { error } = await externalSupabase
             .from('technology_edits')
             .insert([{
               technology_id: technology.id,
@@ -640,7 +640,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
           });
         } else {
           // Supervisors/Admins can edit directly - also record as reviewer
-          const { error } = await supabase
+          const { error } = await externalSupabase
             .from('technologies')
             .update({
               ...dataToSave,
@@ -654,7 +654,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           // Update technology_tipos relationship
           // First delete existing
-          await supabase
+          await externalSupabase
             .from('technology_tipos')
             .delete()
             .eq('technology_id', technology.id);
@@ -667,7 +667,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               is_primary: t.is_primary,
             }));
             
-            const { error: tiposError } = await supabase
+            const { error: tiposError } = await externalSupabase
               .from('technology_tipos')
               .insert(tiposToInsert);
             
@@ -676,7 +676,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           // Update technology_subcategorias relationship
           // First delete existing
-          await supabase
+          await externalSupabase
             .from('technology_subcategorias')
             .delete()
             .eq('technology_id', technology.id);
@@ -689,7 +689,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               is_primary: s.is_primary,
             }));
             
-            const { error: subcategoriasError } = await supabase
+            const { error: subcategoriasError } = await externalSupabase
               .from('technology_subcategorias')
               .insert(subcategoriasToInsert);
             
@@ -712,7 +712,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
         // Creating new technology
         if (isAnalyst) {
           // Analysts create proposal for new technology (technology_id = null)
-          const { error } = await supabase
+          const { error } = await externalSupabase
             .from('technology_edits')
             .insert([{
               technology_id: null,
@@ -732,7 +732,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
           });
         } else {
           // Admin/Supervisor: Create directly
-          const { data: insertedData, error } = await supabase
+          const { data: insertedData, error } = await externalSupabase
             .from('technologies')
             .insert({
               ...dataToSave,
@@ -751,7 +751,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               is_primary: t.is_primary,
             }));
             
-            const { error: tiposError } = await supabase
+            const { error: tiposError } = await externalSupabase
               .from('technology_tipos')
               .insert(tiposToInsert);
             
@@ -766,7 +766,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               is_primary: s.is_primary,
             }));
             
-            const { error: subcategoriasError } = await supabase
+            const { error: subcategoriasError } = await externalSupabase
               .from('technology_subcategorias')
               .insert(subcategoriasToInsert);
             

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -83,7 +83,7 @@ const Projects: React.FC = () => {
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('projects')
         .select('*')
         .order('created_at', { ascending: false });
@@ -98,7 +98,7 @@ const Projects: React.FC = () => {
   const { data: techCounts } = useQuery({
     queryKey: ['project-tech-counts'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('project_technologies')
         .select('project_id');
       
@@ -116,7 +116,7 @@ const Projects: React.FC = () => {
   // Create project mutation
   const createMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('projects')
         .insert({
           name: newProject.name,
@@ -144,13 +144,13 @@ const Projects: React.FC = () => {
   const deleteMutation = useMutation({
     mutationFn: async (projectId: string) => {
       // First delete project technologies
-      await supabase
+      await externalSupabase
         .from('project_technologies')
         .delete()
         .eq('project_id', projectId);
       
       // Then delete the project
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('projects')
         .delete()
         .eq('id', projectId);
