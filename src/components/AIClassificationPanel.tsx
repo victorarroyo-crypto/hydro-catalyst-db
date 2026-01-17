@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,14 +34,14 @@ export const AIClassificationPanel: React.FC = () => {
   const { data: stats, refetch: refetchStats } = useQuery({
     queryKey: ['unclassified-count'],
     queryFn: async () => {
-      const { count: unclassifiedCount, error } = await supabase
+      const { count: unclassifiedCount, error } = await externalSupabase
         .from('technologies')
         .select('id', { count: 'exact', head: true })
         .is('tipo_id', null);
       
       if (error) throw error;
 
-      const { count: totalCount } = await supabase
+      const { count: totalCount } = await externalSupabase
         .from('technologies')
         .select('id', { count: 'exact', head: true });
 
@@ -60,7 +60,7 @@ export const AIClassificationPanel: React.FC = () => {
   const { data: modelConfig } = useQuery({
     queryKey: ['classification-model'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('ai_model_settings')
         .select('model')
         .eq('action_type', 'classification')
@@ -79,7 +79,7 @@ export const AIClassificationPanel: React.FC = () => {
 
   const classifyMutation = useMutation({
     mutationFn: async (): Promise<ClassificationResponse> => {
-      const { data, error } = await supabase.functions.invoke('classify-technologies', {
+      const { data, error } = await externalSupabase.functions.invoke('classify-technologies', {
         body: { batchSize: 40 },
       });
 

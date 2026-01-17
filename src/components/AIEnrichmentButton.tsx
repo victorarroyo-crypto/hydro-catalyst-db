@@ -19,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { useLLMModels, getDefaultModel, formatModelCost } from '@/hooks/useLLMModels';
 
@@ -105,7 +105,7 @@ export const AIEnrichmentButton: React.FC<AIEnrichmentButtonProps> = ({
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-technology', {
+      const { data, error } = await externalSupabase.functions.invoke('enrich-technology', {
         body: {
           technology: {
             id: technology.id,

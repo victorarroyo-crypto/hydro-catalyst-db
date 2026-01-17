@@ -4,7 +4,7 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, MapPin, Tag } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { QuickClassifyButton } from '@/components/QuickClassifyButton';
 import { DeleteTechnologyButton } from '@/components/DeleteTechnologyButton';
 import { DownloadTechnologyButton } from '@/components/DownloadTechnologyButton';
@@ -39,7 +39,7 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
       let sector = null;
       
       if (tipoId) {
-        const { data } = await supabase
+        const { data } = await externalSupabase
           .from('taxonomy_tipos')
           .select('codigo, nombre')
           .eq('id', tipoId)
@@ -48,7 +48,7 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
       }
       
       if (subcategoriaId) {
-        const { data } = await supabase
+        const { data } = await externalSupabase
           .from('taxonomy_subcategorias')
           .select('codigo, nombre')
           .eq('id', subcategoriaId)
@@ -57,7 +57,7 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
       }
 
       if (sectorId) {
-        const { data } = await supabase
+        const { data } = await externalSupabase
           .from('taxonomy_sectores')
           .select('id, nombre')
           .eq('id', sectorId)

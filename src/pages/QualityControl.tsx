@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -122,7 +122,7 @@ const QualityControl: React.FC = () => {
   const { data: edits, isLoading: loadingEdits } = useQuery({
     queryKey: ['technology-edits'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_edits')
         .select('*')
         .order('created_at', { ascending: false });
@@ -141,7 +141,7 @@ const QualityControl: React.FC = () => {
       const pageSize = 1000;
       
       while (true) {
-        const { data, error } = await supabase
+        const { data, error } = await externalSupabase
           .from('technologies')
           .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Proveedor / Empresa", "Grado de madurez (TRL)", review_status, reviewer_id, review_requested_at, review_requested_by')
           .neq('review_status', 'none')
@@ -166,7 +166,7 @@ const QualityControl: React.FC = () => {
   const { data: deletionRequests, isLoading: loadingDeletions } = useQuery({
     queryKey: ['deletion-requests'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_edits')
         .select(`
           id,
@@ -203,7 +203,7 @@ const QualityControl: React.FC = () => {
       const pageSize = 1000;
       
       while (true) {
-        const { data, error } = await supabase
+        const { data, error } = await externalSupabase
           .from('technologies')
           .select('id, tipo_id, subcategoria_id, sector_id')
           .range(from, from + pageSize - 1);
@@ -248,7 +248,7 @@ const QualityControl: React.FC = () => {
     queryKey: ['reviewer-profiles', allUserIds],
     queryFn: async () => {
       if (allUserIds.length === 0) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('profiles')
         .select('user_id, full_name')
         .in('user_id', allUserIds);
@@ -269,7 +269,7 @@ const QualityControl: React.FC = () => {
   // Review edit mutation (approve/reject)
   const reviewMutation = useMutation({
     mutationFn: async ({ editId, action }: { editId: string; action: 'approve' | 'reject' }) => {
-      const response = await supabase.functions.invoke('review-edit', {
+      const response = await externalSupabase.functions.invoke('review-edit', {
         body: { editId, action },
       });
 
@@ -277,7 +277,7 @@ const QualityControl: React.FC = () => {
       if (!response.data.success) throw new Error(response.data.error);
       
       if (reviewComment) {
-        await supabase
+        await externalSupabase
           .from('technology_edits')
           .update({ review_comments: reviewComment })
           .eq('id', editId);
@@ -311,7 +311,7 @@ const QualityControl: React.FC = () => {
   // Claim a technology for review
   const claimMutation = useMutation({
     mutationFn: async (techId: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technologies')
         .update({
           review_status: 'in_review',
@@ -342,7 +342,7 @@ const QualityControl: React.FC = () => {
   // Complete review
   const completeMutation = useMutation({
     mutationFn: async (techId: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technologies')
         .update({
           review_status: 'completed',
@@ -372,7 +372,7 @@ const QualityControl: React.FC = () => {
   // Cancel review (release back to pending)
   const cancelMutation = useMutation({
     mutationFn: async (techId: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technologies')
         .update({
           review_status: 'pending',
@@ -403,14 +403,14 @@ const QualityControl: React.FC = () => {
   // Approve deletion request
   const approveDeletionMutation = useMutation({
     mutationFn: async (request: DeletionRequest) => {
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await externalSupabase
         .from('technologies')
         .delete()
         .eq('id', request.technology_id);
 
       if (deleteError) throw deleteError;
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await externalSupabase
         .from('technology_edits')
         .update({
           status: 'approved',
@@ -442,7 +442,7 @@ const QualityControl: React.FC = () => {
   // Reject deletion request
   const rejectDeletionMutation = useMutation({
     mutationFn: async ({ requestId, reason }: { requestId: string; reason: string }) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technology_edits')
         .update({
           status: 'rejected',

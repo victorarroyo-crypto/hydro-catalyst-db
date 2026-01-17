@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Search, Loader2, Info, Filter, ChevronDown, ChevronUp, Eye, Bookmark, BookmarkCheck, Trash2, History, DollarSign } from 'lucide-react';
@@ -100,7 +100,7 @@ const AISearch: React.FC = () => {
   const { data: modelConfig } = useQuery({
     queryKey: ['search-model'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('ai_model_settings')
         .select('model')
         .eq('action_type', 'search')
@@ -120,7 +120,7 @@ const AISearch: React.FC = () => {
   const { data: tipos } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('id, codigo, nombre')
         .order('nombre');
@@ -132,7 +132,7 @@ const AISearch: React.FC = () => {
   const { data: subcategorias } = useQuery({
     queryKey: ['taxonomy-subcategorias', filters.tipoId],
     queryFn: async () => {
-      let query = supabase.from('taxonomy_subcategorias').select('id, codigo, nombre, tipo_id').order('nombre');
+      let query = externalSupabase.from('taxonomy_subcategorias').select('id, codigo, nombre, tipo_id').order('nombre');
       if (filters.tipoId) {
         query = query.eq('tipo_id', filters.tipoId);
       }
@@ -146,7 +146,7 @@ const AISearch: React.FC = () => {
   const { data: sectores } = useQuery({
     queryKey: ['taxonomy-sectores'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_sectores')
         .select('id, nombre')
         .order('nombre');
@@ -158,7 +158,7 @@ const AISearch: React.FC = () => {
   const { data: paises } = useQuery({
     queryKey: ['unique-countries'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technologies')
         .select('"País de origen"')
         .not('"País de origen"', 'is', null);
@@ -173,7 +173,7 @@ const AISearch: React.FC = () => {
     queryKey: ['saved-ai-searches', user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('saved_ai_searches')
         .select('*')
         .eq('user_id', user.id)
@@ -222,7 +222,7 @@ const AISearch: React.FC = () => {
 
       const hasFilters = Object.keys(apiFilters).length > 0;
 
-      const { data, error } = await supabase.functions.invoke('ai-search-technologies', {
+      const { data, error } = await externalSupabase.functions.invoke('ai-search-technologies', {
         body: { 
           query: query.trim(),
           filters: hasFilters ? apiFilters : undefined,
@@ -245,7 +245,7 @@ const AISearch: React.FC = () => {
         const validIds = data.matching_ids.filter((id: string) => uuidRegex.test(id));
 
         if (validIds.length > 0) {
-          const { data: techData, error: techError } = await supabase
+          const { data: techData, error: techError } = await externalSupabase
             .from('technologies')
             .select('*')
             .in('id', validIds);
@@ -325,7 +325,7 @@ const AISearch: React.FC = () => {
         trlMax: trlRange[1] < 9 ? trlRange[1] : null,
       };
 
-      const { error } = await supabase.from('saved_ai_searches').insert({
+      const { error } = await externalSupabase.from('saved_ai_searches').insert({
         user_id: user.id,
         name: searchName.trim(),
         query: query.trim(),
@@ -384,7 +384,7 @@ const AISearch: React.FC = () => {
     e.stopPropagation();
     
     try {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('saved_ai_searches')
         .delete()
         .eq('id', id);
