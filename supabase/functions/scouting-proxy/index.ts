@@ -86,19 +86,19 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    
-    if (claimsError || !claimsData?.claims) {
-      console.warn('[scouting-proxy] Invalid JWT token');
+    // Fix: Use getUser() instead of getClaims() for compatibility
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !userData?.user) {
+      console.warn('[scouting-proxy] Invalid JWT token:', userError?.message);
       return new Response(
         JSON.stringify({ success: false, error: 'Token de autenticación inválido' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    const userId = claimsData.claims.sub;
-    const userEmail = claimsData.claims.email;
+    const userId = userData.user.id;
+    const userEmail = userData.user.email;
     
     // Get user role from database
     const { data: roleData } = await supabase
@@ -190,11 +190,29 @@ Deno.serve(async (req) => {
     console.log(`[scouting-proxy] Response status=${res.status}`);
 
     if (!res.ok) {
+      // Enhanced error handling for specific status codes
+      let errorMessage = `Error del backend: ${res.status}`;
+      let errorDetails: Record<string, unknown> = { status: res.status, body: data };
+
+      // Special handling for 409 Conflict (scouting already running)
+      if (res.status === 409) {
+        errorMessage = data?.detail?.message || data?.message || 'Ya hay un scouting en ejecución';
+        errorDetails = {
+          status: 409,
+          error_type: 'conflict',
+          message: errorMessage,
+          active_job_id: data?.detail?.job_id || data?.job_id,
+          cooldown_seconds: data?.detail?.cooldown || data?.cooldown,
+          body: data,
+        };
+        console.log(`[scouting-proxy] 409 Conflict: ${errorMessage}, job_id: ${errorDetails.active_job_id}`);
+      }
+
       return new Response(
         JSON.stringify({
           success: false,
-          error: `Error del backend: ${res.status}`,
-          details: { status: res.status, body: data },
+          error: errorMessage,
+          details: errorDetails,
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );

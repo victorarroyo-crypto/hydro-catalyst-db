@@ -111,9 +111,13 @@ const ScoutingNew = () => {
     onError: async (error: Error & { details?: unknown }) => {
       const errorMessage = error.message || '';
       if (errorMessage.includes('409') || errorMessage.toLowerCase().includes('ya hay un scouting')) {
-        // Try to extract job_id from backend details and ensure it appears in Monitor
+        // Extract details from enhanced error response
         const detailsAny = (error as any)?.details;
-        const jobId = detailsAny?.job_id || detailsAny?.data?.job_id || detailsAny?.active_job_id;
+        const jobId = detailsAny?.active_job_id || detailsAny?.job_id || detailsAny?.data?.job_id;
+        const cooldownSeconds = detailsAny?.cooldown_seconds;
+        const specificMessage = detailsAny?.message;
+
+        // Try to ensure the active job appears in Monitor
         if (jobId) {
           try {
             await supabase.functions.invoke('scouting-start-session', { body: { session_id: jobId } });
@@ -122,7 +126,17 @@ const ScoutingNew = () => {
           }
         }
 
-        toast.error('Ya hay un scouting en ejecución. Revisa el Monitor.', { id: 'scouting-start', duration: 8000 });
+        // Show more informative error message
+        let toastMessage = 'Ya hay un scouting en ejecución. Revisa el Monitor.';
+        if (cooldownSeconds) {
+          toastMessage = `Espera ${cooldownSeconds} segundos antes de lanzar otro scouting.`;
+        } else if (jobId) {
+          toastMessage = `Scouting activo (${jobId.slice(0, 8)}...). Revisa el Monitor.`;
+        } else if (specificMessage) {
+          toastMessage = specificMessage;
+        }
+
+        toast.error(toastMessage, { id: 'scouting-start', duration: 8000 });
         navigate('/scouting-monitor');
       } else if (errorMessage.includes('429')) {
         toast.error('Límite semanal alcanzado.', { id: 'scouting-start', duration: 8000 });
