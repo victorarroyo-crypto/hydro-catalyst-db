@@ -254,13 +254,13 @@ serve(async (req) => {
       'search_technologies_by_keywords_v2',
       {
         p_keywords: keywords,
-        p_min_trl: filters?.trlMin ?? 1,
-        p_max_trl: filters?.trlMax ?? 9,
-        p_statuses: ['active', 'approved', 'en_revision', 'inactive'],
+        p_min_trl: filters?.trlMin ?? null,
+        p_max_trl: filters?.trlMax ?? null,
+        p_statuses: null, // Allow all statuses by default
+        p_sector_ids: filters?.sectorId ? [filters.sectorId] : null,
         p_tipo_id: filters?.tipoId ?? null,
         p_subcategoria_id: filters?.subcategoriaId ?? null,
-        p_sector_id: filters?.sectorId ?? null,
-        p_max_results: 300
+        p_limit: 300
       }
     );
 
