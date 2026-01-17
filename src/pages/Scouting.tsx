@@ -164,7 +164,6 @@ const Scouting = () => {
       approveToDbMutation.mutate({
         scoutingId: approvalDialog.tech.id,
         approvedBy: approvalEmail,
-        approverId: user?.id,
       }, {
         onSuccess: () => {
           setApprovalDialog(null);
