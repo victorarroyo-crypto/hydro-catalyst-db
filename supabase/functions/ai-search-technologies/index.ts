@@ -108,21 +108,48 @@ Reply JSON only: {"candidate_ids": ["id1", ...]}`;
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '{}';
     
-    // Extract JSON from response
-    let jsonStr = content;
-    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) {
-      jsonStr = codeBlockMatch[1].trim();
-    } else {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        jsonStr = jsonMatch[0];
+    // Robust JSON extraction - handle markdown, truncated responses, etc.
+    let candidates: string[] = [];
+    
+    try {
+      // Try 1: Direct parse
+      const direct = JSON.parse(content);
+      candidates = direct.candidate_ids || [];
+    } catch {
+      try {
+        // Try 2: Extract from markdown code block
+        const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (codeBlockMatch) {
+          const parsed = JSON.parse(codeBlockMatch[1].trim());
+          candidates = parsed.candidate_ids || [];
+        } else {
+          // Try 3: Find JSON object in text
+          const jsonMatch = content.match(/\{[\s\S]*?"candidate_ids"\s*:\s*\[[\s\S]*?\]\s*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            candidates = parsed.candidate_ids || [];
+          } else {
+            // Try 4: Extract IDs directly from array pattern (handles truncated JSON)
+            const idsMatch = content.match(/"candidate_ids"\s*:\s*\[([\s\S]*)/);
+            if (idsMatch) {
+              const idsStr = idsMatch[1];
+              const idMatches = idsStr.match(/"([a-f0-9-]{36})"/gi);
+              if (idMatches) {
+                candidates = idMatches.map((m: string) => m.replace(/"/g, ''));
+              }
+            }
+          }
+        }
+      } catch (innerErr) {
+        // Try 5: Last resort - extract all UUID patterns
+        const uuidMatches = content.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi);
+        if (uuidMatches) {
+          candidates = [...new Set(uuidMatches)] as string[];
+        }
       }
     }
     
-    const parsed = JSON.parse(jsonStr);
-    const candidates = (parsed.candidate_ids || []).slice(0, MAX_CANDIDATES_PER_BLOCK);
-    
+    candidates = candidates.slice(0, MAX_CANDIDATES_PER_BLOCK);
     console.log(`[Block ${blockIndex}] Found ${candidates.length} candidates (${data.usage?.total_tokens || 0} tokens)`);
     
     return { 
