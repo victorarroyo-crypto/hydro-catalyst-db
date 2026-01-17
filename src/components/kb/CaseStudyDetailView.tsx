@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -148,7 +148,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   const { data: caseStudy, isLoading } = useQuery({
     queryKey: ['case-study-detail', caseStudyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('casos_de_estudio')
         .select('*')
         .eq('id', caseStudyId)
@@ -164,7 +164,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   const { data: technologies } = useQuery({
     queryKey: ['case-study-technologies', caseStudyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('case_study_technologies')
         .select('id, technology_name, provider, role, technology_id, scouting_queue_id')
         .eq('case_study_id', caseStudyId);
@@ -178,7 +178,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   const { data: associatedJob } = useQuery({
     queryKey: ['case-study-job', caseStudyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('case_study_jobs')
         .select('id, status, result_data, technologies_new, technologies_found')
         .eq('case_study_id', caseStudyId)
@@ -274,13 +274,13 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     setIsDeleting(true);
     try {
       // First delete associated technologies
-      await supabase
+      await externalSupabase
         .from('case_study_technologies')
         .delete()
         .eq('case_study_id', caseStudyId);
       
       // Then delete the case study
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('casos_de_estudio')
         .delete()
         .eq('id', caseStudyId);

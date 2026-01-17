@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { InviteUsersSection } from '@/components/settings/InviteUsersSection';
 import { AuditLogSection } from '@/components/settings/AuditLogSection';
 import { ExportDataSection } from '@/components/settings/ExportDataSection';
@@ -217,7 +217,7 @@ const Settings: React.FC = () => {
     setIsLoadingUsers(true);
     try {
       // First get all user roles
-      const { data: rolesData, error: rolesError } = await supabase
+      const { data: rolesData, error: rolesError } = await externalSupabase
         .from('user_roles')
         .select('user_id, role')
         .order('role');
@@ -226,7 +226,7 @@ const Settings: React.FC = () => {
 
       // Then get profiles for those users
       const userIds = (rolesData || []).map(r => r.user_id);
-      const { data: profilesData, error: profilesError } = await supabase
+      const { data: profilesData, error: profilesError } = await externalSupabase
         .from('profiles')
         .select('user_id, full_name, created_at')
         .in('user_id', userIds);
@@ -234,7 +234,7 @@ const Settings: React.FC = () => {
       if (profilesError) throw profilesError;
 
       // Merge the data
-      const profilesMap = new Map((profilesData || []).map(p => [p.user_id, p]));
+      const profilesMap = new Map((profilesData || []).map((p: { user_id: string; full_name: string | null; created_at: string }) => [p.user_id, p]));
       
       const formattedUsers: UserWithRole[] = (rolesData || []).map((r) => {
         const profile = profilesMap.get(r.user_id);
@@ -261,7 +261,7 @@ const Settings: React.FC = () => {
       const roleValue = newRole as "admin" | "supervisor" | "analyst" | "client_basic" | "client_professional" | "client_enterprise";
       
       // Update user_roles table
-      const { error: roleError } = await supabase
+      const { error: roleError } = await externalSupabase
         .from('user_roles')
         .update({ role: roleValue })
         .eq('user_id', userId);
@@ -269,7 +269,7 @@ const Settings: React.FC = () => {
       if (roleError) throw roleError;
 
       // Also update profiles table for consistency
-      const { error: profileError } = await supabase
+      const { error: profileError } = await externalSupabase
         .from('profiles')
         .update({ role: roleValue })
         .eq('user_id', userId);
@@ -300,7 +300,7 @@ const Settings: React.FC = () => {
     setDeletingUserId(userId);
     try {
       // Delete from user_roles first
-      const { error: roleError } = await supabase
+      const { error: roleError } = await externalSupabase
         .from('user_roles')
         .delete()
         .eq('user_id', userId);
@@ -308,7 +308,7 @@ const Settings: React.FC = () => {
       if (roleError) throw roleError;
 
       // Delete from profiles
-      const { error: profileError } = await supabase
+      const { error: profileError } = await externalSupabase
         .from('profiles')
         .delete()
         .eq('user_id', userId);
@@ -357,7 +357,7 @@ const Settings: React.FC = () => {
 
     setIsChangingPassword(true);
     try {
-      const { error } = await supabase.auth.updateUser({
+      const { error } = await externalSupabase.auth.updateUser({
         password: newPassword,
       });
 
@@ -395,7 +395,7 @@ const Settings: React.FC = () => {
 
     setIsSavingName(true);
     try {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('profiles')
         .update({ full_name: editedName.trim() })
         .eq('user_id', user?.id);
@@ -403,7 +403,7 @@ const Settings: React.FC = () => {
       if (error) throw error;
 
       // Log the action
-      await supabase.from('audit_logs').insert({
+      await externalSupabase.from('audit_logs').insert({
         user_id: user?.id,
         action: 'UPDATE_PROFILE',
         entity_type: 'profile',
@@ -432,7 +432,7 @@ const Settings: React.FC = () => {
   const handleBulkSync = async () => {
     setIsBulkSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('bulk-sync-to-external', {
+      const { data, error } = await externalSupabase.functions.invoke('bulk-sync-to-external', {
         body: {},
       });
 
@@ -467,7 +467,7 @@ const Settings: React.FC = () => {
     setIsComparing(true);
     setComparisonResults(null);
     try {
-      const { data, error } = await supabase.functions.invoke('compare-databases', {
+      const { data, error } = await externalSupabase.functions.invoke('compare-databases', {
         body: { detailed: true },
       });
 

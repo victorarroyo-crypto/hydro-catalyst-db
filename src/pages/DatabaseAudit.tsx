@@ -10,7 +10,7 @@ import { AlertTriangle, CheckCircle, XCircle, Database, Link2, Languages, ArrowR
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, BorderStyle } from 'docx';
 import { saveAs } from 'file-saver';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 // Schema data extracted from database
 const schemaData = {
   tables: [
@@ -420,7 +420,7 @@ export default function DatabaseAudit() {
     });
 
     try {
-      const { data, error } = await supabase.functions.invoke('run-database-audit');
+      const { data, error } = await externalSupabase.functions.invoke('run-database-audit');
       
       if (error) {
         console.error('Audit error:', error);

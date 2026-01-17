@@ -163,7 +163,7 @@ const AIUsageDashboard: React.FC = () => {
     }, {} as Record<string, { requests: number; tokens: number; time: number; success: number }>);
 
     return Object.entries(byModel)
-      .map(([model, data]) => ({
+      .map(([model, data]: [string, { requests: number; tokens: number; time: number; success: number }]) => ({
         model: model.replace('google/', '').replace('openai/', ''),
         fullModel: model,
         requests: data.requests,
@@ -199,7 +199,7 @@ const AIUsageDashboard: React.FC = () => {
     }, {} as Record<string, { requests: number; tokens: number; time: number }>);
 
     return Object.entries(byAction)
-      .map(([action_type, data]) => ({
+      .map(([action_type, data]: [string, { requests: number; tokens: number; time: number }]) => ({
         action_type,
         requests: data.requests,
         tokens: data.tokens,
@@ -223,7 +223,7 @@ const AIUsageDashboard: React.FC = () => {
     }, {} as Record<string, { requests: number; tokens: number }>);
 
     return Object.entries(byDay)
-      .map(([date, data]) => ({
+      .map(([date, data]: [string, { requests: number; tokens: number }]) => ({
         date: format(new Date(date), 'dd MMM', { locale: es }),
         requests: data.requests,
         tokens: data.tokens,

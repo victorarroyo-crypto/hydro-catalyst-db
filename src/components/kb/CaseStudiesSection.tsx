@@ -6,7 +6,7 @@ import { CaseStudyProcessingView } from './CaseStudyProcessingView';
 import { ActiveJobIndicator } from './ActiveJobIndicator';
 import { useCaseStudyActiveJob } from '@/hooks/useCaseStudyActiveJob';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -193,7 +193,7 @@ export const CaseStudiesSection: React.FC = () => {
     // Actually cancel the job in the database
     if (activeJob?.id) {
       try {
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from('case_study_jobs')
           .update({ 
             status: 'failed', 
@@ -228,7 +228,7 @@ export const CaseStudiesSection: React.FC = () => {
   const { data: caseStudies, isLoading } = useQuery({
     queryKey: ['case-studies-enhanced'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('casos_de_estudio')
         .select('id, name, description, entity_type, country, sector, technology_types, status, quality_score, roi_percent, created_at')
         .order('created_at', { ascending: false });
@@ -262,7 +262,7 @@ export const CaseStudiesSection: React.FC = () => {
   const { data: techCounts } = useQuery({
     queryKey: ['case-study-tech-counts'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('case_study_technologies')
         .select('case_study_id, technology_name');
       
@@ -281,7 +281,7 @@ export const CaseStudiesSection: React.FC = () => {
   const { data: jobsByCaseId } = useQuery({
     queryKey: ['case-study-jobs-map'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('case_study_jobs')
         .select('id, case_study_id, status, result_data, technologies_new, technologies_found')
         .eq('status', 'completed')
@@ -333,13 +333,13 @@ export const CaseStudiesSection: React.FC = () => {
     setIsDeleting(true);
     try {
       // First delete associated technologies
-      await supabase
+      await externalSupabase
         .from('case_study_technologies')
         .delete()
         .eq('case_study_id', caseToDelete.id);
       
       // Then delete the case study
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('casos_de_estudio')
         .delete()
         .eq('id', caseToDelete.id);
