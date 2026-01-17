@@ -29,23 +29,34 @@ serve(async (req) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      global: {
-        headers: {
-          // pass through end-user auth for auditability (optional)
-          Authorization: req.headers.get("Authorization") ?? "",
-        },
-      },
-    });
-
-    const claimsRes = await supabase.auth.getClaims();
-    if (claimsRes.error || !claimsRes.data) {
-      console.error("[scouting-start-session] Unauthorized", claimsRes.error);
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      console.error("[scouting-start-session] No Authorization header");
       return new Response(
         JSON.stringify({ success: false, error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    });
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+
+    if (userError || !user) {
+      console.error("[scouting-start-session] Unauthorized", userError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    console.log(`[scouting-start-session] Authenticated user: ${user.id}`);
 
     const body = (await req.json()) as RequestBody;
     const session_id = (body.session_id || "").trim();
