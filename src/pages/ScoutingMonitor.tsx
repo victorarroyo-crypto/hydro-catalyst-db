@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import ScoutingActivityPanel from '@/components/scouting/ScoutingActivityPanel';
+import { ScoutingSummaryCard } from '@/components/scouting/ScoutingSummaryCard';
 import { toast } from 'sonner';
 import { 
   Activity, 
@@ -826,11 +827,11 @@ export default function ScoutingMonitor() {
                 </div>
               </div>
             ) : (
-              <Tabs defaultValue="logs" className="w-full">
+              <Tabs defaultValue="summary" className="w-full">
                 <TabsList className="mb-4">
+                  <TabsTrigger value="summary">Resumen</TabsTrigger>
                   <TabsTrigger value="activity">Actividad</TabsTrigger>
                   <TabsTrigger value="metrics">Métricas</TabsTrigger>
-                  <TabsTrigger value="summary">Resumen</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="activity">
@@ -910,37 +911,24 @@ export default function ScoutingMonitor() {
                 </TabsContent>
 
                 <TabsContent value="summary">
-                  {selectedSessionData?.summary ? (
-                    <div className="space-y-4">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-sm">Resumen de Ejecución</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <pre className="text-sm bg-muted p-4 rounded-lg overflow-x-auto">
-                            {JSON.stringify(selectedSessionData.summary, null, 2)}
-                          </pre>
-                        </CardContent>
-                      </Card>
-                      
-                      {selectedSessionData.config && (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-sm">Configuración Utilizada</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <pre className="text-sm bg-muted p-4 rounded-lg overflow-x-auto">
-                              {JSON.stringify(selectedSessionData.config, null, 2)}
-                            </pre>
-                          </CardContent>
-                        </Card>
-                      )}
+                  {selectedSessionData && (selectedSessionData.summary || selectedSessionData.status !== 'running') ? (
+                    <ScoutingSummaryCard 
+                      session={selectedSessionData}
+                      realTechCount={techCountsBySession?.[selectedSessionData.session_id]}
+                    />
+                  ) : selectedSessionData?.status === 'running' ? (
+                    <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                      <div className="text-center">
+                        <Activity className="w-12 h-12 mx-auto mb-4 opacity-50 animate-pulse" />
+                        <p>Sesión en ejecución...</p>
+                        <p className="text-sm mt-2">El resumen estará disponible cuando la sesión complete</p>
+                      </div>
                     </div>
                   ) : (
                     <div className="h-[300px] flex items-center justify-center text-muted-foreground">
                       <div className="text-center">
                         <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>El resumen estará disponible cuando la sesión complete</p>
+                        <p>No hay datos de resumen disponibles</p>
                       </div>
                     </div>
                   )}

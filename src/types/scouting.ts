@@ -28,6 +28,7 @@ export interface ScoutingQueueItem {
   queue_status: string | null;
   source: string | null;
   source_url: string | null;
+  scouting_job_id: string | null; // Session ID for linking to scouting sessions
   priority: string | null;
   notes: string | null;
   rejection_reason: string | null;
@@ -99,6 +100,7 @@ export interface QueueItemUI {
   relevanceReason?: string;
   reviewed_by?: string;
   reviewed_at?: string;
+  scouting_job_id?: string; // Session ID for linking to scouting sessions
 }
 
 // Transform from DB to UI format
@@ -127,6 +129,7 @@ export const normalizeScoutingItem = (item: ScoutingQueueItem): QueueItemUI => (
   comentariosAnalista: item["Comentarios del analista"] || undefined,
   reviewed_by: item.reviewed_by || undefined,
   reviewed_at: item.reviewed_at || undefined,
+  scouting_job_id: item.scouting_job_id || undefined,
 });
 
 // Form data for editing scouting items - uses friendly field names
