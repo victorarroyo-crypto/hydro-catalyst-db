@@ -20,13 +20,15 @@ interface SearchFilters {
 }
 
 // ============ CASCADE SEARCH CONSTANTS ============
-const BLOCK_SIZE = 400;              // Technologies per block in Stage 1
-const MAX_CANDIDATES_PER_BLOCK = 80; // Max candidates from each block
-const MAX_STAGE2_CANDIDATES = 300;   // Max candidates for deep analysis
-const MAX_FINAL_RESULTS = 100;       // Max final results
+// NOTE: Edge functions have execution/time limits. We keep Stage 1 lightweight.
+const BLOCK_SIZE = 120;               // Smaller blocks to reduce prompt size
+const STAGE1_CONCURRENCY = 2;         // Avoid rate limits/timeouts
+const MAX_CANDIDATES_PER_BLOCK = 40;  // Keep inclusive but bounded
+const MAX_STAGE2_CANDIDATES = 300;    // Max candidates for deep analysis
+const MAX_FINAL_RESULTS = 100;        // Max final results
 
 // Use faster model for Stage 1 pre-filtering (less critical, needs speed)
-const STAGE1_MODEL = 'google/gemini-2.5-flash-lite';  // Fastest model for pre-filtering
+const STAGE1_MODEL = 'google/gemini-2.5-flash-lite';
 
 // Light fields for Stage 1 pre-filtering (faster, less tokens)
 const LIGHT_FIELDS = `
@@ -57,6 +59,13 @@ const FULL_FIELDS = `
   status
 `;
 
+const compactText = (v: unknown, max = 220): string | null => {
+  if (typeof v !== 'string') return null;
+  const cleaned = v.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+  return cleaned.length > max ? cleaned.slice(0, max) + '…' : cleaned;
+};
+
 // ============ STAGE 1: Process a single block ============
 async function processBlock(
   blockTechs: any[],
@@ -69,12 +78,12 @@ async function processBlock(
   
   const lightSummary = blockTechs.map(t => JSON.stringify({
     id: t.id,
-    nombre: t["Nombre de la tecnología"],
-    tipo: t["Tipo de tecnología"],
-    sub: t["Subcategoría"] ?? null,
-    sector: t["Sector y subsector"] ?? null,
-    app: t["Aplicación principal"] ?? null,
-    desc: t["Descripción técnica breve"] ?? null
+    nombre: compactText(t["Nombre de la tecnología"], 120),
+    tipo: compactText(t["Tipo de tecnología"], 80),
+    sub: compactText(t["Subcategoría"], 80),
+    sector: compactText(t["Sector y subsector"], 120),
+    app: compactText(t["Aplicación principal"], 160),
+    desc: compactText(t["Descripción técnica breve"], 220),
   })).join('\n');
 
   // Compact prompt for speed - Stage 1 just needs to be inclusive
@@ -179,12 +188,20 @@ async function stage1ParallelBlocks(
   
   console.log(`[Stage 1] Processing ${blocks.length} blocks of ~${BLOCK_SIZE} techs each (${technologies.length} total)...`);
 
-  // Process all blocks in parallel using FAST model for Stage 1
-  const results = await Promise.all(
-    blocks.map((block, index) => 
-      processBlock(block, index, query, filterContext, apiKey, STAGE1_MODEL)
-    )
-  );
+  // Process blocks in small batches to avoid network failures / rate limits
+  const results: Array<{ candidateIds: string[]; tokensUsed: number }> = [];
+  for (let i = 0; i < blocks.length; i += STAGE1_CONCURRENCY) {
+    const batch = blocks.slice(i, i + STAGE1_CONCURRENCY);
+    console.log(`[Stage 1] Batch ${Math.floor(i / STAGE1_CONCURRENCY) + 1}/${Math.ceil(blocks.length / STAGE1_CONCURRENCY)} (${batch.length} blocks)...`);
+
+    const batchResults = await Promise.all(
+      batch.map((block, offset) => {
+        const index = i + offset;
+        return processBlock(block, index, query, filterContext, apiKey, STAGE1_MODEL);
+      })
+    );
+    results.push(...batchResults);
+  }
 
   // Merge all candidates (remove duplicates)
   const allCandidateIds = [...new Set(results.flatMap(r => r.candidateIds))];
