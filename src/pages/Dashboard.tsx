@@ -133,7 +133,7 @@ const Dashboard: React.FC = () => {
 
   const quickActions = [
     {
-      title: 'Consultar Tecnologías',
+      title: 'BD Tecnologías',
       description: 'Explora más de 2600 tecnologías de tratamiento de agua',
       icon: Search,
       href: '/technologies',
