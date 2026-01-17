@@ -211,19 +211,27 @@ Deno.serve(async (req) => {
 
     // Optionally update scouting_sessions count if scouting_job_id provided
     if (payload.scouting_job_id) {
-      const { error: updateError } = await supabase
-        .from("scouting_sessions")
-        .update({
-          technologies_found: supabase.rpc("increment_counter", { 
-            row_id: payload.scouting_job_id, 
-            increment_by: 1 
-          }),
-        })
-        .eq("session_id", payload.scouting_job_id);
+      try {
+        // First get the current count
+        const { data: session } = await supabase
+          .from("scouting_sessions")
+          .select("technologies_found")
+          .eq("session_id", payload.scouting_job_id)
+          .single();
 
-      if (updateError) {
+        // Then increment it
+        const currentCount = session?.technologies_found || 0;
+        const { error: updateError } = await supabase
+          .from("scouting_sessions")
+          .update({ technologies_found: currentCount + 1 })
+          .eq("session_id", payload.scouting_job_id);
+
+        if (updateError) {
+          console.warn("Could not update session tech count:", updateError.message);
+        }
+      } catch (countError) {
         // Non-critical - just log
-        console.warn("Could not update session tech count:", updateError.message);
+        console.warn("Error updating tech count:", countError);
       }
     }
 

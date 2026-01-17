@@ -34,15 +34,15 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { ScoutingTechFormModal } from '@/components/ScoutingTechFormModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'react-router-dom';
-import { 
-  useExternalScoutingQueue, 
-  useExternalActiveScoutingQueue,
+import {
+  useScoutingQueue,
+  useActiveScoutingQueue,
   useRejectedTechnologies,
-  useChangeExternalScoutingStatus,
-  useApproveExternalToTechnologies,
-  useMoveExternalToRejected,
-  useExternalScoutingCounts
-} from '@/hooks/useExternalScoutingData';
+  useChangeScoutingStatus,
+  useApproveToTechnologies,
+  useMoveToRejected,
+  useScoutingCounts
+} from '@/hooks/useScoutingData';
 import { QueueItemUI } from '@/types/scouting';
 
 // Score badge color helper
@@ -67,12 +67,12 @@ const Scouting = () => {
   const [approvalDialog, setApprovalDialog] = useState<{ tech: QueueItemUI; action: 'send' | 'approve' } | null>(null);
   const [approvalEmail, setApprovalEmail] = useState('');
 
-  // External Supabase queries for scouting_queue
-  const { data: activeItems = [], isLoading: activeLoading, refetch: refetchActive } = useExternalActiveScoutingQueue();
-  const { data: reviewItems = [], isLoading: reviewLoading, refetch: refetchReview } = useExternalScoutingQueue('review');
-  const { data: pendingApprovalItems = [], isLoading: pendingApprovalLoading, refetch: refetchPendingApproval } = useExternalScoutingQueue('pending_approval');
+  // Local Supabase queries for scouting_queue (Lovable Cloud)
+  const { data: activeItems = [], isLoading: activeLoading, refetch: refetchActive } = useActiveScoutingQueue();
+  const { data: reviewItems = [], isLoading: reviewLoading, refetch: refetchReview } = useScoutingQueue('review');
+  const { data: pendingApprovalItems = [], isLoading: pendingApprovalLoading, refetch: refetchPendingApproval } = useScoutingQueue('pending_approval');
   const { data: rejectedTechs = [] } = useRejectedTechnologies();
-  const { data: counts, refetch: refetchCounts } = useExternalScoutingCounts();
+  const { data: counts, refetch: refetchCounts } = useScoutingCounts();
 
   // Filtered items based on queueFilter and sessionFilter
   const filteredQueueItems = useMemo(() => {
@@ -100,9 +100,9 @@ const Scouting = () => {
     queueFilter === 'review' ? reviewLoading : pendingApprovalLoading;
 
   // Mutations
-  const changeStatusMutation = useChangeExternalScoutingStatus();
-  const approveToDbMutation = useApproveExternalToTechnologies();
-  const moveToRejectedMutation = useMoveExternalToRejected();
+  const changeStatusMutation = useChangeScoutingStatus();
+  const approveToDbMutation = useApproveToTechnologies();
+  const moveToRejectedMutation = useMoveToRejected();
 
   // User role checks
   const isAnalyst = profile?.role === 'analyst';
