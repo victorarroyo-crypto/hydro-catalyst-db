@@ -16,6 +16,14 @@ import { syncTechnologyInsert } from '@/lib/syncToExternal';
  * Las operaciones de aprobación escriben a Lovable Cloud (Master)
  */
 
+// Custom error class for not found records
+export class ExternalRecordNotFoundError extends Error {
+  constructor(message: string = 'Registro no encontrado en BD externa') {
+    super(message);
+    this.name = 'ExternalRecordNotFoundError';
+  }
+}
+
 // Helper function to call the external scouting queue edge function
 async function callExternalScoutingQueue<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('external-scouting-queue', {
@@ -25,6 +33,12 @@ async function callExternalScoutingQueue<T>(body: Record<string, unknown>): Prom
   if (error) {
     console.error('[useExternalScoutingData] Function error:', error);
     throw new Error(error.message);
+  }
+
+  // Handle 404 not found responses gracefully
+  if (data?.notFound) {
+    console.warn('[useExternalScoutingData] Record not found in external DB:', body);
+    throw new ExternalRecordNotFoundError(data?.error || 'Registro no encontrado en BD externa');
   }
 
   if (!data?.success) {
@@ -115,7 +129,13 @@ export const useUpdateExternalScoutingItem = () => {
       toast.success('Cambios guardados en BD externa');
     },
     onError: (error: Error) => {
-      toast.error('Error al guardar', { description: error.message });
+      if (error.name === 'ExternalRecordNotFoundError') {
+        toast.error('Registro no encontrado', { 
+          description: 'Este registro no existe en la base de datos externa. Puede que ya haya sido procesado o eliminado.' 
+        });
+      } else {
+        toast.error('Error al guardar', { description: error.message });
+      }
     },
   });
 };
@@ -162,7 +182,13 @@ export const useChangeExternalScoutingStatus = () => {
       toast.success(`Estado cambiado a "${statusLabels[variables.status]}"`);
     },
     onError: (error: Error) => {
-      toast.error('Error al cambiar estado', { description: error.message });
+      if (error.name === 'ExternalRecordNotFoundError') {
+        toast.error('Registro no encontrado', { 
+          description: 'Este registro no existe en la base de datos externa.' 
+        });
+      } else {
+        toast.error('Error al cambiar estado', { description: error.message });
+      }
     },
   });
 };
@@ -254,7 +280,13 @@ export const useApproveExternalToTechnologies = () => {
       toast.success('Tecnología transferida a la base de datos principal (Lovable Cloud)');
     },
     onError: (error: Error) => {
-      toast.error('Error al aprobar tecnología', { description: error.message });
+      if (error.name === 'ExternalRecordNotFoundError') {
+        toast.error('Tecnología no encontrada', { 
+          description: 'Esta tecnología no existe en la base de datos externa. Puede que ya haya sido aprobada o eliminada.' 
+        });
+      } else {
+        toast.error('Error al aprobar tecnología', { description: error.message });
+      }
     },
   });
 };
@@ -343,7 +375,13 @@ export const useMoveExternalToRejected = () => {
       toast.success('Tecnología movida a rechazadas');
     },
     onError: (error: Error) => {
-      toast.error('Error al rechazar tecnología', { description: error.message });
+      if (error.name === 'ExternalRecordNotFoundError') {
+        toast.error('Tecnología no encontrada', { 
+          description: 'Esta tecnología no existe en la base de datos externa. Puede que ya haya sido rechazada o eliminada.' 
+        });
+      } else {
+        toast.error('Error al rechazar tecnología', { description: error.message });
+      }
     },
   });
 };
