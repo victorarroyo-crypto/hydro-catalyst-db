@@ -110,7 +110,7 @@ const Technologies: React.FC = () => {
         let hasMore = true;
         
         while (hasMore) {
-          const { data, error } = await supabase
+          const { data, error } = await externalSupabase
             .from('technologies')
             .select('*')
             // IMPORTANT: enforce deterministic ordering for stable pagination across batches
@@ -266,7 +266,7 @@ const Technologies: React.FC = () => {
   const createProjectMutation = useMutation({
     mutationFn: async (technologyIds: string[]) => {
       // Create the project
-      const { data: projectData, error: projectError } = await supabase
+      const { data: projectData, error: projectError } = await externalSupabase
         .from('projects')
         .insert({
           name: newProject.name,
@@ -289,7 +289,7 @@ const Technologies: React.FC = () => {
           added_by: user?.id,
         }));
 
-        const { error: techError } = await supabase
+        const { error: techError } = await externalSupabase
           .from('project_technologies')
           .insert(projectTechnologies);
         

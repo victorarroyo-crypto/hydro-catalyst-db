@@ -54,8 +54,8 @@ const Dashboard: React.FC = () => {
     queryFn: async () => {
       // For regular users, only count active/published technologies
       // For admin/supervisor, count all technologies with breakdown by status
-      let techQuery = supabase.from('technologies').select('id', { count: 'exact', head: true });
-      let highTrlQuery = supabase.from('technologies').select('id', { count: 'exact', head: true }).gte('"Grado de madurez (TRL)"', 7);
+      let techQuery = externalSupabase.from('technologies').select('id', { count: 'exact', head: true });
+      let highTrlQuery = externalSupabase.from('technologies').select('id', { count: 'exact', head: true }).gte('"Grado de madurez (TRL)"', 7);
       
       if (!isInternalUser) {
         techQuery = techQuery.eq('status', 'active');
@@ -65,9 +65,9 @@ const Dashboard: React.FC = () => {
       const baseQueries = [
         techQuery,
         highTrlQuery,
-        supabase.from('projects').select('id', { count: 'exact', head: true }).in('status', ['active', 'in_progress', 'draft']),
-        supabase.from('casos_de_estudio').select('id', { count: 'exact', head: true }),
-        supabase.from('technological_trends').select('id', { count: 'exact', head: true }),
+        externalSupabase.from('projects').select('id', { count: 'exact', head: true }).in('status', ['active', 'in_progress', 'draft']),
+        externalSupabase.from('casos_de_estudio').select('id', { count: 'exact', head: true }),
+        externalSupabase.from('technological_trends').select('id', { count: 'exact', head: true }),
       ];
 
       // For internal users, also get status breakdown and pending classification
@@ -75,10 +75,10 @@ const Dashboard: React.FC = () => {
         const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount, 
                activeCount, inReviewCount, inactiveCount, pendingClassificationCount] = await Promise.all([
           ...baseQueries,
-          supabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-          supabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'en_revision'),
-          supabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'inactive'),
-          supabase.from('technologies').select('id', { count: 'exact', head: true }).is('tipo_id', null),
+          externalSupabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+          externalSupabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'en_revision'),
+          externalSupabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'inactive'),
+          externalSupabase.from('technologies').select('id', { count: 'exact', head: true }).is('tipo_id', null),
         ]);
         
         return {
@@ -112,7 +112,7 @@ const Dashboard: React.FC = () => {
     queryKey: ['pending-edits-dashboard'],
     queryFn: async () => {
       // Fetch pending technology edits
-      const { data: editsData, error: editsError } = await supabase
+      const { data: editsData, error: editsError } = await externalSupabase
         .from('technology_edits')
         .select('edit_type')
         .eq('status', 'pending');
@@ -120,7 +120,7 @@ const Dashboard: React.FC = () => {
       if (editsError) throw editsError;
       
       // Fetch technologies pending review
-      const { count: reviewCount, error: reviewError } = await supabase
+      const { count: reviewCount, error: reviewError } = await externalSupabase
         .from('technologies')
         .select('id', { count: 'exact', head: true })
         .eq('review_status', 'pending');
