@@ -45,6 +45,7 @@ import {
 import type { Technology, TechnologyFilters } from '@/types/database';
 
 const ITEMS_PER_PAGE = 20;
+const MAX_TECHNOLOGIES_PER_PROJECT = 100;
 
 const Technologies: React.FC = () => {
   const { profile, user } = useAuth();
@@ -313,17 +314,30 @@ const Technologies: React.FC = () => {
   });
 
   // Get technology IDs from current search results
-  // For AI search: use all AI-matched IDs
+  // For AI search: use all AI-matched IDs (limited to MAX_TECHNOLOGIES_PER_PROJECT)
   // For filtered search: use current page only (to avoid saving thousands)
   const getTechnologyIdsToSave = (): string[] => {
-    // AI search returns curated, relevant results - save all of them
+    let ids: string[] = [];
+    
+    // AI search returns curated, relevant results
     if (aiSearchIds && aiSearchIds.length > 0) {
-      return aiSearchIds;
+      ids = aiSearchIds;
+    } else if (data?.technologies) {
+      // For manual filters, save only current page technologies
+      ids = data.technologies.map(t => t.id);
     }
-    // For manual filters, save only current page technologies
-    if (!data?.technologies) return [];
-    return data.technologies.map(t => t.id);
+    
+    // Apply security limit
+    return ids.slice(0, MAX_TECHNOLOGIES_PER_PROJECT);
   };
+  
+  // Total technologies available before applying limit
+  const totalTechsAvailable = aiSearchIds && aiSearchIds.length > 0 
+    ? aiSearchIds.length 
+    : (data?.technologies?.length || 0);
+  
+  // Check if limit will be applied
+  const willApplyLimit = totalTechsAvailable > MAX_TECHNOLOGIES_PER_PROJECT;
 
   const handleSaveAsProject = () => {
     if (!newProject.name.trim()) return;
@@ -338,10 +352,8 @@ const Technologies: React.FC = () => {
   // Check if there are results to save
   const hasResultsToSave = !isLoading && !isAiSearching && (data?.count || 0) > 0;
   
-  // Count of technologies that will be saved
-  const techCountToSave = aiSearchIds && aiSearchIds.length > 0 
-    ? aiSearchIds.length 
-    : (data?.technologies?.length || 0);
+  // Count of technologies that will be saved (respecting limit)
+  const techCountToSave = Math.min(totalTechsAvailable, MAX_TECHNOLOGIES_PER_PROJECT);
 
   return (
     <div className="animate-fade-in">
@@ -627,6 +639,11 @@ const Technologies: React.FC = () => {
             )}
             .
           </p>
+          {willApplyLimit && (
+            <p className="text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 p-2 rounded-md mt-2">
+              ⚠️ Se guardarán las primeras {MAX_TECHNOLOGIES_PER_PROJECT} tecnologías de {totalTechsAvailable} encontradas.
+            </p>
+          )}
           <div className="space-y-4">
             <div>
               <Label htmlFor="project-name">Nombre del proyecto *</Label>
