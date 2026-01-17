@@ -42,10 +42,28 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Build query with filters applied at database level
+    // Build query with filters applied at database level - include ALL relevant fields for AI analysis
     let dbQuery = supabase
       .from('technologies')
-      .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Sector y subsector", "Aplicación principal", "Descripción técnica breve", "Proveedor / Empresa", "Grado de madurez (TRL)", status, tipo_id, subcategoria_id, sector_id, "País de origen", "Subcategoría"')
+      .select(`
+        id, 
+        "Nombre de la tecnología", 
+        "Tipo de tecnología", 
+        "Subcategoría",
+        "Sector y subsector", 
+        "Aplicación principal", 
+        "Descripción técnica breve", 
+        "Ventaja competitiva clave",
+        "Porque es innovadora",
+        "Casos de referencia",
+        "Proveedor / Empresa", 
+        "Grado de madurez (TRL)", 
+        "País de origen",
+        status, 
+        tipo_id, 
+        subcategoria_id, 
+        sector_id
+      `)
       .or('status.eq.approved,status.eq.active,status.is.null,status.eq.inactive,status.eq.en_revision');
 
     // Apply filters at database level for efficiency
@@ -145,17 +163,22 @@ serve(async (req) => {
 
     console.log(`Sending ${techsForAI.length} technologies to AI (total matching: ${totalCount})`);
 
-    // Create a compact summary for the AI (1 line per technology)
+    // Create a rich summary for the AI (1 line per technology) with ALL relevant fields
     const techSummary =
       techsForAI.map((t) =>
         JSON.stringify({
           id: t.id,
           nombre: t["Nombre de la tecnología"],
           tipo: t["Tipo de tecnología"],
+          subcategoria: t["Subcategoría"] ?? null,
           sector: t["Sector y subsector"] ?? null,
           aplicacion: t["Aplicación principal"] ?? null,
           descripcion: t["Descripción técnica breve"] ?? null,
+          ventaja: t["Ventaja competitiva clave"] ?? null,
+          innovacion: t["Porque es innovadora"] ?? null,
+          casos: t["Casos de referencia"] ?? null,
           proveedor: t["Proveedor / Empresa"] ?? null,
+          pais: t["País de origen"] ?? null,
           trl: t["Grado de madurez (TRL)"] ?? null,
           estado: t.status ?? null,
         })
@@ -182,26 +205,57 @@ serve(async (req) => {
       .map(([k, v]) => `${k}: ${v}`)
       .join(', ') : 'ninguno';
 
-    const systemPrompt = `Eres un asistente experto en tecnologías industriales e innovación.
+    const systemPrompt = `Eres un experto en tecnologías del agua, medio ambiente e innovación industrial.
 
-Tienes una lista de ${techsForAI.length} tecnologías${wasLimited ? ` (de ${totalCount} totales que cumplen los filtros)` : ''} en formato JSONL (un JSON por línea). 
-${filterContext !== 'ninguno' ? `\nFiltros aplicados previamente: ${filterContext}` : ''}
+CONTEXTO:
+Tienes ${techsForAI.length} tecnologías${wasLimited ? ` (de ${totalCount} totales)` : ''} para analizar.
+${filterContext !== 'ninguno' ? `Filtros aplicados: ${filterContext}` : ''}
 
-Cada objeto incluye: id, nombre, tipo, sector, aplicacion, descripcion, proveedor, trl, estado.
+CAMPOS DISPONIBLES EN CADA TECNOLOGÍA:
+- nombre: nombre comercial de la tecnología
+- tipo: categoría principal (Software, Equipamiento, Proceso Químico, Sensores, etc.)
+- subcategoria: clasificación específica dentro del tipo
+- sector: industria o ámbito objetivo
+- aplicacion: uso principal de la tecnología
+- descripcion: resumen técnico breve
+- ventaja: diferenciador competitivo principal
+- innovacion: qué la hace innovadora o única
+- casos: referencias de implementación reales
+- proveedor: empresa fabricante o desarrolladora
+- pais: país de origen
+- trl: nivel de madurez tecnológica (1-9)
+- estado: estado en la base de datos
 
-LISTA (JSONL):
+LISTA DE TECNOLOGÍAS (JSONL - un JSON por línea):
 ${techSummary}
 
-INSTRUCCIONES:
-1. Analiza la consulta del usuario.
-2. Encuentra las tecnologías más relevantes dentro de la LISTA.
-3. Devuelve SOLO los IDs ordenados por relevancia (máximo 30) y una explicación breve.
+INSTRUCCIONES CRÍTICAS PARA LA BÚSQUEDA:
+1. ANALIZA SEMÁNTICAMENTE la consulta del usuario - entiende la INTENCIÓN, no solo palabras literales
+2. BUSCA EN TODOS LOS CAMPOS, no solo en nombre o descripción
+3. CONSIDERA SINÓNIMOS Y TÉRMINOS RELACIONADOS:
+   - "modelado hidráulico" → software de simulación, diseño de redes, análisis de flujos, EPANET, InfoWorks
+   - "monitorización" → sensores, IoT, SCADA, telemetría, control en tiempo real
+   - "tratamiento" → equipos físicos, procesos químicos/biológicos, depuración
+   - "gestión" → software, plataformas, ERP, sistemas de información
+   - "eficiencia energética" → bombas, variadores, recuperación de energía
+   
+4. DISTINGUE CLARAMENTE ENTRE CATEGORÍAS:
+   - SOFTWARE/herramientas digitales ≠ equipos físicos de tratamiento
+   - Simulación/diseño/planificación ≠ operación/tratamiento
+   - Monitorización/sensores ≠ actuación/control
+   
+5. PRIORIZA POR RELEVANCIA SEMÁNTICA:
+   - Alta: coincidencia directa en aplicación, descripción o innovación
+   - Media: coincidencia en tipo/subcategoría relacionada
+   - Baja: solo coincidencia parcial en campos secundarios
 
-FORMATO DE RESPUESTA (SOLO JSON válido):
-{"matching_ids": ["id1", "id2"], "explanation": "..."}
+6. Devuelve HASTA 100 resultados ordenados de mayor a menor relevancia
 
-Si no encuentras coincidencias:
-{"matching_ids": [], "explanation": "No se encontraron tecnologías que coincidan con la búsqueda"}`;
+FORMATO DE RESPUESTA (SOLO JSON válido, sin markdown):
+{"matching_ids": ["id1", "id2", ...], "explanation": "Explicación breve de los criterios de selección usados"}
+
+Si no encuentras coincidencias relevantes:
+{"matching_ids": [], "explanation": "No se encontraron tecnologías que coincidan semánticamente con la búsqueda. Sugerencia: intenta con términos más específicos o sinónimos."}`;
 
     // Track timing for usage logs
     const startTime = Date.now();
