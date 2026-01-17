@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import {
@@ -114,7 +114,7 @@ const TaxonomyAdmin: React.FC = () => {
   const { data: tipos, isLoading: loadingTipos } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('*')
         .order('id');
@@ -126,7 +126,7 @@ const TaxonomyAdmin: React.FC = () => {
   const { data: subcategorias, isLoading: loadingSubcategorias } = useQuery({
     queryKey: ['taxonomy-subcategorias'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_subcategorias')
         .select('*')
         .order('codigo');
@@ -138,7 +138,7 @@ const TaxonomyAdmin: React.FC = () => {
   const { data: sectores, isLoading: loadingSectores } = useQuery({
     queryKey: ['taxonomy-sectores'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_sectores')
         .select('*')
         .order('id');
@@ -151,7 +151,7 @@ const TaxonomyAdmin: React.FC = () => {
   const tipoMutation = useMutation({
     mutationFn: async (data: { tipo: Partial<TaxonomyTipo>; isEdit: boolean }) => {
       if (data.isEdit && editingTipo) {
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from('taxonomy_tipos')
           .update({
             codigo: data.tipo.codigo,
@@ -162,7 +162,7 @@ const TaxonomyAdmin: React.FC = () => {
         if (error) throw error;
         await syncTipoUpdate(editingTipo.id, data.tipo);
       } else {
-        const { data: inserted, error } = await supabase
+        const { data: inserted, error } = await externalSupabase
           .from('taxonomy_tipos')
           .insert({
             codigo: data.tipo.codigo!,
@@ -193,7 +193,7 @@ const TaxonomyAdmin: React.FC = () => {
   const subcategoriaMutation = useMutation({
     mutationFn: async (data: { subcategoria: Partial<TaxonomySubcategoria>; isEdit: boolean }) => {
       if (data.isEdit && editingSubcategoria) {
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from('taxonomy_subcategorias')
           .update({
             codigo: data.subcategoria.codigo,
@@ -204,7 +204,7 @@ const TaxonomyAdmin: React.FC = () => {
         if (error) throw error;
         await syncSubcategoriaUpdate(editingSubcategoria.id, data.subcategoria);
       } else {
-        const { data: inserted, error } = await supabase
+        const { data: inserted, error } = await externalSupabase
           .from('taxonomy_subcategorias')
           .insert({
             codigo: data.subcategoria.codigo!,
@@ -235,7 +235,7 @@ const TaxonomyAdmin: React.FC = () => {
   const sectorMutation = useMutation({
     mutationFn: async (data: { sector: Partial<TaxonomySector>; isEdit: boolean }) => {
       if (data.isEdit && editingSector) {
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from('taxonomy_sectores')
           .update({
             nombre: data.sector.nombre,
@@ -245,7 +245,7 @@ const TaxonomyAdmin: React.FC = () => {
         if (error) throw error;
         await syncSectorUpdate(editingSector.id, data.sector);
       } else {
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from('taxonomy_sectores')
           .insert({
             id: data.sector.id!,
@@ -277,7 +277,7 @@ const TaxonomyAdmin: React.FC = () => {
       
       switch (itemToDelete.type) {
         case 'tipo':
-          const { error: tipoError } = await supabase
+          const { error: tipoError } = await externalSupabase
             .from('taxonomy_tipos')
             .delete()
             .eq('id', Number(itemToDelete.id));
@@ -285,7 +285,7 @@ const TaxonomyAdmin: React.FC = () => {
           await syncTipoDelete(Number(itemToDelete.id));
           break;
         case 'subcategoria':
-          const { error: subError } = await supabase
+          const { error: subError } = await externalSupabase
             .from('taxonomy_subcategorias')
             .delete()
             .eq('id', Number(itemToDelete.id));
@@ -293,7 +293,7 @@ const TaxonomyAdmin: React.FC = () => {
           await syncSubcategoriaDelete(Number(itemToDelete.id));
           break;
         case 'sector':
-          const { error: sectorError } = await supabase
+          const { error: sectorError } = await externalSupabase
             .from('taxonomy_sectores')
             .delete()
             .eq('id', String(itemToDelete.id));

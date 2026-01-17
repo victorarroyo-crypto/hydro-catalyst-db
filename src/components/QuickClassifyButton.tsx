@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,7 +38,7 @@ export const QuickClassifyButton: React.FC<QuickClassifyButtonProps> = ({
   const { data: tipos } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('*')
         .order('id');
@@ -54,7 +54,7 @@ export const QuickClassifyButton: React.FC<QuickClassifyButtonProps> = ({
     try {
       if (canClassifyDirectly) {
         // Admin/Supervisor: Apply classification directly
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from('technologies')
           .update({ tipo_id: tipoId })
           .eq('id', technologyId);
@@ -66,7 +66,7 @@ export const QuickClassifyButton: React.FC<QuickClassifyButtonProps> = ({
         queryClient.invalidateQueries({ queryKey: ['taxonomy-display'] });
       } else if (canSuggestClassification) {
         // Analyst: Create suggestion for approval
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from('technology_edits')
           .insert([{
             technology_id: technologyId,

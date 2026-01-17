@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,7 +67,7 @@ export default function Reviews() {
   const { data: technologies, isLoading } = useQuery({
     queryKey: ['technologies-reviews'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technologies')
         .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Proveedor / Empresa", "Grado de madurez (TRL)", review_status, reviewer_id, review_requested_at, review_requested_by')
         .neq('review_status', 'none')
@@ -85,7 +85,7 @@ export default function Reviews() {
   const { data: deletionRequests, isLoading: loadingDeletions } = useQuery({
     queryKey: ['deletion-requests'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_edits')
         .select(`
           id,
@@ -123,7 +123,7 @@ export default function Reviews() {
     queryKey: ['reviewer-profiles', allUserIds],
     queryFn: async () => {
       if (allUserIds.length === 0) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('profiles')
         .select('user_id, full_name')
         .in('user_id', allUserIds);
@@ -142,7 +142,7 @@ export default function Reviews() {
   // Claim a technology for review
   const claimMutation = useMutation({
     mutationFn: async (techId: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technologies')
         .update({
           review_status: 'in_review',
@@ -172,7 +172,7 @@ export default function Reviews() {
   // Complete review
   const completeMutation = useMutation({
     mutationFn: async (techId: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technologies')
         .update({
           review_status: 'completed',
@@ -200,7 +200,7 @@ export default function Reviews() {
   // Cancel review (release back to pending)
   const cancelMutation = useMutation({
     mutationFn: async (techId: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technologies')
         .update({
           review_status: 'pending',
@@ -230,7 +230,7 @@ export default function Reviews() {
   const approveDeletionMutation = useMutation({
     mutationFn: async (request: DeletionRequest) => {
       // First delete the technology
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await externalSupabase
         .from('technologies')
         .delete()
         .eq('id', request.technology_id);
@@ -238,7 +238,7 @@ export default function Reviews() {
       if (deleteError) throw deleteError;
 
       // Then update the edit request status
-      const { error: updateError } = await supabase
+      const { error: updateError } = await externalSupabase
         .from('technology_edits')
         .update({
           status: 'approved',
@@ -272,7 +272,7 @@ export default function Reviews() {
 
   const rejectDeletionMutation = useMutation({
     mutationFn: async ({ requestId, reason }: { requestId: string; reason: string }) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technology_edits')
         .update({
           status: 'rejected',
