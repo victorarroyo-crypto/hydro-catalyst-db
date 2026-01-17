@@ -167,7 +167,7 @@ export function useScoutingStudies(status?: string) {
   return useQuery({
     queryKey: ['scouting-studies', status],
     queryFn: async () => {
-      let query = supabase
+      let query = externalSupabase
         .from('scouting_studies')
         .select('*')
         .order('updated_at', { ascending: false });
@@ -188,7 +188,7 @@ export function useScoutingStudy(studyId: string | undefined) {
     queryKey: ['scouting-study', studyId],
     queryFn: async () => {
       if (!studyId) return null;
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_studies')
         .select('*')
         .eq('id', studyId)
@@ -206,8 +206,8 @@ export function useCreateStudy() {
 
   return useMutation({
     mutationFn: async (study: Partial<ScoutingStudy>) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase
+      const { data: { user } } = await externalSupabase.auth.getUser();
+      const { data, error } = await externalSupabase
         .from('scouting_studies')
         .insert({
           name: study.name!,
@@ -239,7 +239,7 @@ export function useUpdateStudy() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<ScoutingStudy> & { id: string }) => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_studies')
         .update(updates)
         .eq('id', id)
@@ -265,7 +265,7 @@ export function useDeleteStudy() {
 
   return useMutation({
     mutationFn: async (studyId: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('scouting_studies')
         .delete()
         .eq('id', studyId);
@@ -287,7 +287,7 @@ export function useStudyResearch(studyId: string | undefined) {
     queryKey: ['study-research', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_research')
         .select('*')
         .eq('study_id', studyId)
@@ -305,8 +305,8 @@ export function useAddResearch() {
 
   return useMutation({
     mutationFn: async (research: Partial<StudyResearch>) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase
+      const { data: { user } } = await externalSupabase.auth.getUser();
+      const { data, error } = await externalSupabase
         .from('study_research')
         .insert({
           study_id: research.study_id!,
@@ -341,7 +341,7 @@ export function useUpdateResearch() {
 
   return useMutation({
     mutationFn: async ({ id, study_id, ...updates }: Partial<StudyResearch> & { id: string; study_id: string }) => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_research')
         .update({
           title: updates.title,
@@ -380,7 +380,7 @@ export function useDeleteResearch() {
       filePath?: string | null;
     }) => {
       // Delete the research record
-      const { error: researchError } = await supabase
+      const { error: researchError } = await externalSupabase
         .from('study_research')
         .delete()
         .eq('id', researchId);
@@ -389,13 +389,13 @@ export function useDeleteResearch() {
       // If there's an associated knowledge document, delete it and its chunks
       if (knowledgeDocId) {
         // Delete chunks first
-        await supabase
+        await externalSupabase
           .from('knowledge_chunks')
           .delete()
           .eq('document_id', knowledgeDocId);
 
         // Delete the document record
-        await supabase
+        await externalSupabase
           .from('knowledge_documents')
           .delete()
           .eq('id', knowledgeDocId);
@@ -403,7 +403,7 @@ export function useDeleteResearch() {
 
       // If there's a file in storage, delete it
       if (filePath) {
-        await supabase.storage
+        await externalSupabase.storage
           .from('knowledge-documents')
           .remove([filePath]);
       }
@@ -426,7 +426,7 @@ export function useStudySolutions(studyId: string | undefined) {
     queryKey: ['study-solutions', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_solutions')
         .select('*')
         .eq('study_id', studyId)
@@ -444,8 +444,8 @@ export function useAddSolution() {
 
   return useMutation({
     mutationFn: async (solution: Partial<StudySolution>) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase
+      const { data: { user } } = await externalSupabase.auth.getUser();
+      const { data, error } = await externalSupabase
         .from('study_solutions')
         .insert({
           study_id: solution.study_id!,
@@ -483,7 +483,7 @@ export function useStudyLonglist(studyId: string | undefined) {
     queryKey: ['study-longlist', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_longlist')
         .select('*')
         .eq('study_id', studyId)
@@ -506,8 +506,8 @@ export function useAddToLonglist() {
 
   return useMutation({
     mutationFn: async (item: Partial<StudyLonglistItem>) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase
+      const { data: { user } } = await externalSupabase.auth.getUser();
+      const { data, error } = await externalSupabase
         .from('study_longlist')
         .insert({
           study_id: item.study_id!,
@@ -543,7 +543,7 @@ export function useRemoveFromLonglist() {
 
   return useMutation({
     mutationFn: async ({ id, studyId }: { id: string; studyId: string }) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('study_longlist')
         .delete()
         .eq('id', id);
@@ -568,7 +568,7 @@ export function useStudyShortlist(studyId: string | undefined) {
     queryKey: ['study-shortlist', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_shortlist')
         .select(`
           *,
@@ -589,8 +589,8 @@ export function useAddToShortlist() {
 
   return useMutation({
     mutationFn: async (item: Partial<StudyShortlistItem>) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase
+      const { data: { user } } = await externalSupabase.auth.getUser();
+      const { data, error } = await externalSupabase
         .from('study_shortlist')
         .insert({
           study_id: item.study_id!,
@@ -622,7 +622,7 @@ export function useRemoveFromShortlist() {
 
   return useMutation({
     mutationFn: async ({ id, studyId }: { id: string; studyId: string }) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('study_shortlist')
         .delete()
         .eq('id', id);
@@ -645,7 +645,7 @@ export function useStudyEvaluations(studyId: string | undefined) {
     queryKey: ['study-evaluations', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_evaluations')
         .select(`
           *,
@@ -669,7 +669,7 @@ export function useUpsertEvaluation() {
 
   return useMutation({
     mutationFn: async (evaluation: Partial<StudyEvaluation>) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await externalSupabase.auth.getUser();
       const insertData = {
         study_id: evaluation.study_id!,
         shortlist_id: evaluation.shortlist_id!,
@@ -693,7 +693,7 @@ export function useUpsertEvaluation() {
         recommendation_notes: evaluation.recommendation_notes,
         evaluated_by: user?.id,
       };
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_evaluations')
         .upsert(insertData, { onConflict: 'study_id,shortlist_id' })
         .select()
@@ -717,7 +717,7 @@ export function useStudyReports(studyId: string | undefined) {
     queryKey: ['study-reports', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_reports')
         .select('*')
         .eq('study_id', studyId)
@@ -735,10 +735,10 @@ export function useCreateReport() {
 
   return useMutation({
     mutationFn: async (report: Partial<StudyReport>) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await externalSupabase.auth.getUser();
       
       // Get current max version
-      const { data: existing } = await supabase
+      const { data: existing } = await externalSupabase
         .from('study_reports')
         .select('version')
         .eq('study_id', report.study_id!)
@@ -747,7 +747,7 @@ export function useCreateReport() {
       
       const nextVersion = (existing?.[0]?.version ?? 0) + 1;
       
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_reports')
         .insert({
           study_id: report.study_id!,
@@ -784,7 +784,7 @@ export function useUpdateReport() {
 
   return useMutation({
     mutationFn: async ({ id, study_id, ...updates }: Partial<StudyReport> & { id: string; study_id: string }) => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_reports')
         .update({
           executive_summary: updates.executive_summary,

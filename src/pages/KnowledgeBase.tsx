@@ -394,7 +394,7 @@ export default function KnowledgeBase() {
 
   // Real-time subscription for document status updates
   useEffect(() => {
-    const channel = supabase
+    const channel = externalSupabase
       .channel('doc-status-changes')
       .on(
         'postgres_changes',
@@ -420,7 +420,7 @@ export default function KnowledgeBase() {
       .subscribe();
 
     return () => { 
-      supabase.removeChannel(channel); 
+      externalSupabase.removeChannel(channel); 
     };
   }, [queryClient]);
 
@@ -428,7 +428,7 @@ export default function KnowledgeBase() {
   const { data: modelConfig } = useQuery({
     queryKey: ['knowledge-base-model'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('ai_model_settings')
         .select('model')
         .eq('action_type', 'knowledge_base')
@@ -449,7 +449,7 @@ export default function KnowledgeBase() {
   const { data: documents, isLoading: loadingDocs } = useQuery({
     queryKey: ["knowledge-documents"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from("knowledge_documents")
         .select("*")
         .order("created_at", { ascending: false });
@@ -463,7 +463,7 @@ export default function KnowledgeBase() {
   const { data: sources, isLoading: loadingSources } = useQuery({
     queryKey: ["scouting-sources"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from("scouting_sources")
         .select("*")
         .order("calidad_score", { ascending: false });
@@ -477,7 +477,7 @@ export default function KnowledgeBase() {
   const { data: caseStudies, isLoading: loadingCases } = useQuery({
     queryKey: ['case-studies'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('casos_de_estudio')
         .select('*')
         .order('created_at', { ascending: false });
@@ -491,7 +491,7 @@ export default function KnowledgeBase() {
   const { data: trends, isLoading: loadingTrends } = useQuery({
     queryKey: ['technological-trends'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technological_trends')
         .select('*')
         .order('created_at', { ascending: false });
@@ -506,7 +506,7 @@ export default function KnowledgeBase() {
     mutationFn: async ({ file, description }: { file: File; description?: string }) => {
       console.log("[KB-UPLOAD] Starting upload for:", file.name, "Size:", (file.size / 1024 / 1024).toFixed(2), "MB");
       
-      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const { data: authData, error: authError } = await externalSupabase.auth.getUser();
       if (authError) {
         console.error("[KB-UPLOAD] Auth error:", authError);
         throw new Error(`Error de autenticación: ${authError.message}`);
@@ -522,7 +522,7 @@ export default function KnowledgeBase() {
       console.log("[KB-UPLOAD] Uploading to path:", filePath);
 
       // IMPORTANT: bucket used by the backend processor
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await externalSupabase.storage
         .from("knowledge-documents")
         .upload(filePath, file);
 
@@ -532,7 +532,7 @@ export default function KnowledgeBase() {
       }
       console.log("[KB-UPLOAD] File uploaded to storage successfully");
 
-      const { data: doc, error: docError } = await supabase
+      const { data: doc, error: docError } = await externalSupabase
         .from("knowledge_documents")
         .insert({
           name: file.name,
@@ -555,7 +555,7 @@ export default function KnowledgeBase() {
       console.log("[KB-UPLOAD] Document registered in DB:", doc.id);
 
       console.log("[KB-UPLOAD] Invoking process-knowledge-document function...");
-      const { error: processError } = await supabase.functions.invoke(
+      const { error: processError } = await externalSupabase.functions.invoke(
         "process-knowledge-document",
         { body: { documentId: doc.id } }
       );
@@ -583,12 +583,12 @@ export default function KnowledgeBase() {
   const deleteMutation = useMutation({
     mutationFn: async (doc: KnowledgeDocument) => {
       // Delete associated chunks first
-      await supabase.from("knowledge_chunks").delete().eq("document_id", doc.id);
+      await externalSupabase.from("knowledge_chunks").delete().eq("document_id", doc.id);
       
       // Delete from storage
-      await supabase.storage.from("knowledge-documents").remove([doc.file_path]);
+      await externalSupabase.storage.from("knowledge-documents").remove([doc.file_path]);
 
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from("knowledge_documents")
         .delete()
         .eq("id", doc.id);
@@ -609,13 +609,13 @@ export default function KnowledgeBase() {
     mutationFn: async (parts: KnowledgeDocument[]) => {
       for (const part of parts) {
         // Delete associated chunks
-        await supabase.from("knowledge_chunks").delete().eq("document_id", part.id);
+        await externalSupabase.from("knowledge_chunks").delete().eq("document_id", part.id);
         
         // Delete from storage
-        await supabase.storage.from("knowledge-documents").remove([part.file_path]);
+        await externalSupabase.storage.from("knowledge-documents").remove([part.file_path]);
 
         // Delete document record
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from("knowledge_documents")
           .delete()
           .eq("id", part.id);
@@ -634,7 +634,7 @@ export default function KnowledgeBase() {
 
   const renameMutation = useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from("knowledge_documents")
         .update({ name })
         .eq("id", id);
@@ -671,7 +671,7 @@ export default function KnowledgeBase() {
           newName = `${newBaseName}.pdf`;
         }
         
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from("knowledge_documents")
           .update({ name: newName })
           .eq("id", part.id);
@@ -694,7 +694,7 @@ export default function KnowledgeBase() {
   const saveSourceMutation = useMutation({
     mutationFn: async (data: typeof sourceForm) => {
       if (editingSource) {
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from("scouting_sources")
           .update({
             nombre: data.nombre,
@@ -711,7 +711,7 @@ export default function KnowledgeBase() {
           .eq("id", editingSource.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from("scouting_sources")
           .insert({
             nombre: data.nombre,
@@ -743,7 +743,7 @@ export default function KnowledgeBase() {
 
   const deleteSourceMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from("scouting_sources")
         .delete()
         .eq("id", id);
@@ -810,7 +810,7 @@ export default function KnowledgeBase() {
     setAiSourceExplanation('');
 
     try {
-      const { data, error } = await supabase.functions.invoke('search-scouting-sources', {
+      const { data, error } = await externalSupabase.functions.invoke('search-scouting-sources', {
         body: {
           prompt: aiSourcePrompt.trim(),
           model: selectedAIModel,
@@ -896,7 +896,7 @@ export default function KnowledgeBase() {
         return;
       }
 
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from("scouting_sources")
         .insert({
           nombre: source.nombre,
@@ -958,7 +958,7 @@ export default function KnowledgeBase() {
         status: "active",
       };
       
-      const { data: insertedTech, error } = await supabase
+      const { data: insertedTech, error } = await externalSupabase
         .from("technologies")
         .insert(technologyData)
         .select()
@@ -967,7 +967,7 @@ export default function KnowledgeBase() {
       if (error) throw error;
       
       // Delete from case studies
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await externalSupabase
         .from("casos_de_estudio")
         .delete()
         .eq("id", caseStudy.id);
@@ -990,7 +990,7 @@ export default function KnowledgeBase() {
   // Move case study to trends
   const moveCaseToTrends = useMutation({
     mutationFn: async (caseStudy: CaseStudy) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from("technological_trends")
         .insert([{
           name: caseStudy.name,
@@ -1003,7 +1003,7 @@ export default function KnowledgeBase() {
       if (error) throw error;
       
       // Delete from case studies
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await externalSupabase
         .from("casos_de_estudio")
         .delete()
         .eq("id", caseStudy.id);
@@ -1024,7 +1024,7 @@ export default function KnowledgeBase() {
   // Delete case study
   const deleteCaseMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from("casos_de_estudio")
         .delete()
         .eq("id", id);
@@ -1053,7 +1053,7 @@ export default function KnowledgeBase() {
     toast.info(`Enviando "${docName}" a procesar...`, { duration: 2000 });
     
     try {
-      const { error } = await supabase.functions.invoke('process-knowledge-document', {
+      const { error } = await externalSupabase.functions.invoke('process-knowledge-document', {
         body: { documentId: docId, forceReprocess: true }
       });
       if (error) throw error;
@@ -1085,7 +1085,7 @@ export default function KnowledgeBase() {
   // Legacy mutation for compatibility (uses granular state now)
   const reprocessMutation = useMutation({
     mutationFn: async (docId: string) => {
-      const { error } = await supabase.functions.invoke('process-knowledge-document', {
+      const { error } = await externalSupabase.functions.invoke('process-knowledge-document', {
         body: { documentId: docId, forceReprocess: true }
       });
       if (error) throw error;
@@ -1102,7 +1102,7 @@ export default function KnowledgeBase() {
   // Update document description
   const updateDescriptionMutation = useMutation({
     mutationFn: async ({ docId, description }: { docId: string; description: string }) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('knowledge_documents')
         .update({ description, updated_at: new Date().toISOString() })
         .eq('id', docId);
@@ -1122,7 +1122,7 @@ export default function KnowledgeBase() {
   // Update document category/sector mutation
   const updateCategoryMutation = useMutation({
     mutationFn: async ({ docId, category, sector }: { docId: string; category: string | null; sector: string | null }) => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('knowledge_documents')
         .update({ category, sector, updated_at: new Date().toISOString() })
         .eq('id', docId);
@@ -1141,7 +1141,7 @@ export default function KnowledgeBase() {
   // Download document handler
   const handleDownloadDocument = async (doc: KnowledgeDocument) => {
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await externalSupabase.storage
         .from('knowledge-documents')
         .download(doc.file_path);
       
@@ -1190,7 +1190,7 @@ export default function KnowledgeBase() {
     
     setGeneratingDescription(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-document-description', {
+      const { data, error } = await externalSupabase.functions.invoke('generate-document-description', {
         body: {
           fileName: selectedFile.name,
           category: uploadCategory,
@@ -1219,7 +1219,7 @@ export default function KnowledgeBase() {
   const handleGenerateDescriptionForDoc = async (doc: KnowledgeDocument) => {
     setGeneratingDescId(doc.id);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-document-description', {
+      const { data, error } = await externalSupabase.functions.invoke('generate-document-description', {
         body: {
           fileName: doc.name,
           category: doc.category,
@@ -1370,7 +1370,7 @@ export default function KnowledgeBase() {
     setLastQueryCost(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke("query-knowledge-base", {
+      const { data, error } = await externalSupabase.functions.invoke("query-knowledge-base", {
         body: { query: query.trim(), limit: 5 },
       });
 
@@ -1489,7 +1489,7 @@ export default function KnowledgeBase() {
     
     for (const doc of toReprocess) {
       try {
-        const { error } = await supabase.functions.invoke('process-knowledge-document', {
+        const { error } = await externalSupabase.functions.invoke('process-knowledge-document', {
           body: { documentId: doc.id, forceReprocess: true },
         });
         if (error) {
@@ -1517,7 +1517,7 @@ export default function KnowledgeBase() {
   // Preview document in new tab
   const handlePreviewDocument = async (doc: KnowledgeDocument) => {
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await externalSupabase.storage
         .from('knowledge-documents')
         .download(doc.file_path);
       
