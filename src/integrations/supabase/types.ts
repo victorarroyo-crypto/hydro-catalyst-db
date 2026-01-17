@@ -926,6 +926,7 @@ export type Database = {
           rejection_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          scouting_job_id: string | null
           "Sector y subsector": string | null
           sector_id: string | null
           source: string | null
@@ -963,6 +964,7 @@ export type Database = {
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          scouting_job_id?: string | null
           "Sector y subsector"?: string | null
           sector_id?: string | null
           source?: string | null
@@ -1000,6 +1002,7 @@ export type Database = {
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          scouting_job_id?: string | null
           "Sector y subsector"?: string | null
           sector_id?: string | null
           source?: string | null
