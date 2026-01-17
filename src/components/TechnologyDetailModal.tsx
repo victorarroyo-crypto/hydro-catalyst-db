@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { TRLBadge } from '@/components/TRLBadge';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { syncTrendInsert, syncCaseStudyInsert, syncTechnologyDelete, syncProjectTechnologyInsert } from '@/lib/syncToExternal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';

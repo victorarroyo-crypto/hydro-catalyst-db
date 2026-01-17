@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { differenceInMinutes, differenceInSeconds } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -44,7 +44,7 @@ export const useScoutingJobs = (limit = 50) => {
   return useQuery({
     queryKey: ['admin-scouting-jobs', limit],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_sessions')
         .select('*')
         .order('started_at', { ascending: false })
@@ -71,7 +71,7 @@ export const useScoutingJobStats = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_sessions')
         .select('id, status, last_heartbeat, updated_at, started_at')
         .gte('started_at', today.toISOString());
@@ -103,7 +103,7 @@ export const useForceCloseJob = () => {
 
   return useMutation({
     mutationFn: async ({ jobId, reason }: { jobId: string; reason?: string }) => {
-      const { data, error } = await supabase.rpc('force_close_scouting_job', {
+      const { data, error } = await externalSupabase.rpc('force_close_scouting_job', {
         job_id: jobId,
         close_reason: reason || 'Cerrado manualmente desde admin',
       });
@@ -127,7 +127,7 @@ export const useCloseZombieJobs = () => {
 
   return useMutation({
     mutationFn: async (maxAgeMinutes: number = 10): Promise<number> => {
-      const { data, error } = await supabase.rpc('close_zombie_jobs', {
+      const { data, error } = await externalSupabase.rpc('close_zombie_jobs', {
         max_age_minutes: maxAgeMinutes,
       });
 
@@ -155,7 +155,7 @@ export const useScoutingJobLogs = (sessionId: string | null) => {
     queryFn: async () => {
       if (!sessionId) return [];
 
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_session_logs')
         .select('*')
         .eq('session_id', sessionId)

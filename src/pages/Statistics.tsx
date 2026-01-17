@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -89,7 +89,7 @@ const Statistics: React.FC = () => {
   const { data: caseStudiesCount } = useQuery({
     queryKey: ['case-studies-count'],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { count, error } = await externalSupabase
         .from('casos_de_estudio')
         .select('id', { count: 'exact', head: true });
       if (error) throw error;
@@ -101,7 +101,7 @@ const Statistics: React.FC = () => {
   const { data: trendsCount } = useQuery({
     queryKey: ['trends-count'],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { count, error } = await externalSupabase
         .from('technological_trends')
         .select('id', { count: 'exact', head: true });
       if (error) throw error;
@@ -120,7 +120,7 @@ const Statistics: React.FC = () => {
       const pageSize = 1000;
       
       while (true) {
-        let query = supabase
+        let query = externalSupabase
           .from('technologies')
           .select('id, tipo_id, subcategoria_id, sector_id, "País de origen", status');
         
@@ -149,7 +149,7 @@ const Statistics: React.FC = () => {
   const { data: tipos } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('id, codigo, nombre')
         .order('id');
@@ -161,7 +161,7 @@ const Statistics: React.FC = () => {
   const { data: subcategorias } = useQuery({
     queryKey: ['taxonomy-subcategorias'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_subcategorias')
         .select('id, tipo_id, codigo, nombre')
         .order('codigo');
@@ -173,7 +173,7 @@ const Statistics: React.FC = () => {
   const { data: sectores } = useQuery({
     queryKey: ['taxonomy-sectores'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_sectores')
         .select('id, nombre');
       if (error) throw error;

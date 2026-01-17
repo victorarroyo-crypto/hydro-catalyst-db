@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 export interface TaxonomyTipo {
   id: number;
@@ -56,7 +56,7 @@ export function useTaxonomyAudit() {
   const { data: tipos = [], isLoading: loadingTipos } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('*')
         .order('codigo');
@@ -69,7 +69,7 @@ export function useTaxonomyAudit() {
   const { data: subcategorias = [], isLoading: loadingSubcategorias } = useQuery({
     queryKey: ['taxonomy-subcategorias'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_subcategorias')
         .select('*')
         .order('codigo');
@@ -82,7 +82,7 @@ export function useTaxonomyAudit() {
   const { data: sectores = [], isLoading: loadingSectores } = useQuery({
     queryKey: ['taxonomy-sectores'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_sectores')
         .select('*')
         .order('id');
@@ -95,7 +95,7 @@ export function useTaxonomyAudit() {
   const { data: unclassified = [], isLoading: loadingUnclassified, refetch: refetchUnclassified } = useQuery({
     queryKey: ['taxonomy-unclassified'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technologies')
         .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Subcategoría", "Sector y subsector", tipo_id, subcategoria_id, sector_id')
         .or('tipo_id.is.null,subcategoria_id.is.null,sector_id.is.null')
@@ -129,7 +129,7 @@ export function useTaxonomyAudit() {
     queryKey: ['taxonomy-frequent-unmapped'],
     queryFn: async () => {
       // Get technologies with text subcategoria but no subcategoria_id
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technologies')
         .select('"Subcategoría"')
         .is('subcategoria_id', null)
@@ -158,26 +158,26 @@ export function useTaxonomyAudit() {
   const { data: stats, isLoading: loadingStats } = useQuery({
     queryKey: ['taxonomy-stats'],
     queryFn: async () => {
-      const { count: totalTech } = await supabase
+      const { count: totalTech } = await externalSupabase
         .from('technologies')
         .select('*', { count: 'exact', head: true });
 
-      const { count: withTipo } = await supabase
+      const { count: withTipo } = await externalSupabase
         .from('technologies')
         .select('*', { count: 'exact', head: true })
         .not('tipo_id', 'is', null);
 
-      const { count: withSubcategoria } = await supabase
+      const { count: withSubcategoria } = await externalSupabase
         .from('technologies')
         .select('*', { count: 'exact', head: true })
         .not('subcategoria_id', 'is', null);
 
-      const { count: withSector } = await supabase
+      const { count: withSector } = await externalSupabase
         .from('technologies')
         .select('*', { count: 'exact', head: true })
         .not('sector_id', 'is', null);
 
-      const { count: fullyClassified } = await supabase
+      const { count: fullyClassified } = await externalSupabase
         .from('technologies')
         .select('*', { count: 'exact', head: true })
         .not('tipo_id', 'is', null)
@@ -202,7 +202,7 @@ export function useTaxonomyAudit() {
     techId: string,
     updates: { tipo_id?: number; subcategoria_id?: number; sector_id?: string }
   ) => {
-    const { error } = await supabase
+    const { error } = await externalSupabase
       .from('technologies')
       .update(updates)
       .eq('id', techId);
@@ -213,7 +213,7 @@ export function useTaxonomyAudit() {
 
   // Bulk assign subcategoria_id based on text matching
   const bulkAssignSubcategoria = async (textMatch: string, subcategoriaId: number) => {
-    const { error } = await supabase
+    const { error } = await externalSupabase
       .from('technologies')
       .update({ subcategoria_id: subcategoriaId })
       .ilike('"Subcategoría"', textMatch)

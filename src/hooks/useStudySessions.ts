@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from '@/hooks/use-toast';
 
 export interface StudySession {
@@ -35,7 +35,7 @@ export function useStudySessions(studyId: string | undefined) {
     queryFn: async () => {
       if (!studyId) return [];
       
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_sessions')
         .select('*')
         .eq('study_id', studyId)
@@ -54,7 +54,7 @@ export function useActiveStudySession(studyId: string | undefined, sessionType?:
     queryFn: async () => {
       if (!studyId) return null;
       
-      let query = supabase
+      let query = externalSupabase
         .from('study_sessions')
         .select('*')
         .eq('study_id', studyId)
@@ -87,7 +87,7 @@ export function useStudySessionLogs(sessionId: string | undefined) {
     queryFn: async () => {
       if (!sessionId) return [];
       
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('study_session_logs')
         .select('*')
         .eq('session_id', sessionId)
@@ -114,7 +114,7 @@ export function useStartStudySession() {
       sessionType: string; 
       config?: Record<string, unknown>;
     }) => {
-      const { data, error } = await supabase.functions.invoke('study-start-session', {
+      const { data, error } = await externalSupabase.functions.invoke('study-start-session', {
         body: { study_id: studyId, session_type: sessionType, config },
       });
 
@@ -152,7 +152,7 @@ export function useStudyProxy() {
       method?: string; 
       body?: Record<string, unknown>;
     }) => {
-      const { data, error } = await supabase.functions.invoke('study-proxy', {
+      const { data, error } = await externalSupabase.functions.invoke('study-proxy', {
         body: { endpoint, method, body },
       });
 
