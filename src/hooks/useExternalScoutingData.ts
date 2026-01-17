@@ -30,12 +30,35 @@ async function callExternalScoutingQueue<T>(body: Record<string, unknown>): Prom
     body,
   });
 
+  // NOTE: When the edge function responds with non-2xx (e.g. 404), supabase-js surfaces it as `error`
+  // and `data` may be null. We map 404 to a domain error so the UI doesn't crash.
   if (error) {
-    console.error('[useExternalScoutingData] Function error:', error);
-    throw new Error(error.message);
+    const anyErr = error as any;
+    const status: number | undefined = anyErr?.context?.status ?? anyErr?.status;
+    const responseBody = anyErr?.context?.body;
+
+    console.error('[useExternalScoutingData] Function error:', {
+      status,
+      message: error.message,
+      responseBody,
+      requestBody: body,
+    });
+
+    const looksLikeNotFound =
+      status === 404 ||
+      (typeof error.message === 'string' && error.message.includes('404')) ||
+      (typeof responseBody?.error === 'string' && responseBody.error.toLowerCase().includes('not found'));
+
+    if (looksLikeNotFound) {
+      throw new ExternalRecordNotFoundError(
+        responseBody?.error || 'Registro no encontrado en BD externa'
+      );
+    }
+
+    throw new Error(responseBody?.error || error.message);
   }
 
-  // Handle 404 not found responses gracefully
+  // Some code paths return 200 with { success:false, notFound:true }
   if (data?.notFound) {
     console.warn('[useExternalScoutingData] Record not found in external DB:', body);
     throw new ExternalRecordNotFoundError(data?.error || 'Registro no encontrado en BD externa');
