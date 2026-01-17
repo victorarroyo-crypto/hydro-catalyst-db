@@ -1,112 +1,132 @@
+/**
+ * Hooks para el módulo de Scouting
+ * 
+ * MIGRACIÓN: Este hook ahora lee directamente de la base de datos externa
+ * (ktzhrlcvluaptixngrsh.supabase.co) usando el cliente externalSupabase.
+ * 
+ * La BD externa usa schema snake_case: nombre, proveedor, status, etc.
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
-  ScoutingQueueItem, 
-  RejectedTechnology, 
+  ExternalScoutingQueueItem,
+  ExternalRejectedTechnology,
   QueueItemUI, 
-  normalizeScoutingItem,
+  normalizeExternalScoutingItem,
   ScoutingFormData,
-  formDataToDbFormat
+  formDataToExternalDbFormat
 } from '@/types/scouting';
 
-// Note: These tables are new and may not be in the generated types yet
-// Using type assertions to work with the new tables
-
-// Status mapping for database queue_status column
-// Values in DB: 'pending', 'reviewing', 'approved', 'rejected' (per constraint)
-// Plus 'pending_approval' and 'review' may be used by external systems
+// Status mapping for external database 'status' column
 const STATUS_MAPPING: Record<string, string[]> = {
   'review': ['pending', 'review', 'reviewing'],
   'pending_approval': ['pending_approval'],
   'approved': ['approved'],
   'rejected': ['rejected'],
-  // Combined filter for "all active" items (not yet approved/rejected)
   'active': ['pending', 'review', 'reviewing', 'pending_approval'],
 };
 
-// Fetch scouting queue items by status
+// ============================================================
+// FETCH HOOKS (read from external DB)
+// ============================================================
+
+/**
+ * Fetch scouting queue items by status from external DB
+ */
 export const useScoutingQueue = (status?: string) => {
   return useQuery({
     queryKey: ['scouting-queue', status],
     queryFn: async () => {
-      let query = (supabase as any)
+      let query = externalSupabase
         .from('scouting_queue')
         .select('*')
         .order('created_at', { ascending: false });
       
       if (status) {
         const dbStatuses = STATUS_MAPPING[status] || [status];
-        query = query.in('queue_status', dbStatuses);
+        query = query.in('status', dbStatuses);
       }
       
       const { data, error } = await query;
       
       if (error) throw error;
-      return (data as ScoutingQueueItem[]).map(normalizeScoutingItem);
+      return (data as ExternalScoutingQueueItem[]).map(normalizeExternalScoutingItem);
     },
   });
 };
 
-// Fetch active scouting queue items (review + pending_approval)
+/**
+ * Fetch active scouting queue items (review + pending_approval)
+ */
 export const useActiveScoutingQueue = () => {
   return useQuery({
     queryKey: ['scouting-queue', 'active'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await externalSupabase
         .from('scouting_queue')
         .select('*')
-        .in('queue_status', STATUS_MAPPING.active)
+        .in('status', STATUS_MAPPING.active)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return (data as ScoutingQueueItem[]).map(normalizeScoutingItem);
+      return (data as ExternalScoutingQueueItem[]).map(normalizeExternalScoutingItem);
     },
   });
 };
 
-// Fetch all scouting queue items (all statuses)
+/**
+ * Fetch all scouting queue items (all statuses)
+ */
 export const useAllScoutingQueue = () => {
   return useQuery({
     queryKey: ['scouting-queue', 'all'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await externalSupabase
         .from('scouting_queue')
         .select('*')
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return (data as ScoutingQueueItem[]).map(normalizeScoutingItem);
+      return (data as ExternalScoutingQueueItem[]).map(normalizeExternalScoutingItem);
     },
   });
 };
 
-// Fetch rejected technologies
+/**
+ * Fetch rejected technologies from external DB
+ */
 export const useRejectedTechnologies = () => {
   return useQuery({
     queryKey: ['rejected-technologies'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await externalSupabase
         .from('rejected_technologies')
         .select('*')
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data as RejectedTechnology[];
+      return data as ExternalRejectedTechnology[];
     },
   });
 };
 
-// Update scouting queue item
+// ============================================================
+// MUTATION HOOKS (write to external DB)
+// ============================================================
+
+/**
+ * Update scouting queue item in external DB
+ */
 export const useUpdateScoutingItem = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<ScoutingFormData> }) => {
-      // Convert form data to database column names
-      const dbUpdates = formDataToDbFormat(updates as ScoutingFormData);
+      const dbUpdates = formDataToExternalDbFormat(updates as ScoutingFormData);
       
-      const { data, error } = await (supabase as any)
+      const { data, error } = await externalSupabase
         .from('scouting_queue')
         .update({
           ...dbUpdates,
@@ -129,7 +149,9 @@ export const useUpdateScoutingItem = () => {
   });
 };
 
-// Change status of scouting item
+/**
+ * Change status of scouting item in external DB
+ */
 export const useChangeScoutingStatus = () => {
   const queryClient = useQueryClient();
   
@@ -144,21 +166,16 @@ export const useChangeScoutingStatus = () => {
       reviewedBy?: string;
     }) => {
       const updateData: Record<string, unknown> = {
-        queue_status: status,
+        status: status,
         updated_at: new Date().toISOString(),
       };
       
-      if (status === 'pending_approval' && reviewedBy) {
+      if ((status === 'pending_approval' || status === 'approved') && reviewedBy) {
         updateData.reviewed_by = reviewedBy;
         updateData.reviewed_at = new Date().toISOString();
       }
       
-      if (status === 'approved' && reviewedBy) {
-        updateData.reviewed_by = reviewedBy;
-        updateData.reviewed_at = new Date().toISOString();
-      }
-      
-      const { data, error } = await (supabase as any)
+      const { data, error } = await externalSupabase
         .from('scouting_queue')
         .update(updateData)
         .eq('id', id)
@@ -184,23 +201,83 @@ export const useChangeScoutingStatus = () => {
   });
 };
 
-// Approve technology to main database
+/**
+ * Approve technology: 
+ * 1. Get data from external scouting_queue
+ * 2. Insert into LOCAL technologies (Lovable Cloud)
+ * 3. Delete from external scouting_queue
+ */
 export const useApproveToTechnologies = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ scoutingId, approvedBy }: { scoutingId: string; approvedBy: string }) => {
-      // Use the database function that exists
-      const { data, error } = await (supabase as any).rpc('approve_scouting_to_technologies', {
-        scouting_id: scoutingId,
-      });
+    mutationFn: async ({ 
+      scoutingId, 
+      approvedBy,
+      approverId
+    }: { 
+      scoutingId: string; 
+      approvedBy: string;
+      approverId?: string;
+    }) => {
+      // 1. Fetch the record from external DB
+      const { data: scoutingRecord, error: fetchError } = await externalSupabase
+        .from('scouting_queue')
+        .select('*')
+        .eq('id', scoutingId)
+        .single();
       
-      if (error) throw error;
-      return data;
+      if (fetchError) throw new Error(`Error al obtener registro: ${fetchError.message}`);
+      if (!scoutingRecord) throw new Error('Registro no encontrado');
+      
+      const record = scoutingRecord as ExternalScoutingQueueItem;
+      
+      // 2. Insert into LOCAL technologies table (Lovable Cloud)
+      const { data: newTech, error: insertError } = await supabase
+        .from('technologies')
+        .insert({
+          "Nombre de la tecnología": record.nombre,
+          "Tipo de tecnología": record.tipo_sugerido || 'Otro',
+          "Subcategoría": record.subcategoria,
+          "Sector y subsector": record.sector,
+          "Proveedor / Empresa": record.proveedor,
+          "País de origen": record.pais,
+          "Paises donde actua": record.paises_actua,
+          "Web de la empresa": record.web,
+          "Email de contacto": record.email,
+          "Descripción técnica breve": record.descripcion,
+          "Aplicación principal": record.aplicacion_principal,
+          "Ventaja competitiva clave": record.ventaja_competitiva,
+          "Porque es innovadora": record.innovacion,
+          "Grado de madurez (TRL)": record.trl_estimado,
+          "Casos de referencia": record.casos_referencia,
+          "Comentarios del analista": record.comentarios_analista,
+          subsector_industrial: record.subsector,
+          status: 'active',
+          review_status: 'none',
+        })
+        .select()
+        .single();
+      
+      if (insertError) throw new Error(`Error al insertar tecnología: ${insertError.message}`);
+      
+      // 3. Delete from external scouting_queue
+      const { error: deleteError } = await externalSupabase
+        .from('scouting_queue')
+        .delete()
+        .eq('id', scoutingId);
+      
+      if (deleteError) {
+        console.error('Error deleting from external queue:', deleteError);
+        // Don't fail the whole operation if delete fails
+      }
+      
+      return newTech;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
       queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-counts'] });
       toast.success('Tecnología transferida a la base de datos principal');
     },
     onError: (error: Error) => {
@@ -209,7 +286,12 @@ export const useApproveToTechnologies = () => {
   });
 };
 
-// Reject technology
+/**
+ * Reject technology:
+ * 1. Get data from external scouting_queue
+ * 2. Insert into external rejected_technologies
+ * 3. Delete from external scouting_queue
+ */
 export const useMoveToRejected = () => {
   const queryClient = useQueryClient();
   
@@ -225,19 +307,65 @@ export const useMoveToRejected = () => {
       rejectedBy: string; 
       rejectionStage: 'analyst' | 'supervisor' | 'admin';
     }) => {
-      // Use the database function that exists
-      const { data, error } = await (supabase as any).rpc('reject_scouting_to_rejected', {
-        scouting_id: scoutingId,
-        reason: rejectionReason,
-        category: rejectionStage,
-      });
+      // 1. Fetch the record from external DB
+      const { data: scoutingRecord, error: fetchError } = await externalSupabase
+        .from('scouting_queue')
+        .select('*')
+        .eq('id', scoutingId)
+        .single();
       
-      if (error) throw error;
-      return data;
+      if (fetchError) throw new Error(`Error al obtener registro: ${fetchError.message}`);
+      if (!scoutingRecord) throw new Error('Registro no encontrado');
+      
+      const record = scoutingRecord as ExternalScoutingQueueItem;
+      
+      // 2. Insert into rejected_technologies in external DB
+      const { error: insertError } = await externalSupabase
+        .from('rejected_technologies')
+        .insert({
+          original_scouting_id: record.id,
+          nombre: record.nombre,
+          proveedor: record.proveedor,
+          pais: record.pais,
+          web: record.web,
+          email: record.email,
+          descripcion: record.descripcion,
+          tipo_sugerido: record.tipo_sugerido,
+          subcategoria: record.subcategoria,
+          sector: record.sector,
+          subsector: record.subsector,
+          aplicacion_principal: record.aplicacion_principal,
+          ventaja_competitiva: record.ventaja_competitiva,
+          innovacion: record.innovacion,
+          trl_estimado: record.trl_estimado,
+          casos_referencia: record.casos_referencia,
+          paises_actua: record.paises_actua,
+          comentarios_analista: record.comentarios_analista,
+          rejection_reason: rejectionReason,
+          rejection_category: rejectionStage,
+          rejected_by: rejectedBy,
+          rejected_at: new Date().toISOString(),
+          original_data: record as unknown as Record<string, unknown>,
+        });
+      
+      if (insertError) throw new Error(`Error al mover a rechazadas: ${insertError.message}`);
+      
+      // 3. Delete from external scouting_queue
+      const { error: deleteError } = await externalSupabase
+        .from('scouting_queue')
+        .delete()
+        .eq('id', scoutingId);
+      
+      if (deleteError) {
+        console.error('Error deleting from external queue:', deleteError);
+      }
+      
+      return { success: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
       queryClient.invalidateQueries({ queryKey: ['rejected-technologies'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-counts'] });
       toast.success('Tecnología movida a rechazadas');
     },
     onError: (error: Error) => {
@@ -246,16 +374,29 @@ export const useMoveToRejected = () => {
   });
 };
 
-// Get scouting queue counts by status
+// ============================================================
+// COUNT HOOKS
+// ============================================================
+
+/**
+ * Get scouting queue counts by status from external DB
+ */
 export const useScoutingCounts = () => {
   return useQuery({
     queryKey: ['scouting-counts'],
     queryFn: async () => {
-      const supabaseAny = supabase as any;
       const [reviewRes, pendingRes, rejectedRes] = await Promise.all([
-        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).in('queue_status', ['pending', 'review', 'reviewing']),
-        supabaseAny.from('scouting_queue').select('id', { count: 'exact', head: true }).eq('queue_status', 'pending_approval'),
-        supabaseAny.from('rejected_technologies').select('id', { count: 'exact', head: true }),
+        externalSupabase
+          .from('scouting_queue')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pending', 'review', 'reviewing']),
+        externalSupabase
+          .from('scouting_queue')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending_approval'),
+        externalSupabase
+          .from('rejected_technologies')
+          .select('id', { count: 'exact', head: true }),
       ]);
       
       return {
@@ -264,5 +405,32 @@ export const useScoutingCounts = () => {
         rejected: rejectedRes.count ?? 0,
       };
     },
+  });
+};
+
+/**
+ * Get technology counts grouped by scouting_job_id from external DB
+ */
+export const useTechCountsBySession = () => {
+  return useQuery({
+    queryKey: ['tech-counts-by-session'],
+    queryFn: async () => {
+      const { data, error } = await externalSupabase
+        .from('scouting_queue')
+        .select('scouting_job_id');
+      
+      if (error) throw error;
+      
+      // Count by session
+      const counts: Record<string, number> = {};
+      (data || []).forEach((item: { scouting_job_id: string | null }) => {
+        if (item.scouting_job_id) {
+          counts[item.scouting_job_id] = (counts[item.scouting_job_id] || 0) + 1;
+        }
+      });
+      
+      return counts;
+    },
+    refetchInterval: 30000,
   });
 };

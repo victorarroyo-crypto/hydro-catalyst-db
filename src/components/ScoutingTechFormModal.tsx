@@ -19,11 +19,11 @@ import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
-  useUpdateExternalScoutingItem,
-  useChangeExternalScoutingStatus,
-  useApproveExternalToTechnologies,
-  useMoveExternalToRejected 
-} from '@/hooks/useExternalScoutingData';
+  useUpdateScoutingItem,
+  useChangeScoutingStatus,
+  useApproveToTechnologies,
+  useMoveToRejected 
+} from '@/hooks/useScoutingData';
 import { QueueItemUI, ScoutingFormData } from '@/types/scouting';
 import { 
   Loader2, 
@@ -166,11 +166,11 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
   const [rejectionDialog, setRejectionDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   
-  // Mutations - using external hooks (read from Railway, write to Lovable Cloud)
-  const updateItemMutation = useUpdateExternalScoutingItem();
-  const changeStatusMutation = useChangeExternalScoutingStatus();
-  const approveToDbMutation = useApproveExternalToTechnologies();
-  const moveToRejectedMutation = useMoveExternalToRejected();
+  // Mutations - using hooks that connect to external DB
+  const updateItemMutation = useUpdateScoutingItem();
+  const changeStatusMutation = useChangeScoutingStatus();
+  const approveToDbMutation = useApproveToTechnologies();
+  const moveToRejectedMutation = useMoveToRejected();
   
   const isLoading = updateItemMutation.isPending || changeStatusMutation.isPending || 
                     approveToDbMutation.isPending || moveToRejectedMutation.isPending;

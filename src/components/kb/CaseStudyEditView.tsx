@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -181,44 +182,39 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
             const appData = (tech.application_data as Record<string, unknown>) || {};
             
             try {
-              const { data: insertResult, error: scoutingError } = await supabase.functions.invoke('external-scouting-queue', {
-                body: {
-                  action: 'insert',
-                  record: {
-                    nombre: tech.technology_name,
-                    proveedor: tech.provider || null,
-                    pais: appData.country || country || null,
-                    web: appData.web || null,
-                    email: appData.email || null,
-                    descripcion: appData.description || null,
-                    tipo_sugerido: appData.type || 'Por clasificar',
-                    subcategoria_sugerida: appData.subcategory || null,
-                    trl_estimado: appData.trl || null,
-                    ventaja_competitiva: appData.innovationAdvantages || null,
-                    aplicacion_principal: appData.mainApplication || null,
-                    sector: sector || null,
-                    source: 'case_study',
-                    case_study_id: caseStudyId,
-                    relevance_score: tech.role === 'recommended' ? 90 : 50,
-                    relevance_reason: tech.selection_rationale || `Tecnología de caso de estudio: ${name}`,
-                    status: 'review'
-                  }
-                }
-              });
+              // Insertar en BD Externa directamente (campos snake_case)
+              const { data: insertedRecord, error: scoutingError } = await externalSupabase
+                .from('scouting_queue')
+                .insert({
+                  nombre: tech.technology_name,
+                  proveedor: tech.provider || null,
+                  pais: (appData.country as string) || country || null,
+                  web: (appData.web as string) || null,
+                  email: (appData.email as string) || null,
+                  descripcion: (appData.description as string) || null,
+                  tipo_sugerido: (appData.type as string) || 'Por clasificar',
+                  subcategoria: (appData.subcategory as string) || null,
+                  trl_estimado: (appData.trl as number) || null,
+                  ventaja_competitiva: (appData.innovationAdvantages as string) || null,
+                  aplicacion_principal: (appData.mainApplication as string) || null,
+                  sector: sector || null,
+                  source: 'case_study',
+                  case_study_id: caseStudyId,
+                  status: 'review'
+                })
+                .select()
+                .single();
 
-              if (scoutingError || !insertResult?.success) {
-                console.error('[CaseStudyEditView] Error sending tech to scouting:', tech.technology_name, scoutingError || insertResult?.error);
-              } else if (insertResult.data?.id) {
+              if (scoutingError) {
+                console.error('[CaseStudyEditView] Error sending tech to scouting:', tech.technology_name, scoutingError);
+              } else if (insertedRecord?.id) {
                 // Successfully inserted - update scouting_queue_id to mark as sent
                 await supabase
                   .from('case_study_technologies')
-                  .update({ scouting_queue_id: insertResult.data.id })
+                  .update({ scouting_queue_id: insertedRecord.id })
                   .eq('id', tech.id);
                 
-                console.log('[CaseStudyEditView] Successfully sent and linked:', tech.technology_name, insertResult.data.id);
-              } else if (insertResult.skipped) {
-                // Technology already exists in external DB, silently skip
-                console.log('[CaseStudyEditView] Skipped (already exists in scouting):', tech.technology_name);
+                console.log('[CaseStudyEditView] Successfully sent and linked:', tech.technology_name, insertedRecord.id);
               }
             } catch (err) {
               console.error('[CaseStudyEditView] Exception sending tech to scouting:', tech.technology_name, err);

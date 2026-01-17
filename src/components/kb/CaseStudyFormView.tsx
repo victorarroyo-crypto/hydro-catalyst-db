@@ -49,6 +49,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { useCaseStudyFiles } from '@/hooks/useCaseStudyFiles';
 import { PAISES } from '@/constants/taxonomyData';
@@ -659,13 +660,18 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
 
     setSendingToScouting(tech.id);
     try {
-      // Verificar duplicados en BD Externa via edge function
-      const { data: listResult } = await supabase.functions.invoke('external-scouting-queue', {
-        body: { action: 'list', status: 'all' }
-      });
+      // Verificar duplicados en BD Externa directamente
+      const { data: existingItems, error: listError } = await externalSupabase
+        .from('scouting_queue')
+        .select('id, nombre')
+        .ilike('nombre', tech.name);
 
-      const existingInQueue = listResult?.data?.find(
-        (item: any) => item['Nombre de la tecnología']?.toLowerCase() === tech.name.toLowerCase()
+      if (listError) {
+        console.error('Error checking duplicates:', listError);
+      }
+
+      const existingInQueue = existingItems?.find(
+        (item: { nombre: string }) => item.nombre?.toLowerCase() === tech.name.toLowerCase()
       );
 
       if (existingInQueue) {
@@ -676,33 +682,30 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         return;
       }
 
-      // Insertar en BD Externa via edge function (campos con nombres externos)
-      const { data: insertResult, error } = await supabase.functions.invoke('external-scouting-queue', {
-        body: {
-          action: 'insert',
-          record: {
-            nombre: tech.name,
-            proveedor: tech.provider || null,
-            pais: tech.country || null,
-            web: tech.web || null,
-            email: tech.email || null,
-            descripcion: tech.description || null,
-            tipo_sugerido: tech.type || 'Por clasificar',
-            subcategoria_sugerida: tech.subcategory || null,
-            trl_estimado: tech.trl || null,
-            ventaja_competitiva: tech.innovationAdvantages || null,
-            aplicacion_principal: tech.mainApplication || null,
-            sector: tech.sector || null,
-            source: 'case_study',
-            relevance_score: tech.role === 'Recomendada' ? 90 : 50,
-            relevance_reason: buildScoutingNotes(tech, title),
-            status: 'pending'
-          }
-        }
-      });
+      // Insertar en BD Externa directamente (campos snake_case)
+      const { data: insertedRecord, error: insertError } = await externalSupabase
+        .from('scouting_queue')
+        .insert({
+          nombre: tech.name,
+          proveedor: tech.provider || null,
+          pais: tech.country || null,
+          web: tech.web || null,
+          email: tech.email || null,
+          descripcion: tech.description || null,
+          tipo_sugerido: tech.type || 'Por clasificar',
+          subcategoria: tech.subcategory || null,
+          trl_estimado: tech.trl || null,
+          ventaja_competitiva: tech.innovationAdvantages || null,
+          aplicacion_principal: tech.mainApplication || null,
+          sector: tech.sector || null,
+          source: 'case_study',
+          status: 'pending'
+        })
+        .select()
+        .single();
 
-      if (error || !insertResult?.success) {
-        throw new Error(insertResult?.error || error?.message || 'Error insertando tecnología');
+      if (insertError) {
+        throw new Error(insertError.message || 'Error insertando tecnología');
       }
 
       // Actualizar estado local
@@ -874,33 +877,30 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             // Para borradores, solo guardar en case_study_technologies sin crear entrada en scouting
             
             if (status === 'approved') {
-              // Publicando → insertar en BD Externa via edge function
-              const { data: insertResult, error: scoutingError } = await supabase.functions.invoke('external-scouting-queue', {
-                body: {
-                  action: 'insert',
-                  record: {
-                    nombre: tech.name,
-                    proveedor: tech.provider || null,
-                    pais: tech.country || null,
-                    web: tech.web || null,
-                    email: tech.email || null,
-                    descripcion: tech.description || null,
-                    tipo_sugerido: tech.type || 'Por clasificar',
-                    subcategoria_sugerida: tech.subcategory || null,
-                    trl_estimado: tech.trl || null,
-                    ventaja_competitiva: tech.innovationAdvantages || null,
-                    aplicacion_principal: tech.mainApplication || null,
-                    sector: tech.sector || sector,
-                    source: 'case_study',
-                    relevance_score: tech.role === 'Recomendada' ? 90 : 50,
-                    relevance_reason: buildScoutingNotes(tech, title),
-                    status: 'pending'
-                  }
-                }
-              });
+              // Publicando → insertar en BD Externa directamente (campos snake_case)
+              const { data: insertedRecord, error: scoutingError } = await externalSupabase
+                .from('scouting_queue')
+                .insert({
+                  nombre: tech.name,
+                  proveedor: tech.provider || null,
+                  pais: tech.country || null,
+                  web: tech.web || null,
+                  email: tech.email || null,
+                  descripcion: tech.description || null,
+                  tipo_sugerido: tech.type || 'Por clasificar',
+                  subcategoria: tech.subcategory || null,
+                  trl_estimado: tech.trl || null,
+                  ventaja_competitiva: tech.innovationAdvantages || null,
+                  aplicacion_principal: tech.mainApplication || null,
+                  sector: tech.sector || sector,
+                  source: 'case_study',
+                  status: 'pending'
+                })
+                .select()
+                .single();
 
-              if (scoutingError || !insertResult?.success) {
-                console.error('Error inserting to external scouting_queue:', scoutingError || insertResult?.error);
+              if (scoutingError) {
+                console.error('Error inserting to external scouting_queue:', scoutingError);
               }
 
               // Insertar en case_study_technologies local (tracking interno)
