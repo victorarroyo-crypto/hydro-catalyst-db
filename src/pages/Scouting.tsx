@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { 
@@ -74,6 +74,15 @@ const Scouting = () => {
   const { data: rejectedTechs = [] } = useRejectedTechnologies();
   const { data: counts, refetch: refetchCounts } = useScoutingCounts();
 
+  // Invalidate cache when session filter changes to ensure fresh data
+  useEffect(() => {
+    if (sessionFilter) {
+      console.log('[Scouting] Session filter detected, invalidating cache:', sessionFilter);
+      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+      queryClient.invalidateQueries({ queryKey: ['active-scouting-queue'] });
+    }
+  }, [sessionFilter, queryClient]);
+
   // Filtered items based on queueFilter and sessionFilter
   const filteredQueueItems = useMemo(() => {
     let items: QueueItemUI[];
@@ -89,6 +98,19 @@ const Scouting = () => {
     
     return items;
   }, [queueFilter, activeItems, reviewItems, pendingApprovalItems, sessionFilter]);
+
+  // Debug logging for session filter
+  console.log('[Scouting] Filter state:', {
+    sessionFilter,
+    queueFilter,
+    activeItemsCount: activeItems.length,
+    activeItemsWithJobId: activeItems.filter(i => i.scouting_job_id).length,
+    filteredCount: filteredQueueItems.length,
+    sampleItems: activeItems.slice(0, 3).map(i => ({
+      name: i.name,
+      scouting_job_id: i.scouting_job_id
+    }))
+  });
 
   // Clear session filter function
   const clearSessionFilter = () => {
