@@ -2557,30 +2557,26 @@ export type Database = {
       search_technologies_by_keywords_v2: {
         Args: {
           p_keywords: string[]
-          p_max_results?: number
+          p_limit?: number
           p_max_trl?: number
           p_min_trl?: number
-          p_sector_id?: string
+          p_sector_ids?: string[]
           p_statuses?: string[]
           p_subcategoria_id?: number
           p_tipo_id?: number
         }
         Returns: {
           aplicacion: string
-          casos_referencia: string
           descripcion: string
           id: string
-          innovacion: string
           nombre: string
-          pais: string
           proveedor: string
           relevance_score: number
           sector: string
+          status: string
           subcategoria: string
           tipo: string
           trl: number
-          ventaja: string
-          web: string
         }[]
       }
     }
