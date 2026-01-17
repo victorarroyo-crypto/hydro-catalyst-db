@@ -220,16 +220,24 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'get' && id) {
-      // Get single item from external DB
+      // Get single item from external DB - use maybeSingle to handle not found gracefully
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('[external-scouting-queue] Get error:', error);
         throw error;
+      }
+
+      if (!data) {
+        console.log(`[external-scouting-queue] Record not found: ${id}`);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Record not found', notFound: true }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       // Transform to local format
@@ -248,17 +256,26 @@ Deno.serve(async (req) => {
       
       console.log('[external-scouting-queue] Updating with:', externalUpdates);
 
-      // Update item in external DB
+      // Update item in external DB - use maybeSingle to handle not found gracefully
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .update(externalUpdates)
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('[external-scouting-queue] Update error:', error);
         throw error;
+      }
+
+      // Handle case where record doesn't exist in external DB
+      if (!data) {
+        console.log(`[external-scouting-queue] Record not found for update: ${id}`);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Record not found in external database', notFound: true }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       // Transform response to local format
