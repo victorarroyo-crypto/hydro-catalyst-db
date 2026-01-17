@@ -1,10 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { TechnologyFiltersPanel } from '@/components/TechnologyFiltersPanel';
 import { TechnologyCard } from '@/components/TechnologyCard';
 import { TechnologyTable } from '@/components/TechnologyTable';
@@ -13,6 +17,20 @@ import { TechnologyFormModal } from '@/components/TechnologyFormModal';
 import { AISearchBar, AISearchFilters } from '@/components/AISearchBar';
 import { AIClassificationPanel } from '@/components/AIClassificationPanel';
 import { useTechnologyFilters, TaxonomyFilters } from '@/hooks/useTechnologyFilters';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   Search, 
   LayoutGrid, 
@@ -22,13 +40,16 @@ import {
   ChevronRight,
   Plus,
   Bot,
+  FolderPlus,
 } from 'lucide-react';
 import type { Technology, TechnologyFilters } from '@/types/database';
 
 const ITEMS_PER_PAGE = 20;
 
 const Technologies: React.FC = () => {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { 
     filterOptions, 
@@ -51,6 +72,16 @@ const Technologies: React.FC = () => {
   const [aiSearchIds, setAiSearchIds] = useState<string[] | null>(null);
   const [isAiSearching, setIsAiSearching] = useState(false);
   const [showClassificationPanel, setShowClassificationPanel] = useState(false);
+
+  // Save search as project state
+  const [saveProjectModalOpen, setSaveProjectModalOpen] = useState(false);
+  const [newProject, setNewProject] = useState({
+    name: '',
+    description: '',
+    status: 'draft',
+    target_date: '',
+    notes: '',
+  });
 
   // Check if user can create/edit technologies
   const canEdit = profile?.role && ['admin', 'supervisor', 'analyst'].includes(profile.role);
@@ -230,6 +261,77 @@ const Technologies: React.FC = () => {
     setEditingTechnology(null);
   };
 
+  // Mutation to create project with technologies
+  const createProjectMutation = useMutation({
+    mutationFn: async (technologyIds: string[]) => {
+      // Create the project
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          name: newProject.name,
+          description: newProject.description || null,
+          status: newProject.status,
+          target_date: newProject.target_date || null,
+          notes: newProject.notes || null,
+          created_by: user?.id,
+        })
+        .select('id')
+        .single();
+      
+      if (projectError) throw projectError;
+
+      // Add technologies to the project
+      if (technologyIds.length > 0) {
+        const projectTechnologies = technologyIds.map(techId => ({
+          project_id: projectData.id,
+          technology_id: techId,
+          added_by: user?.id,
+        }));
+
+        const { error: techError } = await supabase
+          .from('project_technologies')
+          .insert(projectTechnologies);
+        
+        if (techError) throw techError;
+      }
+
+      return projectData.id;
+    },
+    onSuccess: (projectId) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setSaveProjectModalOpen(false);
+      setNewProject({ name: '', description: '', status: 'draft', target_date: '', notes: '' });
+      toast({ 
+        title: 'Proyecto creado', 
+        description: `Se añadieron ${data?.count || 0} tecnologías al proyecto` 
+      });
+      navigate(`/projects/${projectId}`);
+    },
+    onError: () => {
+      toast({ title: 'Error al crear proyecto', variant: 'destructive' });
+    },
+  });
+
+  // Get all technology IDs from current search/filter results
+  const getAllFilteredTechnologyIds = (): string[] => {
+    if (!data?.technologies) return [];
+    // If AI search is active, use those IDs
+    if (aiSearchIds && aiSearchIds.length > 0) {
+      return aiSearchIds;
+    }
+    // Otherwise get IDs from current filtered data (all pages)
+    return data.technologies.map(t => t.id);
+  };
+
+  const handleSaveAsProject = () => {
+    if (!newProject.name.trim()) return;
+    const techIds = getAllFilteredTechnologyIds();
+    createProjectMutation.mutate(techIds);
+  };
+
+  // Check if there are results to save
+  const hasResultsToSave = !isLoading && !isAiSearching && (data?.count || 0) > 0;
+
   return (
     <div className="animate-fade-in">
       <div className="flex items-start justify-between mb-6">
@@ -349,7 +451,7 @@ const Technologies: React.FC = () => {
             </div>
           </div>
 
-          {/* Results Count */}
+          {/* Results Count & Save Search Button */}
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">
               {isLoading || isAiSearching ? (
@@ -372,9 +474,22 @@ const Technologies: React.FC = () => {
                 </>
               )}
             </p>
-            {(isFetching && !isLoading) || isAiSearching ? (
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-            ) : null}
+            <div className="flex items-center gap-2">
+              {hasResultsToSave && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSaveProjectModalOpen(true)}
+                  className="text-primary border-primary/30 hover:bg-primary/10"
+                >
+                  <FolderPlus className="w-4 h-4 mr-2" />
+                  Guardar búsqueda
+                </Button>
+              )}
+              {(isFetching && !isLoading) || isAiSearching ? (
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              ) : null}
+            </div>
           </div>
 
           {/* Results */}
@@ -481,6 +596,94 @@ const Technologies: React.FC = () => {
         onOpenChange={setFormModalOpen}
         onSuccess={handleFormSuccess}
       />
+
+      {/* Save Search as Project Modal */}
+      <Dialog open={saveProjectModalOpen} onOpenChange={setSaveProjectModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderPlus className="w-5 h-5 text-primary" />
+              Guardar búsqueda como proyecto
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Se creará un nuevo proyecto con las{' '}
+            <span className="font-medium text-foreground">{data?.count || 0} tecnologías</span>{' '}
+            encontradas en la búsqueda actual.
+          </p>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="project-name">Nombre del proyecto *</Label>
+              <Input
+                id="project-name"
+                placeholder="Ej: Planta EDAR Valencia"
+                value={newProject.name}
+                onChange={(e) => setNewProject(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor="project-description">Descripción</Label>
+              <Textarea
+                id="project-description"
+                placeholder="Describe el objetivo del proyecto..."
+                value={newProject.description}
+                onChange={(e) => setNewProject(prev => ({ ...prev, description: e.target.value }))}
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="project-status">Estado</Label>
+                <Select
+                  value={newProject.status}
+                  onValueChange={(value) => setNewProject(prev => ({ ...prev, status: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">🟡 Borrador</SelectItem>
+                    <SelectItem value="active">🟢 Activo</SelectItem>
+                    <SelectItem value="on_hold">🔵 En espera</SelectItem>
+                    <SelectItem value="closed">⚫ Cerrado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="project-target-date">Fecha objetivo</Label>
+                <Input
+                  id="project-target-date"
+                  type="date"
+                  value={newProject.target_date}
+                  onChange={(e) => setNewProject(prev => ({ ...prev, target_date: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="project-notes">Notas internas</Label>
+              <Textarea
+                id="project-notes"
+                placeholder="Notas sobre el proyecto, cliente, requisitos..."
+                value={newProject.notes}
+                onChange={(e) => setNewProject(prev => ({ ...prev, notes: e.target.value }))}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveProjectModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleSaveAsProject} 
+              disabled={!newProject.name.trim() || createProjectMutation.isPending}
+            >
+              {createProjectMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Crear Proyecto
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
