@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
       "Fecha de scouting": new Date().toISOString().split("T")[0],
       "Estado del seguimiento": "Nuevo",
       // Queue-specific fields
-      queue_status: "review",
+      queue_status: "pending",
       source: payload.source || "railway_scouting",
       source_url: payload.source_url || null,
       priority: payload.priority || "normal",
