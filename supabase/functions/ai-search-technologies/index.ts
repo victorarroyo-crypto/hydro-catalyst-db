@@ -156,8 +156,9 @@ serve(async (req) => {
       );
     }
 
-    // Limit for AI context - with pre-filtering we can analyze more
-    const MAX_TECHS_FOR_AI = 500;
+    // Limit for AI context - reduced to 200 due to richer field content per technology
+    // (500 techs with all fields exceeds 272K token limit)
+    const MAX_TECHS_FOR_AI = 200;
     const techsForAI = technologies.slice(0, MAX_TECHS_FOR_AI);
     const wasLimited = totalCount > MAX_TECHS_FOR_AI;
 
