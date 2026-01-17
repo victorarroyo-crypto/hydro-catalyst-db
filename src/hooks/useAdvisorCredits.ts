@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 interface CreditTransaction {
   id: string;
@@ -17,7 +17,7 @@ export function useAdvisorCredits(userId: string | undefined) {
     queryFn: async () => {
       if (!userId) return null;
 
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('advisor_users')
         .select('credits_balance, free_queries_used, free_queries_reset_at')
         .eq('id', userId)
@@ -33,7 +33,7 @@ export function useAdvisorCredits(userId: string | undefined) {
       
       if (now > resetAt) {
         // Reset free queries
-        await supabase
+        await externalSupabase
           .from('advisor_users')
           .update({
             free_queries_used: 0,
@@ -58,7 +58,7 @@ export function useAdvisorCredits(userId: string | undefined) {
     queryFn: async () => {
       if (!userId) return [];
 
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('advisor_credits')
         .select('*')
         .eq('user_id', userId)

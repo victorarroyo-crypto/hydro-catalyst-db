@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import type { TechnologyFilters } from '@/types/database';
 
 export interface FilterOptionWithCount {
@@ -56,7 +56,7 @@ export function useTechnologyFilters() {
   const { data: taxonomyTipos } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('*')
         .order('id');
@@ -68,7 +68,7 @@ export function useTechnologyFilters() {
   const { data: taxonomySubcategorias } = useQuery({
     queryKey: ['taxonomy-subcategorias'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_subcategorias')
         .select('*')
         .order('codigo');
@@ -80,7 +80,7 @@ export function useTechnologyFilters() {
   const { data: taxonomySectores } = useQuery({
     queryKey: ['taxonomy-sectores'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_sectores')
         .select('*')
         .order('id');
@@ -92,7 +92,7 @@ export function useTechnologyFilters() {
   useEffect(() => {
     const fetchFilterOptions = async () => {
       // Fetch all technologies for counting
-      const { data: allTech } = await supabase
+      const { data: allTech } = await externalSupabase
         .from('technologies')
         .select('"Tipo de tecnología", "Subcategoría", "País de origen", "Sector y subsector", status');
 

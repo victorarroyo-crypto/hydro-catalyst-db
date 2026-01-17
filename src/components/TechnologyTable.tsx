@@ -10,7 +10,7 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Star } from 'lucide-react';
 import { DownloadTechnologyButton } from '@/components/DownloadTechnologyButton';
 import type { Technology } from '@/types/database';
@@ -48,7 +48,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
   const { data: tipos } = useQuery({
     queryKey: ['taxonomy-tipos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_tipos')
         .select('id, codigo, nombre');
       if (error) throw error;
@@ -60,7 +60,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
   const { data: subcategorias } = useQuery({
     queryKey: ['taxonomy-subcategorias'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_subcategorias')
         .select('id, codigo, nombre');
       if (error) throw error;
@@ -72,7 +72,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
   const { data: sectores } = useQuery({
     queryKey: ['taxonomy-sectores'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_sectores')
         .select('id, nombre');
       if (error) throw error;
@@ -87,7 +87,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
     queryKey: ['technology-tipos-batch', technologyIds],
     queryFn: async () => {
       if (technologyIds.length === 0) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_tipos')
         .select('technology_id, tipo_id, is_primary')
         .in('technology_id', technologyIds);

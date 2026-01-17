@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import type { 
   Message, 
   ChatResponse, 
@@ -48,7 +48,7 @@ async function uploadAndGetSignedUrl(
     const filePath = `advisor/${userId}/${timestamp}_${safeName}`;
 
     // Upload to Storage
-    const { data, error } = await supabase.storage
+    const { data, error } = await externalSupabase.storage
       .from('knowledge-docs')
       .upload(filePath, file, {
         cacheControl: '3600',
@@ -61,7 +61,7 @@ async function uploadAndGetSignedUrl(
     }
 
     // Generate signed URL (valid 4 hours, same as KB)
-    const { data: signedData, error: signedError } = await supabase.storage
+    const { data: signedData, error: signedError } = await externalSupabase.storage
       .from('knowledge-docs')
       .createSignedUrl(filePath, 4 * 60 * 60); // 4 hours
 
@@ -113,7 +113,7 @@ export function useAdvisorChat(userId: string | undefined) {
   const loadChat = useCallback(async (existingChatId: string) => {
     if (!userId) return;
 
-    const { data } = await supabase
+    const { data } = await externalSupabase
       .from('advisor_messages')
       .select('*')
       .eq('chat_id', existingChatId)
