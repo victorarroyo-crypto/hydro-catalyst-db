@@ -110,3 +110,6 @@ verify_jwt = false
 
 [functions.merge-case-studies]
 verify_jwt = false
+
+[functions.receive-scouting-technology]
+verify_jwt = false
