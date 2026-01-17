@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Radar, 
   Building2,
@@ -55,6 +56,9 @@ const getScoreColor = (score: number): string => {
 const Scouting = () => {
   const queryClient = useQueryClient();
   const { user, profile } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sessionFilter = searchParams.get('session');
+  
   const [queueFilter, setQueueFilter] = useState('all');
   const [selectedTech, setSelectedTech] = useState<QueueItemUI | null>(null);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -70,13 +74,27 @@ const Scouting = () => {
   const { data: rejectedTechs = [] } = useRejectedTechnologies();
   const { data: counts, refetch: refetchCounts } = useExternalScoutingCounts();
 
-  // Filtered items based on queueFilter
+  // Filtered items based on queueFilter and sessionFilter
   const filteredQueueItems = useMemo(() => {
-    if (queueFilter === 'all') return activeItems;
-    if (queueFilter === 'review') return reviewItems;
-    if (queueFilter === 'pending_approval') return pendingApprovalItems;
-    return activeItems;
-  }, [queueFilter, activeItems, reviewItems, pendingApprovalItems]);
+    let items: QueueItemUI[];
+    if (queueFilter === 'all') items = activeItems;
+    else if (queueFilter === 'review') items = reviewItems;
+    else if (queueFilter === 'pending_approval') items = pendingApprovalItems;
+    else items = activeItems;
+    
+    // Filter by session if sessionFilter is set
+    if (sessionFilter) {
+      items = items.filter(item => item.scouting_job_id === sessionFilter);
+    }
+    
+    return items;
+  }, [queueFilter, activeItems, reviewItems, pendingApprovalItems, sessionFilter]);
+
+  // Clear session filter function
+  const clearSessionFilter = () => {
+    searchParams.delete('session');
+    setSearchParams(searchParams);
+  };
 
   const isQueueLoading = queueFilter === 'all' ? activeLoading : 
     queueFilter === 'review' ? reviewLoading : pendingApprovalLoading;
@@ -353,6 +371,28 @@ const Scouting = () => {
 
       {/* Queue Content */}
       <div className="space-y-4">
+        {/* Session filter banner */}
+        {sessionFilter && (
+          <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Radar className="w-5 h-5 text-primary" />
+              <span className="text-sm">
+                Mostrando tecnologías de la sesión: <code className="font-mono bg-muted px-1 rounded">{sessionFilter.slice(0, 8)}...</code>
+              </span>
+              <Badge variant="secondary">{filteredQueueItems.length} resultado{filteredQueueItems.length !== 1 ? 's' : ''}</Badge>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={clearSessionFilter}
+              className="gap-1"
+            >
+              <X className="w-4 h-4" />
+              Ver todas
+            </Button>
+          </div>
+        )}
+
         <div className="mb-4">
           <p className="text-muted-foreground">
             Las tecnologías pasan por un proceso de revisión antes de añadirse a la base de datos principal.
