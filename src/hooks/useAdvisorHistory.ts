@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 interface Chat {
   id: string;
@@ -17,7 +17,7 @@ export function useAdvisorHistory(userId: string | undefined) {
     queryFn: async () => {
       if (!userId) return [];
 
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('advisor_chats')
         .select('*')
         .eq('user_id', userId)

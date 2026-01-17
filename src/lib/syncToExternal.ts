@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 type SyncAction = 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT';
 type SyncTable = 'technologies' | 'technological_trends' | 'casos_de_estudio' | 'taxonomy_tipos' | 'taxonomy_subcategorias' | 'taxonomy_sectores' | 'project_technologies' | 'projects';
@@ -12,7 +12,7 @@ interface SyncOptions {
 
 export const syncToExternalSupabase = async ({ table, action, record, recordId }: SyncOptions) => {
   try {
-    const { data, error } = await supabase.functions.invoke('sync-to-external', {
+    const { data, error } = await externalSupabase.functions.invoke('sync-to-external', {
       body: {
         table,
         action,

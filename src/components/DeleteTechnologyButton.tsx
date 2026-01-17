@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { syncTechnologyDelete } from '@/lib/syncToExternal';
 import { Button } from '@/components/ui/button';
@@ -57,7 +57,7 @@ export const DeleteTechnologyButton: React.FC<DeleteTechnologyButtonProps> = ({
     e.stopPropagation();
     setIsDeleting(true);
     try {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technologies')
         .delete()
         .eq('id', technologyId);
@@ -92,7 +92,7 @@ export const DeleteTechnologyButton: React.FC<DeleteTechnologyButtonProps> = ({
     setIsSubmitting(true);
     try {
       // Create an edit suggestion for deletion
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('technology_edits')
         .insert({
           technology_id: technologyId,
