@@ -12,7 +12,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLLMModels, formatModelCost, isFreeModel } from '@/hooks/useLLMModels';
+import { useLLMModels, formatModelCost, isFreeModel, LLMModel } from '@/hooks/useLLMModels';
+import { AI_MODELS, MODEL_PRICING } from '@/lib/aiModelPricing';
+
+// Modelos de Lovable AI para acciones que usan el gateway de Lovable
+const LOVABLE_AI_MODELS: LLMModel[] = AI_MODELS.map((m) => ({
+  key: m.id,
+  name: m.name,
+  cost_per_query: ((MODEL_PRICING[m.id]?.input || 0.15) + (MODEL_PRICING[m.id]?.output || 0.6)) / 1000, // Estimado por query
+  is_recommended: m.id === 'google/gemini-3-flash-preview',
+  is_free: false,
+}));
+
+// Acciones que usan Lovable AI Gateway (en lugar de Railway)
+const LOVABLE_AI_ACTIONS = ['search'];
 
 interface ActionConfig {
   id: string;
@@ -129,8 +142,13 @@ export const AIModelSettings: React.FC = () => {
     }
   };
 
-  const getModelInfo = (modelKey: string) => {
-    return models.find((m) => m.key === modelKey);
+  const getModelInfo = (modelKey: string, actionType: string) => {
+    const modelList = LOVABLE_AI_ACTIONS.includes(actionType) ? LOVABLE_AI_MODELS : models;
+    return modelList.find((m) => m.key === modelKey);
+  };
+
+  const getModelsForAction = (actionType: string): LLMModel[] => {
+    return LOVABLE_AI_ACTIONS.includes(actionType) ? LOVABLE_AI_MODELS : models;
   };
 
   if (isLoading) {
@@ -157,13 +175,18 @@ export const AIModelSettings: React.FC = () => {
       </CardHeader>
       <CardContent className="space-y-6">
         {settings.map((setting) => {
-          const currentModel = getModelInfo(setting.model);
+          const currentModel = getModelInfo(setting.model, setting.action_type);
+          const availableModels = getModelsForAction(setting.action_type);
+          const isLovableAction = LOVABLE_AI_ACTIONS.includes(setting.action_type);
           return (
             <div key={setting.action_type} className="space-y-2">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium text-foreground">{setting.label}</h4>
                   <p className="text-sm text-muted-foreground">{setting.description}</p>
+                  {isLovableAction && (
+                    <p className="text-xs text-blue-600 mt-1">Usa Lovable AI Gateway</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {currentModel?.is_recommended && (
@@ -183,13 +206,13 @@ export const AIModelSettings: React.FC = () => {
               <Select
                 value={setting.model}
                 onValueChange={(value) => handleModelChange(setting.action_type, value)}
-                disabled={modelsLoading}
+                disabled={!isLovableAction && modelsLoading}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder={modelsLoading ? "Cargando modelos..." : "Selecciona un modelo"} />
+                  <SelectValue placeholder={modelsLoading && !isLovableAction ? "Cargando modelos..." : "Selecciona un modelo"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {models.map((model) => (
+                  {availableModels.map((model) => (
                     <SelectItem key={model.key} value={model.key}>
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{model.name}</span>
@@ -234,11 +257,10 @@ export const AIModelSettings: React.FC = () => {
         <div className="mt-4 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
           <p className="font-medium mb-1">Modelos disponibles:</p>
           <ul className="list-disc list-inside space-y-1">
-            <li><strong>DeepSeek V3.2:</strong> El más económico ($0.002/query) - ideal para tareas simples.</li>
-            <li><strong>Claude Sonnet 4.5:</strong> Recomendado - buen equilibrio calidad/precio ($0.031/query).</li>
-            <li><strong>Claude Opus 4.5:</strong> Máxima calidad ($0.157/query) - para análisis complejos.</li>
+            <li><strong>Lovable AI (Búsqueda):</strong> Gemini 3 Flash Preview (recomendado), Gemini 2.5 Pro, GPT-5 Mini, etc.</li>
+            <li><strong>Railway (Clasificación, KB, Enriquecimiento):</strong> DeepSeek, Claude Sonnet, Claude Opus.</li>
           </ul>
-          <p className="text-xs mt-2 italic">* Los modelos se cargan dinámicamente desde Railway.</p>
+          <p className="text-xs mt-2 italic">* La búsqueda con IA usa el gateway de Lovable. Las demás acciones usan Railway.</p>
         </div>
       </CardContent>
     </Card>
