@@ -32,10 +32,21 @@ const Dashboard: React.FC = () => {
   const canReviewEdits = profile?.role && ['admin', 'supervisor'].includes(profile.role);
   const isInternalUser = profile?.role && ['admin', 'supervisor'].includes(profile.role);
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates for all dashboard data
   useRealtimeSubscription({
-    tables: ['technologies', 'projects', 'technology_edits'],
-    queryKeys: [['dashboard-stats', isInternalUser ? 'internal' : 'public'], ['pending-edits-dashboard']],
+    tables: [
+      'technologies', 
+      'projects', 
+      'technology_edits', 
+      'casos_de_estudio', 
+      'technological_trends',
+      'scouting_queue',
+      'scouting_sessions',
+    ],
+    queryKeys: [
+      ['dashboard-stats', isInternalUser ? 'internal' : 'public'], 
+      ['pending-edits-dashboard'],
+    ],
   });
 
   const { data: stats } = useQuery({

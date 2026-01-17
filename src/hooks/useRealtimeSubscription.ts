@@ -2,7 +2,20 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-type TableName = 'technologies' | 'taxonomy_tipos' | 'taxonomy_subcategorias' | 'taxonomy_sectores' | 'technological_trends' | 'projects' | 'technology_edits' | 'user_favorites';
+type TableName = 
+  | 'technologies' 
+  | 'taxonomy_tipos' 
+  | 'taxonomy_subcategorias' 
+  | 'taxonomy_sectores' 
+  | 'technological_trends' 
+  | 'projects' 
+  | 'technology_edits' 
+  | 'user_favorites'
+  | 'casos_de_estudio'
+  | 'scouting_queue'
+  | 'scouting_sessions'
+  | 'study_sessions'
+  | 'scouting_studies';
 
 interface UseRealtimeSubscriptionOptions {
   tables: TableName[];
