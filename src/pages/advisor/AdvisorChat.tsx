@@ -34,15 +34,9 @@ import { ComparadorModal, type ComparadorData } from '@/components/advisor/modal
 import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/ChecklistModal';
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
 import { PresupuestoModal, type PresupuestoData } from '@/components/advisor/modals/PresupuestoModal';
+import { PromptExamples } from '@/components/advisor/PromptExamples';
 import type { Message } from '@/types/advisorChat';
 
-const EXAMPLE_QUERIES = [
-  "¿Qué tecnología me recomiendas para tratar agua con alto contenido en metales pesados?",
-  "Comparar sistemas de ósmosis inversa vs electrodiálisis",
-  "Ficha técnica de ZeeWeed 500D",
-  "Tecnologías para reutilización de agua en industria alimentaria",
-  "¿Qué TRL tienen las tecnologías de desalinización solar?",
-];
 
 
 export default function AdvisorChat() {
@@ -267,27 +261,17 @@ export default function AdvisorChat() {
         <div className="max-w-4xl mx-auto py-6 space-y-6">
           {/* Welcome with example queries */}
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 space-y-8">
+            <div className="flex flex-col items-center justify-center py-12 space-y-8">
               <div className="text-center space-y-3">
-                <img src={vandarumSymbolBlue} alt="Vandarum" className="h-16 w-auto mx-auto" />
+                <img src={vandarumSymbolBlue} alt="Vandarum" className="h-14 w-auto mx-auto" />
                 <h2 className="text-2xl font-semibold">¿En qué puedo ayudarte?</h2>
                 <p className="text-muted-foreground">Experto en tratamiento de aguas industriales</p>
               </div>
               
-              <div className="flex flex-wrap justify-center gap-2 max-w-2xl">
-                {EXAMPLE_QUERIES.map((query, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setInputValue(query)}
-                    className="px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg border border-border/50 hover:border-border transition-colors text-left"
-                  >
-                    {query}
-                  </button>
-                ))}
-              </div>
+              <PromptExamples onSelectPrompt={(prompt) => setInputValue(prompt)} />
 
               {/* Info about features */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl w-full mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl w-full mt-2">
                 <div className="text-center p-4 rounded-lg bg-muted/30 border border-border/30">
                   <FileText className="w-6 h-6 mx-auto mb-2 text-primary" />
                   <p className="text-sm font-medium">Fichas técnicas</p>
