@@ -226,7 +226,7 @@ export function AppSidebar() {
                       <FolderOpen className="w-5 h-5" />
                       {!collapsed && (
                         <>
-                          <span className="flex-1 text-left">Proyectos</span>
+                          <span className="flex-1 text-left">Tec Scouting</span>
                           <ChevronDown className={cn(
                             "w-4 h-4 transition-transform duration-200",
                             projectsOpen && "rotate-180"
