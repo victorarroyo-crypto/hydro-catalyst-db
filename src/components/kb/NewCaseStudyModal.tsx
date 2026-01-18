@@ -31,7 +31,7 @@ import { CaseStudyProcessingView } from './CaseStudyProcessingView';
 import { CaseStudyFormView } from './CaseStudyFormView';
 import { LLMSelector } from './LLMSelector';
 import { getDefaultModel } from '@/hooks/useCaseStudyModels';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 
 interface NewCaseStudyModalProps {
@@ -408,7 +408,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       console.log('[CaseStudy] Creating job in case_study_jobs...');
       
       // Create a new job in case_study_jobs
-      const { data: job, error } = await supabase
+      const { data: job, error } = await externalSupabase
         .from('case_study_jobs')
         .insert({
           status: 'processing',
@@ -441,7 +441,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       if (failed > 0 && completed === 0) {
         // All failed
         toast.error('Todos los documentos fallaron al subir');
-        await supabase
+        await externalSupabase
           .from('case_study_jobs')
           .update({ 
             status: 'failed', 
@@ -459,7 +459,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       }
       
       // Update job phase to extracting and move to processing view
-      await supabase
+      await externalSupabase
         .from('case_study_jobs')
         .update({ 
           current_phase: 'extracting',
@@ -476,7 +476,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       // If job was created but failed, update status
       if (currentJobId) {
         console.log('[CaseStudy] Updating job status to failed...');
-        await supabase
+        await externalSupabase
           .from('case_study_jobs')
           .update({ 
             status: 'failed', 
@@ -529,7 +529,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
       toast.success('Todos los documentos reintentados exitosamente');
       
       // Move to processing if all are now done
-      await supabase
+      await externalSupabase
         .from('case_study_jobs')
         .update({ 
           current_phase: 'extracting',
@@ -568,7 +568,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   const handleCancel = async () => {
     if (currentJobId) {
       // Optionally mark job as cancelled
-      await supabase
+      await externalSupabase
         .from('case_study_jobs')
         .update({ status: 'failed', error_message: 'Cancelado por el usuario' })
         .eq('id', currentJobId);
@@ -888,7 +888,7 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
                 <Button 
                   onClick={async () => {
                     if (currentJobId) {
-                      await supabase
+                      await externalSupabase
                         .from('case_study_jobs')
                         .update({ 
                           current_phase: 'extracting',

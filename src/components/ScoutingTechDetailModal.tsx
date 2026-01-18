@@ -45,7 +45,7 @@ import {
   ArrowRight,
   Sparkles
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { TRLBadge } from '@/components/TRLBadge';
 import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
 import { toast } from 'sonner';
@@ -134,7 +134,7 @@ export const ScoutingTechDetailModal = ({
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { data, error } = await supabase.functions.invoke('scouting-update-queue', {
+      const { data, error } = await externalSupabase.functions.invoke('scouting-update-queue', {
         body: { id, status },
       });
       if (error) throw new Error(error.message);

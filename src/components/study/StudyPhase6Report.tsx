@@ -71,7 +71,7 @@ import {
 } from '@/lib/vandarumDocStyles';
 import { saveAs } from 'file-saver';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface Props {
@@ -110,7 +110,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
         description: 'Recopilando datos y generando informe con IA. Esto puede tardar unos segundos.',
       });
 
-      const { data, error } = await supabase.functions.invoke('generate-comprehensive-report', {
+      const { data, error } = await externalSupabase.functions.invoke('generate-comprehensive-report', {
         body: { study_id: studyId },
       });
 
@@ -230,7 +230,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             implementation_barriers: e.implementation_barriers || [],
           }));
 
-          const { data: translationResult, error: translationError } = await supabase.functions.invoke('translate-swot', {
+          const { data: translationResult, error: translationError } = await externalSupabase.functions.invoke('translate-swot', {
             body: { evaluations: evalData }
           });
 
@@ -752,7 +752,7 @@ export default function StudyPhase6Report({ studyId, study }: Props) {
             implementation_barriers: e.implementation_barriers || [],
           }));
 
-          const { data: translationResult, error: translationError } = await supabase.functions.invoke('translate-swot', {
+          const { data: translationResult, error: translationError } = await externalSupabase.functions.invoke('translate-swot', {
             body: { evaluations: evalData }
           });
 

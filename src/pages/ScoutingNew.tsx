@@ -5,7 +5,7 @@ import {
   Loader2,
   XCircle,
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,7 +24,7 @@ import { useLLMModels, getDefaultModel, formatModelCost } from '@/hooks/useLLMMo
 
 // Proxy helper - calls to Railway backend
 async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('scouting-proxy', {
+  const { data, error } = await externalSupabase.functions.invoke('scouting-proxy', {
     body: { endpoint, method, body },
   });
 
@@ -84,7 +84,7 @@ const ScoutingNew = () => {
       // Ensure it appears in the Monitor immediately (even if webhooks are delayed)
       if (jobId) {
         try {
-          await supabase.functions.invoke('scouting-start-session', {
+          await externalSupabase.functions.invoke('scouting-start-session', {
             body: {
               session_id: jobId,
               config: {
@@ -120,7 +120,7 @@ const ScoutingNew = () => {
         // Try to ensure the active job appears in Monitor
         if (jobId) {
           try {
-            await supabase.functions.invoke('scouting-start-session', { body: { session_id: jobId } });
+            await externalSupabase.functions.invoke('scouting-start-session', { body: { session_id: jobId } });
           } catch {
             // ignore
           }

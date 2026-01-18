@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 export interface CaseStudyModel {
   key: string;
@@ -51,7 +51,7 @@ const FALLBACK_MODELS: CaseStudyModel[] = [
 async function fetchCaseStudyModels(): Promise<CaseStudyModelsResponse> {
   try {
     // Use Edge Function as proxy to avoid CORS issues
-    const { data, error } = await supabase.functions.invoke('get-case-study-models');
+    const { data, error } = await externalSupabase.functions.invoke('get-case-study-models');
 
     if (error) {
       throw new Error(`Edge function error: ${error.message}`);

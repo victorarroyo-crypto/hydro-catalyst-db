@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useStudyResearch, useAddResearch, useUpdateResearch, useDeleteResearch, ScoutingStudy, StudyResearch } from '@/hooks/useScoutingStudies';
 import { useAIStudySession } from '@/hooks/useAIStudySession';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -154,7 +154,7 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
 
       // If file mode and file selected, upload it
       if (sourceMode === 'file' && selectedFile) {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } } = await externalSupabase.auth.getUser();
         if (!user) throw new Error('Usuario no autenticado');
 
         // Generate unique file path
@@ -162,19 +162,19 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
         const fileName = `${studyId}/${Date.now()}-${selectedFile.name}`;
         
         // Upload file to storage
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError } = await externalSupabase.storage
           .from('knowledge-documents')
           .upload(fileName, selectedFile);
         
         if (uploadError) throw uploadError;
 
         // Get public URL
-        const { data: urlData } = supabase.storage
+        const { data: urlData } = externalSupabase.storage
           .from('knowledge-documents')
           .getPublicUrl(fileName);
 
         // Create knowledge document entry
-        const { data: docData, error: docError } = await supabase
+        const { data: docData, error: docError } = await externalSupabase
           .from('knowledge_documents')
           .insert({
             name: selectedFile.name,
@@ -192,7 +192,7 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
         sourceUrl = urlData.publicUrl;
 
         // Trigger processing
-        supabase.functions.invoke('process-knowledge-document', {
+        externalSupabase.functions.invoke('process-knowledge-document', {
           body: { documentId: docData.id },
         }).catch(console.error); // Fire and forget
       }
@@ -674,7 +674,7 @@ export default function StudyPhase1Research({ studyId, study }: Props) {
                 const urlParts = item.source_url.split('/knowledge-documents/');
                 if (urlParts.length > 1) {
                   const filePath = decodeURIComponent(urlParts[1]);
-                  const { data, error } = await supabase.storage
+                  const { data, error } = await externalSupabase.storage
                     .from('knowledge-documents')
                     .download(filePath);
                   
