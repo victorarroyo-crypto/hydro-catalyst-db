@@ -10,6 +10,32 @@ interface SyncOptions {
   recordId?: string | number;
 }
 
+const RAILWAY_SYNC_URL = 'https://watertech-scouting-production.up.railway.app/api/technologies/sync';
+
+// Sync to Railway for technologies (embeddings)
+const syncToRailway = async (id: string, action: 'create' | 'update' | 'delete', data?: Record<string, unknown>) => {
+  try {
+    const response = await fetch(RAILWAY_SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action, data })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Railway sync failed: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('Successfully synced to Railway:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to sync to Railway:', error);
+    // Don't throw - Railway sync is secondary, don't block main operations
+    return null;
+  }
+};
+
 export const syncToExternalSupabase = async ({ table, action, record, recordId }: SyncOptions) => {
   try {
     const { data, error } = await externalSupabase.functions.invoke('sync-to-external', {
@@ -34,18 +60,50 @@ export const syncToExternalSupabase = async ({ table, action, record, recordId }
   }
 };
 
-// Technology helpers
-export const syncTechnologyInsert = (technology: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'technologies', action: 'INSERT', record: technology });
+// Technology helpers - now also sync to Railway
+export const syncTechnologyInsert = async (technology: Record<string, unknown>) => {
+  // Sync to external Supabase
+  const result = await syncToExternalSupabase({ table: 'technologies', action: 'INSERT', record: technology });
+  
+  // Also sync to Railway for embeddings
+  if (technology.id) {
+    await syncToRailway(technology.id as string, 'create', technology);
+  }
+  
+  return result;
+};
 
-export const syncTechnologyUpdate = (id: string, changes: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'technologies', action: 'UPDATE', record: changes, recordId: id });
+export const syncTechnologyUpdate = async (id: string, changes: Record<string, unknown>) => {
+  // Sync to external Supabase
+  const result = await syncToExternalSupabase({ table: 'technologies', action: 'UPDATE', record: changes, recordId: id });
+  
+  // Also sync to Railway for embeddings
+  await syncToRailway(id, 'update', changes);
+  
+  return result;
+};
 
-export const syncTechnologyDelete = (id: string) => 
-  syncToExternalSupabase({ table: 'technologies', action: 'DELETE', recordId: id });
+export const syncTechnologyDelete = async (id: string) => {
+  // Sync to external Supabase
+  const result = await syncToExternalSupabase({ table: 'technologies', action: 'DELETE', recordId: id });
+  
+  // Also sync to Railway for embeddings
+  await syncToRailway(id, 'delete');
+  
+  return result;
+};
 
-export const syncTechnologyUpsert = (technology: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'technologies', action: 'UPSERT', record: technology });
+export const syncTechnologyUpsert = async (technology: Record<string, unknown>) => {
+  // Sync to external Supabase
+  const result = await syncToExternalSupabase({ table: 'technologies', action: 'UPSERT', record: technology });
+  
+  // Also sync to Railway for embeddings
+  if (technology.id) {
+    await syncToRailway(technology.id as string, 'update', technology);
+  }
+  
+  return result;
+};
 
 // Taxonomy Tipos helpers
 export const syncTipoInsert = (tipo: Record<string, unknown>) => 
