@@ -30,13 +30,10 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'second
   completed: { label: 'Completado', variant: 'default', className: 'bg-primary text-primary-foreground' },
 };
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://watertech-scouting-production.up.railway.app';
+
 const fetchProjects = async (): Promise<ConsultoriaProject[]> => {
-  const apiUrl = import.meta.env.VITE_API_URL;
-  if (!apiUrl) {
-    throw new Error('VITE_API_URL no está configurada');
-  }
-  
-  const response = await fetch(`${apiUrl}/api/projects`);
+  const response = await fetch(`${API_URL}/api/projects`);
   if (!response.ok) {
     throw new Error('Error al cargar proyectos');
   }
@@ -114,9 +111,6 @@ export default function ConsultoriaList() {
           <CardContent className="py-8 text-center">
             <p className="text-destructive font-medium">
               {error instanceof Error ? error.message : 'Error al cargar proyectos'}
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Verifica que VITE_API_URL esté configurada correctamente
             </p>
           </CardContent>
         </Card>
