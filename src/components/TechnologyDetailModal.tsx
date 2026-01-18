@@ -482,39 +482,44 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
 
           <Separator />
 
-          {/* Classification */}
+          {/* Classification - New 3-level taxonomy */}
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
               <Tag className="w-4 h-4" />
-              Clasificación
+              Clasificación (Taxonomía 3 Niveles)
             </h3>
             <div className="bg-muted/30 rounded-lg p-4 space-y-3">
-              {/* Multiple tipos display */}
+              {/* Categorías */}
               <div className="flex items-start gap-3 py-2">
                 <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground mb-1">Tipos de tecnología</p>
+                  <p className="text-xs text-muted-foreground mb-1">Categorías</p>
                   <div className="flex flex-wrap gap-2">
-                    {technologyTipos && technologyTipos.length > 0 ? (
-                      [...technologyTipos]
-                        .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
-                        .map(tt => {
-                          const tipo = tipos?.find(x => x.id === tt.tipo_id);
-                          if (!tipo) return null;
-                          return (
-                            <Badge
-                              key={tt.tipo_id}
-                              variant={tt.is_primary ? "default" : "secondary"}
-                              className="flex items-center gap-1"
-                            >
-                              {tt.is_primary && technologyTipos.length > 1 && (
-                                <Star className="w-3 h-3 fill-current" />
-                              )}
-                              <span className="font-mono text-xs opacity-70">{tipo.codigo}</span>
-                              {tipo.nombre}
-                            </Badge>
-                          );
-                        })
+                    {(t as any).categorias && (t as any).categorias.length > 0 ? (
+                      (t as any).categorias.map((cat: string) => (
+                        <Badge key={cat} variant="default" className="text-xs">
+                          <span className="font-mono mr-1">{cat}</span>
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tipos */}
+              <div className="flex items-start gap-3 py-2">
+                <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground mb-1">Tipos</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(t as any).tipos && (t as any).tipos.length > 0 ? (
+                      (t as any).tipos.map((tipo: string) => (
+                        <Badge key={tipo} variant="secondary" className="text-xs">
+                          {tipo}
+                        </Badge>
+                      ))
                     ) : t["Tipo de tecnología"] ? (
                       <Badge variant="outline" className="text-muted-foreground">
                         {t["Tipo de tecnología"]}
@@ -525,7 +530,30 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                   </div>
                 </div>
               </div>
-              <InfoRow icon={Tag} label="Subcategoría" value={t["Subcategoría"]} showEmpty />
+
+              {/* Subcategorías */}
+              <div className="flex items-start gap-3 py-2">
+                <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground mb-1">Subcategorías</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(t as any).subcategorias && (t as any).subcategorias.length > 0 ? (
+                      (t as any).subcategorias.map((sub: string) => (
+                        <Badge key={sub} variant="outline" className="text-xs">
+                          {sub}
+                        </Badge>
+                      ))
+                    ) : t["Subcategoría"] ? (
+                      <Badge variant="outline" className="text-muted-foreground text-xs">
+                        {t["Subcategoría"]}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <InfoRow icon={Tag} label="Sector y subsector" value={t["Sector y subsector"]} showEmpty />
               <InfoRow icon={Tag} label="Aplicación principal" value={t["Aplicación principal"]} showEmpty />
             </div>
