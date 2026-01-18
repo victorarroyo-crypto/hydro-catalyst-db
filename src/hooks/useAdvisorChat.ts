@@ -56,7 +56,11 @@ export function useAdvisorChat(userId: string | undefined) {
         'https://watertech-scouting-production.up.railway.app/api/advisor/chat/stream',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
+          },
+          cache: 'no-store',
           body: JSON.stringify({
             user_id: userId,
             message: message,
@@ -82,14 +86,17 @@ export function useAdvisorChat(userId: string | undefined) {
               const json = JSON.parse(line.substring(6));
               if (json.content) {
                 fullResponse += json.content;
+                // Forzar actualización inmediata
                 setMessages(prev => {
-                  const updated = [...prev];
-                  updated[updated.length - 1] = { 
-                    ...updated[updated.length - 1],
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = { 
+                    ...newMessages[newMessages.length - 1],
                     content: fullResponse 
                   };
-                  return updated;
+                  return newMessages;
                 });
+                // Forzar repaint del DOM
+                await new Promise(resolve => setTimeout(resolve, 0));
               }
               // Capturar chat_id si viene del servidor
               if (json.chat_id && !chatId) {
