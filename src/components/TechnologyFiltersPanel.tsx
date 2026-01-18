@@ -9,6 +9,7 @@ import { X, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import type { TechnologyFilters } from '@/types/database';
 import type { FilterOptions, TaxonomyFilters, TaxonomyTipo, TaxonomySubcategoria, TaxonomySector } from '@/hooks/useTechnologyFilters';
+import { TIPOS_TECNOLOGIA, SECTORES, PAISES } from '@/constants/taxonomyData';
 
 interface TechnologyFiltersProps {
   filters: TechnologyFilters;
@@ -90,14 +91,14 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Filtros por Taxonomía (basados en texto de la tabla technologies) */}
+        {/* Filtros por Taxonomía (datos fijos) */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-primary">
             <Sparkles className="w-4 h-4" />
             Taxonomía
           </div>
           
-          {/* Tipo de tecnología */}
+          {/* Tipo de tecnología (fijo) */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Tipo de tecnología</Label>
             <Select
@@ -109,11 +110,11 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
               </SelectTrigger>
               <SelectContent className="max-h-60 bg-popover z-50">
                 <SelectItem value="all">Todos los tipos</SelectItem>
-                {filterOptions.tiposTecnologia.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <span className="flex items-center justify-between w-full gap-2">
-                      <span className="truncate">{option.value}</span>
-                      <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
+                {TIPOS_TECNOLOGIA.map((tipo) => (
+                  <SelectItem key={tipo.id} value={tipo.nombre}>
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-muted-foreground">{tipo.codigo}</span>
+                      {tipo.nombre}
                     </span>
                   </SelectItem>
                 ))}
@@ -121,31 +122,7 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
             </Select>
           </div>
 
-          {/* Subcategoría */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Subcategoría</Label>
-            <Select
-              value={filters.subcategoria || 'all'}
-              onValueChange={(value) => updateFilter('subcategoria', value === 'all' ? '' : value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todas las subcategorías" />
-              </SelectTrigger>
-              <SelectContent className="max-h-60 bg-popover z-50">
-                <SelectItem value="all">Todas las subcategorías</SelectItem>
-                {filterOptions.subcategorias.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <span className="flex items-center justify-between w-full gap-2">
-                      <span className="truncate">{option.value}</span>
-                      <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Sector */}
+          {/* Sector (fijo) */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Sector</Label>
             <Select
@@ -155,13 +132,13 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
               <SelectTrigger>
                 <SelectValue placeholder="Todos los sectores" />
               </SelectTrigger>
-              <SelectContent className="max-h-60 bg-popover z-50">
+              <SelectContent className="bg-popover z-50">
                 <SelectItem value="all">Todos los sectores</SelectItem>
-                {filterOptions.sectores.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <span className="flex items-center justify-between w-full gap-2">
-                      <span className="truncate">{option.value}</span>
-                      <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
+                {SECTORES.map((sector) => (
+                  <SelectItem key={sector.id} value={sector.nombre}>
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-muted-foreground">{sector.id}</span>
+                      {sector.nombre}
                     </span>
                   </SelectItem>
                 ))}
@@ -193,7 +170,7 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
           </div>
         </div>
 
-        {/* País */}
+        {/* País (fijo) */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">País de origen</Label>
           <Select
@@ -205,12 +182,9 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
             </SelectTrigger>
             <SelectContent className="max-h-60 bg-popover z-50">
               <SelectItem value="all">Todos los países</SelectItem>
-              {filterOptions.paises.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  <span className="flex items-center justify-between w-full gap-2">
-                    <span className="truncate">{option.value}</span>
-                    <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
-                  </span>
+              {PAISES.map((pais) => (
+                <SelectItem key={pais} value={pais}>
+                  {pais}
                 </SelectItem>
               ))}
             </SelectContent>

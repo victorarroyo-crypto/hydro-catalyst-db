@@ -37,6 +37,32 @@ export const SUBSECTORES_INDUSTRIALES = [
   'Otros',
 ] as const;
 
+/**
+ * TIPOS DE TECNOLOGÍA (Taxonomía fija)
+ * Sincronizado con tabla taxonomy_tipos
+ */
+export const TIPOS_TECNOLOGIA = [
+  { id: 1, codigo: 'TAP', nombre: 'Tratamiento de Agua Potable' },
+  { id: 2, codigo: 'TAR', nombre: 'Tratamiento de Aguas Residuales' },
+  { id: 3, codigo: 'GLR', nombre: 'Gestión de Lodos y Residuos' },
+  { id: 4, codigo: 'MON', nombre: 'Monitorización y Control' },
+  { id: 5, codigo: 'RED', nombre: 'Gestión de Redes' },
+  { id: 6, codigo: 'SOF', nombre: 'Software y Digitalización' },
+  { id: 7, codigo: 'ENE', nombre: 'Energía y Eficiencia' },
+  { id: 8, codigo: 'EQU', nombre: 'Equipamiento Auxiliar' },
+  { id: 9, codigo: 'ALC', nombre: 'Gestión de Redes de Alcantarillado' },
+] as const;
+
+/**
+ * SECTORES (Taxonomía fija)
+ * Sincronizado con tabla taxonomy_sectores
+ */
+export const SECTORES = [
+  { id: 'MUN', nombre: 'Municipal' },
+  { id: 'IND', nombre: 'Industrial' },
+  { id: 'AMB', nombre: 'Ambos' },
+] as const;
+
 export const PAISES = [
   'Afganistán', 'Albania', 'Alemania', 'Andorra', 'Angola', 'Antigua y Barbuda', 'Arabia Saudita', 'Argelia', 'Argentina', 'Armenia',
   'Australia', 'Austria', 'Azerbaiyán', 'Bahamas', 'Bangladés', 'Barbados', 'Baréin', 'Bélgica', 'Belice', 'Benín',
@@ -66,3 +92,5 @@ export type StatusValue = (typeof STATUS_OPTIONS)[number]['value'];
 export type EstadoSeguimientoValue = (typeof ESTADO_SEGUIMIENTO_OPTIONS)[number]['value'];
 export type SubsectorIndustrialValue = (typeof SUBSECTORES_INDUSTRIALES)[number];
 export type PaisValue = (typeof PAISES)[number];
+export type TipoTecnologiaValue = (typeof TIPOS_TECNOLOGIA)[number];
+export type SectorValue = (typeof SECTORES)[number];
