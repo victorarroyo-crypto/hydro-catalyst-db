@@ -32,7 +32,7 @@ const projectSchema = z.object({
   client_name: z.string().trim().max(200, 'Máximo 200 caracteres').optional(),
   client_contact: z.string().trim().max(200, 'Máximo 200 caracteres').optional(),
   project_type: z.enum(['diagnosis', 'optimization', 'new_plant', 'audit', 'feasibility']).optional(),
-  industry_sector: z.enum(['Alimentario', 'Textil', 'Químico', 'Farmacéutico', 'Papelero', 'Metalúrgico', 'Otro']).optional(),
+  industry_sector: z.enum(['Alimentario', 'Bebidas', 'Textil', 'Químico', 'Farmacéutico', 'Papelero', 'Metalúrgico', 'Automotriz', 'Otro']).optional(),
   plant_name: z.string().trim().max(200, 'Máximo 200 caracteres').optional(),
   plant_location: z.string().trim().max(300, 'Máximo 300 caracteres').optional(),
   plant_capacity_m3_day: z.coerce.number().min(0, 'Debe ser un número positivo').optional().or(z.literal('')),
@@ -50,11 +50,13 @@ const projectTypeLabels: Record<string, string> = {
 
 const industrySectors = [
   'Alimentario',
+  'Bebidas',
   'Textil',
   'Químico',
   'Farmacéutico',
   'Papelero',
   'Metalúrgico',
+  'Automotriz',
   'Otro',
 ];
 
