@@ -256,35 +256,8 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     },
   });
 
-  // Fetch existing technology tipos relationship
-  const { data: existingTipos } = useQuery({
-    queryKey: ['technology-tipos', technology?.id],
-    queryFn: async () => {
-      if (!technology?.id) return [];
-      const { data, error } = await externalSupabase
-        .from('technology_tipos')
-        .select('tipo_id, is_primary')
-        .eq('technology_id', technology.id);
-      if (error) throw error;
-      return data as SelectedTipo[];
-    },
-    enabled: !!technology?.id,
-  });
-
-  // Fetch existing technology subcategorias relationship
-  const { data: existingSubcategorias } = useQuery({
-    queryKey: ['technology-subcategorias', technology?.id],
-    queryFn: async () => {
-      if (!technology?.id) return [];
-      const { data, error } = await externalSupabase
-        .from('technology_subcategorias')
-        .select('subcategoria_id, is_primary')
-        .eq('technology_id', technology.id);
-      if (error) throw error;
-      return data as SelectedSubcategoria[];
-    },
-    enabled: !!technology?.id,
-  });
+  // NOTE: technology_tipos and technology_subcategorias tables don't exist in external DB
+  // We use the direct text fields "Tipo de tecnología" and "Subcategoría" instead
 
   // Fetch editor profile name (updated_by)
   const { data: editorProfile } = useQuery({
@@ -353,25 +326,19 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     (sub) => selectedTipoIds.includes(sub.tipo_id)
   ) || [];
 
-  // Load existing tipos when editing
+  // Load tipos from technology's tipo_id when editing
   useEffect(() => {
-    if (existingTipos && existingTipos.length > 0) {
-      setSelectedTipos(existingTipos);
-    } else if ((technology as any)?.tipo_id) {
-      // Fallback to legacy tipo_id if no relationship exists
+    if ((technology as any)?.tipo_id) {
       setSelectedTipos([{ tipo_id: (technology as any).tipo_id, is_primary: true }]);
     }
-  }, [existingTipos, technology]);
+  }, [technology]);
 
-  // Load existing subcategorias when editing
+  // Load subcategorias from technology's subcategoria_id when editing
   useEffect(() => {
-    if (existingSubcategorias && existingSubcategorias.length > 0) {
-      setSelectedSubcategorias(existingSubcategorias);
-    } else if ((technology as any)?.subcategoria_id) {
-      // Fallback to legacy subcategoria_id if no relationship exists
+    if ((technology as any)?.subcategoria_id) {
       setSelectedSubcategorias([{ subcategoria_id: (technology as any).subcategoria_id, is_primary: true }]);
     }
-  }, [existingSubcategorias, technology]);
+  }, [technology]);
 
   // Helper functions for managing multiple tipos
   const handleTipoToggle = (tipoId: number, checked: boolean) => {
@@ -652,49 +619,8 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           if (error) throw error;
 
-          // Update technology_tipos relationship
-          // First delete existing
-          await externalSupabase
-            .from('technology_tipos')
-            .delete()
-            .eq('technology_id', technology.id);
-
-          // Then insert new ones
-          if (selectedTipos.length > 0) {
-            const tiposToInsert = selectedTipos.map(t => ({
-              technology_id: technology.id,
-              tipo_id: t.tipo_id,
-              is_primary: t.is_primary,
-            }));
-            
-            const { error: tiposError } = await externalSupabase
-              .from('technology_tipos')
-              .insert(tiposToInsert);
-            
-            if (tiposError) console.error('Error saving tipos:', tiposError);
-          }
-
-          // Update technology_subcategorias relationship
-          // First delete existing
-          await externalSupabase
-            .from('technology_subcategorias')
-            .delete()
-            .eq('technology_id', technology.id);
-
-          // Then insert new ones
-          if (selectedSubcategorias.length > 0) {
-            const subcategoriasToInsert = selectedSubcategorias.map(s => ({
-              technology_id: technology.id,
-              subcategoria_id: s.subcategoria_id,
-              is_primary: s.is_primary,
-            }));
-            
-            const { error: subcategoriasError } = await externalSupabase
-              .from('technology_subcategorias')
-              .insert(subcategoriasToInsert);
-            
-            if (subcategoriasError) console.error('Error saving subcategorias:', subcategoriasError);
-          }
+          // NOTE: Tipos and subcategorias are saved directly in the "Tipo de tecnología" 
+          // and "Subcategoría" text fields - no separate relationship tables needed
 
           // Sync to external Supabase
           try {
@@ -743,35 +669,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           if (error) throw error;
 
-          // Insert technology_tipos relationships
-          if (selectedTipos.length > 0) {
-            const tiposToInsert = selectedTipos.map(t => ({
-              technology_id: insertedData.id,
-              tipo_id: t.tipo_id,
-              is_primary: t.is_primary,
-            }));
-            
-            const { error: tiposError } = await externalSupabase
-              .from('technology_tipos')
-              .insert(tiposToInsert);
-            
-            if (tiposError) console.error('Error saving tipos:', tiposError);
-          }
-
-          // Insert technology_subcategorias relationships
-          if (selectedSubcategorias.length > 0) {
-            const subcategoriasToInsert = selectedSubcategorias.map(s => ({
-              technology_id: insertedData.id,
-              subcategoria_id: s.subcategoria_id,
-              is_primary: s.is_primary,
-            }));
-            
-            const { error: subcategoriasError } = await externalSupabase
-              .from('technology_subcategorias')
-              .insert(subcategoriasToInsert);
-            
-            if (subcategoriasError) console.error('Error saving subcategorias:', subcategoriasError);
-          }
+          // NOTE: Tipos and subcategorias are saved directly in the text fields
 
           // Sync to external Supabase
           try {
