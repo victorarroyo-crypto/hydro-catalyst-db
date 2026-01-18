@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import {
   useStudyLonglist,
   useAddToLonglist,
@@ -85,7 +85,7 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
   useEffect(() => {
     if (!studyId) return;
 
-    const channel = supabase
+    const channel = externalSupabase
       .channel(`study_longlist_${studyId}`)
       .on(
         'postgres_changes',
@@ -102,7 +102,7 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      externalSupabase.removeChannel(channel);
     };
   }, [studyId, queryClient]);
 
@@ -110,7 +110,7 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
   useEffect(() => {
     if (!webSearchSessionId || generationState !== 'generating_web') return;
 
-    const channel = supabase
+    const channel = externalSupabase
       .channel(`session_${webSearchSessionId}`)
       .on(
         'postgres_changes',
@@ -142,7 +142,7 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
     }, 5 * 60 * 1000);
 
     return () => {
-      supabase.removeChannel(channel);
+      externalSupabase.removeChannel(channel);
       clearTimeout(timeout);
     };
   }, [webSearchSessionId, generationState]);
@@ -160,10 +160,10 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
   // Generate longlist mutation
   const generateLonglist = useMutation({
     mutationFn: async (triggerRailway: boolean) => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await externalSupabase.auth.getSession();
       if (!session) throw new Error('No authenticated');
 
-      const response = await supabase.functions.invoke('generate-longlist', {
+      const response = await externalSupabase.functions.invoke('generate-longlist', {
         body: {
           study_id: studyId,
           problem_statement: study.problem_statement,
@@ -217,7 +217,7 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
     queryKey: ['tech-search', searchTerm],
     queryFn: async () => {
       if (!searchTerm || searchTerm.length < 2) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technologies')
         .select('id, "Nombre de la tecnología", "Proveedor / Empresa", "País de origen", "Grado de madurez (TRL)", "Descripción técnica breve"')
         .or(`"Nombre de la tecnología".ilike.%${searchTerm}%,"Proveedor / Empresa".ilike.%${searchTerm}%`)

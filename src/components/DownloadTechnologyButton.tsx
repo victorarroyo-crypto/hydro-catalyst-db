@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { generateTechnologyWordDocument } from "@/lib/generateWordDocument";
-import { supabase } from "@/integrations/supabase/client";
+import { externalSupabase } from "@/integrations/supabase/externalClient";
 import type { Technology } from "@/types/database";
 
 interface DownloadTechnologyButtonProps {
@@ -36,7 +36,7 @@ export const DownloadTechnologyButton: React.FC<DownloadTechnologyButtonProps> =
       } = {};
 
       if (tipoId) {
-        const { data } = await supabase
+        const { data } = await externalSupabase
           .from("taxonomy_tipos")
           .select("codigo, nombre")
           .eq("id", tipoId)
@@ -45,7 +45,7 @@ export const DownloadTechnologyButton: React.FC<DownloadTechnologyButtonProps> =
       }
 
       if (subcategoriaId) {
-        const { data } = await supabase
+        const { data } = await externalSupabase
           .from("taxonomy_subcategorias")
           .select("codigo, nombre")
           .eq("id", subcategoriaId)
@@ -54,7 +54,7 @@ export const DownloadTechnologyButton: React.FC<DownloadTechnologyButtonProps> =
       }
 
       if (sectorId) {
-        const { data } = await supabase
+        const { data } = await externalSupabase
           .from("taxonomy_sectores")
           .select("id, nombre")
           .eq("id", sectorId)

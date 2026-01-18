@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -104,7 +103,7 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
   const { data: caseStudy, isLoading } = useQuery({
     queryKey: ['case-study-edit', caseStudyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('casos_de_estudio')
         .select('*')
         .eq('id', caseStudyId)
@@ -139,7 +138,7 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('casos_de_estudio')
         .update({
           name,
@@ -167,7 +166,7 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
         console.log('[CaseStudyEditView] Publishing case study, checking for technologies to send to scouting');
         
         // Fetch associated technologies that don't have a scouting_queue_id yet
-        const { data: techs, error: techError } = await supabase
+        const { data: techs, error: techError } = await externalSupabase
           .from('case_study_technologies')
           .select('*')
           .eq('case_study_id', caseStudyId)
@@ -209,7 +208,7 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
                 console.error('[CaseStudyEditView] Error sending tech to scouting:', tech.technology_name, scoutingError);
               } else if (insertedRecord?.id) {
                 // Successfully inserted - update scouting_queue_id to mark as sent
-                await supabase
+                await externalSupabase
                   .from('case_study_technologies')
                   .update({ scouting_queue_id: insertedRecord.id })
                   .eq('id', tech.id);

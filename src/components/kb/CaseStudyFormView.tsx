@@ -48,7 +48,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { useCaseStudyFiles } from '@/hooks/useCaseStudyFiles';
@@ -334,7 +333,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
   useEffect(() => {
     const loadJobData = async () => {
       try {
-        const { data: job, error } = await supabase
+        const { data: job, error } = await externalSupabase
           .from('case_study_jobs')
           .select('result_data, quality_score')
           .eq('id', jobId)
@@ -574,7 +573,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
       setIsSearchingTech(true);
       try {
         // Buscar match en technologies por nombre similar
-        const { data: match } = await supabase
+        const { data: match } = await externalSupabase
           .from('technologies')
           .select('id, "Nombre de la tecnología"')
           .ilike('Nombre de la tecnología', `%${newTechName.trim()}%`)
@@ -806,7 +805,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
 
       // If we have an existing case ID, UPDATE it instead of inserting
       if (existingCaseId) {
-        const { error: updateError } = await supabase
+        const { error: updateError } = await externalSupabase
           .from('casos_de_estudio')
           .update(caseData)
           .eq('id', existingCaseId);
@@ -816,7 +815,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         console.log('[CaseStudyForm] Updated existing case:', existingCaseId);
       } else {
         // Create new case
-        const { data: newCase, error: insertError } = await supabase
+        const { data: newCase, error: insertError } = await externalSupabase
           .from('casos_de_estudio')
           .insert(caseData)
           .select('id')
@@ -834,7 +833,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
           
           if (tech.linkedTechId || tech.status === 'linked') {
             // CASO A: Tecnología ya existe en DB → vincular directamente
-            const { error: techError } = await supabase
+            const { error: techError } = await externalSupabase
               .from('case_study_technologies')
               .insert({
                 case_study_id: caseStudyId,
@@ -850,14 +849,14 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             }
           } else if (tech.status === 'sent_to_scouting') {
             // CASO B: Ya fue enviada a scouting → solo crear link sin duplicar en scouting
-            const { data: existingScouting } = await supabase
+            const { data: existingScouting } = await externalSupabase
               .from('scouting_queue')
               .select('id')
               .ilike('Nombre de la tecnología', tech.name)
               .limit(1)
               .maybeSingle();
 
-            const { error: techError } = await supabase
+            const { error: techError } = await externalSupabase
               .from('case_study_technologies')
               .insert({
                 case_study_id: caseStudyId,
@@ -904,7 +903,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
               }
 
               // Insertar en case_study_technologies local (tracking interno)
-              const { error: techError } = await supabase
+              const { error: techError } = await externalSupabase
                 .from('case_study_technologies')
                 .insert({
                   case_study_id: caseStudyId,
@@ -920,7 +919,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             } else {
               // Borrador → solo guardar en case_study_technologies sin enviar a scouting
               // Esto evita crear tecnologías huérfanas si el borrador se elimina
-              const { error: techError } = await supabase
+              const { error: techError } = await externalSupabase
                 .from('case_study_technologies')
                 .insert({
                   case_study_id: caseStudyId,
@@ -941,7 +940,7 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
 
       // Update job with case_study_id (only if creating new case)
       if (!existingCaseId) {
-        await supabase
+        await externalSupabase
           .from('case_study_jobs')
           .update({ case_study_id: caseStudyId })
           .eq('id', jobId);

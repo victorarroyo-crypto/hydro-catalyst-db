@@ -1,6 +1,6 @@
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, HeadingLevel, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 interface TaxonomyTipo {
   id: number;
@@ -61,9 +61,9 @@ const createHeaderCell = (text: string, width?: number) => createBorderedCell(te
 export async function generateTaxonomyDocumentation(): Promise<void> {
   // Fetch taxonomy data
   const [tiposRes, subcategoriasRes, sectoresRes] = await Promise.all([
-    supabase.from('taxonomy_tipos').select('*').order('id'),
-    supabase.from('taxonomy_subcategorias').select('*').order('tipo_id, id'),
-    supabase.from('taxonomy_sectores').select('*').order('nombre'),
+    externalSupabase.from('taxonomy_tipos').select('*').order('id'),
+    externalSupabase.from('taxonomy_subcategorias').select('*').order('tipo_id, id'),
+    externalSupabase.from('taxonomy_sectores').select('*').order('nombre'),
   ]);
 
   const tipos: TaxonomyTipo[] = tiposRes.data || [];
@@ -71,7 +71,7 @@ export async function generateTaxonomyDocumentation(): Promise<void> {
   const sectores: TaxonomySector[] = sectoresRes.data || [];
 
   // Fetch statistics
-  const { data: techStats } = await supabase
+  const { data: techStats } = await externalSupabase
     .from('technologies')
     .select('id, tipo_id, subcategoria_id, sector_id, "Tipo de tecnología", "Subcategoría"');
 

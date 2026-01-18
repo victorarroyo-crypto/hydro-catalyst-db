@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { supabase } from '@/integrations/supabase/client'
+import { externalSupabase } from '@/integrations/supabase/externalClient'
 import { Loader2, CheckCircle, XCircle, Database, Sparkles } from 'lucide-react'
 
 export default function AdminKBSync() {
@@ -14,7 +14,7 @@ export default function AdminKBSync() {
     setSyncStatus('loading')
     setSyncResult(null)
     
-    const { data, error } = await supabase.functions.invoke('sync-knowledge-chunks', {
+    const { data, error } = await externalSupabase.functions.invoke('sync-knowledge-chunks', {
       body: { exclude_corrupt: true }
     })
     
@@ -31,7 +31,7 @@ export default function AdminKBSync() {
     setEmbeddingStatus('loading')
     setEmbeddingResult(null)
     
-    const { data, error } = await supabase.functions.invoke('generate-chunk-embeddings', {
+    const { data, error } = await externalSupabase.functions.invoke('generate-chunk-embeddings', {
       body: { batch_size: 50 }
     })
     

@@ -46,7 +46,7 @@ import {
   X,
   Eye
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 
 const API_BASE = 'https://watertech-scouting-production.up.railway.app';
@@ -163,7 +163,7 @@ const fetchQueue = async (status: string): Promise<{ items: QueueItem[] }> => {
 };
 
 const updateQueueItem = async ({ id, status }: { id: string; status: string }) => {
-  const { data, error } = await supabase.functions.invoke('scouting-update-queue', {
+  const { data, error } = await externalSupabase.functions.invoke('scouting-update-queue', {
     body: { id, status },
   });
 

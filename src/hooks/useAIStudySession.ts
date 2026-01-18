@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useQueryClient } from '@tanstack/react-query';
 import { useActiveStudySession, useStudySessionLogs, useStartStudySession } from './useStudySessions';
 import { toast } from '@/hooks/use-toast';
@@ -41,7 +41,7 @@ export function useAIStudySession(studyId: string | undefined, sessionType?: AIS
   useEffect(() => {
     if (!activeSession?.id) return;
 
-    const channel = supabase
+    const channel = externalSupabase
       .channel(`study-session-${activeSession.id}`)
       .on(
         'postgres_changes',
@@ -71,7 +71,7 @@ export function useAIStudySession(studyId: string | undefined, sessionType?: AIS
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      externalSupabase.removeChannel(channel);
     };
   }, [activeSession?.id, studyId, queryClient]);
 
@@ -79,7 +79,7 @@ export function useAIStudySession(studyId: string | undefined, sessionType?: AIS
   useEffect(() => {
     if (!studyId) return;
 
-    const channel = supabase
+    const channel = externalSupabase
       .channel(`study-data-${studyId}`)
       .on(
         'postgres_changes',
@@ -132,7 +132,7 @@ export function useAIStudySession(studyId: string | undefined, sessionType?: AIS
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      externalSupabase.removeChannel(channel);
     };
   }, [studyId, queryClient]);
 
@@ -160,9 +160,9 @@ export function useAIStudySession(studyId: string | undefined, sessionType?: AIS
     if (!activeSession?.id) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('study_sessions')
-        .update({ 
+        .update({
           status: 'cancelled',
           completed_at: new Date().toISOString(),
         })
