@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { API_URL } from '@/lib/api';
 
 const projectSchema = z.object({
   name: z.string().trim().min(1, 'El nombre es requerido').max(200, 'Máximo 200 caracteres'),
@@ -59,8 +60,6 @@ const industrySectors = [
   'Automotriz',
   'Otro',
 ];
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://watertech-scouting-production.up.railway.app';
 
 const createProject = async (data: ProjectFormData): Promise<{ id: string }> => {
   const payload = {

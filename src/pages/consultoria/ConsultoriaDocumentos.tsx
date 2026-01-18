@@ -28,8 +28,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://watertech-scouting-production.up.railway.app';
+import { API_URL } from "@/lib/api";
 
 interface Document {
   id: string;

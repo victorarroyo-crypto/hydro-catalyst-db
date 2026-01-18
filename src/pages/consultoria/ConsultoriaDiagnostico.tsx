@@ -21,8 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://watertech-scouting-production.up.railway.app';
+import { API_URL } from "@/lib/api";
 
 interface Project {
   id: string;
@@ -152,7 +151,7 @@ export default function ConsultoriaDiagnostico() {
     setWorkflowStatus({ id: '', status: 'pending', progress_percentage: 0 });
 
     try {
-      const url = `${import.meta.env.VITE_API_URL}/api/projects/${id}/workflows/run`;
+      const url = `${API_URL}/api/projects/${id}/workflows/run`;
       console.log('POST a:', url);
       
       const response = await fetch(url, {

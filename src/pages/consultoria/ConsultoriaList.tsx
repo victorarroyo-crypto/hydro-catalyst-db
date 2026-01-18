@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { API_URL } from '@/lib/api';
 
 interface ConsultoriaProject {
   id: string;
@@ -29,8 +30,6 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'second
   in_progress: { label: 'En Progreso', variant: 'default', className: 'bg-accent text-accent-foreground' },
   completed: { label: 'Completado', variant: 'default', className: 'bg-primary text-primary-foreground' },
 };
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://watertech-scouting-production.up.railway.app';
 
 const fetchProjects = async (): Promise<ConsultoriaProject[]> => {
   const response = await fetch(`${API_URL}/api/projects`);

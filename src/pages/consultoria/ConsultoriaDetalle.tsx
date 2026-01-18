@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatsCard } from '@/components/StatsCard';
 import { Skeleton } from '@/components/ui/skeleton';
+import { API_URL } from '@/lib/api';
 
 interface DashboardData {
   project: {
@@ -51,8 +52,6 @@ interface DashboardData {
     created_at: string;
   }>;
 }
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://watertech-scouting-production.up.railway.app';
 
 const fetchDashboard = async (id: string): Promise<DashboardData> => {
   const response = await fetch(`${API_URL}/api/projects/${id}/dashboard`);
