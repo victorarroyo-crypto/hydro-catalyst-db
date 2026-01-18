@@ -62,7 +62,6 @@ import { cn } from '@/lib/utils';
 const mainNavItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   { title: 'BD Tecnologías', url: '/technologies', icon: Search },
-  { title: 'Favoritos', url: '/favorites', icon: Star },
 ];
 
 const projectsSubItems = [
