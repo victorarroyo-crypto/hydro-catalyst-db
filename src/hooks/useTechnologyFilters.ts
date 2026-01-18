@@ -67,10 +67,11 @@ export function useTechnologyFilters() {
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
-      // Fetch all technologies for counting
+      // Fetch a capped set (avoid implicit pagination / large responses)
       const { data: allTech } = await externalSupabase
         .from('technologies')
-        .select('"Tipo de tecnología", "Subcategoría", "País de origen", "Sector y subsector", status');
+        .select('"Tipo de tecnología", "Subcategoría", "País de origen", "Sector y subsector", status')
+        .range(0, 999);
 
       if (!allTech) {
         setLoading(false);

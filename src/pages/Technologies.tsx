@@ -101,104 +101,95 @@ const Technologies: React.FC = () => {
       const from = (page - 1) * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
-      // Use RPC or direct fetch with client-side filtering for complex queries
-      // Fetch all technologies (bypass 1000 row limit by fetching in batches)
-      const fetchAllTechnologies = async () => {
-        const allRecords: Technology[] = [];
-        const batchSize = 1000;
-        let from = 0;
-        let hasMore = true;
-        
-        while (hasMore) {
-          const { data, error } = await externalSupabase
-            .from('technologies')
-            .select('*')
-            // NOTE: external DB doesn't have created_at, use id for ordering
-            .order('id', { ascending: false })
-            .range(from, from + batchSize - 1);
-          
-          if (error) throw error;
-          
-          if (data && data.length > 0) {
-            allRecords.push(...(data as Technology[]));
-            from += batchSize;
-            hasMore = data.length === batchSize;
-          } else {
-            hasMore = false;
-          }
-        }
-        
-        return allRecords;
-      };
-      
-      const allData = await fetchAllTechnologies();
+      // IMPORTANT: Don't batch-fetch >1000 rows from the external DB in the browser.
+      // It can trigger upstream 500 responses (which then surface as CORS errors).
+      // Instead, fetch only the current page and do filtering server-side.
 
-      // Apply filters client-side for reliability with Spanish column names
-      let filtered = allData;
+      // Base query (paged)
+      let query = externalSupabase
+        .from('technologies')
+        .select('*')
+        // NOTE: external DB doesn't have created_at
+        .order('id', { ascending: false })
+        .range(from, to);
+
+      // Count query (same filters, head)
+      let countQuery = externalSupabase
+        .from('technologies')
+        .select('id', { count: 'exact', head: true });
 
       // If AI search is active, filter by AI results first
       if (aiSearchIds && aiSearchIds.length > 0) {
-        const idsSet = new Set(aiSearchIds);
-        filtered = filtered.filter(t => idsSet.has(t.id));
-        // Sort by AI relevance order
-        filtered.sort((a, b) => aiSearchIds.indexOf(a.id) - aiSearchIds.indexOf(b.id));
+        query = query.in('id', aiSearchIds);
+        countQuery = countQuery.in('id', aiSearchIds);
       } else if (aiSearchIds && aiSearchIds.length === 0) {
-        // AI search returned no results
-        filtered = [];
+        return { technologies: [], count: 0 };
       } else {
         // Normal filtering when no AI search is active
         if (filters.search) {
-          const searchLower = filters.search.toLowerCase();
-          filtered = filtered.filter(t => 
-            t["Nombre de la tecnología"]?.toLowerCase().includes(searchLower) ||
-            t["Proveedor / Empresa"]?.toLowerCase().includes(searchLower) ||
-            t["Descripción técnica breve"]?.toLowerCase().includes(searchLower)
-          );
+          const search = filters.search.trim();
+          // Use OR across name/provider/description
+          const orExpr = [
+            `"Nombre de la tecnología".ilike.%${search}%`,
+            `"Proveedor / Empresa".ilike.%${search}%`,
+            `"Descripción técnica breve".ilike.%${search}%`,
+          ].join(',');
+
+          query = query.or(orExpr);
+          countQuery = countQuery.or(orExpr);
         }
 
-        // NOTE: Taxonomy ID filters disabled - external DB doesn't have tipo_id, subcategoria_id, sector_id columns
-        // Filtering is done via text fields below
-
-        // Text-based filters (these work with the external DB)
         if (filters.tipoTecnologia) {
-          filtered = filtered.filter(t => t["Tipo de tecnología"] === filters.tipoTecnologia);
+          query = query.eq('"Tipo de tecnología"', filters.tipoTecnologia);
+          countQuery = countQuery.eq('"Tipo de tecnología"', filters.tipoTecnologia);
         }
 
         if (filters.subcategoria) {
-          filtered = filtered.filter(t => t["Subcategoría"] === filters.subcategoria);
+          query = query.eq('"Subcategoría"', filters.subcategoria);
+          countQuery = countQuery.eq('"Subcategoría"', filters.subcategoria);
         }
 
         if (filters.pais) {
-          filtered = filtered.filter(t => t["País de origen"] === filters.pais);
+          query = query.eq('"País de origen"', filters.pais);
+          countQuery = countQuery.eq('"País de origen"', filters.pais);
         }
 
         if (filters.sector) {
-          filtered = filtered.filter(t => t["Sector y subsector"] === filters.sector);
+          query = query.eq('"Sector y subsector"', filters.sector);
+          countQuery = countQuery.eq('"Sector y subsector"', filters.sector);
         }
 
         if (filters.status) {
-          filtered = filtered.filter(t => t.status === filters.status);
+          query = query.eq('status', filters.status);
+          countQuery = countQuery.eq('status', filters.status);
         }
 
-        if (filters.trlMin > 1 || filters.trlMax < 9) {
-          filtered = filtered.filter(t => {
-            const trl = t["Grado de madurez (TRL)"];
-            if (trl === null || trl === undefined) return false;
-            return trl >= filters.trlMin && trl <= filters.trlMax;
-          });
+        if (filters.trlMin > 1) {
+          query = query.gte('"Grado de madurez (TRL)"', filters.trlMin);
+          countQuery = countQuery.gte('"Grado de madurez (TRL)"', filters.trlMin);
         }
 
-        // Sort by name only when not using AI search
-        filtered.sort((a, b) => 
-          (a["Nombre de la tecnología"] || '').localeCompare(b["Nombre de la tecnología"] || '')
-        );
+        if (filters.trlMax < 9) {
+          query = query.lte('"Grado de madurez (TRL)"', filters.trlMax);
+          countQuery = countQuery.lte('"Grado de madurez (TRL)"', filters.trlMax);
+        }
       }
 
-      // Apply pagination
-      const totalCount = filtered.length;
-      const paginatedData = filtered.slice(from, to + 1);
+      const [{ data: technologies, error }, { count, error: countError }] = await Promise.all([
+        query,
+        countQuery,
+      ]);
 
-      return { technologies: paginatedData, count: totalCount };
+      if (error) throw error;
+      if (countError) throw countError;
+
+      // When not AI-searching, order by name client-side for nicer UX (safe on a single page)
+      const rows = (technologies as Technology[]) || [];
+      if (!aiSearchIds) {
+        rows.sort((a, b) => (a["Nombre de la tecnología"] || '').localeCompare(b["Nombre de la tecnología"] || ''));
+      }
+
+      return { technologies: rows, count: count ?? rows.length };
     },
   });
 
