@@ -309,7 +309,7 @@ export default function AdvisorChat() {
                   }}
                 >
                   <Briefcase className="w-4 h-4 mr-2" />
-                  Solicitar Consultoría Gratuita
+                  Solicitar Consultoría
                 </Button>
               </div>
             </div>
