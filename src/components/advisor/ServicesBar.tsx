@@ -39,16 +39,14 @@ export const ServicesBar = ({ onServiceClick, userCredits, onNewChat }: Services
       {/* Right side - CTA Presupuesto */}
       <Button
         onClick={() => onServiceClick('presupuesto')}
-        className="flex items-center gap-2 whitespace-nowrap text-sm h-9 text-white shadow-md hover:shadow-lg transition-all duration-300"
+        size="lg"
+        className="flex items-center gap-2 whitespace-nowrap text-base h-11 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-white/20"
         style={{
-          background: 'linear-gradient(135deg, #307177 0%, #32b4cd 50%, #8cb63c 100%)',
+          background: 'linear-gradient(135deg, #ffa720 0%, #ff8c00 100%)',
         }}
       >
-        <Phone className="w-4 h-4" />
-        <span className="font-semibold">Pide tu Presupuesto</span>
-        <Badge className="bg-[#ffa720] text-white text-[10px] px-1.5 py-0 hover:bg-[#ffa720]/90 border-0">
-          Gratis
-        </Badge>
+        <Phone className="w-5 h-5" />
+        <span className="font-bold">Pide tu Presupuesto</span>
       </Button>
     </div>
   );
