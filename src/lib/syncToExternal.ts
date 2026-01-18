@@ -1,14 +1,10 @@
-import { externalSupabase } from '@/integrations/supabase/externalClient';
-
-type SyncAction = 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT';
-type SyncTable = 'technologies' | 'technological_trends' | 'casos_de_estudio' | 'taxonomy_tipos' | 'taxonomy_subcategorias' | 'taxonomy_sectores' | 'project_technologies' | 'projects';
-
-interface SyncOptions {
-  table: SyncTable;
-  action: SyncAction;
-  record?: Record<string, unknown>;
-  recordId?: string | number;
-}
+/**
+ * Sync utilities for external systems
+ * 
+ * Since we now use externalSupabase (Railway) as the primary database,
+ * we only need to sync to Railway for embeddings - the main DB operations
+ * are already happening on externalSupabase directly.
+ */
 
 const RAILWAY_SYNC_URL = 'https://watertech-scouting-production.up.railway.app/api/technologies/sync';
 
@@ -36,132 +32,57 @@ const syncToRailway = async (id: string, action: 'create' | 'update' | 'delete',
   }
 };
 
-export const syncToExternalSupabase = async ({ table, action, record, recordId }: SyncOptions) => {
-  try {
-    const { data, error } = await externalSupabase.functions.invoke('sync-to-external', {
-      body: {
-        table,
-        action,
-        record,
-        recordId,
-      },
-    });
-
-    if (error) {
-      console.error('Error syncing to external Supabase:', error);
-      throw error;
-    }
-
-    console.log('Successfully synced to external Supabase:', data);
-    return data;
-  } catch (error) {
-    console.error('Failed to sync to external Supabase:', error);
-    throw error;
-  }
-};
-
-// Technology helpers - now also sync to Railway
+// Technology helpers - only sync to Railway for embeddings
+// Main DB operations now happen directly on externalSupabase
 export const syncTechnologyInsert = async (technology: Record<string, unknown>) => {
-  // Sync to external Supabase
-  const result = await syncToExternalSupabase({ table: 'technologies', action: 'INSERT', record: technology });
-  
-  // Also sync to Railway for embeddings
+  // Sync to Railway for embeddings
   if (technology.id) {
-    await syncToRailway(technology.id as string, 'create', technology);
+    return await syncToRailway(technology.id as string, 'create', technology);
   }
-  
-  return result;
+  return null;
 };
 
 export const syncTechnologyUpdate = async (id: string, changes: Record<string, unknown>) => {
-  // Sync to external Supabase
-  const result = await syncToExternalSupabase({ table: 'technologies', action: 'UPDATE', record: changes, recordId: id });
-  
-  // Also sync to Railway for embeddings
-  await syncToRailway(id, 'update', changes);
-  
-  return result;
+  // Sync to Railway for embeddings
+  return await syncToRailway(id, 'update', changes);
 };
 
 export const syncTechnologyDelete = async (id: string) => {
-  // Sync to external Supabase
-  const result = await syncToExternalSupabase({ table: 'technologies', action: 'DELETE', recordId: id });
-  
-  // Also sync to Railway for embeddings
-  await syncToRailway(id, 'delete');
-  
-  return result;
+  // Sync to Railway for embeddings
+  return await syncToRailway(id, 'delete');
 };
 
 export const syncTechnologyUpsert = async (technology: Record<string, unknown>) => {
-  // Sync to external Supabase
-  const result = await syncToExternalSupabase({ table: 'technologies', action: 'UPSERT', record: technology });
-  
-  // Also sync to Railway for embeddings
+  // Sync to Railway for embeddings
   if (technology.id) {
-    await syncToRailway(technology.id as string, 'update', technology);
+    return await syncToRailway(technology.id as string, 'update', technology);
   }
-  
-  return result;
+  return null;
 };
 
-// Taxonomy Tipos helpers
-export const syncTipoInsert = (tipo: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'taxonomy_tipos', action: 'INSERT', record: tipo });
+// Taxonomy and other sync functions are no longer needed since we write directly to externalSupabase
+// These are kept as no-ops for backwards compatibility
+export const syncTipoInsert = async (_tipo: Record<string, unknown>) => null;
+export const syncTipoUpdate = async (_id: number, _changes: Record<string, unknown>) => null;
+export const syncTipoDelete = async (_id: number) => null;
 
-export const syncTipoUpdate = (id: number, changes: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'taxonomy_tipos', action: 'UPDATE', record: changes, recordId: id });
+export const syncSubcategoriaInsert = async (_subcategoria: Record<string, unknown>) => null;
+export const syncSubcategoriaUpdate = async (_id: number, _changes: Record<string, unknown>) => null;
+export const syncSubcategoriaDelete = async (_id: number) => null;
 
-export const syncTipoDelete = (id: number) => 
-  syncToExternalSupabase({ table: 'taxonomy_tipos', action: 'DELETE', recordId: id });
+export const syncSectorInsert = async (_sector: Record<string, unknown>) => null;
+export const syncSectorUpdate = async (_id: string, _changes: Record<string, unknown>) => null;
+export const syncSectorDelete = async (_id: string) => null;
 
-// Taxonomy Subcategorías helpers
-export const syncSubcategoriaInsert = (subcategoria: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'taxonomy_subcategorias', action: 'INSERT', record: subcategoria });
+export const syncTrendInsert = async (_trend: Record<string, unknown>) => null;
+export const syncTrendDelete = async (_id: string) => null;
 
-export const syncSubcategoriaUpdate = (id: number, changes: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'taxonomy_subcategorias', action: 'UPDATE', record: changes, recordId: id });
+export const syncCaseStudyInsert = async (_caseStudy: Record<string, unknown>) => null;
+export const syncCaseStudyDelete = async (_id: string) => null;
 
-export const syncSubcategoriaDelete = (id: number) => 
-  syncToExternalSupabase({ table: 'taxonomy_subcategorias', action: 'DELETE', recordId: id });
+export const syncProjectInsert = async (_project: Record<string, unknown>) => null;
+export const syncProjectUpdate = async (_id: string, _changes: Record<string, unknown>) => null;
+export const syncProjectDelete = async (_id: string) => null;
 
-// Taxonomy Sectores helpers
-export const syncSectorInsert = (sector: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'taxonomy_sectores', action: 'INSERT', record: sector });
-
-export const syncSectorUpdate = (id: string, changes: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'taxonomy_sectores', action: 'UPDATE', record: changes, recordId: id });
-
-export const syncSectorDelete = (id: string) => 
-  syncToExternalSupabase({ table: 'taxonomy_sectores', action: 'DELETE', recordId: id });
-
-// Technological Trends helpers
-export const syncTrendInsert = (trend: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'technological_trends', action: 'INSERT', record: trend });
-
-export const syncTrendDelete = (id: string) => 
-  syncToExternalSupabase({ table: 'technological_trends', action: 'DELETE', recordId: id });
-
-// Casos de Estudio helpers
-export const syncCaseStudyInsert = (caseStudy: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'casos_de_estudio', action: 'INSERT', record: caseStudy });
-
-export const syncCaseStudyDelete = (id: string) => 
-  syncToExternalSupabase({ table: 'casos_de_estudio', action: 'DELETE', recordId: id });
-
-// Project helpers
-export const syncProjectInsert = (project: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'projects', action: 'INSERT', record: project });
-
-export const syncProjectUpdate = (id: string, changes: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'projects', action: 'UPDATE', record: changes, recordId: id });
-
-export const syncProjectDelete = (id: string) => 
-  syncToExternalSupabase({ table: 'projects', action: 'DELETE', recordId: id });
-
-// Project Technologies helpers
-export const syncProjectTechnologyInsert = (projectTech: Record<string, unknown>) => 
-  syncToExternalSupabase({ table: 'project_technologies', action: 'INSERT', record: projectTech });
-
-export const syncProjectTechnologyDelete = (id: string) => 
-  syncToExternalSupabase({ table: 'project_technologies', action: 'DELETE', recordId: id });
+export const syncProjectTechnologyInsert = async (_projectTech: Record<string, unknown>) => null;
+export const syncProjectTechnologyDelete = async (_id: string) => null;
