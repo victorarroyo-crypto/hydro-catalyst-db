@@ -89,9 +89,9 @@ const Technologies: React.FC = () => {
   // Only admins can use AI features
   const canUseAI = profile?.role === 'admin';
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates - only technologies table exists in external DB
   useRealtimeSubscription({
-    tables: ['technologies', 'taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores'],
+    tables: ['technologies'],
     queryKeys: [['technologies']],
   });
 
@@ -156,25 +156,10 @@ const Technologies: React.FC = () => {
           );
         }
 
-        // New taxonomy filters
-        if (taxonomyFilters.tipoId) {
-          if (taxonomyFilters.tipoId === -1) {
-            // Filter unclassified technologies (tipo_id is null)
-            filtered = filtered.filter(t => (t as any).tipo_id === null || (t as any).tipo_id === undefined);
-          } else {
-            filtered = filtered.filter(t => (t as any).tipo_id === taxonomyFilters.tipoId);
-          }
-        }
+        // NOTE: Taxonomy ID filters disabled - external DB doesn't have tipo_id, subcategoria_id, sector_id columns
+        // Filtering is done via text fields below
 
-        if (taxonomyFilters.subcategoriaId) {
-          filtered = filtered.filter(t => (t as any).subcategoria_id === taxonomyFilters.subcategoriaId);
-        }
-
-        if (taxonomyFilters.sectorId) {
-          filtered = filtered.filter(t => (t as any).sector_id === taxonomyFilters.sectorId);
-        }
-
-        // Legacy filters
+        // Text-based filters (these work with the external DB)
         if (filters.tipoTecnologia) {
           filtered = filtered.filter(t => t["Tipo de tecnología"] === filters.tipoTecnologia);
         }

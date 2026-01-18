@@ -557,6 +557,9 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
     setIsLoading(true);
 
+    // IMPORTANT: Only include columns that exist in the external DB
+    // Excluded: quality_score, tipo_id, subcategoria_id, sector_id, subsector_industrial,
+    // updated_by, reviewer_id, reviewed_at (these columns don't exist in external DB)
     const dataToSave = {
       "Nombre de la tecnología": formData["Nombre de la tecnología"],
       "Proveedor / Empresa": formData["Proveedor / Empresa"] || null,
@@ -577,11 +580,6 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       "Estado del seguimiento": formData["Estado del seguimiento"] || null,
       "Grado de madurez (TRL)": formData["Grado de madurez (TRL)"] || null,
       status: formData.status,
-      quality_score: formData.quality_score,
-      tipo_id: formData.tipo_id,
-      subcategoria_id: formData.subcategoria_id,
-      sector_id: formData.sector_id,
-      subsector_industrial: formData.subsector_industrial || null,
     };
 
     try {
@@ -606,15 +604,11 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
             description: 'Tu edición ha sido enviada para revisión. Un supervisor la aprobará.',
           });
         } else {
-          // Supervisors/Admins can edit directly - also record as reviewer
+          // Supervisors/Admins can edit directly
+          // NOTE: Don't send updated_by, reviewer_id, reviewed_at - they don't exist in external DB
           const { error } = await externalSupabase
             .from('technologies')
-            .update({
-              ...dataToSave,
-              updated_by: user?.id,
-              reviewer_id: user?.id,
-              // NOTE: the external DB schema may not have reviewed_at; avoid sending unknown columns
-            })
+            .update(dataToSave)
             .eq('id', technology.id);
 
           if (error) throw error;
@@ -658,24 +652,24 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
           });
         } else {
           // Admin/Supervisor: Create directly using upsert to avoid conflicts
+          // NOTE: Don't send updated_by - it doesn't exist in external DB
           const { data: insertedData, error } = await externalSupabase
             .from('technologies')
-            .upsert({
-              ...dataToSave,
-              updated_by: user?.id,
-            }, { onConflict: 'id' })
-            .select()
-            .single();
+            .upsert(dataToSave, { onConflict: 'id' })
+            .select();
 
           if (error) throw error;
 
           // NOTE: Tipos and subcategorias are saved directly in the text fields
 
-          // Sync to external Supabase
-          try {
-            await syncTechnologyInsert({ ...dataToSave, id: insertedData.id });
-          } catch (syncError) {
-            console.error('External sync failed:', syncError);
+          // Sync to external Supabase (use first item from array)
+          const insertedItem = insertedData?.[0];
+          if (insertedItem) {
+            try {
+              await syncTechnologyInsert({ ...dataToSave, id: insertedItem.id });
+            } catch (syncError) {
+              console.error('External sync failed:', syncError);
+            }
           }
 
           toast({

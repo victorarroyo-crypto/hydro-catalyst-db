@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import type { TechnologyFilters } from '@/types/database';
 
@@ -8,6 +7,7 @@ export interface FilterOptionWithCount {
   count: number;
 }
 
+// Keep interfaces for compatibility, but these won't be populated from external DB
 export interface TaxonomyTipo {
   id: number;
   codigo: string;
@@ -42,6 +42,13 @@ export interface TaxonomyFilters {
   sectorId: string | null;
 }
 
+/**
+ * useTechnologyFilters - Simplified version
+ * 
+ * No longer queries taxonomy tables (taxonomy_tipos, taxonomy_subcategorias, taxonomy_sectores)
+ * from the external DB as they don't exist.
+ * Filter options are derived from the technologies table text fields.
+ */
 export function useTechnologyFilters() {
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     tiposTecnologia: [],
@@ -52,42 +59,11 @@ export function useTechnologyFilters() {
   });
   const [loading, setLoading] = useState(true);
 
-  // Fetch taxonomy data
-  const { data: taxonomyTipos } = useQuery({
-    queryKey: ['taxonomy-tipos'],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('taxonomy_tipos')
-        .select('*')
-        .order('id');
-      if (error) throw error;
-      return data as TaxonomyTipo[];
-    },
-  });
-
-  const { data: taxonomySubcategorias } = useQuery({
-    queryKey: ['taxonomy-subcategorias'],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('taxonomy_subcategorias')
-        .select('*')
-        .order('codigo');
-      if (error) throw error;
-      return data as TaxonomySubcategoria[];
-    },
-  });
-
-  const { data: taxonomySectores } = useQuery({
-    queryKey: ['taxonomy-sectores'],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('taxonomy_sectores')
-        .select('*')
-        .order('id');
-      if (error) throw error;
-      return data as TaxonomySector[];
-    },
-  });
+  // DISABLED: External DB doesn't have these tables
+  // Return empty arrays for taxonomy data
+  const taxonomyTipos: TaxonomyTipo[] = [];
+  const taxonomySubcategorias: TaxonomySubcategoria[] = [];
+  const taxonomySectores: TaxonomySector[] = [];
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
@@ -150,8 +126,8 @@ export function useTechnologyFilters() {
     loading, 
     defaultFilters,
     defaultTaxonomyFilters,
-    taxonomyTipos: taxonomyTipos || [],
-    taxonomySubcategorias: taxonomySubcategorias || [],
-    taxonomySectores: taxonomySectores || [],
+    taxonomyTipos,
+    taxonomySubcategorias,
+    taxonomySectores,
   };
 }
