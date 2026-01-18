@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LogOut,
   FileText,
+  Square,
 } from 'lucide-react';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
@@ -50,9 +51,11 @@ export default function AdvisorChat() {
   const { 
     messages, 
     isLoading, 
+    isStreaming,
     sendMessage, 
     startNewChat, 
     chatId,
+    stopStreaming,
   } = useAdvisorChat(advisorUser?.id);
   const { balance, freeRemaining, refetch: refetchCredits } = useAdvisorCredits(advisorUser?.id);
   
@@ -391,18 +394,30 @@ export default function AdvisorChat() {
               disabled={isLoading}
               className="flex-1 border-0 shadow-none focus-visible:ring-0 h-14 text-base px-4"
             />
-            <Button 
-              onClick={handleSend} 
-              disabled={isLoading || !inputValue.trim()} 
-              size="lg" 
-              className="h-14 px-8"
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
-            </Button>
+            {isStreaming ? (
+              <Button 
+                onClick={stopStreaming}
+                variant="destructive"
+                size="lg" 
+                className="h-14 px-6 gap-2"
+              >
+                <Square className="w-4 h-4" />
+                Detener
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleSend} 
+                disabled={isLoading || !inputValue.trim()} 
+                size="lg" 
+                className="h-14 px-8"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </Button>
+            )}
           </div>
           
           {/* Cost indicator */}
