@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+// Advisor users table is in Lovable Cloud, use local supabase client
+import { supabase } from '@/integrations/supabase/client';
 
 interface AdvisorUser {
   id: string;
@@ -50,7 +51,7 @@ export function AdvisorAuthProvider({ children }: { children: ReactNode }) {
       // Simple hash for demo - in production use bcrypt on backend
       const passwordHash = btoa(password);
       
-      const { data, error } = await externalSupabase
+      const { data, error } = await supabase
         .from('advisor_users')
         .select('*')
         .eq('email', email.toLowerCase())
@@ -85,7 +86,7 @@ export function AdvisorAuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string, name: string, company?: string): Promise<{ error?: string }> => {
     try {
       // Check if user exists
-      const { data: existing } = await externalSupabase
+      const { data: existing } = await supabase
         .from('advisor_users')
         .select('id')
         .eq('email', email.toLowerCase())
@@ -98,7 +99,7 @@ export function AdvisorAuthProvider({ children }: { children: ReactNode }) {
       // Simple hash for demo - in production use bcrypt on backend
       const passwordHash = btoa(password);
 
-      const { data, error } = await externalSupabase
+      const { data, error } = await supabase
         .from('advisor_users')
         .insert({
           email: email.toLowerCase(),
@@ -146,7 +147,7 @@ export function AdvisorAuthProvider({ children }: { children: ReactNode }) {
   const refreshCredits = async () => {
     if (!advisorUser) return;
 
-    const { data } = await externalSupabase
+    const { data } = await supabase
       .from('advisor_users')
       .select('credits_balance, free_queries_used, free_queries_reset_at')
       .eq('id', advisorUser.id)
@@ -167,7 +168,7 @@ export function AdvisorAuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = async (email: string, newPassword: string): Promise<{ error?: string }> => {
     try {
       // Check if user exists
-      const { data: existing } = await externalSupabase
+      const { data: existing } = await supabase
         .from('advisor_users')
         .select('id')
         .eq('email', email.toLowerCase())
@@ -180,7 +181,7 @@ export function AdvisorAuthProvider({ children }: { children: ReactNode }) {
       // Simple hash for demo - in production use bcrypt on backend
       const passwordHash = btoa(newPassword);
 
-      const { error } = await externalSupabase
+      const { error } = await supabase
         .from('advisor_users')
         .update({ password_hash: passwordHash })
         .eq('email', email.toLowerCase());
