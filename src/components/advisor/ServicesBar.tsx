@@ -30,7 +30,7 @@ export const ServicesBar = ({ onServiceClick, userCredits, onNewChat }: Services
           </Button>
         )}
         
-        <Badge variant="outline" className="text-[10px] px-2 py-1 bg-primary/5 border-primary/20 text-primary hidden md:flex items-center gap-1">
+        <Badge variant="outline" className="text-[10px] px-2 py-1 bg-[#307177]/10 border-[#307177]/30 text-[#307177] hidden md:flex items-center gap-1">
           <Sparkles className="w-3 h-3" />
           IA especializada en agua industrial
         </Badge>
@@ -39,11 +39,14 @@ export const ServicesBar = ({ onServiceClick, userCredits, onNewChat }: Services
       {/* Right side - CTA Presupuesto */}
       <Button
         onClick={() => onServiceClick('presupuesto')}
-        className="flex items-center gap-2 whitespace-nowrap text-sm h-9 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300 animate-pulse hover:animate-none"
+        className="flex items-center gap-2 whitespace-nowrap text-sm h-9 text-white shadow-md hover:shadow-lg transition-all duration-300"
+        style={{
+          background: 'linear-gradient(135deg, #307177 0%, #32b4cd 50%, #8cb63c 100%)',
+        }}
       >
         <Phone className="w-4 h-4" />
         <span className="font-semibold">Pide tu Presupuesto</span>
-        <Badge className="bg-white/20 text-white text-[10px] px-1.5 py-0 hover:bg-white/30">
+        <Badge className="bg-[#ffa720] text-white text-[10px] px-1.5 py-0 hover:bg-[#ffa720]/90 border-0">
           Gratis
         </Badge>
       </Button>
