@@ -91,6 +91,9 @@ export default function ConsultoriaDiagnostico() {
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [pollingStartTime, setPollingStartTime] = useState<number | null>(null);
+
+  const POLLING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
   const { data: project, isLoading: loadingProject } = useQuery({
     queryKey: ['project', id],
@@ -104,12 +107,23 @@ export default function ConsultoriaDiagnostico() {
     enabled: !!id,
   });
 
-  // Polling for workflow status
+  // Polling for workflow status with timeout
   useEffect(() => {
     if (!workflowId || !id) return;
 
     const interval = setInterval(async () => {
       try {
+        // Check for timeout
+        if (pollingStartTime && Date.now() - pollingStartTime > POLLING_TIMEOUT_MS) {
+          clearInterval(interval);
+          setIsRunning(false);
+          setWorkflowId(null);
+          setWorkflowStatus(null);
+          setPollingStartTime(null);
+          toast.error("El diagnóstico ha tardado demasiado. Por favor, inténtalo de nuevo.");
+          return;
+        }
+
         console.log('Polling workflow status:', workflowId);
         const response = await fetch(`${API_URL}/api/projects/${id}/workflows/${workflowId}/status`);
         if (!response.ok) throw new Error('Error al obtener estado');
@@ -123,6 +137,7 @@ export default function ConsultoriaDiagnostico() {
           setIsRunning(false);
           setWorkflowId(null);
           setWorkflowStatus(null);
+          setPollingStartTime(null);
           await refetchFindings();
           toast.success("Diagnóstico completado - Los hallazgos han sido actualizados");
         } else if (status.status === 'failed') {
@@ -130,15 +145,17 @@ export default function ConsultoriaDiagnostico() {
           setIsRunning(false);
           setWorkflowId(null);
           setWorkflowStatus(null);
+          setPollingStartTime(null);
           toast.error(status.error_message || "Error en el diagnóstico");
         }
       } catch (error) {
         console.error('Error polling workflow status:', error);
+        toast.error("Error al verificar estado del diagnóstico");
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [workflowId, id, refetchFindings]);
+  }, [workflowId, id, refetchFindings, pollingStartTime]);
 
   const handleRunDiagnosis = async () => {
     console.log('Iniciando diagnóstico...', { id, API_URL });
@@ -149,6 +166,7 @@ export default function ConsultoriaDiagnostico() {
 
     setIsRunning(true);
     setWorkflowStatus({ id: '', status: 'pending', progress_percentage: 0 });
+    setPollingStartTime(Date.now());
 
     try {
       const url = `${API_URL}/api/projects/${id}/workflows/run`;
