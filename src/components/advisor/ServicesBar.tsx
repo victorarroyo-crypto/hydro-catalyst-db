@@ -16,27 +16,6 @@ interface Service {
 
 const SERVICES: Service[] = [
   { 
-    id: 'comparador', 
-    icon: <BarChart3 className="w-4 h-4" />, 
-    label: 'Comparar Ofertas', 
-    credits: 5,
-    description: 'Analiza y compara ofertas de proveedores'
-  },
-  { 
-    id: 'checklist', 
-    icon: <ClipboardList className="w-4 h-4" />, 
-    label: 'Checklist Análisis', 
-    credits: 2,
-    description: 'Lista de parámetros a analizar'
-  },
-  { 
-    id: 'ficha', 
-    icon: <FileText className="w-4 h-4" />, 
-    label: 'Ficha Técnica', 
-    credits: 3,
-    description: 'Fichas descargables de tecnologías'
-  },
-  { 
     id: 'presupuesto', 
     icon: <Briefcase className="w-4 h-4" />, 
     label: 'Presupuesto', 
