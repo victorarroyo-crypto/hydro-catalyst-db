@@ -13,14 +13,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { syncTechnologyUpdate, syncTechnologyInsert } from '@/lib/syncToExternal';
-import { Loader2, Save, AlertTriangle, X, Star, Sparkles } from 'lucide-react';
+import { Loader2, Save, AlertTriangle } from 'lucide-react';
 import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
+import { TaxonomyCascadeSelector } from '@/components/taxonomy/TaxonomyCascadeSelector';
+import { TaxonomySelections } from '@/hooks/useTaxonomy3Levels';
 import type { Technology } from '@/types/database';
 
 interface TechnologyFormModalProps {
@@ -30,34 +30,10 @@ interface TechnologyFormModalProps {
   onSuccess: () => void;
 }
 
-interface TaxonomyTipo {
-  id: number;
-  codigo: string;
-  nombre: string;
-  descripcion: string | null;
-}
-
-interface TaxonomySubcategoria {
-  id: number;
-  tipo_id: number;
-  codigo: string;
-  nombre: string;
-}
-
 interface TaxonomySector {
   id: string;
   nombre: string;
   descripcion: string | null;
-}
-
-interface SelectedTipo {
-  tipo_id: number;
-  is_primary: boolean;
-}
-
-interface SelectedSubcategoria {
-  subcategoria_id: number;
-  is_primary: boolean;
 }
 
 interface FormData {
@@ -81,8 +57,6 @@ interface FormData {
   "Grado de madurez (TRL)": number | null;
   status: string;
   quality_score: number;
-  tipo_id: number | null;
-  subcategoria_id: number | null;
   sector_id: string | null;
   subsector_industrial: string;
 }
@@ -132,7 +106,7 @@ const PAISES = [
   'Yemen', 'Yibuti', 'Zambia', 'Zimbabue'
 ];
 
-// Move these components outside to prevent re-creation on each render
+// Helper components
 const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="space-y-4">
     <h3 className="text-sm font-semibold text-foreground border-b pb-2">{title}</h3>
@@ -212,38 +186,19 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [editComment, setEditComment] = useState('');
-  const [selectedTipos, setSelectedTipos] = useState<SelectedTipo[]>([]);
-  const [selectedSubcategorias, setSelectedSubcategorias] = useState<SelectedSubcategoria[]>([]);
   const isEditing = !!technology;
+  
+  // New 3-level taxonomy state
+  const [taxonomySelections, setTaxonomySelections] = useState<TaxonomySelections>({
+    categorias: [],
+    tipos: [],
+    subcategorias: [],
+  });
   
   // Check user role - analysts need approval, supervisors/admins can edit directly
   const isAnalyst = profile?.role === 'analyst';
 
-  // Fetch taxonomy data
-  const { data: tipos } = useQuery({
-    queryKey: ['taxonomy-tipos'],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('taxonomy_tipos')
-        .select('*')
-        .order('id');
-      if (error) throw error;
-      return data as TaxonomyTipo[];
-    },
-  });
-
-  const { data: allSubcategorias } = useQuery({
-    queryKey: ['taxonomy-subcategorias'],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('taxonomy_subcategorias')
-        .select('*')
-        .order('codigo');
-      if (error) throw error;
-      return data as TaxonomySubcategoria[];
-    },
-  });
-
+  // Fetch sector data for the sector selector
   const { data: sectores } = useQuery({
     queryKey: ['taxonomy-sectores'],
     queryFn: async () => {
@@ -255,9 +210,6 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       return data as TaxonomySector[];
     },
   });
-
-  // NOTE: technology_tipos and technology_subcategorias tables don't exist in external DB
-  // We use the direct text fields "Tipo de tecnología" and "Subcategoría" instead
 
   // Fetch editor profile name (updated_by)
   const { data: editorProfile } = useQuery({
@@ -314,128 +266,11 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     "Grado de madurez (TRL)": null,
     status: 'active',
     quality_score: 0,
-    tipo_id: null,
-    subcategoria_id: null,
     sector_id: null,
     subsector_industrial: '',
   });
 
-  // Filter subcategories based on all selected tipos (not just primary)
-  const selectedTipoIds = selectedTipos.map(t => t.tipo_id);
-  const filteredSubcategorias = allSubcategorias?.filter(
-    (sub) => selectedTipoIds.includes(sub.tipo_id)
-  ) || [];
-
-  // Load tipos from technology's tipo_id when editing
-  useEffect(() => {
-    if ((technology as any)?.tipo_id) {
-      setSelectedTipos([{ tipo_id: (technology as any).tipo_id, is_primary: true }]);
-    }
-  }, [technology]);
-
-  // Load subcategorias from technology's subcategoria_id when editing
-  useEffect(() => {
-    if ((technology as any)?.subcategoria_id) {
-      setSelectedSubcategorias([{ subcategoria_id: (technology as any).subcategoria_id, is_primary: true }]);
-    }
-  }, [technology]);
-
-  // Helper functions for managing multiple tipos
-  const handleTipoToggle = (tipoId: number, checked: boolean) => {
-    if (checked) {
-      const isFirst = selectedTipos.length === 0;
-      setSelectedTipos(prev => [...prev, { tipo_id: tipoId, is_primary: isFirst }]);
-      
-      // Update legacy field with primary tipo name
-      if (isFirst) {
-        const tipo = tipos?.find(t => t.id === tipoId);
-        if (tipo) {
-          handleChange('tipo_id', tipoId);
-          handleChange('Tipo de tecnología', tipo.nombre);
-        }
-      }
-    } else {
-      const removedTipo = selectedTipos.find(t => t.tipo_id === tipoId);
-      const newTipos = selectedTipos.filter(t => t.tipo_id !== tipoId);
-      
-      // If we removed the primary, set first remaining as primary
-      if (removedTipo?.is_primary && newTipos.length > 0) {
-        newTipos[0].is_primary = true;
-        const tipo = tipos?.find(t => t.id === newTipos[0].tipo_id);
-        if (tipo) {
-          handleChange('tipo_id', newTipos[0].tipo_id);
-          handleChange('Tipo de tecnología', tipo.nombre);
-        }
-      } else if (newTipos.length === 0) {
-        handleChange('tipo_id', null);
-        handleChange('Tipo de tecnología', '');
-      }
-      
-      setSelectedTipos(newTipos);
-    }
-  };
-
-  const handleSetPrimary = (tipoId: number) => {
-    setSelectedTipos(prev => prev.map(t => ({
-      ...t,
-      is_primary: t.tipo_id === tipoId
-    })));
-    
-    const tipo = tipos?.find(t => t.id === tipoId);
-    if (tipo) {
-      handleChange('tipo_id', tipoId);
-      handleChange('Tipo de tecnología', tipo.nombre);
-    }
-  };
-
-  // Helper functions for managing multiple subcategorias
-  const handleSubcategoriaToggle = (subcategoriaId: number, checked: boolean) => {
-    if (checked) {
-      const isFirst = selectedSubcategorias.length === 0;
-      setSelectedSubcategorias(prev => [...prev, { subcategoria_id: subcategoriaId, is_primary: isFirst }]);
-      
-      // Update legacy field with primary subcategoria name
-      if (isFirst) {
-        const sub = allSubcategorias?.find(s => s.id === subcategoriaId);
-        if (sub) {
-          handleChange('subcategoria_id', subcategoriaId);
-          handleChange('Subcategoría', sub.nombre);
-        }
-      }
-    } else {
-      const removedSub = selectedSubcategorias.find(s => s.subcategoria_id === subcategoriaId);
-      const newSubs = selectedSubcategorias.filter(s => s.subcategoria_id !== subcategoriaId);
-      
-      // If we removed the primary, set first remaining as primary
-      if (removedSub?.is_primary && newSubs.length > 0) {
-        newSubs[0].is_primary = true;
-        const sub = allSubcategorias?.find(s => s.id === newSubs[0].subcategoria_id);
-        if (sub) {
-          handleChange('subcategoria_id', newSubs[0].subcategoria_id);
-          handleChange('Subcategoría', sub.nombre);
-        }
-      } else if (newSubs.length === 0) {
-        handleChange('subcategoria_id', null);
-        handleChange('Subcategoría', '');
-      }
-      
-      setSelectedSubcategorias(newSubs);
-    }
-  };
-
-  const handleSetPrimarySubcategoria = (subcategoriaId: number) => {
-    setSelectedSubcategorias(prev => prev.map(s => ({
-      ...s,
-      is_primary: s.subcategoria_id === subcategoriaId
-    })));
-    
-    const sub = allSubcategorias?.find(s => s.id === subcategoriaId);
-    if (sub) {
-      handleChange('subcategoria_id', subcategoriaId);
-      handleChange('Subcategoría', sub.nombre);
-    }
-  };
-
+  // Load data when editing
   useEffect(() => {
     if (technology) {
       setFormData({
@@ -459,11 +294,18 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
         "Grado de madurez (TRL)": technology["Grado de madurez (TRL)"],
         status: technology.status || 'active',
         quality_score: technology.quality_score || 0,
-        tipo_id: (technology as any).tipo_id || null,
-        subcategoria_id: (technology as any).subcategoria_id || null,
         sector_id: (technology as any).sector_id || null,
         subsector_industrial: (technology as any).subsector_industrial || '',
       });
+      
+      // Load taxonomy arrays if they exist
+      const tech = technology as any;
+      setTaxonomySelections({
+        categorias: tech.categorias || [],
+        tipos: tech.tipos || [],
+        subcategorias: tech.subcategorias || [],
+      });
+      
       setEditComment('');
     } else {
       setFormData({
@@ -487,37 +329,21 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
         "Grado de madurez (TRL)": null,
         status: 'active',
         quality_score: 0,
-        tipo_id: null,
-        subcategoria_id: null,
         sector_id: null,
         subsector_industrial: '',
       });
+      setTaxonomySelections({
+        categorias: [],
+        tipos: [],
+        subcategorias: [],
+      });
       setEditComment('');
-      setSelectedTipos([]);
-      setSelectedSubcategorias([]);
     }
   }, [technology, open]);
 
   const handleChange = (field: keyof FormData, value: string | number | null) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
-      
-      // If tipo_id changes, reset subcategoria_id and update "Tipo de tecnología" text
-      if (field === 'tipo_id') {
-        newData.subcategoria_id = null;
-        const selectedTipo = tipos?.find(t => t.id === value);
-        if (selectedTipo) {
-          newData["Tipo de tecnología"] = selectedTipo.nombre;
-        }
-      }
-      
-      // If subcategoria_id changes, update "Subcategoría" text
-      if (field === 'subcategoria_id') {
-        const selectedSub = allSubcategorias?.find(s => s.id === value);
-        if (selectedSub) {
-          newData["Subcategoría"] = selectedSub.nombre;
-        }
-      }
       
       // If sector_id changes, update "Sector y subsector" text and clear subsector if not industrial
       if (field === 'sector_id') {
@@ -534,6 +360,24 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     });
   };
 
+  // Update legacy text fields when taxonomy selections change
+  useEffect(() => {
+    // Update "Tipo de tecnología" with first tipo
+    if (taxonomySelections.tipos.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        "Tipo de tecnología": taxonomySelections.tipos[0],
+      }));
+    }
+    // Update "Subcategoría" with first subcategoria
+    if (taxonomySelections.subcategorias.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        "Subcategoría": taxonomySelections.subcategorias[0],
+      }));
+    }
+  }, [taxonomySelections]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -546,10 +390,10 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       return;
     }
 
-    if (selectedTipos.length === 0 && !formData["Tipo de tecnología"].trim()) {
+    if (taxonomySelections.categorias.length === 0) {
       toast({
         title: 'Campo requerido',
-        description: 'Debes seleccionar al menos un tipo de tecnología',
+        description: 'Debes seleccionar al menos una categoría',
         variant: 'destructive',
       });
       return;
@@ -557,9 +401,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
     setIsLoading(true);
 
-    // IMPORTANT: Only include columns that exist in the external DB
-    // Excluded: quality_score, tipo_id, subcategoria_id, sector_id, subsector_industrial,
-    // updated_by, reviewer_id, reviewed_at (these columns don't exist in external DB)
+    // Data to save includes new taxonomy arrays
     const dataToSave = {
       "Nombre de la tecnología": formData["Nombre de la tecnología"],
       "Proveedor / Empresa": formData["Proveedor / Empresa"] || null,
@@ -580,6 +422,10 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       "Estado del seguimiento": formData["Estado del seguimiento"] || null,
       "Grado de madurez (TRL)": formData["Grado de madurez (TRL)"] || null,
       status: formData.status,
+      // New taxonomy arrays
+      categorias: taxonomySelections.categorias,
+      tipos: taxonomySelections.tipos,
+      subcategorias: taxonomySelections.subcategorias,
     };
 
     try {
@@ -605,16 +451,12 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
           });
         } else {
           // Supervisors/Admins can edit directly
-          // NOTE: Don't send updated_by, reviewer_id, reviewed_at - they don't exist in external DB
           const { error } = await externalSupabase
             .from('technologies')
             .update(dataToSave)
             .eq('id', technology.id);
 
           if (error) throw error;
-
-          // NOTE: Tipos and subcategorias are saved directly in the "Tipo de tecnología" 
-          // and "Subcategoría" text fields - no separate relationship tables needed
 
           // Sync to external Supabase
           try {
@@ -631,7 +473,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       } else {
         // Creating new technology
         if (isAnalyst) {
-          // Analysts create proposal for new technology (technology_id = null)
+          // Analysts create proposal for new technology
           const { error } = await externalSupabase
             .from('technology_edits')
             .insert([{
@@ -651,8 +493,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
             description: 'Tu sugerencia de nueva tecnología ha sido enviada para revisión',
           });
         } else {
-          // Admin/Supervisor: Create directly using upsert to avoid conflicts
-          // NOTE: Don't send updated_by - it doesn't exist in external DB
+          // Admin/Supervisor: Create directly
           const { data: insertedData, error } = await externalSupabase
             .from('technologies')
             .upsert(dataToSave, { onConflict: 'id' })
@@ -660,9 +501,6 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           if (error) throw error;
 
-          // NOTE: Tipos and subcategorias are saved directly in the text fields
-
-          // Sync to external Supabase (use first item from array)
           const insertedItem = insertedData?.[0];
           if (insertedItem) {
             try {
@@ -745,7 +583,6 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
                 comentarios_analista: formData["Comentarios del analista"],
               }}
               onEnrichmentComplete={(enrichedData) => {
-                // Update form with enriched data
                 const fieldMapping: Record<string, keyof FormData> = {
                   descripcion: "Descripción técnica breve",
                   aplicacion_principal: "Aplicación principal",
@@ -818,159 +655,24 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
             />
           </FormSection>
 
-          {/* Taxonomy Classification */}
-          <FormSection title="Clasificación (Nueva Taxonomía)">
+          {/* New 3-Level Taxonomy Classification */}
+          <FormSection title="Clasificación Tecnológica">
             <div className="md:col-span-2">
-              <Label className="text-sm">
-                Tipos de Tecnología <span className="text-destructive">*</span>
+              <Label className="text-sm mb-2 block">
+                Taxonomía de 3 niveles <span className="text-destructive">*</span>
               </Label>
-              <p className="text-xs text-muted-foreground mb-2">
-                Selecciona uno o más tipos. Haz clic en ⭐ para marcar como principal.
+              <p className="text-xs text-muted-foreground mb-3">
+                Selecciona categorías, tipos y subcategorías. La selección es en cascada: primero categorías, luego tipos, y finalmente subcategorías.
               </p>
-              
-              {/* Selected tipos badges */}
-              {selectedTipos.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {selectedTipos.map(st => {
-                    const tipo = tipos?.find(t => t.id === st.tipo_id);
-                    if (!tipo) return null;
-                    return (
-                      <Badge 
-                        key={st.tipo_id} 
-                        variant={st.is_primary ? "default" : "secondary"}
-                        className="flex items-center gap-1 pr-1"
-                      >
-                        {st.is_primary && <Star className="w-3 h-3 fill-current" />}
-                        <span className="font-mono text-xs mr-1">{tipo.codigo}</span>
-                        {tipo.nombre}
-                        {!st.is_primary && (
-                          <button
-                            type="button"
-                            onClick={() => handleSetPrimary(st.tipo_id)}
-                            className="ml-1 p-0.5 hover:bg-primary/20 rounded"
-                            title="Marcar como principal"
-                          >
-                            <Star className="w-3 h-3" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleTipoToggle(st.tipo_id, false)}
-                          className="ml-1 p-0.5 hover:bg-destructive/20 rounded"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              )}
-              
-              {/* Checkbox list of tipos */}
-              <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
-                {tipos?.map((tipo) => {
-                  const isSelected = selectedTipos.some(st => st.tipo_id === tipo.id);
-                  return (
-                    <div key={tipo.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`tipo-${tipo.id}`}
-                        checked={isSelected}
-                        onCheckedChange={(checked) => handleTipoToggle(tipo.id, !!checked)}
-                      />
-                      <label
-                        htmlFor={`tipo-${tipo.id}`}
-                        className="text-sm flex items-center gap-2 cursor-pointer flex-1"
-                      >
-                        <span className="font-mono text-xs text-muted-foreground">{tipo.codigo}</span>
-                        {tipo.nombre}
-                      </label>
-                    </div>
-                  );
-                })}
-              </div>
+              <TaxonomyCascadeSelector
+                value={taxonomySelections}
+                onChange={setTaxonomySelections}
+              />
             </div>
+          </FormSection>
 
-            <div className="md:col-span-2">
-              <Label className="text-sm">Subcategorías</Label>
-              <p className="text-xs text-muted-foreground mb-2">
-                {selectedTipos.length > 0 
-                  ? "Selecciona una o más subcategorías. Haz clic en ⭐ para marcar como principal."
-                  : "Primero selecciona al menos un tipo de tecnología"
-                }
-              </p>
-              
-              {/* Selected subcategorias badges */}
-              {selectedSubcategorias.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {selectedSubcategorias.map(ss => {
-                    const sub = allSubcategorias?.find(s => s.id === ss.subcategoria_id);
-                    if (!sub) return null;
-                    return (
-                      <Badge 
-                        key={ss.subcategoria_id} 
-                        variant={ss.is_primary ? "default" : "secondary"}
-                        className="flex items-center gap-1 pr-1"
-                      >
-                        {ss.is_primary && <Star className="w-3 h-3 fill-current" />}
-                        <span className="font-mono text-xs mr-1">{sub.codigo}</span>
-                        {sub.nombre}
-                        {!ss.is_primary && (
-                          <button
-                            type="button"
-                            onClick={() => handleSetPrimarySubcategoria(ss.subcategoria_id)}
-                            className="ml-1 p-0.5 hover:bg-primary/20 rounded"
-                            title="Marcar como principal"
-                          >
-                            <Star className="w-3 h-3" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleSubcategoriaToggle(ss.subcategoria_id, false)}
-                          className="ml-1 p-0.5 hover:bg-destructive/20 rounded"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              )}
-              
-              {/* Checkbox list of subcategorias */}
-              <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
-                {selectedTipos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Primero selecciona un tipo de tecnología</p>
-                ) : filteredSubcategorias.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No hay subcategorías disponibles para los tipos seleccionados</p>
-                ) : (
-                  filteredSubcategorias.map((sub) => {
-                    const isSelected = selectedSubcategorias.some(ss => ss.subcategoria_id === sub.id);
-                    const tipoParent = tipos?.find(t => t.id === sub.tipo_id);
-                    return (
-                      <div key={sub.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`subcategoria-${sub.id}`}
-                          checked={isSelected}
-                          onCheckedChange={(checked) => handleSubcategoriaToggle(sub.id, !!checked)}
-                        />
-                        <label
-                          htmlFor={`subcategoria-${sub.id}`}
-                          className="text-sm flex items-center gap-2 cursor-pointer flex-1"
-                        >
-                          <span className="font-mono text-xs text-muted-foreground">{sub.codigo}</span>
-                          {sub.nombre}
-                          {tipoParent && (
-                            <span className="text-xs text-muted-foreground">({tipoParent.codigo})</span>
-                          )}
-                        </label>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
+          {/* Sector Classification */}
+          <FormSection title="Sector de Aplicación">
             <div>
               <Label className="text-sm">Sector</Label>
               <Select
@@ -1018,28 +720,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
                 </Select>
               </div>
             )}
-          </FormSection>
 
-          {/* Legacy Classification (read-only hint) */}
-          <FormSection title="Clasificación (Campos Legacy)">
-            <FormField 
-              label="Tipo de tecnología (texto)" 
-              field="Tipo de tecnología" 
-              value={formData["Tipo de tecnología"]}
-              onChange={handleChange}
-            />
-            <FormField 
-              label="Subcategoría (texto)" 
-              field="Subcategoría" 
-              value={formData["Subcategoría"]}
-              onChange={handleChange}
-            />
-            <FormField 
-              label="Sector y subsector (texto)" 
-              field="Sector y subsector" 
-              value={formData["Sector y subsector"]}
-              onChange={handleChange}
-            />
             <FormField 
               label="Aplicación principal" 
               field="Aplicación principal" 
