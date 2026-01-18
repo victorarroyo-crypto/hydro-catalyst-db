@@ -5,7 +5,8 @@ import {
   Loader2,
   XCircle,
 } from 'lucide-react';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+// Edge Functions are in Lovable Cloud, use local supabase client
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,9 +23,9 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useLLMModels, getDefaultModel, formatModelCost } from '@/hooks/useLLMModels';
 
-// Proxy helper - calls to Railway backend
+// Proxy helper - calls to Railway backend via Lovable Cloud Edge Function
 async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): Promise<T> {
-  const { data, error } = await externalSupabase.functions.invoke('scouting-proxy', {
+  const { data, error } = await supabase.functions.invoke('scouting-proxy', {
     body: { endpoint, method, body },
   });
 
@@ -84,7 +85,7 @@ const ScoutingNew = () => {
       // Ensure it appears in the Monitor immediately (even if webhooks are delayed)
       if (jobId) {
         try {
-          await externalSupabase.functions.invoke('scouting-start-session', {
+          await supabase.functions.invoke('scouting-start-session', {
             body: {
               session_id: jobId,
               config: {
@@ -120,7 +121,7 @@ const ScoutingNew = () => {
         // Try to ensure the active job appears in Monitor
         if (jobId) {
           try {
-            await externalSupabase.functions.invoke('scouting-start-session', { body: { session_id: jobId } });
+            await supabase.functions.invoke('scouting-start-session', { body: { session_id: jobId } });
           } catch {
             // ignore
           }
