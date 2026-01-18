@@ -41,6 +41,7 @@ import ConsultoriaList from "./pages/consultoria/ConsultoriaList";
 import ConsultoriaNuevo from "./pages/consultoria/ConsultoriaNuevo";
 import ConsultoriaDetalle from "./pages/consultoria/ConsultoriaDetalle";
 import ConsultoriaDiagnostico from "./pages/consultoria/ConsultoriaDiagnostico";
+import ConsultoriaDocumentos from "./pages/consultoria/ConsultoriaDocumentos";
 import AdvisorLanding from "./pages/advisor/AdvisorLanding";
 import AdvisorAuth from "./pages/advisor/AdvisorAuth";
 import AdvisorChat from "./pages/advisor/AdvisorChat";
@@ -84,6 +85,7 @@ const App = () => (
               <Route path="/consultoria/nuevo" element={<ConsultoriaNuevo />} />
               <Route path="/consultoria/:id" element={<ConsultoriaDetalle />} />
               <Route path="/consultoria/:id/diagnostico" element={<ConsultoriaDiagnostico />} />
+              <Route path="/consultoria/:id/documentos" element={<ConsultoriaDocumentos />} />
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/reviews" element={<QualityControl />} />
               <Route path="/trends" element={<Trends />} />
