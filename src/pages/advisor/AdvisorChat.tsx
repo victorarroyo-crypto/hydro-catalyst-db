@@ -180,28 +180,30 @@ export default function AdvisorChat() {
   const canUseFree = freeRemaining > 0 && currentModel && isFreeModel(currentModel);
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 py-3">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      {/* Header with brand gradient */}
+      <header className="px-4 py-3 text-white" style={{
+        background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)',
+      }}>
         <div className="flex items-center justify-between max-w-5xl mx-auto">
           <div className="flex items-center gap-3">
-            <img src={vandarumSymbolBlue} alt="Vandarum" className="h-9 w-auto" />
+            <img src={vandarumSymbolBlue} alt="Vandarum" className="h-9 w-auto brightness-0 invert" />
             <span className="font-bold text-lg">AI Advisor</span>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Credits Badge */}
-            <Badge variant="secondary" className="gap-1.5 px-3 py-1.5">
+            <Badge className="gap-1.5 px-3 py-1.5 bg-white/20 text-white border-white/30 hover:bg-white/30">
               <CreditCard className="w-3.5 h-3.5" />
               <span>{balance.toFixed(1)} créditos</span>
               {freeRemaining > 0 && (
-                <span className="text-muted-foreground">· {freeRemaining} gratis</span>
+                <span className="text-white/70">· {freeRemaining} gratis</span>
               )}
             </Badge>
 
             {/* Model Selector */}
             <Select value={selectedModel} onValueChange={setSelectedModel} disabled={modelsLoading}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-[200px] bg-white/10 border-white/30 text-white hover:bg-white/20">
                 <SelectValue placeholder={modelsLoading ? "Cargando..." : "Modelo"} />
               </SelectTrigger>
               <SelectContent className="max-w-[300px]">
@@ -210,12 +212,12 @@ export default function AdvisorChat() {
                     <div className="flex items-center gap-2 overflow-hidden">
                       <span className="truncate">{model.name}</span>
                       {model.is_free && (
-                        <Badge variant="outline" className="text-[10px] px-1 py-0 bg-green-500/10 text-green-600 border-green-500/30 shrink-0">
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 bg-[#8cb63c]/10 text-[#8cb63c] border-[#8cb63c]/30 shrink-0">
                           Gratis
                         </Badge>
                       )}
                       {model.is_recommended && (
-                        <Badge variant="secondary" className="text-[10px] px-1 py-0 shrink-0">
+                        <Badge className="text-[10px] px-1 py-0 shrink-0 bg-[#32b4cd] text-white">
                           Recomendado
                         </Badge>
                       )}
@@ -227,13 +229,13 @@ export default function AdvisorChat() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="ghost" size="icon" onClick={() => navigate('/advisor/dashboard')} title="Dashboard">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/advisor/dashboard')} title="Dashboard" className="text-white hover:bg-white/20">
               <LayoutDashboard className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => navigate('/advisor/history')} title="Historial">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/advisor/history')} title="Historial" className="text-white hover:bg-white/20">
               <History className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={signOut} title="Cerrar sesión">
+            <Button variant="ghost" size="icon" onClick={signOut} title="Cerrar sesión" className="text-white hover:bg-white/20">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -256,15 +258,20 @@ export default function AdvisorChat() {
               {/* Hero section */}
               <div className="text-center space-y-4">
                 <div className="relative">
-                  <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full" />
+                  <div className="absolute inset-0 blur-3xl rounded-full" style={{ background: 'linear-gradient(135deg, rgba(48,113,119,0.2), rgba(50,180,205,0.15))' }} />
                   <img src={vandarumSymbolBlue} alt="Vandarum" className="h-16 w-auto mx-auto relative" />
                 </div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                <h2 className="text-2xl font-bold" style={{ 
+                  background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}>
                   Tu Experto en Agua Industrial
                 </h2>
                 <p className="text-muted-foreground max-w-md mx-auto">
                   Resuelve tus dudas sobre tratamiento de agua con IA especializada. 
-                  <span className="font-medium text-foreground"> +20 años de experiencia</span> en el sector.
+                  <span className="font-medium" style={{ color: '#307177' }}> +20 años de experiencia</span> en el sector.
                 </p>
               </div>
 
@@ -324,9 +331,10 @@ export default function AdvisorChat() {
                 className={cn(
                   'flex-1 max-w-[85%] rounded-2xl p-4',
                   message.role === 'user'
-                    ? 'bg-primary text-primary-foreground rounded-tr-none'
-                    : 'bg-muted/50 rounded-tl-none'
+                    ? 'text-white rounded-tr-none'
+                    : 'bg-white/80 border border-slate-200/50 rounded-tl-none shadow-sm'
                 )}
+                style={message.role === 'user' ? { background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)' } : undefined}
               >
 
                 {/* Message Content */}
@@ -373,8 +381,8 @@ export default function AdvisorChat() {
           {isLoading && (
             <div className="flex gap-3">
               <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
-              <div className="bg-muted/50 rounded-2xl rounded-tl-none p-4">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
+                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#32b4cd' }} />
               </div>
             </div>
           )}
@@ -382,9 +390,9 @@ export default function AdvisorChat() {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t bg-muted/60 p-8">
+      <div className="border-t p-8" style={{ background: 'linear-gradient(180deg, rgba(48,113,119,0.03) 0%, rgba(50,180,205,0.05) 100%)' }}>
         <div className="max-w-4xl mx-auto">
-          <div className="flex gap-3 bg-background border-2 border-primary/20 rounded-2xl p-3 shadow-lg items-center">
+          <div className="flex gap-3 bg-white rounded-2xl p-3 shadow-lg items-center" style={{ border: '2px solid rgba(48,113,119,0.2)' }}>
             <FileAttachmentButton
               attachments={attachments}
               onAttach={(files) => {
@@ -411,9 +419,9 @@ export default function AdvisorChat() {
             {isStreaming ? (
               <Button 
                 onClick={stopStreaming}
-                variant="destructive"
                 size="lg" 
-                className="h-14 px-6 gap-2"
+                className="h-14 px-6 gap-2 text-white"
+                style={{ background: '#ffa720' }}
               >
                 <Square className="w-4 h-4" />
                 Detener
@@ -423,7 +431,8 @@ export default function AdvisorChat() {
                 onClick={handleSend} 
                 disabled={isLoading || !inputValue.trim()} 
                 size="lg" 
-                className="h-14 px-8"
+                className="h-14 px-8 text-white"
+                style={{ background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)' }}
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />

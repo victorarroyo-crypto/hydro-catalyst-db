@@ -64,31 +64,46 @@ interface PromptExamplesProps {
   onSelectPrompt: (prompt: string) => void;
 }
 
+// Brand colors
+const BRAND_COLORS = ['#307177', '#32b4cd', '#8cb63c', '#ffa720'];
+
 export function PromptExamples({ onSelectPrompt }: PromptExamplesProps) {
   return (
     <div className="space-y-6 w-full max-w-3xl mx-auto">
       <div className="text-center mb-8">
-        <h2 className="text-xl font-semibold text-foreground">¿Qué puedo preguntarte?</h2>
+        <h2 className="text-xl font-semibold" style={{ color: '#307177' }}>¿Qué puedo preguntarte?</h2>
         <p className="text-muted-foreground text-sm mt-1">Haz click en cualquier ejemplo para empezar</p>
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {PROMPT_EXAMPLES.map((category, idx) => {
           const Icon = category.icon;
+          const brandColor = BRAND_COLORS[idx % BRAND_COLORS.length];
           return (
             <div key={idx} className="space-y-3">
               <div className="flex items-center gap-2">
-                <Icon className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-medium text-foreground">{category.category}</h3>
+                <Icon className="w-4 h-4" style={{ color: brandColor }} />
+                <h3 className="text-sm font-medium" style={{ color: brandColor }}>{category.category}</h3>
               </div>
               <div className="space-y-2">
                 {category.examples.map((example, i) => (
                   <button
                     key={i}
                     onClick={() => onSelectPrompt(example.prompt)}
-                    className="w-full text-left p-3 rounded-lg border border-border bg-card hover:border-primary/50 hover:bg-accent/50 transition-all group"
+                    className="w-full text-left p-3 rounded-lg bg-white/80 border transition-all group shadow-sm hover:shadow-md"
+                    style={{ 
+                      borderColor: `${brandColor}30`,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = `${brandColor}60`;
+                      e.currentTarget.style.background = `${brandColor}08`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = `${brandColor}30`;
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.8)';
+                    }}
                   >
-                    <span className="font-medium text-foreground group-hover:text-primary text-sm">
+                    <span className="font-medium text-sm" style={{ color: '#307177' }}>
                       {example.title}
                     </span>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
