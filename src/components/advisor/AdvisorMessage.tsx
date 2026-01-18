@@ -4,23 +4,12 @@ import remarkGfm from 'remark-gfm';
 import { ExternalLink, Wrench, FileText, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
-import { fixMarkdownTables } from '@/utils/fixMarkdownTables';
+import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
 
 interface AdvisorMessageProps {
   content: string;
   sources?: Source[];
   isStreaming?: boolean;
-}
-
-// Clean excessive markdown before rendering
-function cleanMarkdown(text: string): string {
-  const fixed = fixMarkdownTables(text);
-  return fixed
-    .replace(/^#{3,6}\s+/gm, '') // Remove ### #### etc (keep h1, h2)
-    .replace(/\*{3,}/g, '**') // *** or more → **
-    .replace(/\n{3,}/g, '\n\n') // Multiple empty lines → 2
-    .replace(/^\s*[-*]\s*$/gm, '') // Empty bullet points
-    .trim();
 }
 
 // Source type icon and styling
@@ -50,7 +39,7 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(isStreaming);
   
-  const cleanedContent = cleanMarkdown(content);
+  const cleanedContent = cleanMarkdownContent(content);
   
   // Simulated typing effect
   useEffect(() => {
