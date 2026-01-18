@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   LogOut,
   Square,
+  Briefcase,
 } from 'lucide-react';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
@@ -251,14 +252,53 @@ export default function AdvisorChat() {
         <div className="max-w-4xl mx-auto py-6 space-y-6">
           {/* Welcome with example queries */}
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 space-y-8">
-              <div className="text-center space-y-3">
-                <img src={vandarumSymbolBlue} alt="Vandarum" className="h-14 w-auto mx-auto" />
-                <h2 className="text-2xl font-semibold">¿En qué puedo ayudarte?</h2>
-                <p className="text-muted-foreground">Experto en tratamiento de aguas industriales</p>
+            <div className="flex flex-col items-center justify-center py-8 space-y-6">
+              {/* Hero section */}
+              <div className="text-center space-y-4">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full" />
+                  <img src={vandarumSymbolBlue} alt="Vandarum" className="h-16 w-auto mx-auto relative" />
+                </div>
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                  Tu Experto en Agua Industrial
+                </h2>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  Resuelve tus dudas sobre tratamiento de agua con IA especializada. 
+                  <span className="font-medium text-foreground"> +20 años de experiencia</span> en el sector.
+                </p>
+              </div>
+
+              {/* Value propositions */}
+              <div className="flex flex-wrap justify-center gap-3 text-xs">
+                <Badge variant="outline" className="px-3 py-1.5 bg-green-500/5 border-green-500/30 text-green-700">
+                  ✓ Respuestas inmediatas
+                </Badge>
+                <Badge variant="outline" className="px-3 py-1.5 bg-blue-500/5 border-blue-500/30 text-blue-700">
+                  ✓ Conocimiento experto
+                </Badge>
+                <Badge variant="outline" className="px-3 py-1.5 bg-purple-500/5 border-purple-500/30 text-purple-700">
+                  ✓ Normativa actualizada
+                </Badge>
               </div>
               
               <PromptExamples onSelectPrompt={(prompt) => setInputValue(prompt)} />
+
+              {/* Marketing CTA */}
+              <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border border-primary/20 rounded-xl p-5 max-w-lg w-full text-center space-y-3">
+                <p className="text-sm font-medium">
+                  ¿Necesitas una solución personalizada para tu planta?
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Nuestros ingenieros pueden diseñar el tratamiento óptimo para tu caso específico
+                </p>
+                <Button 
+                  onClick={() => setActiveModal('presupuesto')}
+                  className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
+                >
+                  <Briefcase className="w-4 h-4 mr-2" />
+                  Solicitar Consultoría Gratuita
+                </Button>
+              </div>
             </div>
           )}
 
