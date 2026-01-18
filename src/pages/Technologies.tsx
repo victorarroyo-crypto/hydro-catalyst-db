@@ -113,8 +113,7 @@ const Technologies: React.FC = () => {
           const { data, error } = await externalSupabase
             .from('technologies')
             .select('*')
-            // IMPORTANT: enforce deterministic ordering for stable pagination across batches
-            .order('created_at', { ascending: false })
+            // NOTE: external DB doesn't have created_at, use id for ordering
             .order('id', { ascending: false })
             .range(from, from + batchSize - 1);
           
