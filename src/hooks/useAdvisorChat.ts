@@ -106,7 +106,7 @@ export function useAdvisorChat(userId: string | undefined) {
   const [chatId, setChatId] = useState<string | null>(null);
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
-  const [pendingFiles, setPendingFiles] = useState<Map<string, File>>(new Map());
+  const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
   const [streamingContent, setStreamingContent] = useState<string>('');
 
   const loadChat = useCallback(async (existingChatId: string) => {
@@ -136,7 +136,7 @@ export function useAdvisorChat(userId: string | undefined) {
       const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
       // Store the file for later upload
-      setPendingFiles(prev => new Map(prev).set(id, file));
+      setPendingFiles(prev => ({ ...prev, [id]: file }));
       
       const attachment: AttachmentInfo = {
         id,
@@ -152,15 +152,15 @@ export function useAdvisorChat(userId: string | undefined) {
   const removeAttachment = useCallback((id: string) => {
     setAttachments(prev => prev.filter(a => a.id !== id));
     setPendingFiles(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(id);
-      return newMap;
+      const newFiles = { ...prev };
+      delete newFiles[id];
+      return newFiles;
     });
   }, []);
 
   const clearAttachments = useCallback(() => {
     setAttachments([]);
-    setPendingFiles(new Map());
+    setPendingFiles({});
   }, []);
 
   // SSE Streaming sendMessage
@@ -173,7 +173,7 @@ export function useAdvisorChat(userId: string | undefined) {
     // Get pending files to upload
     const filesToUpload: File[] = [];
     for (const att of attachments) {
-      const file = pendingFiles.get(att.id);
+      const file = pendingFiles[att.id];
       if (file) {
         filesToUpload.push(file);
       }
