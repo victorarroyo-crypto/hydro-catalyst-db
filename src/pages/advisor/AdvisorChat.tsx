@@ -8,12 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   Send, 
   Loader2, 
-  PlusCircle,
   CreditCard,
   History,
   LayoutDashboard,
   LogOut,
-  FileText,
   Square,
 } from 'lucide-react';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
@@ -35,7 +33,8 @@ import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
 import { PresupuestoModal, type PresupuestoData } from '@/components/advisor/modals/PresupuestoModal';
 import { PromptExamples } from '@/components/advisor/PromptExamples';
-import type { Message } from '@/types/advisorChat';
+import { FileAttachmentButton } from '@/components/advisor/FileAttachmentButton';
+import type { Message, AttachmentInfo } from '@/types/advisorChat';
 
 
 
@@ -60,6 +59,7 @@ export default function AdvisorChat() {
   const [inputValue, setInputValue] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [activeModal, setActiveModal] = useState<'comparador' | 'checklist' | 'ficha' | 'presupuesto' | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   
   // Hook for special services
@@ -200,43 +200,32 @@ export default function AdvisorChat() {
 
             {/* Model Selector */}
             <Select value={selectedModel} onValueChange={setSelectedModel} disabled={modelsLoading}>
-              <SelectTrigger className="w-[260px]">
-                <SelectValue placeholder={modelsLoading ? "Cargando..." : "Seleccionar modelo"} />
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder={modelsLoading ? "Cargando..." : "Modelo"} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-w-[300px]">
                 {models.map((model) => (
                   <SelectItem key={model.key} value={model.key}>
-                    <span className="flex items-center gap-2">
-                      <span>{model.name}</span>
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <span className="truncate">{model.name}</span>
                       {model.is_free && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-500/30">
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 bg-green-500/10 text-green-600 border-green-500/30 shrink-0">
                           Gratis
                         </Badge>
                       )}
                       {model.is_recommended && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                        <Badge variant="secondary" className="text-[10px] px-1 py-0 shrink-0">
                           Recomendado
                         </Badge>
                       )}
-                      <span className="text-xs text-muted-foreground ml-1">
+                      <span className="text-xs text-muted-foreground shrink-0">
                         {formatModelCost(model.cost_per_query)}
                       </span>
-                    </span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-
-            {/* Actions */}
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={startNewChat}
-              className="gap-1.5"
-            >
-              <PlusCircle className="h-4 w-4" />
-              Nuevo Chat
-            </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate('/advisor/dashboard')} title="Dashboard">
               <LayoutDashboard className="w-4 h-4" />
             </Button>
@@ -253,7 +242,8 @@ export default function AdvisorChat() {
       {/* Services Bar */}
       <ServicesBar 
         onServiceClick={setActiveModal} 
-        userCredits={balance} 
+        userCredits={balance}
+        onNewChat={startNewChat}
       />
 
       {/* Messages Area */}
@@ -269,27 +259,6 @@ export default function AdvisorChat() {
               </div>
               
               <PromptExamples onSelectPrompt={(prompt) => setInputValue(prompt)} />
-
-              {/* Info about features */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl w-full mt-2">
-                <div className="text-center p-4 rounded-lg bg-muted/30 border border-border/30">
-                  <FileText className="w-6 h-6 mx-auto mb-2 text-primary" />
-                  <p className="text-sm font-medium">Fichas técnicas</p>
-                  <p className="text-xs text-muted-foreground">0.5 créditos</p>
-                </div>
-                <div className="text-center p-4 rounded-lg bg-muted/30 border border-border/30">
-                  <FileText className="w-6 h-6 mx-auto mb-2 text-primary" />
-                  <p className="text-sm font-medium">Análisis de agua</p>
-                  <p className="text-xs text-muted-foreground">2 créditos</p>
-                </div>
-                <div className="text-center p-4 rounded-lg bg-muted/30 border border-border/30">
-                  <svg className="w-6 h-6 mx-auto mb-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-                  </svg>
-                  <p className="text-sm font-medium">Comparador</p>
-                  <p className="text-xs text-muted-foreground">Incluido</p>
-                </div>
-              </div>
             </div>
           )}
 
@@ -369,7 +338,22 @@ export default function AdvisorChat() {
       {/* Input Area */}
       <div className="border-t bg-muted/60 p-8">
         <div className="max-w-4xl mx-auto">
-          <div className="flex gap-3 bg-background border-2 border-primary/20 rounded-2xl p-3 shadow-lg">
+          <div className="flex gap-3 bg-background border-2 border-primary/20 rounded-2xl p-3 shadow-lg items-center">
+            <FileAttachmentButton
+              attachments={attachments}
+              onAttach={(files) => {
+                const newAttachments: AttachmentInfo[] = files.map(f => ({
+                  id: crypto.randomUUID(),
+                  name: f.name,
+                  size: f.size,
+                  type: f.type,
+                  file: f,
+                }));
+                setAttachments(prev => [...prev, ...newAttachments]);
+              }}
+              onRemove={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
+              disabled={isLoading}
+            />
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
