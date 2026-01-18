@@ -270,13 +270,13 @@ export default function AdvisorChat() {
 
               {/* Value propositions */}
               <div className="flex flex-wrap justify-center gap-3 text-xs">
-                <Badge variant="outline" className="px-3 py-1.5 bg-green-500/5 border-green-500/30 text-green-700">
+                <Badge variant="outline" className="px-3 py-1.5 bg-[#307177]/10 border-[#307177]/30 text-[#307177]">
                   ✓ Respuestas inmediatas
                 </Badge>
-                <Badge variant="outline" className="px-3 py-1.5 bg-blue-500/5 border-blue-500/30 text-blue-700">
+                <Badge variant="outline" className="px-3 py-1.5 bg-[#32b4cd]/10 border-[#32b4cd]/30 text-[#32b4cd]">
                   ✓ Conocimiento experto
                 </Badge>
-                <Badge variant="outline" className="px-3 py-1.5 bg-purple-500/5 border-purple-500/30 text-purple-700">
+                <Badge variant="outline" className="px-3 py-1.5 bg-[#8cb63c]/10 border-[#8cb63c]/30 text-[#8cb63c]">
                   ✓ Normativa actualizada
                 </Badge>
               </div>
@@ -284,7 +284,10 @@ export default function AdvisorChat() {
               <PromptExamples onSelectPrompt={(prompt) => setInputValue(prompt)} />
 
               {/* Marketing CTA */}
-              <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border border-primary/20 rounded-xl p-5 max-w-lg w-full text-center space-y-3">
+              <div className="border rounded-xl p-5 max-w-lg w-full text-center space-y-3" style={{
+                background: 'linear-gradient(135deg, rgba(48,113,119,0.08) 0%, rgba(50,180,205,0.05) 50%, rgba(140,182,60,0.08) 100%)',
+                borderColor: 'rgba(48,113,119,0.25)'
+              }}>
                 <p className="text-sm font-medium">
                   ¿Necesitas una solución personalizada para tu planta?
                 </p>
@@ -293,7 +296,10 @@ export default function AdvisorChat() {
                 </p>
                 <Button 
                   onClick={() => setActiveModal('presupuesto')}
-                  className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
+                  className="text-white shadow-lg hover:shadow-xl transition-all"
+                  style={{
+                    background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)',
+                  }}
                 >
                   <Briefcase className="w-4 h-4 mr-2" />
                   Solicitar Consultoría Gratuita
