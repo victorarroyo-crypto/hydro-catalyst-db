@@ -20,7 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -87,7 +87,6 @@ const fetchFindings = async (id: string): Promise<Finding[]> => {
 export default function ConsultoriaDiagnostico() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [workflowId, setWorkflowId] = useState<string | null>(null);
@@ -112,10 +111,12 @@ export default function ConsultoriaDiagnostico() {
 
     const interval = setInterval(async () => {
       try {
+        console.log('Polling workflow status:', workflowId);
         const response = await fetch(`${API_URL}/api/projects/${id}/workflows/${workflowId}/status`);
         if (!response.ok) throw new Error('Error al obtener estado');
         
         const status: WorkflowStatus = await response.json();
+        console.log('Workflow status:', status);
         setWorkflowStatus(status);
 
         if (status.status === 'completed') {
@@ -124,20 +125,13 @@ export default function ConsultoriaDiagnostico() {
           setWorkflowId(null);
           setWorkflowStatus(null);
           await refetchFindings();
-          toast({
-            title: "Diagnóstico completado",
-            description: "Los hallazgos han sido actualizados",
-          });
+          toast.success("Diagnóstico completado - Los hallazgos han sido actualizados");
         } else if (status.status === 'failed') {
           clearInterval(interval);
           setIsRunning(false);
           setWorkflowId(null);
           setWorkflowStatus(null);
-          toast({
-            title: "Error en el diagnóstico",
-            description: status.error_message || "Ha ocurrido un error",
-            variant: "destructive",
-          });
+          toast.error(status.error_message || "Error en el diagnóstico");
         }
       } catch (error) {
         console.error('Error polling workflow status:', error);
@@ -145,34 +139,47 @@ export default function ConsultoriaDiagnostico() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [workflowId, id, refetchFindings, toast]);
+  }, [workflowId, id, refetchFindings]);
 
   const handleRunDiagnosis = async () => {
-    if (!id) return;
+    console.log('Iniciando diagnóstico...', { id, API_URL });
+    if (!id) {
+      console.error('No hay ID de proyecto');
+      return;
+    }
 
     setIsRunning(true);
     setWorkflowStatus({ id: '', status: 'pending', progress_percentage: 0 });
 
     try {
-      const response = await fetch(`${API_URL}/api/projects/${id}/workflows/run`, {
+      const url = `${import.meta.env.VITE_API_URL}/api/projects/${id}/workflows/run`;
+      console.log('POST a:', url);
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workflow_type: 'quick_diagnosis' }),
       });
 
-      if (!response.ok) throw new Error('Error al iniciar diagnóstico');
-
       const data = await response.json();
-      setWorkflowId(data.workflow_id);
-      setWorkflowStatus({ id: data.workflow_id, status: 'running', progress_percentage: 0 });
+      console.log('Respuesta:', data);
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Error al iniciar diagnóstico');
+      }
+
+      if (data.workflow_id) {
+        setWorkflowId(data.workflow_id);
+        setWorkflowStatus({ id: data.workflow_id, status: 'running', progress_percentage: 0 });
+        toast.success('Diagnóstico iniciado');
+      } else {
+        throw new Error('No se recibió workflow_id');
+      }
     } catch (error) {
+      console.error('Error:', error);
       setIsRunning(false);
       setWorkflowStatus(null);
-      toast({
-        title: "Error",
-        description: "No se pudo iniciar el diagnóstico",
-        variant: "destructive",
-      });
+      toast.error('Error al iniciar diagnóstico');
     }
   };
 
