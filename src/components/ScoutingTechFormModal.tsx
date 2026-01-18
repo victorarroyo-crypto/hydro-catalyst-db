@@ -36,6 +36,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
+import { TaxonomyCascadeSelector } from '@/components/taxonomy/TaxonomyCascadeSelector';
+import { TaxonomySelections } from '@/hooks/useTaxonomy3Levels';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -165,6 +167,13 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
   const [selectedSubcategorias, setSelectedSubcategorias] = useState<SelectedSubcategoria[]>([]);
   const [rejectionDialog, setRejectionDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  
+  // New 3-level taxonomy state
+  const [taxonomySelections, setTaxonomySelections] = useState<TaxonomySelections>({
+    categorias: [],
+    tipos: [],
+    subcategorias: [],
+  });
   
   // Mutations - using hooks that connect to external DB
   const updateItemMutation = useUpdateScoutingItem();
@@ -648,202 +657,72 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
 
               <Separator />
 
-              {/* Clasificación - Tipos */}
-              <FormSection title="Clasificación (Taxonomía)">
-                <div className="md:col-span-2">
-                  <Label className="text-sm">Tipos de Tecnología</Label>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Selecciona uno o más tipos. Haz clic en ⭐ para marcar como principal.
-                  </p>
-                  
-                  {/* Selected tipos badges */}
-                  {selectedTipos.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {selectedTipos.map(st => {
-                        const tipo = tipos?.find(t => t.id === st.tipo_id);
-                        if (!tipo) return null;
-                        return (
-                          <Badge 
-                            key={st.tipo_id} 
-                            variant={st.is_primary ? "default" : "secondary"}
-                            className="flex items-center gap-1 pr-1"
-                          >
-                            {st.is_primary && <Star className="w-3 h-3 fill-current" />}
-                            <span className="font-mono text-xs mr-1">{tipo.codigo}</span>
-                            {tipo.nombre}
-                            {!st.is_primary && (
-                              <button
-                                type="button"
-                                onClick={() => handleSetPrimaryTipo(st.tipo_id)}
-                                className="ml-1 p-0.5 hover:bg-primary/20 rounded"
-                                title="Marcar como principal"
-                              >
-                                <Star className="w-3 h-3" />
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleTipoToggle(st.tipo_id, false)}
-                              className="ml-1 p-0.5 hover:bg-destructive/20 rounded"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  )}
-                  
-                  {/* Checkbox list of tipos */}
-                  <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
-                    {tipos?.map((tipo) => {
-                      const isSelected = selectedTipos.some(st => st.tipo_id === tipo.id);
-                      return (
-                        <div key={tipo.id} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`tipo-${tipo.id}`}
-                            checked={isSelected}
-                            onCheckedChange={(checked) => handleTipoToggle(tipo.id, !!checked)}
-                          />
-                          <label
-                            htmlFor={`tipo-${tipo.id}`}
-                            className="text-sm flex items-center gap-2 cursor-pointer flex-1"
-                          >
-                            <span className="font-mono text-xs text-muted-foreground">{tipo.codigo}</span>
-                            {tipo.nombre}
-                          </label>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Subcategorías */}
-                <div className="md:col-span-2">
-                  <Label className="text-sm">Subcategorías</Label>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {selectedTipos.length > 0 
-                      ? "Selecciona una o más subcategorías. Haz clic en ⭐ para marcar como principal."
-                      : "Primero selecciona al menos un tipo de tecnología"
+              {/* Clasificación - Nueva Taxonomía 3 Niveles */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground border-b pb-2">
+                  Clasificación (Taxonomía 3 Niveles)
+                </h3>
+                <TaxonomyCascadeSelector
+                  value={taxonomySelections}
+                  onChange={(newSelections) => {
+                    setTaxonomySelections(newSelections);
+                    // Update legacy fields for compatibility
+                    if (newSelections.tipos.length > 0) {
+                      handleChange('tipo_sugerido', newSelections.tipos[0]);
                     }
-                  </p>
-                  
-                  {/* Selected subcategorias badges */}
-                  {selectedSubcategorias.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {selectedSubcategorias.map(ss => {
-                        const sub = allSubcategorias?.find(s => s.id === ss.subcategoria_id);
-                        if (!sub) return null;
-                        return (
-                          <Badge 
-                            key={ss.subcategoria_id} 
-                            variant={ss.is_primary ? "default" : "secondary"}
-                            className="flex items-center gap-1 pr-1"
-                          >
-                            {ss.is_primary && <Star className="w-3 h-3 fill-current" />}
-                            <span className="font-mono text-xs mr-1">{sub.codigo}</span>
-                            {sub.nombre}
-                            {!ss.is_primary && (
-                              <button
-                                type="button"
-                                onClick={() => handleSetPrimarySubcategoria(ss.subcategoria_id)}
-                                className="ml-1 p-0.5 hover:bg-primary/20 rounded"
-                                title="Marcar como principal"
-                              >
-                                <Star className="w-3 h-3" />
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleSubcategoriaToggle(ss.subcategoria_id, false)}
-                              className="ml-1 p-0.5 hover:bg-destructive/20 rounded"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  )}
-                  
-                  {/* Checkbox list of subcategorias */}
-                  <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
-                    {selectedTipos.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Primero selecciona un tipo de tecnología</p>
-                    ) : filteredSubcategorias.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No hay subcategorías disponibles</p>
-                    ) : (
-                      filteredSubcategorias.map((sub) => {
-                        const isSelected = selectedSubcategorias.some(ss => ss.subcategoria_id === sub.id);
-                        const tipoParent = tipos?.find(t => t.id === sub.tipo_id);
-                        return (
-                          <div key={sub.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`subcategoria-${sub.id}`}
-                              checked={isSelected}
-                              onCheckedChange={(checked) => handleSubcategoriaToggle(sub.id, !!checked)}
-                            />
-                            <label
-                              htmlFor={`subcategoria-${sub.id}`}
-                              className="text-sm flex items-center gap-2 cursor-pointer flex-1"
-                            >
-                              <span className="font-mono text-xs text-muted-foreground">{sub.codigo}</span>
-                              {sub.nombre}
-                              {tipoParent && (
-                                <span className="text-xs text-muted-foreground">({tipoParent.codigo})</span>
-                              )}
-                            </label>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
+                    if (newSelections.subcategorias.length > 0) {
+                      handleChange('subcategoria', newSelections.subcategorias[0]);
+                    }
+                  }}
+                  disabled={isLoading}
+                />
 
-                {/* Sector */}
-                <div>
-                  <Label className="text-sm">Sector</Label>
-                  <Select
-                    value={formData.sector || ''}
-                    onValueChange={(value) => handleChange('sector', value || '')}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Seleccionar sector..." />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      {sectores?.map((sector) => (
-                        <SelectItem key={sector.id} value={sector.id}>
-                          <span className="flex items-center gap-2">
-                            <span className="font-mono text-xs text-muted-foreground">{sector.id}</span>
-                            {sector.nombre}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {formData.sector === 'IND' && (
+                {/* Sector - keeping for compatibility */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-sm">Subsector Industrial</Label>
+                    <Label className="text-sm">Sector</Label>
                     <Select
-                      value={formData.subsector || ''}
-                      onValueChange={(value) => handleChange('subsector', value)}
+                      value={formData.sector || ''}
+                      onValueChange={(value) => handleChange('sector', value || '')}
                     >
                       <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Seleccionar subsector..." />
+                        <SelectValue placeholder="Seleccionar sector..." />
                       </SelectTrigger>
-                      <SelectContent>
-                        {SUBSECTORES_INDUSTRIALES.map((sub) => (
-                          <SelectItem key={sub} value={sub}>
-                            {sub}
+                      <SelectContent className="bg-popover z-50">
+                        {sectores?.map((sector) => (
+                          <SelectItem key={sector.id} value={sector.id}>
+                            <span className="flex items-center gap-2">
+                              <span className="font-mono text-xs text-muted-foreground">{sector.id}</span>
+                              {sector.nombre}
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
-              </FormSection>
+
+                  {formData.sector === 'IND' && (
+                    <div>
+                      <Label className="text-sm">Subsector Industrial</Label>
+                      <Select
+                        value={formData.subsector || ''}
+                        onValueChange={(value) => handleChange('subsector', value)}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Seleccionar subsector..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SUBSECTORES_INDUSTRIALES.map((sub) => (
+                            <SelectItem key={sub} value={sub}>
+                              {sub}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               <Separator />
 
