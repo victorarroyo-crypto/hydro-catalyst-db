@@ -8,17 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   Send, 
   Loader2, 
-  Plus, 
   PlusCircle,
   CreditCard,
   History,
   LayoutDashboard,
   LogOut,
-  Paperclip,
   FileText,
-  Image,
-  FileSpreadsheet,
-  X
 } from 'lucide-react';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
@@ -38,8 +33,7 @@ import { ComparadorModal, type ComparadorData } from '@/components/advisor/modal
 import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/ChecklistModal';
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
 import { PresupuestoModal, type PresupuestoData } from '@/components/advisor/modals/PresupuestoModal';
-import type { AttachmentInfo, Message } from '@/types/advisorChat';
-import type { ToolMetadata } from '@/types/advisorTools';
+import type { Message } from '@/types/advisorChat';
 
 const EXAMPLE_QUERIES = [
   "¿Qué tecnología me recomiendas para tratar agua con alto contenido en metales pesados?",
@@ -49,16 +43,6 @@ const EXAMPLE_QUERIES = [
   "¿Qué TRL tienen las tecnologías de desalinización solar?",
 ];
 
-const ACCEPTED_TYPES = [
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-];
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export default function AdvisorChat() {
   const navigate = useNavigate();
@@ -69,9 +53,6 @@ export default function AdvisorChat() {
     sendMessage, 
     startNewChat, 
     chatId,
-    attachments, 
-    addAttachment, 
-    removeAttachment 
   } = useAdvisorChat(advisorUser?.id);
   const { balance, freeRemaining, refetch: refetchCredits } = useAdvisorCredits(advisorUser?.id);
   
@@ -83,7 +64,6 @@ export default function AdvisorChat() {
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [activeModal, setActiveModal] = useState<'comparador' | 'checklist' | 'ficha' | 'presupuesto' | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Hook for special services
   const { callService, isLoading: serviceLoading } = useAdvisorServices(
@@ -156,7 +136,7 @@ export default function AdvisorChat() {
   };
 
   const handleSend = async () => {
-    if ((!inputValue.trim() && attachments.length === 0) || isLoading) return;
+    if (!inputValue.trim() || isLoading) return;
 
     const model = models.find(m => m.key === selectedModel);
     if (!model) return;
@@ -189,41 +169,6 @@ export default function AdvisorChat() {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const validFiles = files.filter(file => {
-      if (!ACCEPTED_TYPES.includes(file.type)) {
-        toast.error(`Formato no soportado: ${file.name}`);
-        return false;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        toast.error(`Archivo muy grande: ${file.name} (máx. 10MB)`);
-        return false;
-      }
-      return true;
-    });
-    
-    if (validFiles.length > 0) {
-      addAttachment(validFiles);
-    }
-    
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const getFileIcon = (type: string) => {
-    if (type.includes('image')) return <Image className="w-3 h-3" />;
-    if (type.includes('spreadsheet') || type.includes('excel')) return <FileSpreadsheet className="w-3 h-3" />;
-    return <FileText className="w-3 h-3" />;
-  };
-
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   if (authLoading) {
     return (
@@ -346,7 +291,7 @@ export default function AdvisorChat() {
                   <p className="text-xs text-muted-foreground">0.5 créditos</p>
                 </div>
                 <div className="text-center p-4 rounded-lg bg-muted/30 border border-border/30">
-                  <Paperclip className="w-6 h-6 mx-auto mb-2 text-primary" />
+                  <FileText className="w-6 h-6 mx-auto mb-2 text-primary" />
                   <p className="text-sm font-medium">Análisis de agua</p>
                   <p className="text-xs text-muted-foreground">2 créditos</p>
                 </div>
@@ -381,20 +326,6 @@ export default function AdvisorChat() {
                     : 'bg-muted/50 rounded-tl-none'
                 )}
               >
-                {/* User attachments */}
-                {message.role === 'user' && message.attachments && message.attachments.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {message.attachments.map((file) => (
-                      <div
-                        key={file.id}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs bg-white/10"
-                      >
-                        {getFileIcon(file.type)}
-                        <span className="max-w-[100px] truncate">{file.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
                 {/* Message Content */}
                 {message.role === 'user' ? (
@@ -451,65 +382,18 @@ export default function AdvisorChat() {
       {/* Input Area */}
       <div className="border-t bg-muted/60 p-8">
         <div className="max-w-4xl mx-auto">
-          {/* Attachments preview */}
-          {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {attachments.map((file) => (
-                <div
-                  key={file.id}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border text-sm"
-                >
-                  {getFileIcon(file.type)}
-                  <span className="max-w-[150px] truncate">{file.name}</span>
-                  <span className="text-muted-foreground text-xs">({formatSize(file.size)})</span>
-                  <button
-                    type="button"
-                    onClick={() => removeAttachment(file.id)}
-                    className="ml-1 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
           <div className="flex gap-3 bg-background border-2 border-primary/20 rounded-2xl p-3 shadow-lg">
-            {/* File attachment button */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              title="Adjuntar análisis de agua (PDF, Excel o imagen)"
-              className="h-14 w-14 flex-shrink-0"
-            >
-              <Paperclip className="w-5 h-5" />
-            </Button>
-
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={attachments.length > 0 
-                ? "Describe lo que quieres analizar..." 
-                : "Escribe tu consulta sobre tratamiento de agua..."
-              }
+              placeholder="Escribe tu consulta sobre tratamiento de agua..."
               disabled={isLoading}
               className="flex-1 border-0 shadow-none focus-visible:ring-0 h-14 text-base px-4"
             />
             <Button 
               onClick={handleSend} 
-              disabled={isLoading || (!inputValue.trim() && attachments.length === 0)} 
+              disabled={isLoading || !inputValue.trim()} 
               size="lg" 
               className="h-14 px-8"
             >
@@ -524,11 +408,9 @@ export default function AdvisorChat() {
           {/* Cost indicator */}
           <div className="flex items-center justify-center mt-3 text-xs text-muted-foreground gap-4">
             <span>
-              {attachments.length > 0 
-                ? 'Análisis de agua: 2 créditos'
-                : canUseFree 
-                  ? `Consulta gratuita (${freeRemaining} restantes)`
-                  : currentModel ? formatModelCost(currentModel.cost_per_query) : ''
+              {canUseFree 
+                ? `Consulta gratuita (${freeRemaining} restantes)`
+                : currentModel ? formatModelCost(currentModel.cost_per_query) : ''
               }
             </span>
             <span className="text-border">•</span>
