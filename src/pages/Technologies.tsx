@@ -477,8 +477,21 @@ const Technologies: React.FC = () => {
           {/* Results Count & Save Search Button */}
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">
-              {isLoading || isAiSearching ? (
-                'Cargando...'
+              {isAiSearching ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Buscando con IA...
+                </span>
+              ) : isLoading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Cargando tecnologías...
+                </span>
+              ) : isFetching ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {filters.search ? 'Filtrando tecnologías...' : 'Actualizando...'}
+                </span>
               ) : (
                 <>
                   {aiSearchIds !== null && (
