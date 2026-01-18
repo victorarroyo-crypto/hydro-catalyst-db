@@ -1,9 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { 
-  BarChart3, 
-  ClipboardList, 
-  FileText, 
-  Briefcase 
+  Briefcase,
+  PlusCircle, 
 } from "lucide-react";
 
 interface Service {
@@ -27,9 +25,10 @@ const SERVICES: Service[] = [
 interface ServicesBarProps {
   onServiceClick: (serviceId: 'comparador' | 'checklist' | 'ficha' | 'presupuesto') => void;
   userCredits: number;
+  onNewChat?: () => void;
 }
 
-export const ServicesBar = ({ onServiceClick, userCredits }: ServicesBarProps) => {
+export const ServicesBar = ({ onServiceClick, userCredits, onNewChat }: ServicesBarProps) => {
   return (
     <div className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-b overflow-x-auto">
       <span className="text-xs text-muted-foreground font-medium whitespace-nowrap mr-1">
@@ -60,6 +59,19 @@ export const ServicesBar = ({ onServiceClick, userCredits }: ServicesBarProps) =
           </Button>
         );
       })}
+      
+      {/* New Chat button */}
+      {onNewChat && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onNewChat}
+          className="flex items-center gap-1.5 whitespace-nowrap text-xs h-8 hover:bg-primary/10 hover:border-primary/30"
+        >
+          <PlusCircle className="w-4 h-4" />
+          <span className="hidden sm:inline">Nuevo Chat</span>
+        </Button>
+      )}
     </div>
   );
 };
