@@ -1,12 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import type { Message, Source } from '@/types/advisorChat';
 
 export function useAdvisorChat(userId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const loadChat = useCallback(async (existingChatId: string) => {
     if (!userId) return;
@@ -33,7 +35,11 @@ export function useAdvisorChat(userId: string | undefined) {
   const sendMessage = useCallback(async (message: string, model: string = 'deepseek') => {
     if (!userId || !message.trim()) return;
     
+    // Create new AbortController for this request
+    abortControllerRef.current = new AbortController();
+    
     setIsLoading(true);
+    setIsStreaming(true);
     
     // Añadir mensaje del usuario
     setMessages(prev => [...prev, { 
@@ -66,7 +72,8 @@ export function useAdvisorChat(userId: string | undefined) {
             message: message,
             chat_id: chatId || undefined,
             model: model
-          })
+          }),
+          signal: abortControllerRef.current.signal
         }
       );
 
@@ -112,15 +119,39 @@ export function useAdvisorChat(userId: string | undefined) {
           }
         }
       }
-    } catch (error) {
-      console.error('Error:', error);
-      // Eliminar mensajes temporales en caso de error
-      setMessages(prev => prev.slice(0, -2));
-      throw error;
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        // User cancelled - keep partial response, mark as stopped
+        setMessages(prev => {
+          const newMessages = [...prev];
+          if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'assistant') {
+            const lastMsg = newMessages[newMessages.length - 1];
+            newMessages[newMessages.length - 1] = {
+              ...lastMsg,
+              content: lastMsg.content + '\n\n*[Generación detenida por el usuario]*'
+            };
+          }
+          return newMessages;
+        });
+        console.log('Streaming cancelado por el usuario');
+      } else {
+        console.error('Error:', error);
+        // Eliminar mensajes temporales en caso de error
+        setMessages(prev => prev.slice(0, -2));
+        throw error;
+      }
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
+      abortControllerRef.current = null;
     }
   }, [userId, chatId]);
+
+  const stopStreaming = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  }, []);
 
   const startNewChat = useCallback(() => {
     setMessages([]);
@@ -130,10 +161,12 @@ export function useAdvisorChat(userId: string | undefined) {
   return {
     messages,
     isLoading,
+    isStreaming,
     chatId,
     creditsRemaining,
     sendMessage,
     loadChat,
     startNewChat,
+    stopStreaming,
   };
 }
