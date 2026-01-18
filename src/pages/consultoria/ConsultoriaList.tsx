@@ -37,7 +37,9 @@ const fetchProjects = async (): Promise<ConsultoriaProject[]> => {
   if (!response.ok) {
     throw new Error('Error al cargar proyectos');
   }
-  return response.json();
+  const data = await response.json();
+  // Handle both array responses and { data: [...] } responses
+  return Array.isArray(data) ? data : (data?.data ?? data?.projects ?? []);
 };
 
 export default function ConsultoriaList() {
