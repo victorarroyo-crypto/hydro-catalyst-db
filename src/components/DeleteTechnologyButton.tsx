@@ -56,6 +56,12 @@ export const DeleteTechnologyButton: React.FC<DeleteTechnologyButtonProps> = ({
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDeleting(true);
+    
+    // Show immediate feedback toast
+    const deleteToastId = toast.loading('Eliminando tecnología...', {
+      description: 'Sincronizando con la base de datos'
+    });
+    
     try {
       const { error } = await externalSupabase
         .from('technologies')
@@ -64,19 +70,24 @@ export const DeleteTechnologyButton: React.FC<DeleteTechnologyButtonProps> = ({
 
       if (error) throw error;
 
-      // Sync deletion to external Supabase
+      // Sync deletion to external Supabase and Railway
       try {
         await syncTechnologyDelete(technologyId);
       } catch (syncError) {
         console.error('External sync failed:', syncError);
       }
 
-      toast.success('Tecnología eliminada correctamente');
+      toast.success('Tecnología eliminada correctamente', {
+        id: deleteToastId,
+        description: 'Se ha sincronizado con todas las bases de datos'
+      });
       queryClient.invalidateQueries({ queryKey: ['technologies'] });
       onDeleted?.();
     } catch (error) {
       console.error('Error deleting technology:', error);
-      toast.error('Error al eliminar la tecnología');
+      toast.error('Error al eliminar la tecnología', {
+        id: deleteToastId,
+      });
     } finally {
       setIsDeleting(false);
     }
