@@ -9,6 +9,7 @@ import {
   Send, 
   Loader2, 
   Plus, 
+  PlusCircle,
   CreditCard,
   History,
   LayoutDashboard,
@@ -285,8 +286,14 @@ export default function AdvisorChat() {
             </Select>
 
             {/* Actions */}
-            <Button variant="ghost" size="icon" onClick={startNewChat} title="Nueva conversación">
-              <Plus className="w-4 h-4" />
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={startNewChat}
+              className="gap-1.5"
+            >
+              <PlusCircle className="h-4 w-4" />
+              Nuevo Chat
             </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate('/advisor/dashboard')} title="Dashboard">
               <LayoutDashboard className="w-4 h-4" />

@@ -2,9 +2,7 @@ import { useState, useCallback } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import type { 
   Message, 
-  ChatResponse, 
   AttachmentInfo, 
-  MessageMetadata,
   Source 
 } from '@/types/advisorChat';
 
@@ -108,7 +106,8 @@ export function useAdvisorChat(userId: string | undefined) {
   const [chatId, setChatId] = useState<string | null>(null);
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
-  const [pendingFiles, setPendingFiles] = useState<Map<string, File>>(new Map()); // id -> File
+  const [pendingFiles, setPendingFiles] = useState<Map<string, File>>(new Map());
+  const [streamingContent, setStreamingContent] = useState<string>('');
 
   const loadChat = useCallback(async (existingChatId: string) => {
     if (!userId) return;
@@ -164,10 +163,12 @@ export function useAdvisorChat(userId: string | undefined) {
     setPendingFiles(new Map());
   }, []);
 
-  const sendMessage = useCallback(async (message: string, model: string = 'gpt-4o-mini') => {
+  // SSE Streaming sendMessage
+  const sendMessage = useCallback(async (message: string, model: string = 'deepseek') => {
     if (!userId || (!message.trim() && attachments.length === 0)) return;
 
     setIsLoading(true);
+    setStreamingContent('');
 
     // Get pending files to upload
     const filesToUpload: File[] = [];
@@ -178,7 +179,7 @@ export function useAdvisorChat(userId: string | undefined) {
       }
     }
 
-    // Add user message optimistically (with attachment info for display)
+    // Add user message optimistically
     const tempUserMsg: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
@@ -189,8 +190,17 @@ export function useAdvisorChat(userId: string | undefined) {
     setMessages(prev => [...prev, tempUserMsg]);
 
     // Clear attachments after adding to message
-    const attachmentsCopy = [...attachments];
     clearAttachments();
+
+    // Create placeholder for assistant response
+    const assistantMsgId = `assistant-${Date.now()}`;
+    const assistantPlaceholder: Message = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      created_at: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, assistantPlaceholder]);
 
     try {
       // 1. Upload files to Storage and get signed URLs
@@ -201,15 +211,15 @@ export function useAdvisorChat(userId: string | undefined) {
         console.log(`Subidos ${uploadedAttachments.length} archivos con URLs firmadas`);
       }
 
-      // 2. Send to Railway API with URLs (not base64)
-      const response = await fetch(`${RAILWAY_API_URL}/api/advisor/chat`, {
+      // 2. Send to Railway API with streaming endpoint
+      const response = await fetch(`${RAILWAY_API_URL}/api/advisor/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: userId,
           message,
           chat_id: chatId,
           model,
+          user_id: userId,
           attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
         }),
       });
@@ -221,41 +231,93 @@ export function useAdvisorChat(userId: string | undefined) {
         throw new Error(errorMessage);
       }
 
-      const data: ChatResponse = await response.json();
+      // 3. Process SSE stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedContent = '';
+      let newChatId = chatId;
+      let creditsUsed: number | undefined;
+      let sources: Source[] | undefined;
 
-      // Update chat ID if new
-      if (!chatId) {
-        setChatId(data.chat_id);
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              // Handle different event types
+              if (data.content) {
+                accumulatedContent += data.content;
+                setStreamingContent(accumulatedContent);
+                // Update the assistant message in real-time
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMsgId 
+                    ? { ...msg, content: accumulatedContent }
+                    : msg
+                ));
+              }
+              
+              if (data.chat_id && !newChatId) {
+                newChatId = data.chat_id;
+                setChatId(data.chat_id);
+              }
+              
+              if (data.credits_used !== undefined) {
+                creditsUsed = data.credits_used;
+              }
+              
+              if (data.credits_remaining !== undefined) {
+                setCreditsRemaining(data.credits_remaining);
+              }
+              
+              if (data.sources) {
+                sources = data.sources;
+              }
+              
+              if (data.done) {
+                // Final update with all metadata
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMsgId 
+                    ? { 
+                        ...msg, 
+                        content: accumulatedContent,
+                        credits_used: creditsUsed,
+                        sources: sources,
+                      }
+                    : msg
+                ));
+                setIsLoading(false);
+              }
+            } catch (parseError) {
+              // Skip malformed JSON lines
+              console.warn('Failed to parse SSE line:', line);
+            }
+          }
+        }
       }
-
-      // Update credits
-      setCreditsRemaining(data.credits_remaining);
-
-      // Add assistant message
-      const assistantMsg: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: data.response,
-        sources: data.sources,
-        credits_used: data.credits_used,
-        created_at: new Date().toISOString(),
-        metadata: data.metadata,
-      };
-      setMessages(prev => [...prev, assistantMsg]);
 
     } catch (error) {
       console.error('Chat error:', error);
-      // Remove optimistic message and add error
-      setMessages(prev => prev.filter(m => m.id !== tempUserMsg.id));
+      // Remove placeholder messages and add error
+      setMessages(prev => prev.filter(m => m.id !== tempUserMsg.id && m.id !== assistantMsgId));
+      setStreamingContent('');
       throw error;
     } finally {
       setIsLoading(false);
+      setStreamingContent('');
     }
   }, [userId, chatId, attachments, pendingFiles, clearAttachments]);
 
   const startNewChat = useCallback(() => {
     setMessages([]);
     setChatId(null);
+    setStreamingContent('');
     clearAttachments();
   }, [clearAttachments]);
 
@@ -265,6 +327,7 @@ export function useAdvisorChat(userId: string | undefined) {
     chatId,
     creditsRemaining,
     attachments,
+    streamingContent,
     sendMessage,
     loadChat,
     startNewChat,
