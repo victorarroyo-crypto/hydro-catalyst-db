@@ -37,6 +37,7 @@ import AdminScoutingJobs from "./pages/AdminScoutingJobs";
 import AdminKBSync from "./pages/AdminKBSync";
 import Studies from "./pages/Studies";
 import StudyDetail from "./pages/StudyDetail";
+import ConsultoriaList from "./pages/consultoria/ConsultoriaList";
 import AdvisorLanding from "./pages/advisor/AdvisorLanding";
 import AdvisorAuth from "./pages/advisor/AdvisorAuth";
 import AdvisorChat from "./pages/advisor/AdvisorChat";
@@ -76,6 +77,9 @@ const App = () => (
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/studies" element={<Studies />} />
               <Route path="/studies/:studyId" element={<StudyDetail />} />
+              <Route path="/consultoria" element={<ConsultoriaList />} />
+              <Route path="/consultoria/nuevo" element={<div className="p-6"><h1 className="text-2xl font-bold">Nuevo Proyecto</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
+              <Route path="/consultoria/:id" element={<div className="p-6"><h1 className="text-2xl font-bold">Detalle de Proyecto</h1><p className="text-muted-foreground">Próximamente...</p></div>} />
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/reviews" element={<QualityControl />} />
               <Route path="/trends" element={<Trends />} />
