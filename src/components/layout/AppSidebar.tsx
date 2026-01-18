@@ -80,7 +80,7 @@ const advisorSubItems = [
 
 const internalNavItems = [
   { title: 'Centro de Supervisión', url: '/quality-control', icon: ShieldCheck },
-  { title: 'Taxonomía', url: '/taxonomy-admin', icon: Tag },
+  { title: 'Taxonomía 3 Niveles', url: '/taxonomy-admin', icon: Tag },
 ];
 
 const knowledgeBaseItems = [
