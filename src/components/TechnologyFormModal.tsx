@@ -646,7 +646,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               ...dataToSave,
               updated_by: user?.id,
               reviewer_id: user?.id,
-              reviewed_at: new Date().toISOString(),
+              // NOTE: the external DB schema may not have reviewed_at; avoid sending unknown columns
             })
             .eq('id', technology.id);
 
