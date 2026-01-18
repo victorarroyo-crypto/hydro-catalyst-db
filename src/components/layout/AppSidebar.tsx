@@ -21,6 +21,7 @@ import {
   Globe,
   Radio,
   Lightbulb,
+  ClipboardList,
   Database,
   Rocket,
   Wrench,
@@ -67,6 +68,11 @@ const mainNavItems = [
 const projectsSubItems = [
   { title: 'Scouting Completo', url: '/studies', icon: GraduationCap },
   { title: 'Scouting', url: '/projects', icon: FolderOpen },
+];
+
+const consultoriaSubItems = [
+  { title: 'Mis Proyectos', url: '/consultoria', icon: FolderOpen },
+  { title: 'Nuevo Proyecto', url: '/consultoria/nuevo', icon: Rocket },
 ];
 
 const scoutingSubItems = [
@@ -139,6 +145,9 @@ export function AppSidebar() {
   const [projectsOpen, setProjectsOpen] = useState(
     projectsSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/studies/'))
   );
+  const [consultoriaOpen, setConsultoriaOpen] = useState(
+    consultoriaSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/consultoria'))
+  );
   const [taxonomyOpen, setTaxonomyOpen] = useState(
     location.pathname === '/taxonomy-admin'
   );
@@ -150,6 +159,7 @@ export function AppSidebar() {
   const isScoutingActive = scoutingSubItems.some((item) => location.pathname === item.url);
   const isAdvisorActive = advisorSubItems.some((item) => location.pathname === item.url);
   const isProjectsActive = projectsSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/studies/'));
+  const isConsultoriaActive = consultoriaSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/consultoria'));
   const isTaxonomyActive = location.pathname === '/taxonomy-admin';
 
   return (
@@ -228,6 +238,60 @@ export function AppSidebar() {
                   <CollapsibleContent>
                     <SidebarMenuSub>
                       {projectsSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isActive(item.url) || location.pathname.startsWith(item.url + '/')}
+                            className={cn(
+                              'transition-all duration-200',
+                              (isActive(item.url) || location.pathname.startsWith(item.url + '/'))
+                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                            )}
+                          >
+                            <Link to={item.url} className="flex items-center gap-2">
+                              <item.icon className="w-4 h-4" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+
+              {/* Consultoría Submenu */}
+              <Collapsible
+                open={consultoriaOpen}
+                onOpenChange={setConsultoriaOpen}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      className={cn(
+                        'transition-all duration-200 w-full',
+                        isConsultoriaActive
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                      )}
+                    >
+                      <ClipboardList className="w-5 h-5" />
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 text-left">Consultoría</span>
+                          <ChevronDown className={cn(
+                            "w-4 h-4 transition-transform duration-200",
+                            consultoriaOpen && "rotate-180"
+                          )} />
+                        </>
+                      )}
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {consultoriaSubItems.map((item) => (
                         <SidebarMenuSubItem key={item.title}>
                           <SidebarMenuSubButton
                             asChild
