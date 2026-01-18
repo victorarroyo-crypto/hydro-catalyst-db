@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -17,7 +17,7 @@ export const ZombieJobsIndicator: React.FC = () => {
   const { data: zombieCount } = useQuery({
     queryKey: ['zombie-jobs-count'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_sessions')
         .select('id, last_heartbeat, updated_at')
         .eq('status', 'running');

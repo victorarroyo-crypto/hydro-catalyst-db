@@ -8,7 +8,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
-import { supabase } from '@/integrations/supabase/client';
+
 import { toast } from 'sonner';
 import { 
   ExternalScoutingQueueItem,
@@ -233,7 +233,7 @@ export const useApproveToTechnologies = () => {
       const record = scoutingRecord as ExternalScoutingQueueItem;
       
       // 2. Insert into LOCAL technologies table (Lovable Cloud)
-      const { data: newTech, error: insertError } = await supabase
+      const { data: newTech, error: insertError } = await externalSupabase
         .from('technologies')
         .insert({
           "Nombre de la tecnología": record.nombre,

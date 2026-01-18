@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -71,7 +71,7 @@ export const AIModelSettings: React.FC = () => {
 
   const loadSettings = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('ai_model_settings')
         .select('*')
         .order('action_type');
@@ -110,7 +110,7 @@ export const AIModelSettings: React.FC = () => {
     setIsSaving(true);
     try {
       for (const setting of settings) {
-        const { error } = await supabase
+        const { error } = await externalSupabase
           .from('ai_model_settings')
           .update({ model: setting.model, updated_at: new Date().toISOString() })
           .eq('action_type', setting.action_type);
@@ -119,7 +119,7 @@ export const AIModelSettings: React.FC = () => {
       }
 
       // Log the action
-      await supabase.from('audit_logs').insert({
+      await externalSupabase.from('audit_logs').insert({
         action: 'UPDATE_AI_MODEL_SETTINGS',
         entity_type: 'ai_model_settings',
         details: { settings: settings.map((s) => ({ action: s.action_type, model: s.model })) },

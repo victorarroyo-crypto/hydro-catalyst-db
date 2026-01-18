@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Cloud, CloudOff, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -24,7 +24,7 @@ export const SyncStatusIndicator: React.FC = () => {
 
   useEffect(() => {
     // Listen to real-time changes on synced tables
-    const channel = supabase
+    const channel = externalSupabase
       .channel('sync-status-indicator')
       .on(
         'postgres_changes',
@@ -44,7 +44,7 @@ export const SyncStatusIndicator: React.FC = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      externalSupabase.removeChannel(channel);
     };
   }, []);
 

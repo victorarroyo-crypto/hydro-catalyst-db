@@ -1,5 +1,5 @@
 import React from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, History, User, FileText, Settings, Trash2, UserPlus, Shield } from 'lucide-react';
@@ -26,7 +26,7 @@ export const AuditLogSection: React.FC = () => {
   const { data: logs, isLoading } = useQuery({
     queryKey: ['audit-logs'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('audit_logs')
         .select(`
           id,
@@ -44,7 +44,7 @@ export const AuditLogSection: React.FC = () => {
 
       // Get user profiles for the logs
       const userIds = [...new Set((data || []).map(l => l.user_id).filter(Boolean))];
-      const { data: profiles } = await supabase
+      const { data: profiles } = await externalSupabase
         .from('profiles')
         .select('user_id, full_name')
         .in('user_id', userIds);

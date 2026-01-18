@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Database, ExternalLink } from 'lucide-react';
 import { UnifiedTechDetailContent } from '@/components/tech/UnifiedTechDetailContent';
@@ -74,7 +74,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     queryKey: ['linked-technology', item?.existing_technology_id],
     queryFn: async () => {
       if (!item?.existing_technology_id) return null;
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technologies')
         .select('*')
         .eq('id', item.existing_technology_id)
@@ -90,7 +90,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     queryKey: ['technology-tipos', item?.existing_technology_id],
     queryFn: async () => {
       if (!item?.existing_technology_id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_tipos')
         .select('tipo_id, is_primary')
         .eq('technology_id', item.existing_technology_id);
@@ -105,7 +105,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     queryKey: ['technology-subcategorias', item?.existing_technology_id],
     queryFn: async () => {
       if (!item?.existing_technology_id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_subcategorias')
         .select('subcategoria_id, is_primary')
         .eq('technology_id', item.existing_technology_id);
@@ -188,7 +188,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     const primarySubcategoriaId = selectedSubcategorias.find(s => s.is_primary)?.subcategoria_id || null;
     
     // Always save to study_longlist with taxonomy IDs
-    const { error: longlistError } = await supabase
+    const { error: longlistError } = await externalSupabase
       .from('study_longlist')
       .update({
         technology_name: editData.technology_name,
@@ -218,7 +218,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
 
     // If linked to DB, also sync changes to technologies table
     if (isLinkedToDB && item.existing_technology_id) {
-      const { error: techError } = await supabase
+      const { error: techError } = await externalSupabase
         .from('technologies')
         .update({
           'Nombre de la tecnología': editData.technology_name,
@@ -251,8 +251,8 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
 
       // Sync many-to-many relationships for tipos
       if (selectedTipos.length > 0) {
-        await supabase.from('technology_tipos').delete().eq('technology_id', item.existing_technology_id);
-        await supabase.from('technology_tipos').insert(
+        await externalSupabase.from('technology_tipos').delete().eq('technology_id', item.existing_technology_id);
+        await externalSupabase.from('technology_tipos').insert(
           selectedTipos.map(t => ({
             technology_id: item.existing_technology_id,
             tipo_id: t.tipo_id,
@@ -263,8 +263,8 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
 
       // Sync many-to-many relationships for subcategorias
       if (selectedSubcategorias.length > 0) {
-        await supabase.from('technology_subcategorias').delete().eq('technology_id', item.existing_technology_id);
-        await supabase.from('technology_subcategorias').insert(
+        await externalSupabase.from('technology_subcategorias').delete().eq('technology_id', item.existing_technology_id);
+        await externalSupabase.from('technology_subcategorias').insert(
           selectedSubcategorias.map(s => ({
             technology_id: item.existing_technology_id,
             subcategoria_id: s.subcategoria_id,
@@ -330,7 +330,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     const primaryTipoId = selectedTipos.find(t => t.is_primary)?.tipo_id || null;
     const primarySubcategoriaId = selectedSubcategorias.find(s => s.is_primary)?.subcategoria_id || null;
     
-    const { data: insertedTech, error } = await supabase
+    const { data: insertedTech, error } = await externalSupabase
       .from('technologies')
       .insert({
         'Nombre de la tecnología': dataToSend.technology_name,
@@ -372,7 +372,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
 
     // Create many-to-many relationships for tipos
     if (selectedTipos.length > 0) {
-      await supabase.from('technology_tipos').insert(
+      await externalSupabase.from('technology_tipos').insert(
         selectedTipos.map(t => ({
           technology_id: insertedTech.id,
           tipo_id: t.tipo_id,
@@ -383,7 +383,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
 
     // Create many-to-many relationships for subcategorias
     if (selectedSubcategorias.length > 0) {
-      await supabase.from('technology_subcategorias').insert(
+      await externalSupabase.from('technology_subcategorias').insert(
         selectedSubcategorias.map(s => ({
           technology_id: insertedTech.id,
           subcategoria_id: s.subcategoria_id,
@@ -392,7 +392,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
       );
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await externalSupabase
       .from('study_longlist')
       .update({
         existing_technology_id: insertedTech.id,
@@ -439,7 +439,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     
     // Save directly to study_longlist
     setIsSaving(true);
-    const { error: longlistError } = await supabase
+    const { error: longlistError } = await externalSupabase
       .from('study_longlist')
       .update({
         brief_description: updatedData.description,
@@ -457,7 +457,7 @@ export const LonglistTechDetailModal: React.FC<LonglistTechDetailModalProps> = (
     
     // If linked to DB, also sync enriched data to technologies table
     if (isLinkedToDB && item.existing_technology_id) {
-      const { error: techError } = await supabase
+      const { error: techError } = await externalSupabase
         .from('technologies')
         .update({
           'Descripción técnica breve': updatedData.description || null,

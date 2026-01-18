@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { SUBSECTORES_INDUSTRIALES } from '@/constants/taxonomyData';
 
 interface TaxonomySector {
@@ -39,7 +39,7 @@ export const TaxonomySectorSelector: React.FC<TaxonomySectorSelectorProps> = ({
   const { data: sectores, isLoading } = useQuery({
     queryKey: ['taxonomy-sectores'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('taxonomy_sectores')
         .select('*')
         .order('id');

@@ -21,7 +21,7 @@ import {
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
 import { useAdvisorHistory } from '@/hooks/useAdvisorHistory';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -54,7 +54,7 @@ export default function AdvisorDashboard() {
 
     setCallbackLoading(true);
     try {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('advisor_callback_requests')
         .insert({
           user_id: advisorUser.id,

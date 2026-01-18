@@ -1,6 +1,6 @@
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType, AlignmentType, PageBreak } from 'docx';
 import { saveAs } from 'file-saver';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import type { Tables } from '@/integrations/supabase/types';
 
 // Types
@@ -188,7 +188,7 @@ async function fetchTableCounts(): Promise<Record<string, number>> {
   const results = await Promise.allSettled(
     validTables.map(async (table) => {
       try {
-        const { count, error } = await supabase.from(table as any).select('*', { count: 'exact', head: true });
+        const { count, error } = await externalSupabase.from(table as any).select('*', { count: 'exact', head: true });
         if (error) throw error;
         return { table, count: count || 0 };
       } catch {
@@ -263,7 +263,7 @@ async function fetchForeignKeys(): Promise<ForeignKey[]> {
 // Fetch sync status from edge function
 async function fetchSyncStatus(): Promise<SyncComparison[]> {
   try {
-    const { data, error } = await supabase.functions.invoke('compare-databases', {
+    const { data, error } = await externalSupabase.functions.invoke('compare-databases', {
       body: { detailed: true }
     });
     

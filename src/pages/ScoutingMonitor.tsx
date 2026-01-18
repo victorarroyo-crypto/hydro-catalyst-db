@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -193,7 +192,7 @@ export default function ScoutingMonitor() {
   const { data: sessions, isLoading: loadingSessions, refetch: refetchSessions, isFetching: isFetchingSessions } = useQuery({
     queryKey: ['scouting-sessions'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_sessions')
         .select('*')
         .order('started_at', { ascending: false })
@@ -257,7 +256,7 @@ export default function ScoutingMonitor() {
   const { data: allRecentLogs } = useQuery({
     queryKey: ['scouting-logs-all-recent'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_session_logs')
         .select('*')
         .order('timestamp', { ascending: false })
@@ -274,7 +273,7 @@ export default function ScoutingMonitor() {
     queryKey: ['scouting-logs', selectedSession],
     queryFn: async () => {
       if (!selectedSession) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('scouting_session_logs')
         .select('*')
         .eq('session_id', selectedSession)
@@ -464,7 +463,7 @@ export default function ScoutingMonitor() {
 
   // Real-time subscription for sessions
   useEffect(() => {
-    const channel = supabase
+    const channel = externalSupabase
       .channel('scouting-sessions-realtime')
       .on(
         'postgres_changes',
@@ -476,7 +475,7 @@ export default function ScoutingMonitor() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      externalSupabase.removeChannel(channel);
     };
   }, [refetchSessions]);
 
@@ -484,7 +483,7 @@ export default function ScoutingMonitor() {
   useEffect(() => {
     if (!selectedSession) return;
 
-    const channel = supabase
+    const channel = externalSupabase
       .channel('scouting-logs-realtime')
       .on(
         'postgres_changes',
@@ -501,7 +500,7 @@ export default function ScoutingMonitor() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      externalSupabase.removeChannel(channel);
     };
   }, [selectedSession, refetchLogs]);
 
