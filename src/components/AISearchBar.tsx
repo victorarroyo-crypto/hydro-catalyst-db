@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Sparkles, Search, X, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -50,7 +50,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
   const { data: dynamicData } = useQuery({
     queryKey: ['ai-search-suggestions'],
     queryFn: async () => {
-      const { data: technologies } = await externalSupabase
+      const { data: technologies } = await supabase
         .from('technologies')
         .select('"Sector y subsector", "Tipo de tecnología"')
         .or('status.eq.active,status.is.null');
@@ -112,7 +112,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
     setExplanation(null);
 
     try {
-      const { data, error } = await externalSupabase.functions.invoke('ai-search-technologies', {
+      const { data, error } = await supabase.functions.invoke('ai-search-technologies', {
         body: { 
           query: searchQuery.trim(),
           filters: activeFilters 

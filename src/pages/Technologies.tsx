@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
@@ -110,7 +110,7 @@ const Technologies: React.FC = () => {
         let hasMore = true;
         
         while (hasMore) {
-          const { data, error } = await externalSupabase
+          const { data, error } = await supabase
             .from('technologies')
             .select('*')
             // IMPORTANT: enforce deterministic ordering for stable pagination across batches
@@ -266,7 +266,7 @@ const Technologies: React.FC = () => {
   const createProjectMutation = useMutation({
     mutationFn: async (technologyIds: string[]) => {
       // Create the project
-      const { data: projectData, error: projectError } = await externalSupabase
+      const { data: projectData, error: projectError } = await supabase
         .from('projects')
         .insert({
           name: newProject.name,
@@ -289,7 +289,7 @@ const Technologies: React.FC = () => {
           added_by: user?.id,
         }));
 
-        const { error: techError } = await externalSupabase
+        const { error: techError } = await supabase
           .from('project_technologies')
           .insert(projectTechnologies);
         
