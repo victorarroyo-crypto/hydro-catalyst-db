@@ -29,6 +29,9 @@ import {
   Bot,
   MessageSquare,
   History,
+  FolderTree,
+  Download,
+  PieChart,
 } from 'lucide-react';
 import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
 import {
@@ -80,7 +83,12 @@ const advisorSubItems = [
 
 const internalNavItems = [
   { title: 'Centro de Supervisión', url: '/quality-control', icon: ShieldCheck },
-  { title: 'Taxonomía 3 Niveles', url: '/taxonomy-admin', icon: Tag },
+];
+
+const taxonomySubItems = [
+  { title: 'Vista Jerárquica', url: '/taxonomy-admin', icon: FolderTree },
+  { title: 'Estadísticas', url: '/taxonomy-admin?view=stats', icon: PieChart },
+  { title: 'Exportar Documentación', url: '/taxonomy-admin?view=export', icon: Download },
 ];
 
 const knowledgeBaseItems = [
@@ -131,6 +139,9 @@ export function AppSidebar() {
   const [projectsOpen, setProjectsOpen] = useState(
     projectsSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/studies/'))
   );
+  const [taxonomyOpen, setTaxonomyOpen] = useState(
+    location.pathname === '/taxonomy-admin'
+  );
 
   const isActive = (path: string) => location.pathname === path;
   const isKnowledgeBaseActive = location.pathname === '/knowledge-base';
@@ -139,6 +150,7 @@ export function AppSidebar() {
   const isScoutingActive = scoutingSubItems.some((item) => location.pathname === item.url);
   const isAdvisorActive = advisorSubItems.some((item) => location.pathname === item.url);
   const isProjectsActive = projectsSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/studies/'));
+  const isTaxonomyActive = location.pathname === '/taxonomy-admin';
 
   return (
     <Sidebar className={cn('border-r-0', collapsed ? 'w-16' : 'w-64')} collapsible="icon">
@@ -378,7 +390,60 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 ))}
 
-                {/* Knowledge Base Submenu */}
+                {/* Taxonomy Submenu */}
+                <Collapsible
+                  open={taxonomyOpen}
+                  onOpenChange={setTaxonomyOpen}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        className={cn(
+                          'transition-all duration-200 w-full',
+                          isTaxonomyActive
+                            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                            : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                        )}
+                      >
+                        <Tag className="w-5 h-5" />
+                        {!collapsed && (
+                          <>
+                            <span className="flex-1 text-left">Taxonomía 3 Niveles</span>
+                            <ChevronDown className={cn(
+                              "w-4 h-4 transition-transform duration-200",
+                              taxonomyOpen && "rotate-180"
+                            )} />
+                          </>
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {taxonomySubItems.map((item) => (
+                          <SidebarMenuSubItem key={item.title}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={location.pathname + location.search === item.url || (item.url === '/taxonomy-admin' && location.pathname === '/taxonomy-admin' && !location.search)}
+                              className={cn(
+                                'transition-all duration-200',
+                                (location.pathname + location.search === item.url || (item.url === '/taxonomy-admin' && location.pathname === '/taxonomy-admin' && !location.search))
+                                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                  : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                              )}
+                            >
+                              <Link to={item.url} className="flex items-center gap-2">
+                                <item.icon className="w-4 h-4" />
+                                <span>{item.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+
                 <Collapsible
                   open={knowledgeBaseOpen}
                   onOpenChange={setKnowledgeBaseOpen}

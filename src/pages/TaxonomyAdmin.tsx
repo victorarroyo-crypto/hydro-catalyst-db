@@ -1,826 +1,422 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
-import {
-  syncTipoInsert,
-  syncTipoUpdate,
-  syncTipoDelete,
-  syncSubcategoriaInsert,
-  syncSubcategoriaUpdate,
-  syncSubcategoriaDelete,
-  syncSectorInsert,
-  syncSectorUpdate,
-  syncSectorDelete,
-} from '@/lib/syncToExternal';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useTaxonomy3Levels } from '@/hooks/useTaxonomy3Levels';
+import { TaxonomyTreeView } from '@/components/taxonomy/TaxonomyTreeView';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { 
-  Tag, 
-  Layers, 
-  Building2, 
-  Plus, 
-  Pencil, 
-  Trash2, 
-  Loader2,
-  Settings,
-  ArrowLeft,
-  FileText,
-  Download,
-} from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Skeleton } from '@/components/ui/skeleton';
+import { AlertCircle, Download, FileText, FolderTree, Layers, Tag, PieChart, BarChart3, TrendingUp } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 import { generateTaxonomyDocumentation } from '@/lib/generateTaxonomyDocumentation';
+import { useMemo, useState } from 'react';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 
-interface TaxonomyTipo {
-  id: number;
-  codigo: string;
-  nombre: string;
-  descripcion: string | null;
-}
-
-interface TaxonomySubcategoria {
-  id: number;
-  tipo_id: number | null;
-  codigo: string;
-  nombre: string;
-}
-
-interface TaxonomySector {
-  id: string;
-  nombre: string;
-  descripcion: string | null;
-}
-
-const TaxonomyAdmin: React.FC = () => {
+const TaxonomyAdmin = () => {
   const { profile } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  // Only admins can access this page
+  const { taxonomyData, isLoading, error } = useTaxonomy3Levels();
+  const [searchParams] = useSearchParams();
+  const [isExporting, setIsExporting] = useState(false);
+  
+  const view = searchParams.get('view') || 'tree';
   const isAdmin = profile?.role === 'admin';
 
-  // Real-time subscriptions
-  useRealtimeSubscription({
-    tables: ['taxonomy_tipos', 'taxonomy_subcategorias', 'taxonomy_sectores'],
-    queryKeys: [['taxonomy-tipos'], ['taxonomy-subcategorias'], ['taxonomy-sectores']],
-  });
+  // Calculate detailed statistics
+  const stats = useMemo(() => {
+    if (!taxonomyData?.taxonomy) return null;
 
-  // Modal states
-  const [tipoModalOpen, setTipoModalOpen] = useState(false);
-  const [subcategoriaModalOpen, setSubcategoriaModalOpen] = useState(false);
-  const [sectorModalOpen, setSectorModalOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{ type: string; id: string | number; name: string } | null>(null);
-  
+    const categoryStats = Object.entries(taxonomyData.taxonomy).map(([codigo, categoria]) => {
+      const tiposCount = Object.keys(categoria.tipos).length;
+      const subcatsCount = Object.values(categoria.tipos).flat().length;
+      return {
+        codigo,
+        nombre: categoria.nombre,
+        descripcion: categoria.descripcion,
+        tiposCount,
+        subcatsCount,
+      };
+    });
 
-  // Form states
-  const [editingTipo, setEditingTipo] = useState<TaxonomyTipo | null>(null);
-  const [editingSubcategoria, setEditingSubcategoria] = useState<TaxonomySubcategoria | null>(null);
-  const [editingSector, setEditingSector] = useState<TaxonomySector | null>(null);
-  const [generatingDoc, setGeneratingDoc] = useState(false);
+    // Sort by subcategories count
+    const topCategories = [...categoryStats].sort((a, b) => b.subcatsCount - a.subcatsCount);
 
-  // Fetch data
-  const { data: tipos, isLoading: loadingTipos } = useQuery({
-    queryKey: ['taxonomy-tipos'],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('taxonomy_tipos')
-        .select('*')
-        .order('id');
-      if (error) throw error;
-      return data as TaxonomyTipo[];
-    },
-  });
-
-  const { data: subcategorias, isLoading: loadingSubcategorias } = useQuery({
-    queryKey: ['taxonomy-subcategorias'],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('taxonomy_subcategorias')
-        .select('*')
-        .order('codigo');
-      if (error) throw error;
-      return data as TaxonomySubcategoria[];
-    },
-  });
-
-  const { data: sectores, isLoading: loadingSectores } = useQuery({
-    queryKey: ['taxonomy-sectores'],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('taxonomy_sectores')
-        .select('*')
-        .order('id');
-      if (error) throw error;
-      return data as TaxonomySector[];
-    },
-  });
-
-  // Mutations for Tipos
-  const tipoMutation = useMutation({
-    mutationFn: async (data: { tipo: Partial<TaxonomyTipo>; isEdit: boolean }) => {
-      if (data.isEdit && editingTipo) {
-        const { error } = await externalSupabase
-          .from('taxonomy_tipos')
-          .update({
-            codigo: data.tipo.codigo,
-            nombre: data.tipo.nombre,
-            descripcion: data.tipo.descripcion,
-          })
-          .eq('id', editingTipo.id);
-        if (error) throw error;
-        await syncTipoUpdate(editingTipo.id, data.tipo);
-      } else {
-        const { data: inserted, error } = await externalSupabase
-          .from('taxonomy_tipos')
-          .insert({
-            codigo: data.tipo.codigo!,
-            nombre: data.tipo.nombre!,
-            descripcion: data.tipo.descripcion,
-          })
-          .select()
-          .single();
-        if (error) throw error;
-        await syncTipoInsert({ ...data.tipo, id: inserted.id });
-      }
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['taxonomy-tipos'] });
-      setTipoModalOpen(false);
-      setEditingTipo(null);
-      toast({
-        title: variables.isEdit ? 'Tipo actualizado' : 'Tipo creado',
-        description: 'Los cambios se han sincronizado con Supabase externo',
+    // Get all types with their subcategory counts
+    const typeStats: { nombre: string; categoria: string; subcatsCount: number }[] = [];
+    Object.entries(taxonomyData.taxonomy).forEach(([codigo, categoria]) => {
+      Object.entries(categoria.tipos).forEach(([tipo, subcats]) => {
+        typeStats.push({
+          nombre: tipo,
+          categoria: codigo,
+          subcatsCount: subcats.length,
+        });
       });
-    },
-    onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+    });
+    const topTypes = [...typeStats].sort((a, b) => b.subcatsCount - a.subcatsCount).slice(0, 10);
 
-  // Mutations for Subcategorias
-  const subcategoriaMutation = useMutation({
-    mutationFn: async (data: { subcategoria: Partial<TaxonomySubcategoria>; isEdit: boolean }) => {
-      if (data.isEdit && editingSubcategoria) {
-        const { error } = await externalSupabase
-          .from('taxonomy_subcategorias')
-          .update({
-            codigo: data.subcategoria.codigo,
-            nombre: data.subcategoria.nombre,
-            tipo_id: data.subcategoria.tipo_id,
-          })
-          .eq('id', editingSubcategoria.id);
-        if (error) throw error;
-        await syncSubcategoriaUpdate(editingSubcategoria.id, data.subcategoria);
-      } else {
-        const { data: inserted, error } = await externalSupabase
-          .from('taxonomy_subcategorias')
-          .insert({
-            codigo: data.subcategoria.codigo!,
-            nombre: data.subcategoria.nombre!,
-            tipo_id: data.subcategoria.tipo_id,
-          })
-          .select()
-          .single();
-        if (error) throw error;
-        await syncSubcategoriaInsert({ ...data.subcategoria, id: inserted.id });
-      }
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['taxonomy-subcategorias'] });
-      setSubcategoriaModalOpen(false);
-      setEditingSubcategoria(null);
-      toast({
-        title: variables.isEdit ? 'Subcategoría actualizada' : 'Subcategoría creada',
-        description: 'Los cambios se han sincronizado con Supabase externo',
-      });
-    },
-    onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+    return {
+      categoryStats,
+      topCategories,
+      topTypes,
+      totalCategorias: taxonomyData.counts.categorias,
+      totalTipos: taxonomyData.counts.tipos,
+      totalSubcategorias: taxonomyData.counts.subcategorias,
+      avgTiposPorCategoria: (taxonomyData.counts.tipos / taxonomyData.counts.categorias).toFixed(1),
+      avgSubcatsPorTipo: (taxonomyData.counts.subcategorias / taxonomyData.counts.tipos).toFixed(1),
+    };
+  }, [taxonomyData]);
 
-  // Mutations for Sectores
-  const sectorMutation = useMutation({
-    mutationFn: async (data: { sector: Partial<TaxonomySector>; isEdit: boolean }) => {
-      if (data.isEdit && editingSector) {
-        const { error } = await externalSupabase
-          .from('taxonomy_sectores')
-          .update({
-            nombre: data.sector.nombre,
-            descripcion: data.sector.descripcion,
-          })
-          .eq('id', editingSector.id);
-        if (error) throw error;
-        await syncSectorUpdate(editingSector.id, data.sector);
-      } else {
-        const { error } = await externalSupabase
-          .from('taxonomy_sectores')
-          .insert({
-            id: data.sector.id!,
-            nombre: data.sector.nombre!,
-            descripcion: data.sector.descripcion,
-          });
-        if (error) throw error;
-        await syncSectorInsert(data.sector);
-      }
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['taxonomy-sectores'] });
-      setSectorModalOpen(false);
-      setEditingSector(null);
-      toast({
-        title: variables.isEdit ? 'Sector actualizado' : 'Sector creado',
-        description: 'Los cambios se han sincronizado con Supabase externo',
-      });
-    },
-    onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      if (!itemToDelete) return;
-      
-      switch (itemToDelete.type) {
-        case 'tipo':
-          const { error: tipoError } = await externalSupabase
-            .from('taxonomy_tipos')
-            .delete()
-            .eq('id', Number(itemToDelete.id));
-          if (tipoError) throw tipoError;
-          await syncTipoDelete(Number(itemToDelete.id));
-          break;
-        case 'subcategoria':
-          const { error: subError } = await externalSupabase
-            .from('taxonomy_subcategorias')
-            .delete()
-            .eq('id', Number(itemToDelete.id));
-          if (subError) throw subError;
-          await syncSubcategoriaDelete(Number(itemToDelete.id));
-          break;
-        case 'sector':
-          const { error: sectorError } = await externalSupabase
-            .from('taxonomy_sectores')
-            .delete()
-            .eq('id', String(itemToDelete.id));
-          if (sectorError) throw sectorError;
-          await syncSectorDelete(String(itemToDelete.id));
-          break;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['taxonomy-tipos'] });
-      queryClient.invalidateQueries({ queryKey: ['taxonomy-subcategorias'] });
-      queryClient.invalidateQueries({ queryKey: ['taxonomy-sectores'] });
-      setDeleteConfirmOpen(false);
-      setItemToDelete(null);
-      toast({
-        title: 'Eliminado',
-        description: 'El elemento se ha eliminado y sincronizado',
-      });
-    },
-    onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  // Download handlers
   const handleDownloadWord = async () => {
-    setGeneratingDoc(true);
+    if (!taxonomyData) {
+      toast.error('No hay datos de taxonomía para exportar');
+      return;
+    }
+
+    setIsExporting(true);
     try {
       await generateTaxonomyDocumentation();
-      toast({ title: 'Documento generado', description: 'Se ha descargado el documento Word de taxonomía' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'No se pudo generar el documento', variant: 'destructive' });
+      toast.success('Documento Word generado correctamente');
+    } catch (err) {
+      console.error('Error generating Word document:', err);
+      toast.error('Error al generar el documento');
     } finally {
-      setGeneratingDoc(false);
+      setIsExporting(false);
     }
   };
+
   if (!isAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <Settings className="w-16 h-16 text-muted-foreground/50 mb-4" />
-        <h2 className="text-xl font-semibold mb-2">Acceso restringido</h2>
-        <p className="text-muted-foreground">Solo los administradores pueden gestionar la taxonomía</p>
+      <div className="container mx-auto py-8 px-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            No tienes permisos para acceder a esta página. Se requiere rol de administrador.
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Settings className="w-6 h-6 text-primary" />
-          </div>
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-8 px-4 space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+        <Skeleton className="h-[400px]" />
+      </div>
+    );
+  }
+
+  if (error || !taxonomyData) {
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Error al cargar la taxonomía: {error?.message || 'Error desconocido'}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Export view
+  if (view === 'export') {
+    return (
+      <div className="container mx-auto py-8 px-4 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Administración de Taxonomía</h1>
-            <p className="text-muted-foreground">
-              Gestiona tipos, subcategorías y sectores
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Download className="h-6 w-6 text-primary" />
+              Exportar Documentación
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Genera documentos con la estructura completa de taxonomía
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={handleDownloadWord}
-            disabled={generatingDoc}
-          >
-            {generatingDoc ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4 mr-2" />
-            )}
-            Descargar Word
-          </Button>
-          <Button asChild variant="outline">
-            <Link to="/taxonomy-audit" className="gap-2">
-              <FileText className="w-4 h-4" />
-              Auditoría
-            </Link>
-          </Button>
-          <Button asChild variant="ghost">
-            <Link to="/settings" className="gap-2">
-              <ArrowLeft className="w-4 h-4" />
-              Volver
-            </Link>
-          </Button>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Documento Word
+              </CardTitle>
+              <CardDescription>
+                Exporta la taxonomía completa en formato Microsoft Word (.docx)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>El documento incluye:</p>
+                <ul className="list-disc list-inside ml-2 space-y-1">
+                  <li>{taxonomyData.counts.categorias} categorías con descripciones</li>
+                  <li>{taxonomyData.counts.tipos} tipos organizados jerárquicamente</li>
+                  <li>{taxonomyData.counts.subcategorias} subcategorías detalladas</li>
+                  <li>Tabla de contenidos automática</li>
+                </ul>
+              </div>
+              <Button onClick={handleDownloadWord} disabled={isExporting} className="w-full gap-2">
+                {isExporting ? (
+                  <>Generando...</>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Descargar Word
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Resumen de Exportación
+              </CardTitle>
+              <CardDescription>
+                Vista previa del contenido a exportar
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Categorías</span>
+                  <Badge variant="secondary">{taxonomyData.counts.categorias}</Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Tipos</span>
+                  <Badge variant="secondary">{taxonomyData.counts.tipos}</Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Subcategorías</span>
+                  <Badge variant="secondary">{taxonomyData.counts.subcategorias}</Badge>
+                </div>
+                <div className="border-t pt-4">
+                  <p className="text-xs text-muted-foreground">
+                    Versión: {taxonomyData.version}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
+    );
+  }
 
-      <Tabs defaultValue="tipos" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="tipos" className="gap-2">
-            <Tag className="w-4 h-4" />
-            Tipos ({tipos?.length || 0})
-          </TabsTrigger>
-          <TabsTrigger value="subcategorias" className="gap-2">
-            <Layers className="w-4 h-4" />
-            Subcategorías ({subcategorias?.length || 0})
-          </TabsTrigger>
-          <TabsTrigger value="sectores" className="gap-2">
-            <Building2 className="w-4 h-4" />
-            Sectores ({sectores?.length || 0})
-          </TabsTrigger>
-        </TabsList>
+  // Stats view
+  if (view === 'stats' && stats) {
+    return (
+      <div className="container mx-auto py-8 px-4 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <PieChart className="h-6 w-6 text-primary" />
+              Estadísticas de Taxonomía
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Análisis detallado de la estructura de clasificación (v{taxonomyData.version})
+            </p>
+          </div>
+        </div>
 
-        {/* Tipos Tab */}
-        <TabsContent value="tipos">
+        {/* Summary cards */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Tipos de Tecnología</CardTitle>
-                <CardDescription>Categorías principales de clasificación</CardDescription>
-              </div>
-              <Button onClick={() => { setEditingTipo(null); setTipoModalOpen(true); }}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nuevo Tipo
-              </Button>
+            <CardContent className="pt-6">
+              <div className="text-3xl font-bold text-primary">{stats.totalCategorias}</div>
+              <p className="text-sm text-muted-foreground">Categorías</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-3xl font-bold text-primary">{stats.totalTipos}</div>
+              <p className="text-sm text-muted-foreground">Tipos</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-3xl font-bold text-primary">{stats.totalSubcategorias}</div>
+              <p className="text-sm text-muted-foreground">Subcategorías</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-3xl font-bold text-primary">{stats.avgTiposPorCategoria}</div>
+              <p className="text-sm text-muted-foreground">Tipos/Categoría</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-3xl font-bold text-primary">{stats.avgSubcatsPorTipo}</div>
+              <p className="text-sm text-muted-foreground">Subcats/Tipo</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Categories breakdown */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FolderTree className="h-5 w-5" />
+                Distribución por Categoría
+              </CardTitle>
+              <CardDescription>
+                Tipos y subcategorías por categoría principal
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              {loadingTipos ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {tipos?.map((tipo) => (
-                    <div
-                      key={tipo.id}
-                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary">{tipo.codigo}</Badge>
-                        <div>
-                          <p className="font-medium">{tipo.nombre}</p>
-                          {tipo.descripcion && (
-                            <p className="text-sm text-muted-foreground line-clamp-1">
-                              {tipo.descripcion}
-                            </p>
-                          )}
-                        </div>
+            <CardContent className="space-y-4">
+              {stats.topCategories.map((cat) => {
+                const percentage = (cat.subcatsCount / stats.totalSubcategorias) * 100;
+                return (
+                  <div key={cat.codigo} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {cat.codigo}
+                        </Badge>
+                        <span className="text-sm font-medium truncate max-w-[200px]">
+                          {cat.nombre}
+                        </span>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => { setEditingTipo(tipo); setTipoModalOpen(true); }}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            setItemToDelete({ type: 'tipo', id: tipo.id, name: tipo.nombre });
-                            setDeleteConfirmOpen(true);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {cat.tiposCount} tipos • {cat.subcatsCount} subcats
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <Progress value={percentage} className="h-2" />
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Subcategorias Tab */}
-        <TabsContent value="subcategorias">
+          {/* Top types */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Subcategorías</CardTitle>
-                <CardDescription>Subcategorías agrupadas por tipo</CardDescription>
-              </div>
-              <Button onClick={() => { setEditingSubcategoria(null); setSubcategoriaModalOpen(true); }}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nueva Subcategoría
-              </Button>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Top 10 Tipos
+              </CardTitle>
+              <CardDescription>
+                Tipos con más subcategorías
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {loadingSubcategorias ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {tipos?.map((tipo) => {
-                    const tipoSubs = subcategorias?.filter(s => s.tipo_id === tipo.id) || [];
-                    if (tipoSubs.length === 0) return null;
-                    return (
-                      <div key={tipo.id}>
-                        <h4 className="font-medium text-sm text-muted-foreground mb-2">
-                          {tipo.codigo} - {tipo.nombre}
-                        </h4>
-                        <div className="space-y-1 ml-4">
-                          {tipoSubs.map((sub) => (
-                            <div
-                              key={sub.id}
-                              className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50"
-                            >
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs">{sub.codigo}</Badge>
-                                <span className="text-sm">{sub.nombre}</span>
-                              </div>
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => { setEditingSubcategoria(sub); setSubcategoriaModalOpen(true); }}
-                                >
-                                  <Pencil className="w-3 h-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-destructive hover:text-destructive"
-                                  onClick={() => {
-                                    setItemToDelete({ type: 'subcategoria', id: sub.id, name: sub.nombre });
-                                    setDeleteConfirmOpen(true);
-                                  }}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Sectores Tab */}
-        <TabsContent value="sectores">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Sectores</CardTitle>
-                <CardDescription>Sectores industriales de aplicación</CardDescription>
-              </div>
-              <Button onClick={() => { setEditingSector(null); setSectorModalOpen(true); }}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nuevo Sector
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {loadingSectores ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {sectores?.map((sector) => (
-                    <div
-                      key={sector.id}
-                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary">{sector.id}</Badge>
-                        <div>
-                          <p className="font-medium">{sector.nombre}</p>
-                          {sector.descripcion && (
-                            <p className="text-sm text-muted-foreground line-clamp-1">
-                              {sector.descripcion}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => { setEditingSector(sector); setSectorModalOpen(true); }}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            setItemToDelete({ type: 'sector', id: sector.id, name: sector.nombre });
-                            setDeleteConfirmOpen(true);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+              <div className="space-y-3">
+                {stats.topTypes.map((type, idx) => (
+                  <div key={`${type.categoria}-${type.nombre}`} className="flex items-center gap-3">
+                    <span className="text-lg font-bold text-muted-foreground w-6">
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{type.nombre}</p>
+                      <p className="text-xs text-muted-foreground">{type.categoria}</p>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <Badge>{type.subcatsCount} subcats</Badge>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
+    );
+  }
 
-      {/* Tipo Modal */}
-      <Dialog open={tipoModalOpen} onOpenChange={setTipoModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingTipo ? 'Editar Tipo' : 'Nuevo Tipo'}</DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              tipoMutation.mutate({
-                tipo: {
-                  codigo: formData.get('codigo') as string,
-                  nombre: formData.get('nombre') as string,
-                  descripcion: formData.get('descripcion') as string || null,
-                },
-                isEdit: !!editingTipo,
-              });
-            }}
-            className="space-y-4"
-          >
-            <div>
-              <Label htmlFor="codigo">Código</Label>
-              <Input
-                id="codigo"
-                name="codigo"
-                defaultValue={editingTipo?.codigo || ''}
-                placeholder="TAP"
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="nombre">Nombre</Label>
-              <Input
-                id="nombre"
-                name="nombre"
-                defaultValue={editingTipo?.nombre || ''}
-                placeholder="Tratamiento de Agua Potable"
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="descripcion">Descripción</Label>
-              <Textarea
-                id="descripcion"
-                name="descripcion"
-                defaultValue={editingTipo?.descripcion || ''}
-                placeholder="Descripción opcional..."
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setTipoModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={tipoMutation.isPending}>
-                {tipoMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Guardar
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+  // Default: Tree view
+  return (
+    <div className="container mx-auto py-8 px-4 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <FolderTree className="h-6 w-6 text-primary" />
+            Taxonomía de 3 Niveles
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Sistema de clasificación jerárquica (v{taxonomyData.version})
+          </p>
+        </div>
+        <Button onClick={handleDownloadWord} variant="outline" className="gap-2" disabled={isExporting}>
+          <Download className="h-4 w-4" />
+          {isExporting ? 'Generando...' : 'Descargar Word'}
+        </Button>
+      </div>
 
-      {/* Subcategoria Modal */}
-      <Dialog open={subcategoriaModalOpen} onOpenChange={setSubcategoriaModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingSubcategoria ? 'Editar Subcategoría' : 'Nueva Subcategoría'}</DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              subcategoriaMutation.mutate({
-                subcategoria: {
-                  codigo: formData.get('codigo') as string,
-                  nombre: formData.get('nombre') as string,
-                  tipo_id: parseInt(formData.get('tipo_id') as string) || null,
-                },
-                isEdit: !!editingSubcategoria,
-              });
-            }}
-            className="space-y-4"
-          >
-            <div>
-              <Label htmlFor="tipo_id">Tipo</Label>
-              <Select name="tipo_id" defaultValue={editingSubcategoria?.tipo_id?.toString() || ''}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tipos?.map((tipo) => (
-                    <SelectItem key={tipo.id} value={tipo.id.toString()}>
-                      {tipo.codigo} - {tipo.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* Stats cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Categorías
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-primary">
+              {taxonomyData.counts.categorias}
             </div>
-            <div>
-              <Label htmlFor="codigo">Código</Label>
-              <Input
-                id="codigo"
-                name="codigo"
-                defaultValue={editingSubcategoria?.codigo || ''}
-                placeholder="TAP-01"
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="nombre">Nombre</Label>
-              <Input
-                id="nombre"
-                name="nombre"
-                defaultValue={editingSubcategoria?.nombre || ''}
-                placeholder="Filtración"
-                required
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setSubcategoriaModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={subcategoriaMutation.isPending}>
-                {subcategoriaMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Guardar
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+            <p className="text-xs text-muted-foreground">
+              Nivel 1 - Áreas principales
+            </p>
+          </CardContent>
+        </Card>
 
-      {/* Sector Modal */}
-      <Dialog open={sectorModalOpen} onOpenChange={setSectorModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingSector ? 'Editar Sector' : 'Nuevo Sector'}</DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              sectorMutation.mutate({
-                sector: {
-                  id: formData.get('id') as string,
-                  nombre: formData.get('nombre') as string,
-                  descripcion: formData.get('descripcion') as string || null,
-                },
-                isEdit: !!editingSector,
-              });
-            }}
-            className="space-y-4"
-          >
-            <div>
-              <Label htmlFor="id">ID/Código</Label>
-              <Input
-                id="id"
-                name="id"
-                defaultValue={editingSector?.id || ''}
-                placeholder="IND"
-                required
-                disabled={!!editingSector}
-              />
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Tipos
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-primary">
+              {taxonomyData.counts.tipos}
             </div>
-            <div>
-              <Label htmlFor="nombre">Nombre</Label>
-              <Input
-                id="nombre"
-                name="nombre"
-                defaultValue={editingSector?.nombre || ''}
-                placeholder="Industrial"
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="descripcion">Descripción</Label>
-              <Textarea
-                id="descripcion"
-                name="descripcion"
-                defaultValue={editingSector?.descripcion || ''}
-                placeholder="Descripción opcional..."
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setSectorModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={sectorMutation.isPending}>
-                {sectorMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Guardar
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+            <p className="text-xs text-muted-foreground">
+              Nivel 2 - Clasificaciones
+            </p>
+          </CardContent>
+        </Card>
 
-      {/* Delete Confirmation */}
-      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar "{itemToDelete?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer. El elemento se eliminará de la base de datos local y del Supabase externo.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteMutation.mutate()}
-              disabled={deleteMutation.isPending}
-              className="bg-destructive hover:bg-destructive/90"
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4 mr-2" />
-              )}
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="flex items-center gap-2">
+              <Tag className="h-4 w-4" />
+              Subcategorías
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-primary">
+              {taxonomyData.counts.subcategorias}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Nivel 3 - Tecnologías específicas
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tree view */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Estructura de Taxonomía</CardTitle>
+          <CardDescription>
+            Explora la jerarquía completa de categorías, tipos y subcategorías
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TaxonomyTreeView taxonomyData={taxonomyData} />
+        </CardContent>
+      </Card>
     </div>
   );
 };
