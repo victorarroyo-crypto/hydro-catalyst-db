@@ -90,105 +90,87 @@ export const TechnologyFiltersPanel: React.FC<TechnologyFiltersProps> = ({
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Nueva Taxonomía Section - DISABLED: external DB doesn't have these tables */}
-        {/* Only show if taxonomyTipos has data (meaning we're connected to internal DB with taxonomy) */}
-        {taxonomyTipos.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-              <Sparkles className="w-4 h-4" />
-              Nueva Taxonomía
-            </div>
-            
-            {/* Tipo (Nueva Taxonomía) */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Tipo</Label>
-              <Select
-                value={taxonomyFilters.tipoId === -1 ? 'unclassified' : (taxonomyFilters.tipoId?.toString() || 'all')}
-                onValueChange={(value) => {
-                  if (value === 'all') {
-                    updateTaxonomyFilter('tipoId', null);
-                  } else if (value === 'unclassified') {
-                    updateTaxonomyFilter('tipoId', -1);
-                  } else {
-                    updateTaxonomyFilter('tipoId', parseInt(value));
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos los tipos" />
-                </SelectTrigger>
-                <SelectContent className="max-h-60 bg-popover z-50">
-                  <SelectItem value="all">Todos los tipos</SelectItem>
-                  <SelectItem value="unclassified">
-                    <span className="flex items-center gap-2 text-amber-600">
-                      <span className="w-2 h-2 rounded-full bg-amber-500" />
-                      No clasificada
+        {/* Filtros por Taxonomía (basados en texto de la tabla technologies) */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+            <Sparkles className="w-4 h-4" />
+            Taxonomía
+          </div>
+          
+          {/* Tipo de tecnología */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Tipo de tecnología</Label>
+            <Select
+              value={filters.tipoTecnologia || 'all'}
+              onValueChange={(value) => updateFilter('tipoTecnologia', value === 'all' ? '' : value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Todos los tipos" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60 bg-popover z-50">
+                <SelectItem value="all">Todos los tipos</SelectItem>
+                {filterOptions.tiposTecnologia.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      <span className="truncate">{option.value}</span>
+                      <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
                     </span>
                   </SelectItem>
-                  {taxonomyTipos.map((tipo) => (
-                    <SelectItem key={tipo.id} value={tipo.id.toString()}>
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{tipo.codigo}</span>
-                        {tipo.nombre}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Subcategoría (Nueva Taxonomía) */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Subcategoría</Label>
-              <Select
-                value={taxonomyFilters.subcategoriaId?.toString() || 'all'}
-                onValueChange={(value) => updateTaxonomyFilter('subcategoriaId', value === 'all' ? null : parseInt(value))}
-                disabled={!taxonomyFilters.tipoId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={taxonomyFilters.tipoId ? "Todas las subcategorías" : "Selecciona un tipo primero"} />
-                </SelectTrigger>
-                <SelectContent className="max-h-60 bg-popover z-50">
-                  <SelectItem value="all">Todas las subcategorías</SelectItem>
-                  {filteredSubcategorias.map((sub) => (
-                    <SelectItem key={sub.id} value={sub.id.toString()}>
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{sub.codigo}</span>
-                        {sub.nombre}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Sector (Nueva Taxonomía) */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Sector</Label>
-              <Select
-                value={taxonomyFilters.sectorId || 'all'}
-                onValueChange={(value) => updateTaxonomyFilter('sectorId', value === 'all' ? null : value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos los sectores" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  <SelectItem value="all">Todos los sectores</SelectItem>
-                  {taxonomySectores.map((sector) => (
-                    <SelectItem key={sector.id} value={sector.id}>
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{sector.id}</span>
-                        {sector.nombre}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Separator />
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
+
+          {/* Subcategoría */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Subcategoría</Label>
+            <Select
+              value={filters.subcategoria || 'all'}
+              onValueChange={(value) => updateFilter('subcategoria', value === 'all' ? '' : value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Todas las subcategorías" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60 bg-popover z-50">
+                <SelectItem value="all">Todas las subcategorías</SelectItem>
+                {filterOptions.subcategorias.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      <span className="truncate">{option.value}</span>
+                      <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Sector */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Sector</Label>
+            <Select
+              value={filters.sector || 'all'}
+              onValueChange={(value) => updateFilter('sector', value === 'all' ? '' : value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Todos los sectores" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60 bg-popover z-50">
+                <SelectItem value="all">Todos los sectores</SelectItem>
+                {filterOptions.sectores.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      <span className="truncate">{option.value}</span>
+                      <Badge variant="secondary" className="text-xs ml-2">{option.count}</Badge>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+        </div>
 
         {/* TRL Slider */}
         <div className="space-y-3">
