@@ -657,13 +657,13 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
             description: 'Tu sugerencia de nueva tecnología ha sido enviada para revisión',
           });
         } else {
-          // Admin/Supervisor: Create directly
+          // Admin/Supervisor: Create directly using upsert to avoid conflicts
           const { data: insertedData, error } = await externalSupabase
             .from('technologies')
-            .insert({
+            .upsert({
               ...dataToSave,
               updated_by: user?.id,
-            })
+            }, { onConflict: 'id' })
             .select()
             .single();
 
