@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { GitMerge, FilePlus, MapPin, Factory, Percent, Loader2, ExternalLink } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 
 export interface SimilarCase {
@@ -72,7 +72,7 @@ export const SimilarCasesModal: React.FC<SimilarCasesModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const response = await supabase.functions.invoke('merge-case-studies', {
+      const response = await externalSupabase.functions.invoke('merge-case-studies', {
         body: {
           source_case_id: sourceCaseId,
           target_case_id: selectedCaseId,

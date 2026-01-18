@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { X, Upload, FileText, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { externalSupabase } from "@/integrations/supabase/externalClient";
 
 interface ComparadorModalProps {
   isOpen: boolean;
@@ -73,12 +73,12 @@ export const ComparadorModal = ({
       const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const filePath = `services/comparador/${timestamp}_${safeName}`;
       
-      const { data, error } = await supabase.storage
+      const { data, error } = await externalSupabase.storage
         .from('knowledge-docs')
         .upload(filePath, file);
       
       if (!error && data) {
-        const { data: urlData } = await supabase.storage
+        const { data: urlData } = await externalSupabase.storage
           .from('knowledge-docs')
           .createSignedUrl(filePath, 4 * 60 * 60);
         

@@ -23,7 +23,7 @@ import {
   GitMerge,
   Info,
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { cn } from '@/lib/utils';
 import { SimilarCasesModal, SimilarCase } from './SimilarCasesModal';
 
@@ -194,7 +194,7 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
   // Fetch initial job state
   useEffect(() => {
     const fetchJob = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('case_study_jobs')
         .select('id, status, current_phase, progress_percentage, error_message, quality_score, technologies_found, technologies_new, case_study_id, result_data')
         .eq('id', jobId)
@@ -224,7 +224,7 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
   useEffect(() => {
     console.log(`[ProcessingView] Subscribing to realtime updates for job ${jobId}`);
     
-    const channel = supabase
+    const channel = externalSupabase
       .channel(`case_study_job_${jobId}`)
       .on(
         'postgres_changes',
@@ -254,13 +254,13 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
 
     return () => {
       console.log(`[ProcessingView] Unsubscribing from job ${jobId}`);
-      supabase.removeChannel(channel);
+      externalSupabase.removeChannel(channel);
     };
   }, [jobId, onCompleted]);
 
   const handleSimilarDecisionMade = () => {
     // Refetch job state after decision
-    supabase
+    externalSupabase
       .from('case_study_jobs')
       .select('id, status, current_phase, progress_percentage, error_message, quality_score, technologies_found, technologies_new, case_study_id, result_data')
       .eq('id', jobId)

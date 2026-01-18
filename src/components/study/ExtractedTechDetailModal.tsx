@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Database, ExternalLink } from 'lucide-react';
 import { UnifiedTechDetailContent } from '@/components/tech/UnifiedTechDetailContent';
@@ -160,7 +160,7 @@ export default function ExtractedTechDetailModal({
     queryKey: ['linked-technology', tech.existing_technology_id],
     queryFn: async () => {
       if (!tech.existing_technology_id) return null;
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technologies')
         .select('*')
         .eq('id', tech.existing_technology_id)
@@ -176,7 +176,7 @@ export default function ExtractedTechDetailModal({
     queryKey: ['technology-tipos', tech.existing_technology_id],
     queryFn: async () => {
       if (!tech.existing_technology_id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_tipos')
         .select('tipo_id, is_primary')
         .eq('technology_id', tech.existing_technology_id);
@@ -191,7 +191,7 @@ export default function ExtractedTechDetailModal({
     queryKey: ['technology-subcategorias', tech.existing_technology_id],
     queryFn: async () => {
       if (!tech.existing_technology_id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('technology_subcategorias')
         .select('subcategoria_id, is_primary')
         .eq('technology_id', tech.existing_technology_id);
@@ -276,7 +276,7 @@ export default function ExtractedTechDetailModal({
     const primaryTipoId = selectedTipos.find(t => t.is_primary)?.tipo_id || null;
     const primarySubcategoriaId = selectedSubcategorias.find(s => s.is_primary)?.subcategoria_id || null;
     
-    const { error } = await supabase
+    const { error } = await externalSupabase
       .from('study_longlist')
       .update({
         technology_name: editData.technology_name,
@@ -352,7 +352,7 @@ export default function ExtractedTechDetailModal({
     const primaryTipoId = selectedTipos.find(t => t.is_primary)?.tipo_id || null;
     const primarySubcategoriaId = selectedSubcategorias.find(s => s.is_primary)?.subcategoria_id || null;
 
-    const { data: insertedTech, error } = await supabase
+    const { data: insertedTech, error } = await externalSupabase
       .from('technologies')
       .insert({
         'Nombre de la tecnología': dataToSend.technology_name,
@@ -394,7 +394,7 @@ export default function ExtractedTechDetailModal({
 
     // Create M:N relationships
     if (selectedTipos.length > 0) {
-      await supabase.from('technology_tipos').insert(
+      await externalSupabase.from('technology_tipos').insert(
         selectedTipos.map(t => ({
           technology_id: insertedTech.id,
           tipo_id: t.tipo_id,
@@ -403,7 +403,7 @@ export default function ExtractedTechDetailModal({
       );
     }
     if (selectedSubcategorias.length > 0) {
-      await supabase.from('technology_subcategorias').insert(
+      await externalSupabase.from('technology_subcategorias').insert(
         selectedSubcategorias.map(s => ({
           technology_id: insertedTech.id,
           subcategoria_id: s.subcategoria_id,
@@ -413,7 +413,7 @@ export default function ExtractedTechDetailModal({
     }
 
     // Link longlist entry
-    await supabase
+    await externalSupabase
       .from('study_longlist')
       .update({
         existing_technology_id: insertedTech.id,
@@ -458,7 +458,7 @@ export default function ExtractedTechDetailModal({
     
     // Save to DB
     setIsSaving(true);
-    const { error } = await supabase
+    const { error } = await externalSupabase
       .from('study_longlist')
       .update({
         brief_description: updatedData.description,

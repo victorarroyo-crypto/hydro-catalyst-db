@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,9 +18,9 @@ export const ExportDataSection: React.FC = () => {
     try {
       // Fetch user's data
       const [profileData, favoritesData, projectsData] = await Promise.all([
-        supabase.from('profiles').select('*').eq('user_id', user.id).single(),
-        supabase.from('user_favorites').select('*, technologies(*)').eq('user_id', user.id),
-        supabase.from('projects').select('*').eq('created_by', user.id),
+        externalSupabase.from('profiles').select('*').eq('user_id', user.id).single(),
+        externalSupabase.from('user_favorites').select('*, technologies(*)').eq('user_id', user.id),
+        externalSupabase.from('projects').select('*').eq('created_by', user.id),
       ]);
 
       const exportData = {
@@ -47,7 +47,7 @@ export const ExportDataSection: React.FC = () => {
       URL.revokeObjectURL(url);
 
       // Log the action
-      await supabase.from('audit_logs').insert({
+      await externalSupabase.from('audit_logs').insert({
         user_id: user.id,
         action: 'EXPORT_DATA',
         entity_type: 'user_data',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,7 @@ export const InviteUsersSection: React.FC = () => {
   const { data: invitations, isLoading } = useQuery({
     queryKey: ['user-invitations'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('user_invitations')
         .select('*')
         .order('created_at', { ascending: false })
@@ -68,7 +68,7 @@ export const InviteUsersSection: React.FC = () => {
 
     setIsSending(true);
     try {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('user_invitations')
         .insert({
           email,
@@ -79,7 +79,7 @@ export const InviteUsersSection: React.FC = () => {
       if (error) throw error;
 
       // Log the action
-      await supabase.from('audit_logs').insert({
+      await externalSupabase.from('audit_logs').insert({
         user_id: user?.id,
         action: 'INVITE_USER',
         entity_type: 'user_invitation',
@@ -107,7 +107,7 @@ export const InviteUsersSection: React.FC = () => {
 
   const handleDeleteInvitation = async (id: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await externalSupabase
         .from('user_invitations')
         .delete()
         .eq('id', id);
