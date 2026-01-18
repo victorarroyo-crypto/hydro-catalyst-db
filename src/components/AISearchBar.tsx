@@ -112,46 +112,42 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
     setExplanation(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('ai-search-technologies', {
-        body: { 
+      const response = await fetch('https://watertech-scouting-production.up.railway.app/api/technologies/ai-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           query: searchQuery.trim(),
-          filters: activeFilters 
-        }
+          top_k: 20,
+          min_trl: activeFilters?.trlMin || null,
+          sector: activeFilters?.sectorId || activeFilters?.sector || null,
+          similarity_threshold: 0.4
+        })
       });
 
-      // Handle HTTP-level errors from invoke (e.g., network issues)
-      if (error) {
-        throw new Error(error.message);
-      }
+      // Handle HTTP errors
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errMsg = errorData.error || `Error ${response.status}`;
 
-      // Handle application-level errors returned in the response body
-      if (data.error) {
-        // Detect specific status codes via error message content
-        const errMsg: string = data.error;
-
-        if (errMsg.includes('demasiado amplia') || errMsg.toLowerCase().includes('context')) {
-          // 400 - context too long
-          toast({
-            title: 'Búsqueda demasiado amplia',
-            description: 'Prueba añadir más palabras clave: sector, aplicación, TRL o proveedor para afinar la búsqueda.',
-            variant: 'destructive',
-          });
-        } else if (errMsg.includes('Límite de tasa') || errMsg.includes('rate')) {
-          // 429 - rate limit
+        if (response.status === 429) {
           toast({
             title: 'Demasiadas solicitudes',
             description: 'Has realizado muchas búsquedas seguidas. Espera unos segundos e inténtalo de nuevo.',
             variant: 'destructive',
           });
-        } else if (errMsg.includes('pago') || errMsg.includes('payment') || errMsg.includes('402')) {
-          // 402 - payment required
+        } else if (response.status === 402) {
           toast({
             title: 'Créditos agotados',
             description: 'Se requiere recargar créditos de IA. Contacta al administrador.',
             variant: 'destructive',
           });
+        } else if (response.status === 400) {
+          toast({
+            title: 'Búsqueda demasiado amplia',
+            description: 'Prueba añadir más palabras clave: sector, aplicación, TRL o proveedor para afinar la búsqueda.',
+            variant: 'destructive',
+          });
         } else {
-          // Generic error
           toast({
             title: 'Error en búsqueda',
             description: errMsg,
@@ -163,27 +159,45 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
         return;
       }
 
-      const matchingIds = data.matching_ids || [];
-      setExplanation(data.explanation || null);
+      const data = await response.json();
+
+      // Handle application-level errors
+      if (!data.success) {
+        toast({
+          title: 'Error en búsqueda',
+          description: data.error || 'Error desconocido',
+          variant: 'destructive',
+        });
+        onResults(null);
+        return;
+      }
+
+      // Extract IDs from technologies array
+      const matchingIds = data.technologies?.map((t: { id: string }) => t.id) || [];
+      const explanationText = matchingIds.length > 0 
+        ? `Búsqueda semántica: ${data.total} resultados ordenados por relevancia`
+        : 'No se encontraron tecnologías similares';
+      
+      setExplanation(explanationText);
       
       if (matchingIds.length === 0) {
         toast({
           title: 'Sin resultados',
-          description: data.explanation || 'No se encontraron tecnologías que coincidan con tu búsqueda. Intenta con términos más generales o sinónimos.',
+          description: 'No se encontraron tecnologías que coincidan con tu búsqueda. Intenta con términos más generales o sinónimos.',
         });
       } else {
         toast({
           title: `${matchingIds.length} tecnología${matchingIds.length > 1 ? 's' : ''} encontrada${matchingIds.length > 1 ? 's' : ''}`,
-          description: data.explanation,
+          description: explanationText,
         });
       }
 
-      onResults(matchingIds, data.explanation);
+      onResults(matchingIds, explanationText);
     } catch (error) {
       console.error('AI search error:', error);
       toast({
         title: 'Error de conexión',
-        description: 'No se pudo conectar con el servicio de IA. Verifica tu conexión e inténtalo de nuevo.',
+        description: 'No se pudo conectar con el servicio de búsqueda. Verifica tu conexión e inténtalo de nuevo.',
         variant: 'destructive',
       });
       onResults(null);
