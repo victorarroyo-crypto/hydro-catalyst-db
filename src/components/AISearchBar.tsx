@@ -117,7 +117,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: searchQuery.trim(),
-          top_k: 30,
+          top_k: 50,
           similarity_threshold: 0.4
         })
       });
