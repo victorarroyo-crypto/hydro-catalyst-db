@@ -58,18 +58,15 @@ const industrySectors = [
   'Otro',
 ];
 
-const createProject = async (data: ProjectFormData): Promise<{ id: string }> => {
-  const apiUrl = import.meta.env.VITE_API_URL;
-  if (!apiUrl) {
-    throw new Error('VITE_API_URL no está configurada');
-  }
+const API_URL = import.meta.env.VITE_API_URL || 'https://watertech-scouting-production.up.railway.app';
 
+const createProject = async (data: ProjectFormData): Promise<{ id: string }> => {
   const payload = {
     ...data,
     plant_capacity_m3_day: data.plant_capacity_m3_day === '' ? null : data.plant_capacity_m3_day,
   };
 
-  const response = await fetch(`${apiUrl}/api/projects`, {
+  const response = await fetch(`${API_URL}/api/projects`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
