@@ -17,11 +17,13 @@ import { API_URL } from '@/lib/api';
 
 interface ConsultoriaProject {
   id: string;
-  nombre: string;
-  cliente: string;
-  planta: string;
+  name: string;
+  client_name: string | null;
+  plant_name: string | null;
+  plant_location: string | null;
   status: 'draft' | 'active' | 'in_progress' | 'completed';
-  progreso: number;
+  progress_percentage: number;
+  industry_sector: string | null;
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive'; className: string }> = {
@@ -38,7 +40,8 @@ const fetchProjects = async (): Promise<ConsultoriaProject[]> => {
   }
   const data = await response.json();
   // Handle both array responses and { data: [...] } responses
-  return Array.isArray(data) ? data : (data?.data ?? data?.projects ?? []);
+  const projects = Array.isArray(data) ? data : (data?.data ?? data?.projects ?? []);
+  return projects;
 };
 
 export default function ConsultoriaList() {
@@ -149,7 +152,7 @@ export default function ConsultoriaList() {
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-lg line-clamp-2">{project.nombre}</CardTitle>
+                  <CardTitle className="text-lg line-clamp-2">{project.name}</CardTitle>
                   {getStatusBadge(project.status)}
                 </div>
               </CardHeader>
@@ -157,20 +160,20 @@ export default function ConsultoriaList() {
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Building2 className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{project.cliente || 'Sin cliente'}</span>
+                    <span className="truncate">{project.client_name || 'Sin cliente'}</span>
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{project.planta || 'Sin planta'}</span>
+                    <span className="truncate">{project.plant_name || project.plant_location || 'Sin planta'}</span>
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Progreso</span>
-                    <span className="font-medium text-foreground">{project.progreso}%</span>
+                    <span className="font-medium text-foreground">{project.progress_percentage ?? 0}%</span>
                   </div>
-                  <Progress value={project.progreso} className="h-2" />
+                  <Progress value={project.progress_percentage ?? 0} className="h-2" />
                 </div>
               </CardContent>
             </Card>
