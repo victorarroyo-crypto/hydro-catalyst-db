@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -17,8 +17,20 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  FileDown
+  FileDown,
+  BookPlus,
+  BookCheck
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +47,7 @@ interface ProjectData {
   plant_name: string | null;
   status: string;
   progress_percentage: number;
+  published_to_kb?: boolean;
 }
 
 interface StatsData {
@@ -103,7 +116,8 @@ const fetchDashboard = async (id: string): Promise<DashboardData> => {
       client_name: project.client_name || null,
       plant_name: project.plant_name || null,
       status: project.status || 'draft',
-      progress_percentage: project.progress_percentage || 0
+      progress_percentage: project.progress_percentage || 0,
+      published_to_kb: project.published_to_kb || false,
     },
     stats: {
       documents_count: dashboardData.findings_count || 0,
@@ -160,14 +174,25 @@ const ConsultoriaDetalle: React.FC = () => {
   // Workflow progress state
   const [runningWorkflowId, setRunningWorkflowId] = useState<string | null>(null);
   const [showProgress, setShowProgress] = useState(false);
-  
   const [isStartingDiagnosis, setIsStartingDiagnosis] = useState(false);
+
+  // Publish to KB state
+  const [showPublishDialog, setShowPublishDialog] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isPublishedToKB, setIsPublishedToKB] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['consultoria-dashboard', id],
     queryFn: () => fetchDashboard(id!),
     enabled: !!id,
   });
+
+  // Update published state when data loads
+  useEffect(() => {
+    if (data?.project) {
+      setIsPublishedToKB(data.project.published_to_kb || false);
+    }
+  }, [data?.project]);
 
   const handleStartDiagnosis = async () => {
     if (!id) return;
@@ -212,6 +237,44 @@ const ConsultoriaDetalle: React.FC = () => {
     });
   };
 
+  const handlePublishToKB = async () => {
+    if (!id) return;
+    
+    setIsPublishing(true);
+    try {
+      const response = await fetch(`${API_URL}/api/projects/${id}/publish-to-kb`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setIsPublishedToKB(true);
+        setShowPublishDialog(false);
+        toast({
+          title: 'Publicado correctamente',
+          description: `Caso de estudio creado con ID: ${result.case_study_id}`,
+        });
+        queryClient.invalidateQueries({ queryKey: ['consultoria-dashboard', id] });
+      } else {
+        toast({
+          title: 'Error al publicar',
+          description: result.detail || 'No se pudo publicar a la base de conocimiento',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Publish to KB error:', error);
+      toast({
+        title: 'Error de conexión',
+        description: 'No se pudo conectar con el servidor',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPublishing(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -272,9 +335,15 @@ const ConsultoriaDetalle: React.FC = () => {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold">{project.name}</h1>
               {getStatusBadge(project.status)}
+              {isPublishedToKB && (
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  <BookCheck className="h-3 w-3 mr-1" />
+                  En Base de Conocimiento
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
               {project.client_name && (
@@ -291,7 +360,7 @@ const ConsultoriaDetalle: React.FC = () => {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               variant="outline"
               onClick={() => navigate(`/consultoria/${id}/documentos`)}
@@ -327,6 +396,35 @@ const ConsultoriaDetalle: React.FC = () => {
             >
               <FileDown className="h-4 w-4 mr-2" />
               Exportar PDF
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowPublishDialog(true)}
+              disabled={
+                !data?.stats || 
+                (data.stats.opportunities_count === 0 && data.stats.critical_risks === 0) || 
+                isPublishedToKB ||
+                isPublishing
+              }
+              title={
+                isPublishedToKB
+                  ? "Este proyecto ya está publicado en la base de conocimiento"
+                  : (data?.stats?.opportunities_count === 0 && data?.stats?.critical_risks === 0)
+                    ? "Ejecuta un diagnóstico primero para poder publicar"
+                    : "Publicar hallazgos a la base de conocimiento global"
+              }
+            >
+              {isPublishedToKB ? (
+                <>
+                  <BookCheck className="h-4 w-4 mr-2" />
+                  Publicado en KB
+                </>
+              ) : (
+                <>
+                  <BookPlus className="h-4 w-4 mr-2" />
+                  Publicar a KB
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -451,6 +549,62 @@ const ConsultoriaDetalle: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Publish to KB Dialog */}
+      <AlertDialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <BookPlus className="h-5 w-5 text-primary" />
+              Publicar a Base de Conocimiento
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p>
+                  Esta acción compilará todos los hallazgos del proyecto en un caso de estudio
+                  y lo añadirá a la base de conocimiento global.
+                </p>
+                
+                <div className="bg-muted p-3 rounded-md text-sm">
+                  <p className="font-medium mb-2">El caso de estudio incluirá:</p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                    <li>Resumen ejecutivo del proyecto</li>
+                    <li>Hallazgos y oportunidades identificadas</li>
+                    <li>Tecnologías recomendadas</li>
+                    <li>Métricas de ahorro y ROI</li>
+                    <li>Lecciones aprendidas</li>
+                  </ul>
+                </div>
+                
+                <p className="text-amber-600 text-sm flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  Una vez publicado, el caso de estudio será visible para futuros análisis
+                  de otros proyectos del mismo sector.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPublishing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handlePublishToKB}
+              disabled={isPublishing}
+            >
+              {isPublishing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Publicando...
+                </>
+              ) : (
+                <>
+                  <BookPlus className="h-4 w-4 mr-2" />
+                  Publicar
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
