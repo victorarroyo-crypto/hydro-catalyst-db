@@ -30,6 +30,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { API_URL } from '@/lib/api';
+import {
   ArrowLeft,
   Calendar,
   User,
@@ -102,6 +109,7 @@ const ProjectDetail: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTechnology, setSelectedTechnology] = useState<any>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
@@ -109,6 +117,58 @@ const ProjectDetail: React.FC = () => {
     target_date: '',
     notes: '',
   });
+
+  // Export report as DOCX
+  const exportDocx = async () => {
+    if (!project) return;
+    
+    setIsExporting(true);
+    try {
+      const response = await fetch(`${API_URL}/api/projects/${id}/report/docx`);
+      
+      if (!response.ok) {
+        if (response.status === 400) {
+          toast({
+            title: 'Datos insuficientes',
+            description: 'El proyecto no tiene suficiente información para generar el informe.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        throw new Error('Error al generar el informe');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project.name.replace(/\s+/g, '_')}_informe.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({ title: 'Informe DOCX descargado' });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: 'Error al exportar',
+        description: 'No se pudo generar el informe. Inténtalo de nuevo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Export report as PDF (placeholder - opens print dialog)
+  const exportPdf = () => {
+    toast({
+      title: 'Exportar PDF',
+      description: 'Use Ctrl+P o Cmd+P para imprimir/guardar como PDF.',
+    });
+    window.print();
+  };
 
   // Fetch project
   const { data: project, isLoading: loadingProject } = useQuery({
@@ -363,10 +423,34 @@ const ProjectDetail: React.FC = () => {
             <p className="text-muted-foreground mt-2 max-w-2xl">{project.description}</p>
           )}
         </div>
-        <Button onClick={openEditModal}>
-          <Edit className="w-4 h-4 mr-2" />
-          Editar
-        </Button>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={isExporting}>
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <FileText className="w-4 h-4 mr-2" />
+                )}
+                Exportar Informe
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportDocx} disabled={isExporting}>
+                <FileText className="w-4 h-4 mr-2" />
+                DOCX (Word)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportPdf}>
+                <Download className="w-4 h-4 mr-2" />
+                PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={openEditModal}>
+            <Edit className="w-4 h-4 mr-2" />
+            Editar
+          </Button>
+        </div>
       </div>
 
       {/* Project Info Cards */}
