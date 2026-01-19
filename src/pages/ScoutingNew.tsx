@@ -58,6 +58,7 @@ const ScoutingNew = () => {
   const [trlMin, setTrlMin] = useState('none');
   const [instructions, setInstructions] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // LLM Models from Railway
   const { data: llmData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useLLMModels();
@@ -145,9 +146,15 @@ const ScoutingNew = () => {
         toast.error(`Error: ${errorMessage}`, { id: 'scouting-start' });
       }
     },
+    onSettled: () => {
+      setIsSubmitting(false);
+    },
   });
 
   const handleStartScouting = () => {
+    // Prevenir doble-clic inmediatamente
+    if (isSubmitting || scoutingMutation.isPending) return;
+    
     const keywordList = keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
     if (keywordList.length === 0) {
       toast.error('Introduce al menos una keyword');
@@ -157,6 +164,9 @@ const ScoutingNew = () => {
       toast.error('Selecciona un modelo LLM');
       return;
     }
+    
+    // Bloquear ANTES de la mutación
+    setIsSubmitting(true);
     
     scoutingMutation.mutate({
       config: {
@@ -305,9 +315,9 @@ const ScoutingNew = () => {
             size="lg" 
             className="w-full"
             onClick={handleStartScouting}
-            disabled={scoutingMutation.isPending || llmModelsLoading || !!llmModelsError}
+            disabled={isSubmitting || scoutingMutation.isPending || llmModelsLoading || !!llmModelsError}
           >
-            {scoutingMutation.isPending ? (
+            {(isSubmitting || scoutingMutation.isPending) ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                 Iniciando scouting...
