@@ -203,9 +203,10 @@ const ConsultoriaDetalle: React.FC = () => {
     );
   }
 
-  if (!data) return null;
+  if (!data || !data.project) return null;
 
-  const { project, stats, water_balance, recent_workflows } = data;
+  const { project, stats, water_balance, recent_workflows = [] } = data;
+  const safeStats = stats || { documents_count: 0, opportunities_count: 0, critical_risks: 0, total_potential_savings: 0 };
 
   return (
     <div className="space-y-6">
@@ -271,7 +272,7 @@ const ConsultoriaDetalle: React.FC = () => {
             <Button
               variant="outline"
               onClick={() => window.open(`${API_URL}/api/projects/${id}/report/pdf`, '_blank')}
-              disabled={!stats || (stats.opportunities_count === 0 && stats.critical_risks === 0)}
+              disabled={safeStats.opportunities_count === 0 && safeStats.critical_risks === 0}
             >
               <FileDown className="h-4 w-4 mr-2" />
               Exportar PDF
@@ -293,27 +294,27 @@ const ConsultoriaDetalle: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Documentos"
-          value={stats.documents_count}
+          value={safeStats.documents_count}
           icon={FileText}
           variant="default"
         />
         <StatsCard
           title="Oportunidades"
-          value={stats.opportunities_count}
+          value={safeStats.opportunities_count}
           icon={Lightbulb}
           variant="primary"
           className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-green-500/10"
         />
         <StatsCard
           title="Riesgos Críticos"
-          value={stats.critical_risks}
+          value={safeStats.critical_risks}
           icon={AlertTriangle}
           variant="default"
           className="border-red-500/20 bg-gradient-to-br from-red-500/5 to-red-500/10"
         />
         <StatsCard
           title="Ahorro Potencial"
-          value={`€${stats.total_potential_savings.toLocaleString('es-ES')}/año`}
+          value={`€${(safeStats.total_potential_savings || 0).toLocaleString('es-ES')}/año`}
           icon={Euro}
           variant="default"
           className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-purple-500/10"
