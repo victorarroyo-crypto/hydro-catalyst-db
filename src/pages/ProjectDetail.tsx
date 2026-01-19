@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TRLBadge } from '@/components/TRLBadge';
 import { Textarea } from '@/components/ui/textarea';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
+import { ScenariosSection } from '@/components/scenarios/ScenariosSection';
 import {
   Dialog,
   DialogContent,
@@ -418,6 +419,10 @@ const ProjectDetail: React.FC = () => {
             <Building2 className="w-4 h-4" />
             Tecnologías ({projectTechnologies?.length || 0})
           </TabsTrigger>
+          <TabsTrigger value="scenarios" className="gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Escenarios
+          </TabsTrigger>
           <TabsTrigger value="notes" className="gap-2">
             <FileText className="w-4 h-4" />
             Notas
@@ -516,6 +521,10 @@ const ProjectDetail: React.FC = () => {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="scenarios" className="mt-6">
+          <ScenariosSection projectId={id!} />
         </TabsContent>
 
         <TabsContent value="notes" className="mt-6">
