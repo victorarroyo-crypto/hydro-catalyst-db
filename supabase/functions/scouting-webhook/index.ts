@@ -11,12 +11,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify webhook secret
     const webhookSecret = req.headers.get('x-webhook-secret')
     const expectedSecret = Deno.env.get('SCOUTING_WEBHOOK_SECRET')
     
     if (webhookSecret !== expectedSecret) {
-      console.error('Invalid webhook secret')
+      console.error('[WEBHOOK] Invalid secret')
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -33,65 +32,79 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // ALWAYS upsert session first to handle FK constraint
+    // 1. SIEMPRE hacer UPSERT de la sesión primero
     const sessionData: Record<string, unknown> = {
       session_id: session_id,
       updated_at: new Date().toISOString(),
       last_heartbeat: new Date().toISOString()
     }
 
-    // Update session based on event type
-    if (event === 'session_start') {
-      sessionData.status = 'running'
-      sessionData.current_phase = data?.phase || 'init'
-      sessionData.started_at = data?.started_at || new Date().toISOString()
-      sessionData.config = data?.config || {}
-    } else if (event === 'progress') {
-      sessionData.current_phase = data?.phase
-      sessionData.progress_percentage = data?.progress_percentage || 0
-      if (data?.metrics) {
-        sessionData.technologies_found = data.metrics.technologies_found || 0
-        sessionData.technologies_approved = data.metrics.technologies_approved || 0
-        sessionData.technologies_discarded = data.metrics.technologies_discarded || 0
-        sessionData.sites_examined = data.metrics.sources_checked || 0
-      }
-    } else if (event === 'activity' || event === 'site_start' || event === 'site_complete') {
-      sessionData.current_activity = data?.message
-      sessionData.current_site = data?.site
-    } else if (event === 'session_complete') {
-      sessionData.status = data?.status || 'completed'
-      sessionData.completed_at = data?.completed_at || new Date().toISOString()
-      sessionData.summary = data?.summary || {}
-      sessionData.current_phase = 'completed'
-    } else if (event === 'error') {
-      if (data?.critical) {
-        sessionData.status = 'failed'
-        sessionData.error_message = data?.message
-      }
+    // Actualizar campos según el tipo de evento
+    switch (event) {
+      case 'session_start':
+        sessionData.status = 'running'
+        sessionData.current_phase = data?.phase || 'init'
+        sessionData.started_at = data?.started_at || new Date().toISOString()
+        sessionData.config = data?.config || {}
+        sessionData.progress_percentage = 0
+        break
+        
+      case 'progress':
+        sessionData.current_phase = data?.phase
+        sessionData.progress_percentage = data?.progress_percentage || 0
+        if (data?.metrics) {
+          sessionData.technologies_found = data.metrics.technologies_found || 0
+          sessionData.technologies_approved = data.metrics.technologies_approved || 0
+          sessionData.technologies_discarded = data.metrics.technologies_discarded || 0
+          sessionData.sites_examined = data.metrics.sources_checked || 0
+        }
+        break
+        
+      case 'activity':
+      case 'site_start':
+      case 'site_complete':
+        sessionData.current_activity = data?.message
+        sessionData.current_site = data?.site
+        break
+        
+      case 'session_complete':
+        sessionData.status = data?.status || 'completed'
+        sessionData.completed_at = data?.completed_at || new Date().toISOString()
+        sessionData.summary = data?.summary || {}
+        sessionData.current_phase = 'completed'
+        sessionData.progress_percentage = 100
+        break
+        
+      case 'error':
+        if (data?.critical) {
+          sessionData.status = 'failed'
+          sessionData.error_message = data?.message
+        }
+        break
     }
 
-    // Upsert session FIRST
+    // UPSERT sesión
     const { error: sessionError } = await supabase
       .from('scouting_sessions')
       .upsert(sessionData, { onConflict: 'session_id' })
 
     if (sessionError) {
       console.error('[WEBHOOK] Session upsert error:', sessionError)
+    } else {
+      console.log(`[WEBHOOK] Session upserted: ${session_id}`)
     }
 
-    // THEN insert log entry
-    const logEntry = {
-      session_id: session_id,
-      timestamp: timestamp || new Date().toISOString(),
-      level: event === 'error' ? 'error' : (event === 'warning' ? 'warn' : 'info'),
-      phase: data?.phase || sessionData.current_phase,
-      message: data?.message || event,
-      details: data || {}
-    }
-
+    // 2. LUEGO insertar log
     const { error: logError } = await supabase
       .from('scouting_session_logs')
-      .insert(logEntry)
+      .insert({
+        session_id: session_id,
+        timestamp: timestamp || new Date().toISOString(),
+        level: event === 'error' ? 'error' : 'info',
+        phase: data?.phase || sessionData.current_phase,
+        message: data?.message || event,
+        details: data || {}
+      })
 
     if (logError) {
       console.error('[WEBHOOK] Log insert error:', logError)
