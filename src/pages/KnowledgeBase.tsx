@@ -691,43 +691,53 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Source mutations
-  // Source mutations (using Lovable Cloud DB)
+  // Source mutations (dual-write: Lovable Cloud DB + External DB for scouting agents)
   const saveSourceMutation = useMutation({
     mutationFn: async (data: typeof sourceForm) => {
+      const sourceData = {
+        nombre: data.nombre,
+        url: data.url,
+        tipo: data.tipo || null,
+        descripcion: data.descripcion || null,
+        pais: data.pais || null,
+        sector_foco: data.sector_foco || null,
+        frecuencia_escaneo: data.frecuencia_escaneo || null,
+        calidad_score: data.calidad_score,
+        activo: data.activo,
+        notas: data.notas || null,
+      };
+
       if (editingSource) {
+        // Update in Lovable Cloud DB
         const { error } = await supabase
           .from("scouting_sources")
-          .update({
-            nombre: data.nombre,
-            url: data.url,
-            tipo: data.tipo || null,
-            descripcion: data.descripcion || null,
-            pais: data.pais || null,
-            sector_foco: data.sector_foco || null,
-            frecuencia_escaneo: data.frecuencia_escaneo || null,
-            calidad_score: data.calidad_score,
-            activo: data.activo,
-            notas: data.notas || null,
-          })
+          .update(sourceData)
           .eq("id", editingSource.id);
         if (error) throw error;
-      } else {
-        const { error } = await supabase
+
+        // Sync to External DB (for scouting agents)
+        const { error: externalError } = await externalSupabase
           .from("scouting_sources")
-          .insert({
-            nombre: data.nombre,
-            url: data.url,
-            tipo: data.tipo || null,
-            descripcion: data.descripcion || null,
-            pais: data.pais || null,
-            sector_foco: data.sector_foco || null,
-            frecuencia_escaneo: data.frecuencia_escaneo || null,
-            calidad_score: data.calidad_score,
-            activo: data.activo,
-            notas: data.notas || null,
-          });
+          .upsert({ id: editingSource.id, ...sourceData }, { onConflict: 'id' });
+        if (externalError) {
+          console.error('[scouting_sources] Error syncing UPDATE to external DB:', externalError);
+        }
+      } else {
+        // Insert in Lovable Cloud DB and get the new ID
+        const { data: inserted, error } = await supabase
+          .from("scouting_sources")
+          .insert(sourceData)
+          .select('id')
+          .single();
         if (error) throw error;
+
+        // Sync to External DB (for scouting agents)
+        const { error: externalError } = await externalSupabase
+          .from("scouting_sources")
+          .upsert({ id: inserted.id, ...sourceData }, { onConflict: 'id' });
+        if (externalError) {
+          console.error('[scouting_sources] Error syncing INSERT to external DB:', externalError);
+        }
       }
     },
     onSuccess: () => {
@@ -745,11 +755,21 @@ export default function KnowledgeBase() {
 
   const deleteSourceMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Delete from Lovable Cloud DB
       const { error } = await supabase
         .from("scouting_sources")
         .delete()
         .eq("id", id);
       if (error) throw error;
+
+      // Sync delete to External DB (for scouting agents)
+      const { error: externalError } = await externalSupabase
+        .from("scouting_sources")
+        .delete()
+        .eq("id", id);
+      if (externalError) {
+        console.error('[scouting_sources] Error syncing DELETE to external DB:', externalError);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scouting-sources"] });
