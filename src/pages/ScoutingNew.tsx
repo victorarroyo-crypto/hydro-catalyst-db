@@ -51,6 +51,16 @@ const runScouting = async (params: {
   });
 };
 
+const cancelScouting = async (jobId: string) => {
+  // Railway puede exponer cancelación por path o por body; intentamos ambos.
+  try {
+    await proxyFetch(`/api/scouting/cancel/${jobId}`, 'POST', {});
+    return;
+  } catch {
+    await proxyFetch('/api/scouting/cancel', 'POST', { job_id: jobId });
+  }
+};
+
 const ScoutingNew = () => {
   const navigate = useNavigate();
   const [keywords, setKeywords] = useState('');
@@ -59,6 +69,8 @@ const ScoutingNew = () => {
   const [instructions, setInstructions] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
 
   // LLM Models from Railway
   const { data: llmData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useLLMModels();
@@ -77,12 +89,14 @@ const ScoutingNew = () => {
   const scoutingMutation = useMutation({
     mutationFn: runScouting,
     onMutate: () => {
+      setActiveJobId(null);
+      setCooldownSeconds(null);
       toast.loading('Iniciando scouting...', { id: 'scouting-start' });
     },
     onSuccess: (data) => {
       const jobId = data.job_id;
       toast.success(`Scouting iniciado (Job ID: ${jobId?.slice(0, 8)}...)`, { id: 'scouting-start' });
-      
+
       // NO llamamos a scouting-start-session aquí porque Railway ya crea la sesión
       // via webhook. Llamarlo de nuevo causa entradas duplicadas en scouting_sessions.
 
@@ -97,29 +111,51 @@ const ScoutingNew = () => {
       const errorMessage = error.message || '';
       if (errorMessage.includes('409') || errorMessage.toLowerCase().includes('ya hay un scouting')) {
         const detailsAny = (error as any)?.details;
-        const cooldownSeconds = detailsAny?.cooldown_seconds;
-        const jobId = detailsAny?.active_job_id || detailsAny?.job_id;
-        const specificMessage = detailsAny?.message;
+        const cooldown = detailsAny?.cooldown_seconds as number | undefined;
+        const jobId = (detailsAny?.active_job_id || detailsAny?.job_id) as string | undefined;
+        const specificMessage = detailsAny?.message as string | undefined;
 
-        let toastMessage = 'Ya hay un scouting en ejecución. Revisa el Monitor.';
-        if (cooldownSeconds) {
-          toastMessage = `Espera ${cooldownSeconds} segundos antes de lanzar otro scouting.`;
+        if (jobId) setActiveJobId(jobId);
+        if (typeof cooldown === 'number') setCooldownSeconds(cooldown);
+
+        let toastMessage = 'Ya hay un scouting en ejecución.';
+        if (cooldown) {
+          toastMessage = `Ya hay un scouting en ejecución. Espera ${cooldown} segundos o cancélalo.`;
         } else if (jobId) {
-          toastMessage = `Scouting activo (${jobId.slice(0, 8)}...). Revisa el Monitor.`;
+          toastMessage = `Scouting activo (${jobId.slice(0, 8)}...). Puedes cancelarlo o ir al Monitor.`;
         } else if (specificMessage) {
           toastMessage = specificMessage;
         }
 
-        toast.error(toastMessage, { id: 'scouting-start', duration: 8000 });
-        navigate('/scouting-monitor');
-      } else if (errorMessage.includes('429')) {
-        toast.error('Límite semanal alcanzado.', { id: 'scouting-start', duration: 8000 });
-      } else {
-        toast.error(`Error: ${errorMessage}`, { id: 'scouting-start' });
+        toast.error(toastMessage, { id: 'scouting-start', duration: 9000 });
+        return;
       }
+
+      if (errorMessage.includes('429')) {
+        toast.error('Límite semanal alcanzado.', { id: 'scouting-start', duration: 8000 });
+        return;
+      }
+
+      toast.error(`Error: ${errorMessage}`, { id: 'scouting-start' });
     },
     onSettled: () => {
       setIsSubmitting(false);
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: cancelScouting,
+    onMutate: () => {
+      toast.loading('Cancelando scouting...', { id: 'scouting-cancel' });
+    },
+    onSuccess: () => {
+      toast.success('Scouting cancelado', { id: 'scouting-cancel' });
+      setActiveJobId(null);
+      setCooldownSeconds(null);
+      // El monitor mostrará la transición; no asumimos timings
+    },
+    onError: (error: Error) => {
+      toast.error('No se pudo cancelar', { id: 'scouting-cancel', description: error.message });
     },
   });
 
@@ -153,6 +189,39 @@ const ScoutingNew = () => {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
+      {activeJobId && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Ya hay un scouting en ejecución</CardTitle>
+            <CardDescription>
+              {cooldownSeconds
+                ? `El backend indica un cooldown de ${cooldownSeconds} segundos.`
+                : 'Puedes ir al Monitor para ver el progreso o cancelar el job activo.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-3">
+            <Button variant="outline" onClick={() => navigate('/scouting-monitor')} className="w-full sm:w-auto">
+              Ver monitor
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => activeJobId && cancelMutation.mutate(activeJobId)}
+              disabled={cancelMutation.isPending}
+              className="w-full sm:w-auto"
+            >
+              {cancelMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Cancelando...
+                </>
+              ) : (
+                'Cancelar scouting activo'
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-3">
