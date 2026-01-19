@@ -832,13 +832,16 @@ export default function KnowledgeBase() {
 
       console.log('[syncAllSources] Syncing', sourcesToSync.length, 'sources to external DB');
 
-      // Upsert all sources to External DB
-      // Use ignoreDuplicates to skip sources that already exist by URL
+      // Upsert all sources to External DB using URL as unique key
+      // Remove 'id' from sources to let the external DB generate its own IDs
+      const sourcesWithoutId = sourcesToSync.map(({ id, ...rest }) => rest);
+      
+      console.log('[syncAllSources] Upserting to external DB with onConflict: url');
+      
       const { error: syncError } = await externalSupabase
         .from("scouting_sources")
-        .upsert(sourcesToSync, { 
-          onConflict: 'id',
-          ignoreDuplicates: true 
+        .upsert(sourcesWithoutId, { 
+          onConflict: 'url'
         });
 
       if (syncError) {
