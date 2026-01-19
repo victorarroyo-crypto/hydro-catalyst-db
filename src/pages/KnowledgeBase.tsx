@@ -35,7 +35,9 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
-import { getModelPricing, formatCost, estimateCostFromTotal, AI_MODELS, MODEL_PRICING } from "@/lib/aiModelPricing";
+import { getModelPricing, formatCost, estimateCostFromTotal } from "@/lib/aiModelPricing";
+import { useLLMModels, getDefaultModel, formatModelCost } from "@/hooks/useLLMModels";
+import { API_URL } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -368,7 +370,7 @@ export default function KnowledgeBase() {
   }>>([]);
   const [aiSourceExplanation, setAiSourceExplanation] = useState('');
   const [isSearchingAI, setIsSearchingAI] = useState(false);
-  const [selectedAIModel, setSelectedAIModel] = useState('google/gemini-2.5-pro');
+  const [selectedAIModel, setSelectedAIModel] = useState('');
   
   // Case studies state
   const [selectedCase, setSelectedCase] = useState<CaseStudy | null>(null);
@@ -424,6 +426,19 @@ export default function KnowledgeBase() {
       externalSupabase.removeChannel(channel); 
     };
   }, [queryClient]);
+
+  // Fetch LLM models from Railway backend
+  const { data: llmModelsData, isLoading: loadingLLMModels } = useLLMModels();
+
+  // Set default AI model when models are loaded
+  useEffect(() => {
+    if (llmModelsData && !selectedAIModel) {
+      const defaultModel = getDefaultModel(llmModelsData);
+      if (defaultModel) {
+        setSelectedAIModel(defaultModel.key);
+      }
+    }
+  }, [llmModelsData, selectedAIModel]);
 
   // Get current model for knowledge base
   const { data: modelConfig } = useQuery({
@@ -883,10 +898,15 @@ export default function KnowledgeBase() {
     saveSourceMutation.mutate(sourceForm);
   };
 
-  // AI Source Search handler
+  // AI Source Search handler - calls Railway backend
   const handleAISourceSearch = async () => {
     if (!aiSourcePrompt.trim() || aiSourcePrompt.trim().length < 5) {
       toast.error("Escribe una descripción de las fuentes que buscas (mínimo 5 caracteres)");
+      return;
+    }
+
+    if (!selectedAIModel) {
+      toast.error("Selecciona un modelo AI");
       return;
     }
 
@@ -895,8 +915,20 @@ export default function KnowledgeBase() {
     setAiSourceExplanation('');
 
     try {
-      const { data, error } = await externalSupabase.functions.invoke('search-scouting-sources', {
-        body: {
+      // Fetch existing source names to avoid duplicates
+      const { data: existingSources } = await supabase
+        .from("scouting_sources")
+        .select("nombre");
+      
+      const existingNames = existingSources?.map(s => s.nombre) || [];
+
+      // Call Railway backend endpoint
+      const response = await fetch(`${API_URL}/api/sources/discover`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           prompt: aiSourcePrompt.trim(),
           model: selectedAIModel,
           filters: {
@@ -904,21 +936,27 @@ export default function KnowledgeBase() {
             region: aiSourceFilters.region || null,
             sector: aiSourceFilters.sector || null,
           },
-        },
+          existing_sources: existingNames,
+        }),
       });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Error ${response.status}`);
+      }
 
-      if (data.error) {
-        toast.error(data.error);
+      const data = await response.json();
+
+      if (!data.success) {
+        toast.error(data.error || "Error en la búsqueda");
         return;
       }
 
       setAiSourceResults(data.sources || []);
       setAiSourceExplanation(data.explanation || '');
       
-      const newCount = data.newCount ?? data.sources?.filter((s: any) => !s.alreadyExists).length ?? 0;
-      const existingCount = data.existingCount ?? data.sources?.filter((s: any) => s.alreadyExists).length ?? 0;
+      const newCount = data.newCount ?? 0;
+      const existingCount = data.existingCount ?? 0;
       
       if (data.sources?.length > 0) {
         if (existingCount > 0) {
@@ -931,7 +969,7 @@ export default function KnowledgeBase() {
       }
     } catch (error) {
       console.error('AI search error:', error);
-      toast.error("Error al buscar fuentes con IA");
+      toast.error(error instanceof Error ? error.message : "Error al buscar fuentes con IA");
     } finally {
       setIsSearchingAI(false);
     }
@@ -3456,37 +3494,42 @@ export default function KnowledgeBase() {
                   </Tooltip>
                 </TooltipProvider>
               </Label>
-              <Select value={selectedAIModel} onValueChange={setSelectedAIModel}>
+              <Select 
+                value={selectedAIModel} 
+                onValueChange={setSelectedAIModel}
+                disabled={loadingLLMModels}
+              >
                 <SelectTrigger className="mt-1">
-                  <SelectValue />
+                  <SelectValue placeholder={loadingLLMModels ? "Cargando modelos..." : "Seleccionar modelo"} />
                 </SelectTrigger>
-                <SelectContent>
-                  {AI_MODELS.map(model => {
-                    const pricing = MODEL_PRICING[model.id];
-                    const avgCost = pricing ? ((pricing.input + pricing.output) / 2).toFixed(2) : '?';
-                    return (
-                      <SelectItem key={model.id} value={model.id}>
-                        <div className="flex items-center gap-2 w-full">
-                          <span className="font-medium">{model.name}</span>
-                          <Badge 
-                            variant="outline" 
-                            className={`text-[10px] px-1.5 py-0 ${
-                              model.tier === 'premium' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                              model.tier === 'estándar' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                              'bg-green-50 text-green-700 border-green-200'
-                            }`}
-                          >
-                            {model.tier}
+                <SelectContent className="bg-background border shadow-lg z-50">
+                  {llmModelsData?.models.map((model) => (
+                    <SelectItem key={model.key} value={model.key}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{model.name}</span>
+                        {model.is_recommended && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            Recomendado
                           </Badge>
-                          <span className="text-xs text-muted-foreground ml-auto">
-                            ~${avgCost}/1M • {model.speed}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
+                        )}
+                        {model.is_free && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-green-600 border-green-300">
+                            Gratis
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {formatModelCost(model.cost_per_query)}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              {selectedAIModel && llmModelsData && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Modelo: {llmModelsData.models.find(m => m.key === selectedAIModel)?.name}
+                </p>
+              )}
             </div>
 
             {/* Prompt */}
