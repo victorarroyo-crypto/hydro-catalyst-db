@@ -79,29 +79,12 @@ const ScoutingNew = () => {
     onMutate: () => {
       toast.loading('Iniciando scouting...', { id: 'scouting-start' });
     },
-    onSuccess: async (data) => {
+    onSuccess: (data) => {
       const jobId = data.job_id;
       toast.success(`Scouting iniciado (Job ID: ${jobId?.slice(0, 8)}...)`, { id: 'scouting-start' });
-
-      // Ensure it appears in the Monitor immediately (even if webhooks are delayed)
-      if (jobId) {
-        try {
-          await supabase.functions.invoke('scouting-start-session', {
-            body: {
-              session_id: jobId,
-              config: {
-                keywords: keywords.split(',').map(k => k.trim()).filter(Boolean),
-                tipo: tipo === 'all' ? '' : tipo,
-                trl_min: trlMin === 'none' ? null : parseInt(trlMin),
-                instructions: instructions || undefined,
-                model: selectedModel,
-              },
-            },
-          });
-        } catch {
-          // Non-blocking: monitor can still work with webhooks
-        }
-      }
+      
+      // NO llamamos a scouting-start-session aquí porque Railway ya crea la sesión
+      // via webhook. Llamarlo de nuevo causa entradas duplicadas en scouting_sessions.
 
       setKeywords('');
       setTipo('all');
@@ -110,25 +93,14 @@ const ScoutingNew = () => {
       // Navigate to monitor to see progress
       navigate('/scouting-monitor');
     },
-    onError: async (error: Error & { details?: unknown }) => {
+    onError: (error: Error & { details?: unknown }) => {
       const errorMessage = error.message || '';
       if (errorMessage.includes('409') || errorMessage.toLowerCase().includes('ya hay un scouting')) {
-        // Extract details from enhanced error response
         const detailsAny = (error as any)?.details;
-        const jobId = detailsAny?.active_job_id || detailsAny?.job_id || detailsAny?.data?.job_id;
         const cooldownSeconds = detailsAny?.cooldown_seconds;
+        const jobId = detailsAny?.active_job_id || detailsAny?.job_id;
         const specificMessage = detailsAny?.message;
 
-        // Try to ensure the active job appears in Monitor
-        if (jobId) {
-          try {
-            await supabase.functions.invoke('scouting-start-session', { body: { session_id: jobId } });
-          } catch {
-            // ignore
-          }
-        }
-
-        // Show more informative error message
         let toastMessage = 'Ya hay un scouting en ejecución. Revisa el Monitor.';
         if (cooldownSeconds) {
           toastMessage = `Espera ${cooldownSeconds} segundos antes de lanzar otro scouting.`;
