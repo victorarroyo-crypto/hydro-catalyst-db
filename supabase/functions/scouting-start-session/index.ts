@@ -6,6 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// BD Externa donde el frontend consulta
+const EXTERNAL_URL = "https://ktzhrlcvluaptixngrsh.supabase.co";
+
 type RequestBody = {
   session_id: string;
   config?: Record<string, unknown> | null;
@@ -20,11 +23,20 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const externalServiceRoleKey = Deno.env.get("EXTERNAL_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !serviceRoleKey) {
       console.error("[scouting-start-session] Missing backend credentials");
       return new Response(
         JSON.stringify({ success: false, error: "Backend not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!externalServiceRoleKey) {
+      console.error("[scouting-start-session] Missing EXTERNAL_SERVICE_ROLE_KEY");
+      return new Response(
+        JSON.stringify({ success: false, error: "External DB not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -38,13 +50,17 @@ serve(async (req) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    // Cliente para autenticación (Main DB)
+    const supabaseMain = createClient(supabaseUrl, serviceRoleKey, {
       global: {
         headers: { Authorization: authHeader },
       },
     });
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
+    // Cliente para BD Externa (donde consulta el frontend)
+    const supabaseExternal = createClient(EXTERNAL_URL, externalServiceRoleKey);
+
+    const { data: { user }, error: userError } = await supabaseMain.auth.getUser(
       authHeader.replace("Bearer ", "")
     );
 
@@ -71,9 +87,10 @@ serve(async (req) => {
     const status = body.status ?? "running";
     const now = new Date().toISOString();
 
-    console.log(`[scouting-start-session] Upserting session ${session_id} status=${status}`);
+    console.log(`[scouting-start-session] Upserting session ${session_id} to EXTERNAL DB, status=${status}`);
 
-    const { data, error } = await supabase
+    // Escribir en BD EXTERNA (donde consulta el frontend)
+    const { data, error } = await supabaseExternal
       .from("scouting_sessions")
       .upsert(
         {
@@ -91,12 +108,14 @@ serve(async (req) => {
       .single();
 
     if (error) {
-      console.error("[scouting-start-session] Upsert error", error);
+      console.error("[scouting-start-session] Upsert error to EXTERNAL DB", error);
       return new Response(
         JSON.stringify({ success: false, error: error.message, details: error }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+
+    console.log(`[scouting-start-session] Session ${session_id} created in EXTERNAL DB`);
 
     return new Response(JSON.stringify({ success: true, data }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
