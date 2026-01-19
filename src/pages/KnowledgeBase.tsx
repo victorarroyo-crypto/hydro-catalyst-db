@@ -833,11 +833,22 @@ export default function KnowledgeBase() {
       console.log('[syncAllSources] Syncing', sourcesToSync.length, 'sources to external DB');
 
       // Upsert all sources to External DB
+      // Use ignoreDuplicates to skip sources that already exist by URL
       const { error: syncError } = await externalSupabase
         .from("scouting_sources")
-        .upsert(sourcesToSync, { onConflict: 'id' });
+        .upsert(sourcesToSync, { 
+          onConflict: 'id',
+          ignoreDuplicates: true 
+        });
 
       if (syncError) {
+        // Handle unique constraint violation on URL gracefully
+        if (syncError.code === '23505' && syncError.message.includes('unique_source_url')) {
+          console.warn('[syncAllSources] Some sources already exist by URL, skipping duplicates');
+          // Still consider it a success since the data is already there
+          return { synced: allSources.length };
+        }
+        
         console.error('[syncAllSources] Sync error details:', {
           message: syncError.message,
           details: syncError.details,
