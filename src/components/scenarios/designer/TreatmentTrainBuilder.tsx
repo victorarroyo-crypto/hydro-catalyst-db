@@ -1,300 +1,350 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Plus, 
   ChevronDown, 
-  ChevronRight,
-  GripVertical,
+  ChevronUp,
+  GitBranch,
+  ArrowRight,
   Trash2,
-  Droplets,
-  ArrowRight
+  X
 } from 'lucide-react';
-import { TreatmentTrain, TechnologyConfig, TECHNOLOGY_TYPES } from '@/types/scenarioDesigner';
-import TechnologyConfigPanel from './TechnologyConfigPanel';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+
+import { TreatmentTrain } from '@/types/scenarioDesigner';
 
 interface TreatmentTrainBuilderProps {
   trains: TreatmentTrain[];
-  onChange: (trains: TreatmentTrain[]) => void;
-  isReadOnly?: boolean;
+  onTrainsChange?: (trains: TreatmentTrain[]) => void;
+  onChange?: (trains: TreatmentTrain[]) => void; // Alias for compatibility
+  onTechnologyClick?: (trainId: string, stageIndex: number) => void;
+  readOnly?: boolean;
+  isReadOnly?: boolean; // Alias for compatibility
 }
+
+const STAGE_TYPES = [
+  { value: 'MBR', label: 'MBR', color: 'bg-blue-500', description: 'Biorreactor de Membrana' },
+  { value: 'RO', label: 'Ósmosis Inversa', color: 'bg-purple-500', description: 'Eliminación de sales y contaminantes disueltos' },
+  { value: 'UF', label: 'Ultrafiltración', color: 'bg-cyan-500', description: 'Filtración por membrana 0.01-0.1 µm' },
+  { value: 'UV', label: 'UV', color: 'bg-yellow-500', description: 'Desinfección ultravioleta' },
+  { value: 'OZONE', label: 'Ozono', color: 'bg-orange-500', description: 'Oxidación avanzada con ozono' },
+  { value: 'EVAP', label: 'Evaporador', color: 'bg-red-500', description: 'Concentración por evaporación' },
+  { value: 'CRYST', label: 'Cristalizador', color: 'bg-pink-500', description: 'Recuperación de sales sólidas' },
+  { value: 'DAF', label: 'DAF', color: 'bg-emerald-500', description: 'Flotación por aire disuelto' },
+  { value: 'CHEM', label: 'Químico', color: 'bg-amber-500', description: 'Tratamiento químico' },
+  { value: 'BIO', label: 'Biológico', color: 'bg-green-500', description: 'Tratamiento biológico' },
+];
 
 const TreatmentTrainBuilder: React.FC<TreatmentTrainBuilderProps> = ({
   trains,
+  onTrainsChange,
   onChange,
+  onTechnologyClick,
+  readOnly = false,
   isReadOnly = false,
 }) => {
-  const [expandedTrains, setExpandedTrains] = useState<Set<string>>(new Set());
-  const [editingTechId, setEditingTechId] = useState<string | null>(null);
-
-  const toggleTrain = (id: string) => {
-    const newExpanded = new Set(expandedTrains);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedTrains(newExpanded);
+  const [expandedTrain, setExpandedTrain] = useState<string | null>(null);
+  
+  // Support both prop names
+  const isDisabled = readOnly || isReadOnly;
+  const handleChange = (updated: TreatmentTrain[]) => {
+    onTrainsChange?.(updated);
+    onChange?.(updated);
   };
 
   const addTrain = () => {
     const newTrain: TreatmentTrain = {
-      id: `train-${Date.now()}`,
+      id: `TT-${Date.now()}`,
       name: `Tren ${trains.length + 1}`,
-      description: '',
-      order: trains.length,
-      capacity_m3_day: 1000,
-      source_type: 'wastewater',
-      target_use: 'riego',
-      technologies: [],
+      stages: [],
+      inlet_stream: 'Agua Residual',
+      outlet_quality: 'Agua Tratada',
+      design_capacity_m3_day: 0,
     };
-    onChange([...trains, newTrain]);
+    handleChange([...trains, newTrain]);
+    setExpandedTrain(newTrain.id);
   };
 
-  const updateTrain = (id: string, updates: Partial<TreatmentTrain>) => {
-    onChange(trains.map(t => t.id === id ? { ...t, ...updates } : t));
-  };
-
-  const deleteTrain = (id: string) => {
-    onChange(trains.filter(t => t.id !== id));
-  };
-
-  const addTechnology = (trainId: string) => {
-    const train = trains.find(t => t.id === trainId);
-    if (!train) return;
-
-    const newTech: TechnologyConfig = {
-      id: `tech-${Date.now()}`,
-      technology_type: 'UF',
-      name: 'Ultrafiltración',
-      recovery_rate: 95,
-      removal_efficiency: { TSS: 99, Turbidity: 99 },
-      energy_consumption: 0.3,
-      chemical_consumption: {},
-      design_flow: train.capacity_m3_day,
-      peak_factor: 1.5,
-      hydraulic_retention_time: 0.5,
-      capex: 50000,
-      opex_per_m3: 0.15,
-      maintenance_percent: 3,
-      lifespan_years: 15,
-      is_default: true,
-      notes: '',
-    };
-
-    updateTrain(trainId, {
-      technologies: [...train.technologies, newTech],
-    });
-  };
-
-  const updateTechnology = (trainId: string, techId: string, updates: Partial<TechnologyConfig>) => {
-    const train = trains.find(t => t.id === trainId);
-    if (!train) return;
-
-    const updatedTechs = train.technologies.map(tech =>
-      tech.id === techId ? { ...tech, ...updates } : tech
+  const updateTrainName = (trainId: string, name: string) => {
+    const updated = trains.map(t =>
+      t.id === trainId ? { ...t, name } : t
     );
-    updateTrain(trainId, { technologies: updatedTechs });
+    handleChange(updated);
   };
 
-  const deleteTechnology = (trainId: string, techId: string) => {
-    const train = trains.find(t => t.id === trainId);
-    if (!train) return;
+  const updateTrainCapacity = (trainId: string, capacity: number) => {
+    const updated = trains.map(t =>
+      t.id === trainId ? { ...t, design_capacity_m3_day: capacity } : t
+    );
+    handleChange(updated);
+  };
 
-    updateTrain(trainId, {
-      technologies: train.technologies.filter(t => t.id !== techId),
+  const deleteTrain = (trainId: string) => {
+    handleChange(trains.filter(t => t.id !== trainId));
+    if (expandedTrain === trainId) {
+      setExpandedTrain(null);
+    }
+  };
+
+  const addStage = (trainId: string, stageType: string) => {
+    const updated = trains.map(t => {
+      if (t.id === trainId) {
+        const currentStages = t.stages || [];
+        return { ...t, stages: [...currentStages, stageType] };
+      }
+      return t;
     });
+    handleChange(updated);
   };
 
-  const sourceTypeLabels: Record<string, string> = {
-    raw_water: 'Agua cruda',
-    wastewater: 'Agua residual',
-    recycled: 'Agua reciclada',
-    rainwater: 'Agua de lluvia',
+  const removeStage = (trainId: string, stageIndex: number) => {
+    const updated = trains.map(t => {
+      if (t.id === trainId) {
+        const newStages = [...(t.stages || [])];
+        newStages.splice(stageIndex, 1);
+        return { ...t, stages: newStages };
+      }
+      return t;
+    });
+    handleChange(updated);
+  };
+
+  const moveStage = (trainId: string, fromIndex: number, toIndex: number) => {
+    if (toIndex < 0) return;
+    const updated = trains.map(t => {
+      if (t.id === trainId) {
+        const newStages = [...(t.stages || [])];
+        const maxIndex = newStages.length - 1;
+        const clampedTo = Math.min(toIndex, maxIndex);
+        const [movedStage] = newStages.splice(fromIndex, 1);
+        newStages.splice(clampedTo, 0, movedStage);
+        return { ...t, stages: newStages };
+      }
+      return t;
+    });
+    handleChange(updated);
+  };
+
+  const getStageInfo = (stageType: string) => {
+    return STAGE_TYPES.find(s => s.value === stageType) || {
+      value: stageType,
+      label: stageType,
+      color: 'bg-slate-500',
+      description: 'Tecnología personalizada',
+    };
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Trenes de Tratamiento</h3>
-        {!isReadOnly && (
-          <Button size="sm" variant="outline" onClick={addTrain}>
+    <TooltipProvider>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold flex items-center gap-2">
+            <GitBranch className="h-5 w-5 text-primary" />
+            Trenes de Tratamiento
+          </h3>
+          <span className="text-sm text-muted-foreground">
+            {trains.length}/5 trenes
+          </span>
+        </div>
+
+        {trains.map((train) => {
+          const stages = train.stages || [];
+          
+          return (
+            <Card key={train.id} className="overflow-hidden">
+              <CardContent className="p-4">
+                {/* Header del tren */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <GitBranch className="h-5 w-5 text-muted-foreground" />
+                    <Input
+                      value={train.name}
+                      onChange={(e) => updateTrainName(train.id, e.target.value)}
+                      className="w-48 h-8 font-medium"
+                      disabled={isDisabled}
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={train.design_capacity_m3_day || train.capacity_m3_day || 0}
+                        onChange={(e) => updateTrainCapacity(train.id, parseFloat(e.target.value) || 0)}
+                        className="w-24 h-8 text-sm"
+                        disabled={isDisabled}
+                      />
+                      <span className="text-sm text-muted-foreground">m³/día</span>
+                    </div>
+                    {!isDisabled && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteTrain(train.id)}
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedTrain(
+                        expandedTrain === train.id ? null : train.id
+                      )}
+                      className="h-8"
+                    >
+                      {expandedTrain === train.id ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Visualización del tren como secuencia horizontal */}
+                <div className="flex items-center gap-2 overflow-x-auto py-3 px-2 bg-muted/30 rounded-lg">
+                  {/* Entrada */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center min-w-[100px] h-12 bg-green-100 dark:bg-green-900/30 border-2 border-green-500 rounded-lg text-xs font-medium text-green-700 dark:text-green-300 cursor-default">
+                        {train.inlet_stream || train.source_type || 'Entrada'}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Flujo de entrada al tren de tratamiento</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+
+                  {/* Etapas del tren */}
+                  {stages.length === 0 ? (
+                    <div className="flex items-center justify-center min-w-[120px] h-12 border-2 border-dashed border-muted-foreground/30 rounded-lg text-xs text-muted-foreground">
+                      Sin etapas
+                    </div>
+                  ) : (
+                    stages.map((stage, idx) => {
+                      const stageInfo = getStageInfo(stage);
+                      return (
+                        <React.Fragment key={`${train.id}-stage-${idx}`}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="relative group">
+                                <Button
+                                  variant="outline"
+                                  className={`min-w-[80px] h-12 ${stageInfo.color} text-white border-none hover:opacity-90 transition-opacity`}
+                                  onClick={() => !isDisabled && onTechnologyClick?.(train.id, idx)}
+                                  disabled={isDisabled}
+                                >
+                                  {stage}
+                                </Button>
+                                {!isDisabled && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeStage(train.id, idx);
+                                    }}
+                                    className="absolute -top-2 -right-2 h-5 w-5 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="text-center">
+                                <p className="font-medium">{stageInfo.label}</p>
+                                <p className="text-xs text-muted-foreground">{stageInfo.description}</p>
+                                {!isDisabled && (
+                                  <p className="text-xs mt-1 text-primary">Click para configurar</p>
+                                )}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+
+                  {/* Salida */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center min-w-[100px] h-12 bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-500 rounded-lg text-xs font-medium text-blue-700 dark:text-blue-300 cursor-default">
+                        {train.outlet_quality || train.target_use || 'Salida'}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Flujo de salida del tren de tratamiento</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Panel expandido para agregar etapas */}
+                {expandedTrain === train.id && !isDisabled && (
+                  <div className="mt-4 pt-4 border-t">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Agregar etapa al tren:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {STAGE_TYPES.map((type) => (
+                        <Tooltip key={type.value}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addStage(train.id, type.value)}
+                              className="h-9"
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              {type.value}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="font-medium">{type.label}</p>
+                            <p className="text-xs">{type.description}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+
+        {/* Botón para agregar nuevo tren */}
+        {!isDisabled && trains.length < 5 && (
+          <Button variant="outline" onClick={addTrain} className="w-full">
             <Plus className="h-4 w-4 mr-2" />
-            Agregar Tren
+            Agregar Tren de Tratamiento
           </Button>
         )}
+
+        {trains.length === 0 && (
+          <Card className="border-dashed">
+            <CardContent className="py-8 text-center text-muted-foreground">
+              <GitBranch className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No hay trenes de tratamiento configurados</p>
+              {!isDisabled && (
+                <Button size="sm" variant="link" onClick={addTrain} className="mt-2">
+                  Agregar el primer tren
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
-
-      {trains.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-8 text-center text-muted-foreground">
-            <Droplets className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>No hay trenes de tratamiento configurados</p>
-            {!isReadOnly && (
-              <Button size="sm" variant="link" onClick={addTrain} className="mt-2">
-                Agregar el primer tren
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {trains.map((train, index) => (
-            <Collapsible
-              key={train.id}
-              open={expandedTrains.has(train.id)}
-              onOpenChange={() => toggleTrain(train.id)}
-            >
-              <Card>
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="py-3 cursor-pointer hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      {!isReadOnly && (
-                        <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                      )}
-                      {expandedTrains.has(train.id) ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                      <div className="flex-1">
-                        <CardTitle className="text-sm font-medium">
-                          {train.name}
-                        </CardTitle>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                          <Badge variant="outline" className="text-[10px]">
-                            {sourceTypeLabels[train.source_type]}
-                          </Badge>
-                          <ArrowRight className="h-3 w-3" />
-                          <span>{train.target_use}</span>
-                          <span className="ml-2">•</span>
-                          <span>{train.capacity_m3_day.toLocaleString('es-ES')} m³/día</span>
-                          <span className="ml-2">•</span>
-                          <span>{train.technologies.length} tecnologías</span>
-                        </div>
-                      </div>
-                      {!isReadOnly && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteTrain(train.id);
-                          }}
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-
-                <CollapsibleContent>
-                  <CardContent className="pt-0 space-y-4">
-                    {/* Train Configuration */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div>
-                        <Label className="text-xs">Nombre</Label>
-                        <Input
-                          value={train.name}
-                          onChange={(e) => updateTrain(train.id, { name: e.target.value })}
-                          disabled={isReadOnly}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Capacidad (m³/día)</Label>
-                        <Input
-                          type="number"
-                          value={train.capacity_m3_day}
-                          onChange={(e) => updateTrain(train.id, { capacity_m3_day: parseFloat(e.target.value) || 0 })}
-                          disabled={isReadOnly}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Origen</Label>
-                        <select
-                          value={train.source_type}
-                          onChange={(e) => updateTrain(train.id, { source_type: e.target.value as TreatmentTrain['source_type'] })}
-                          disabled={isReadOnly}
-                          className="w-full h-8 text-sm rounded-md border border-input bg-background px-2"
-                        >
-                          <option value="raw_water">Agua cruda</option>
-                          <option value="wastewater">Agua residual</option>
-                          <option value="recycled">Reciclada</option>
-                          <option value="rainwater">Pluvial</option>
-                        </select>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Uso destino</Label>
-                        <Input
-                          value={train.target_use}
-                          onChange={(e) => updateTrain(train.id, { target_use: e.target.value })}
-                          disabled={isReadOnly}
-                          className="h-8 text-sm"
-                          placeholder="ej: riego, proceso..."
-                        />
-                      </div>
-                    </div>
-
-                    {/* Technologies */}
-                    <div className="border-t pt-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                          Tecnologías en secuencia
-                        </Label>
-                        {!isReadOnly && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => addTechnology(train.id)}
-                          >
-                            <Plus className="h-3 w-3 mr-1" />
-                            Añadir
-                          </Button>
-                        )}
-                      </div>
-
-                      {train.technologies.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          Sin tecnologías configuradas
-                        </p>
-                      ) : (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {train.technologies.map((tech, techIndex) => (
-                            <React.Fragment key={tech.id}>
-                              {techIndex > 0 && (
-                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                              )}
-                              <TechnologyConfigPanel
-                                technology={tech}
-                                onChange={(updates) => updateTechnology(train.id, tech.id, updates)}
-                                onDelete={() => deleteTechnology(train.id, tech.id)}
-                                isReadOnly={isReadOnly}
-                                isEditing={editingTechId === tech.id}
-                                onEditToggle={() => setEditingTechId(
-                                  editingTechId === tech.id ? null : tech.id
-                                )}
-                              />
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-          ))}
-        </div>
-      )}
-    </div>
+    </TooltipProvider>
   );
 };
 
