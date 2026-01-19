@@ -23,7 +23,7 @@ import {
 import { Plus, Network, Trash2, Edit2, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { DiagramCanvas } from './DiagramCanvas';
-import { Diagram, DiagramLevel } from './types';
+import { Diagram, DiagramLevel, Scenario, DiagramChange } from './types';
 import { API_URL } from '@/lib/api';
 
 interface DiagramsSectionProps {
@@ -53,13 +53,38 @@ export function DiagramsSection({ projectId }: DiagramsSectionProps) {
     queryFn: async () => {
       const response = await fetch(`${API_URL}/api/projects/${projectId}/diagrams`);
       if (!response.ok) {
-        // Return empty array if not found
         if (response.status === 404) return [];
         throw new Error('Error al cargar diagramas');
       }
       return response.json();
     },
   });
+
+  // Fetch scenarios for the project
+  const { data: scenarios } = useQuery<Scenario[]>({
+    queryKey: ['scenarios', projectId],
+    queryFn: async () => {
+      const response = await fetch(`${API_URL}/api/projects/${projectId}/scenarios`);
+      if (!response.ok) {
+        if (response.status === 404) return [];
+        throw new Error('Error al cargar escenarios');
+      }
+      return response.json();
+    },
+  });
+
+  // Save scenario diagram changes
+  const saveScenarioChanges = async (scenarioId: string, changes: DiagramChange[]) => {
+    const response = await fetch(
+      `${API_URL}/api/projects/${projectId}/scenarios/${scenarioId}/diagram-changes`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ diagram_id: selectedDiagram?.id, changes }),
+      }
+    );
+    if (!response.ok) throw new Error('Error al guardar cambios');
+  };
 
   // Create diagram
   const createMutation = useMutation({
