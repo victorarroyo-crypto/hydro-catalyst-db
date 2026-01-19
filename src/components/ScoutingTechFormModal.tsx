@@ -186,6 +186,7 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
   
   // User role checks
   const isSupervisorOrAdmin = profile?.role === 'supervisor' || profile?.role === 'admin';
+  const userId = user?.id || '';
   const userEmail = user?.email || 'unknown';
 
   const [formData, setFormData] = useState<ScoutingFormData>({
@@ -414,7 +415,7 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
     changeStatusMutation.mutate({
       id: technology.id,
       status: 'pending_approval',
-      reviewedBy: userEmail,
+      reviewedBy: userId, // UUID del usuario
     }, {
       onSuccess: () => {
         onSuccess?.();
@@ -465,7 +466,7 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
     moveToRejectedMutation.mutate({
       scoutingId: technology.id,
       rejectionReason: rejectionReason.trim(),
-      rejectedBy: userEmail,
+      rejectedBy: userId, // UUID del usuario
       rejectionStage: stage,
     }, {
       onSuccess: () => {
