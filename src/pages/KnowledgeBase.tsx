@@ -49,6 +49,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { InstructionTip } from "@/components/ui/instruction-tip";
 import { CaseStudiesSection } from "@/components/kb/CaseStudiesSection";
+import { SourcesDashboard } from "@/components/kb/SourcesDashboard";
 
 // Types
 interface KnowledgeDocument {
@@ -3044,6 +3045,11 @@ export default function KnowledgeBase() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Sources Dashboard */}
+              {sources && sources.length > 0 && (
+                <SourcesDashboard sources={sources} />
+              )}
+              
               {loadingSources ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin" />
