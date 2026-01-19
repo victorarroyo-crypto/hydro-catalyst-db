@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { externalSupabase } from "@/integrations/supabase/externalClient";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -459,11 +460,11 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Fetch scouting sources
+  // Fetch scouting sources (from Lovable Cloud DB)
   const { data: sources, isLoading: loadingSources } = useQuery({
     queryKey: ["scouting-sources"],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
+      const { data, error } = await supabase
         .from("scouting_sources")
         .select("*")
         .order("calidad_score", { ascending: false });
@@ -691,10 +692,11 @@ export default function KnowledgeBase() {
   });
 
   // Source mutations
+  // Source mutations (using Lovable Cloud DB)
   const saveSourceMutation = useMutation({
     mutationFn: async (data: typeof sourceForm) => {
       if (editingSource) {
-        const { error } = await externalSupabase
+        const { error } = await supabase
           .from("scouting_sources")
           .update({
             nombre: data.nombre,
@@ -711,7 +713,7 @@ export default function KnowledgeBase() {
           .eq("id", editingSource.id);
         if (error) throw error;
       } else {
-        const { error } = await externalSupabase
+        const { error } = await supabase
           .from("scouting_sources")
           .insert({
             nombre: data.nombre,
@@ -743,7 +745,7 @@ export default function KnowledgeBase() {
 
   const deleteSourceMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await externalSupabase
+      const { error } = await supabase
         .from("scouting_sources")
         .delete()
         .eq("id", id);
