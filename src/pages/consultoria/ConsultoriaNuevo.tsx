@@ -4,8 +4,9 @@ import { useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Loader2, Save, CheckCircle2, FileText } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, FileCheck, Target, Circle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -76,6 +77,15 @@ export default function ConsultoriaNuevo() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
+  
+  // Template details state
+  interface RecommendedDoc {
+    name: string;
+    description?: string;
+  }
+  const [recommendedDocs, setRecommendedDocs] = useState<RecommendedDoc[]>([]);
+  const [keyKpis, setKeyKpis] = useState<string[]>([]);
+  const [loadingTemplateDetails, setLoadingTemplateDetails] = useState(false);
 
   // Fetch templates on mount
   useEffect(() => {
@@ -94,6 +104,32 @@ export default function ConsultoriaNuevo() {
     };
     fetchTemplates();
   }, []);
+
+  // Fetch template details when selected
+  useEffect(() => {
+    if (!selectedTemplate) {
+      setRecommendedDocs([]);
+      setKeyKpis([]);
+      return;
+    }
+    
+    const fetchTemplateDetails = async () => {
+      setLoadingTemplateDetails(true);
+      try {
+        const response = await fetch(`${API_URL}/api/projects/templates/${selectedTemplate}`);
+        if (response.ok) {
+          const data = await response.json();
+          setRecommendedDocs(data.recommended_documents || []);
+          setKeyKpis(data.key_kpis || []);
+        }
+      } catch (error) {
+        console.error('Error fetching template details:', error);
+      } finally {
+        setLoadingTemplateDetails(false);
+      }
+    };
+    fetchTemplateDetails();
+  }, [selectedTemplate]);
 
   // Get selected template data
   const selectedTemplateData = templates.find(t => t.sector_id === selectedTemplate);
@@ -243,29 +279,52 @@ export default function ConsultoriaNuevo() {
             </CardContent>
           </Card>
 
-          {/* Recommended Documents */}
-          {selectedTemplateData?.recommended_documents && selectedTemplateData.recommended_documents.length > 0 && (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-primary" />
-                  Documentos Recomendados
-                </CardTitle>
-                <CardDescription>
-                  Estos documentos serán sugeridos para el diagnóstico del sector {selectedTemplateData.sector_name_es}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {selectedTemplateData.recommended_documents.map((doc, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
-                      <span className="text-muted-foreground">{doc}</span>
-                    </div>
-                  ))}
+          {/* Template Details: Documents and KPIs */}
+          {selectedTemplate && (
+            <>
+              {loadingTemplateDetails ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-              </CardContent>
-            </Card>
+              ) : (
+                <>
+                  {/* Recommended Documents */}
+                  {recommendedDocs.length > 0 && (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-3 flex items-center">
+                        <FileCheck className="inline mr-2 h-4 w-4" />
+                        Documentos recomendados para este sector:
+                      </h4>
+                      <ul className="space-y-1.5 text-sm text-blue-800 dark:text-blue-200">
+                        {recommendedDocs.map((doc, i) => (
+                          <li key={i} className="flex items-center">
+                            <Circle className="h-2 w-2 mr-2 fill-current flex-shrink-0" />
+                            {typeof doc === 'string' ? doc : doc.name}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Key KPIs */}
+                  {keyKpis.length > 0 && (
+                    <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                      <h4 className="font-medium text-green-900 dark:text-green-100 mb-3 flex items-center">
+                        <Target className="inline mr-2 h-4 w-4" />
+                        KPIs a monitorear:
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {keyKpis.map((kpi, i) => (
+                          <Badge key={i} variant="secondary" className="bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200">
+                            {kpi}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           )}
 
           {/* Información General */}
