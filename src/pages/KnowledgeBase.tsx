@@ -793,40 +793,52 @@ export default function KnowledgeBase() {
         return { synced: 0 };
       }
 
+      // Map sources to external DB schema (excluding fields that don't exist in external)
+      const sourcesToSync = allSources.map(s => ({
+        id: s.id,
+        nombre: s.nombre,
+        url: s.url,
+        tipo: s.tipo || null,
+        descripcion: s.descripcion || null,
+        pais: s.pais || null,
+        sector_foco: s.sector_foco || null,
+        tecnologias_foco: s.tecnologias_foco || null,
+        frecuencia_escaneo: s.frecuencia_escaneo || null,
+        calidad_score: s.calidad_score ?? null,
+        activo: s.activo ?? true,
+        notas: s.notas || null,
+        ultima_revision: s.ultima_revision || null,
+        proxima_revision: s.proxima_revision || null,
+        tecnologias_encontradas: s.tecnologias_encontradas ?? 0,
+        created_at: s.created_at,
+        updated_at: s.updated_at,
+        // Explicitly NOT including created_by as it doesn't exist in external DB
+      }));
+
+      console.log('[syncAllSources] Syncing', sourcesToSync.length, 'sources to external DB');
+
       // Upsert all sources to External DB
       const { error: syncError } = await externalSupabase
         .from("scouting_sources")
-        .upsert(
-          allSources.map(s => ({
-            id: s.id,
-            nombre: s.nombre,
-            url: s.url,
-            tipo: s.tipo,
-            descripcion: s.descripcion,
-            pais: s.pais,
-            sector_foco: s.sector_foco,
-            tecnologias_foco: s.tecnologias_foco,
-            frecuencia_escaneo: s.frecuencia_escaneo,
-            calidad_score: s.calidad_score,
-            activo: s.activo,
-            notas: s.notas,
-            ultima_revision: s.ultima_revision,
-            proxima_revision: s.proxima_revision,
-            tecnologias_encontradas: s.tecnologias_encontradas,
-            created_at: s.created_at,
-            updated_at: s.updated_at,
-          })),
-          { onConflict: 'id' }
-        );
+        .upsert(sourcesToSync, { onConflict: 'id' });
 
-      if (syncError) throw syncError;
+      if (syncError) {
+        console.error('[syncAllSources] Sync error details:', {
+          message: syncError.message,
+          details: syncError.details,
+          hint: syncError.hint,
+          code: syncError.code
+        });
+        throw new Error(`Error sincronizando: ${syncError.message}`);
+      }
+      
       return { synced: allSources.length };
     },
     onSuccess: (data) => {
       toast.success(`${data.synced} fuentes sincronizadas a BD Externa`);
     },
-    onError: (error) => {
-      toast.error("Error al sincronizar fuentes");
+    onError: (error: Error) => {
+      toast.error(error.message || "Error al sincronizar fuentes");
       console.error('[syncAllSources] Error:', error);
     },
   });
