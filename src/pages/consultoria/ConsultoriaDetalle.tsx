@@ -17,16 +17,8 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  FileDown,
-  Download,
-  ChevronDown
+  FileDown
 } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -168,7 +160,7 @@ const ConsultoriaDetalle: React.FC = () => {
   // Workflow progress state
   const [runningWorkflowId, setRunningWorkflowId] = useState<string | null>(null);
   const [showProgress, setShowProgress] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  
   const [isStartingDiagnosis, setIsStartingDiagnosis] = useState(false);
 
   const { data, isLoading, error } = useQuery({
@@ -220,53 +212,6 @@ const ConsultoriaDetalle: React.FC = () => {
     });
   };
 
-  // Export report as DOCX
-  const exportDocx = async () => {
-    if (!data?.project) return;
-    
-    setIsExporting(true);
-    try {
-      const response = await fetch(`${API_URL}/api/projects/${id}/report/docx`);
-      
-      if (!response.ok) {
-        if (response.status === 400) {
-          toast({
-            title: 'Datos insuficientes',
-            description: 'El proyecto no tiene suficiente información para generar el informe.',
-            variant: 'destructive',
-          });
-          return;
-        }
-        throw new Error('Error al generar el informe');
-      }
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${data.project.name.replace(/\s+/g, '_')}_informe.docx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      toast({ title: 'Informe DOCX descargado' });
-    } catch (error) {
-      console.error('Export error:', error);
-      toast({
-        title: 'Error al exportar',
-        description: 'No se pudo generar el informe. Inténtalo de nuevo.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // Export report as PDF
-  const exportPdf = () => {
-    window.open(`${API_URL}/api/projects/${id}/report/pdf`, '_blank');
-  };
 
   if (isLoading) {
     return (
@@ -375,29 +320,14 @@ const ConsultoriaDetalle: React.FC = () => {
                 </>
               )}
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={isExporting}>
-                  {isExporting ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <FileDown className="h-4 w-4 mr-2" />
-                  )}
-                  Exportar Informe
-                  <ChevronDown className="h-4 w-4 ml-2" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={exportDocx} disabled={isExporting}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  DOCX (Word)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportPdf}>
-                  <Download className="h-4 w-4 mr-2" />
-                  PDF
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              variant="outline"
+              onClick={() => window.open(`${API_URL}/api/projects/${id}/report/pdf`, '_blank')}
+              disabled={!data?.stats || (data.stats.opportunities_count === 0 && data.stats.critical_risks === 0)}
+            >
+              <FileDown className="h-4 w-4 mr-2" />
+              Exportar PDF
+            </Button>
           </div>
         </div>
       </div>
