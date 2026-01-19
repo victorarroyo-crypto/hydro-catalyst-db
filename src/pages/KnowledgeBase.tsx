@@ -831,6 +831,7 @@ export default function KnowledgeBase() {
     },
   });
 
+  const resetSourceForm = () => {
     setSourceForm({
       nombre: '',
       url: '',
