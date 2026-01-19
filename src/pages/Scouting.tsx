@@ -129,6 +129,7 @@ const Scouting = () => {
   // User role checks
   const isAnalyst = profile?.role === 'analyst';
   const isSupervisorOrAdmin = profile?.role === 'supervisor' || profile?.role === 'admin';
+  const userId = user?.id || '';
   const userEmail = user?.email || '';
 
   // Email validation helper
@@ -137,11 +138,11 @@ const Scouting = () => {
     return emailRegex.test(email);
   };
 
-  // Validate user email before operations
-  const validateUserEmail = (): boolean => {
-    if (!userEmail || !isValidEmail(userEmail)) {
-      toast.error('Email de usuario inválido', {
-        description: 'Tu cuenta no tiene un email válido configurado. Por favor, actualiza tu perfil antes de continuar.',
+  // Validate user has valid ID before operations
+  const validateUserId = (): boolean => {
+    if (!userId) {
+      toast.error('Usuario no identificado', {
+        description: 'No se puede completar la operación. Por favor, vuelve a iniciar sesión.',
       });
       return false;
     }
@@ -175,7 +176,7 @@ const Scouting = () => {
       changeStatusMutation.mutate({
         id: approvalDialog.tech.id,
         status: 'pending_approval',
-        reviewedBy: approvalEmail,
+        reviewedBy: userId, // UUID del usuario
       }, {
         onSuccess: () => {
           setApprovalDialog(null);
@@ -185,7 +186,8 @@ const Scouting = () => {
     } else {
       approveToDbMutation.mutate({
         scoutingId: approvalDialog.tech.id,
-        approvedBy: approvalEmail,
+        approvedBy: userEmail,
+        approverId: userId, // UUID del usuario
       }, {
         onSuccess: () => {
           setApprovalDialog(null);
@@ -202,12 +204,12 @@ const Scouting = () => {
       return;
     }
     
-    if (!validateUserEmail()) return;
+    if (!validateUserId()) return;
     
     moveToRejectedMutation.mutate({
       scoutingId: rejectionDialog.tech.id,
       rejectionReason: rejectionReason.trim(),
-      rejectedBy: userEmail,
+      rejectedBy: userId, // UUID del usuario en lugar de email
       rejectionStage: rejectionDialog.stage,
     }, {
       onSuccess: () => {
