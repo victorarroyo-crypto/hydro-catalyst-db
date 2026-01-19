@@ -901,6 +901,78 @@ export default function KnowledgeBase() {
     },
   });
 
+  // Pull sources from External DB to Lovable (External is source of truth)
+  const pullFromExternalMutation = useMutation({
+    mutationFn: async () => {
+      // Fetch all sources from External DB (source of truth)
+      const { data: externalSources, error: fetchError } = await externalSupabase
+        .from("scouting_sources")
+        .select("*");
+      
+      if (fetchError) throw fetchError;
+      if (!externalSources || externalSources.length === 0) {
+        return { pulled: 0, new: 0 };
+      }
+
+      // Get existing sources in Lovable to check for duplicates
+      const { data: localSources } = await supabase
+        .from("scouting_sources")
+        .select("url");
+      
+      const localNormalizedUrls = new Set(localSources?.map(s => normalizeUrl(s.url)) || []);
+
+      // Filter to only new sources (not in Lovable yet)
+      const newSources = externalSources.filter(s => !localNormalizedUrls.has(normalizeUrl(s.url)));
+
+      if (newSources.length === 0) {
+        return { pulled: externalSources.length, new: 0 };
+      }
+
+      // Map external sources to local schema
+      const sourcesToInsert = newSources.map(s => ({
+        nombre: s.nombre,
+        url: s.url,
+        tipo: s.tipo || null,
+        descripcion: s.descripcion || null,
+        pais: s.pais || null,
+        sector_foco: s.sector_foco || null,
+        tecnologias_foco: s.tecnologias_foco || null,
+        frecuencia_escaneo: s.frecuencia_escaneo || null,
+        calidad_score: s.calidad_score ?? 3,
+        activo: s.activo ?? true,
+        notas: s.notas || null,
+        ultima_revision: s.ultima_revision || null,
+        proxima_revision: s.proxima_revision || null,
+        tecnologias_encontradas: s.tecnologias_encontradas ?? 0,
+      }));
+
+      console.log('[pullFromExternal] Inserting', sourcesToInsert.length, 'new sources to Lovable');
+
+      const { error: insertError } = await supabase
+        .from("scouting_sources")
+        .insert(sourcesToInsert);
+
+      if (insertError) {
+        console.error('[pullFromExternal] Insert error:', insertError);
+        throw new Error(`Error insertando: ${insertError.message}`);
+      }
+      
+      return { pulled: externalSources.length, new: newSources.length };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["scouting-sources"] });
+      if (data.new > 0) {
+        toast.success(`${data.new} fuentes nuevas importadas de BD Externa`);
+      } else {
+        toast.info(`BD sincronizada (${data.pulled} fuentes, ninguna nueva)`);
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Error al importar fuentes");
+      console.error('[pullFromExternal] Error:', error);
+    },
+  });
+
   const resetSourceForm = () => {
     setSourceForm({
       nombre: '',
@@ -2921,15 +2993,32 @@ export default function KnowledgeBase() {
                   <Button 
                     variant="outline" 
                     size="sm"
+                    onClick={() => pullFromExternalMutation.mutate()}
+                    disabled={pullFromExternalMutation.isPending}
+                    title="Importar fuentes desde BD Externa (fuente de verdad)"
+                  >
+                    {pullFromExternalMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    Pull Externa
+                  </Button>
+                )}
+                {canManage && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
                     onClick={() => syncAllSourcesMutation.mutate()}
                     disabled={syncAllSourcesMutation.isPending}
+                    title="Enviar fuentes locales a BD Externa"
                   >
                     {syncAllSourcesMutation.isPending ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
                       <Database className="h-4 w-4 mr-2" />
                     )}
-                    Sync BD Externa
+                    Push Externa
                   </Button>
                 )}
                 {canManage && (
