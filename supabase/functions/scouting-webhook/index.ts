@@ -42,12 +42,45 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Helper function to ensure session exists before inserting logs
+    // This prevents FK constraint violations
+    async function ensureSessionExists(sessionId: string, eventData?: Record<string, unknown>) {
+      const { data: existingSession } = await supabase
+        .from('scouting_sessions')
+        .select('session_id')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+
+      if (!existingSession) {
+        console.log(`Session ${sessionId} does not exist, creating it...`);
+        const { error: upsertError } = await supabase
+          .from('scouting_sessions')
+          .upsert({
+            session_id: sessionId,
+            status: 'running',
+            started_at: eventData?.started_at || new Date().toISOString(),
+            current_phase: eventData?.phase || 'initialization',
+            progress_percentage: 0,
+            config: eventData?.config || {},
+            current_activity: 'Sesión iniciada automáticamente',
+            activity_timeline: [],
+          }, { onConflict: 'session_id' });
+
+        if (upsertError) {
+          console.error('Error creating session:', upsertError);
+          throw new Error(`Failed to create session: ${upsertError.message}`);
+        }
+        console.log(`Session ${sessionId} created successfully`);
+      }
+    }
+
     let result;
 
     switch (event) {
       case 'session_start':
-        // Create new scouting session
-        result = await supabase
+        // FIRST: Create/update the session record
+        console.log(`Creating session ${session_id}...`);
+        const { error: sessionError } = await supabase
           .from('scouting_sessions')
           .upsert({
             session_id,
@@ -60,8 +93,17 @@ serve(async (req) => {
             activity_timeline: [],
           }, { onConflict: 'session_id' });
 
-        // Log session start
-        await supabase.from('scouting_session_logs').insert({
+        if (sessionError) {
+          console.error('Error creating session:', sessionError);
+          return new Response(
+            JSON.stringify({ error: `Failed to create session: ${sessionError.message}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log(`Session ${session_id} created successfully`);
+
+        // THEN: Insert the log (now the FK constraint will be satisfied)
+        result = await supabase.from('scouting_session_logs').insert({
           session_id,
           level: 'info',
           phase: 'initialization',
@@ -71,6 +113,9 @@ serve(async (req) => {
         break;
 
       case 'activity':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // New event: structured activity update for UI
         console.log('Processing activity event:', data);
         
@@ -139,6 +184,9 @@ serve(async (req) => {
         break;
 
       case 'site_start':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // New event: starting to analyze a site
         result = await supabase
           .from('scouting_sessions')
@@ -160,6 +208,9 @@ serve(async (req) => {
         break;
 
       case 'site_complete':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // New event: finished analyzing a site
         const siteCompleteUpdate: Record<string, unknown> = {
           current_activity: `✅ Completado: ${data?.site || 'sitio'}`,
@@ -188,6 +239,9 @@ serve(async (req) => {
         break;
 
       case 'tech_analyzing':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // New event: analyzing a specific technology
         result = await supabase
           .from('scouting_sessions')
@@ -208,6 +262,9 @@ serve(async (req) => {
         break;
 
       case 'tech_decision':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // New event: decision made about a technology
         const isApproved = data?.decision === 'approved';
         const decisionEmoji = isApproved ? '✅' : '❌';
@@ -257,6 +314,9 @@ serve(async (req) => {
         break;
 
       case 'progress':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // Update session progress
         const progressUpdate: Record<string, unknown> = {
           current_phase: data?.phase,
@@ -293,6 +353,9 @@ serve(async (req) => {
         break;
 
       case 'technology_found':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // Log technology found
         result = await supabase.from('scouting_session_logs').insert({
           session_id,
@@ -331,6 +394,9 @@ serve(async (req) => {
         break;
 
       case 'technology_discarded':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // Log technology discarded
         result = await supabase.from('scouting_session_logs').insert({
           session_id,
@@ -369,6 +435,9 @@ serve(async (req) => {
         break;
 
       case 'error':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // Log error
         result = await supabase.from('scouting_session_logs').insert({
           session_id,
@@ -393,6 +462,9 @@ serve(async (req) => {
         break;
 
       case 'session_complete':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // Mark session as completed
         result = await supabase
           .from('scouting_sessions')
@@ -421,6 +493,9 @@ serve(async (req) => {
         break;
 
       case 'log':
+        // Ensure session exists first
+        await ensureSessionExists(session_id, data);
+        
         // Generic log entry
         result = await supabase.from('scouting_session_logs').insert({
           session_id,
@@ -432,6 +507,9 @@ serve(async (req) => {
         break;
 
       default:
+        // Ensure session exists first for unknown events too
+        await ensureSessionExists(session_id, data);
+        
         console.log(`Unknown event type: ${event}`);
         result = await supabase.from('scouting_session_logs').insert({
           session_id,
