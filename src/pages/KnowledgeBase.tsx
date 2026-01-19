@@ -391,6 +391,14 @@ export default function KnowledgeBase() {
   const [selectedCase, setSelectedCase] = useState<CaseStudy | null>(null);
   const [caseSearchQuery, setCaseSearchQuery] = useState('');
   
+  // Sources filter state
+  const [sourceFilters, setSourceFilters] = useState<{
+    tipo: string;
+    pais: string;
+    sector: string;
+    search: string;
+  }>({ tipo: '', pais: '', sector: '', search: '' });
+  
   // Trends state
   const [selectedTrend, setSelectedTrend] = useState<TechnologicalTrend | null>(null);
 
@@ -3045,23 +3053,61 @@ export default function KnowledgeBase() {
               </div>
             </CardHeader>
             <CardContent>
-              {/* Sources Dashboard */}
+              {/* Sources Dashboard with Filters */}
               {sources && sources.length > 0 && (
-                <SourcesDashboard sources={sources} />
+                <SourcesDashboard 
+                  sources={sources} 
+                  filters={sourceFilters}
+                  onFiltersChange={setSourceFilters}
+                />
               )}
               
-              {loadingSources ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
-              ) : sources?.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No hay fuentes configuradas</p>
-                </div>
-              ) : viewMode.sources === 'grid' ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {sources?.map((source) => (
+              {(() => {
+                // Apply filters to sources
+                const filteredSources = sources?.filter(s => {
+                  if (sourceFilters.search) {
+                    const searchLower = sourceFilters.search.toLowerCase();
+                    const matchesSearch = 
+                      s.nombre.toLowerCase().includes(searchLower) ||
+                      s.url.toLowerCase().includes(searchLower) ||
+                      s.descripcion?.toLowerCase().includes(searchLower);
+                    if (!matchesSearch) return false;
+                  }
+                  if (sourceFilters.tipo && (s.tipo || 'Sin clasificar') !== sourceFilters.tipo) return false;
+                  if (sourceFilters.pais && (s.pais || 'Sin región') !== sourceFilters.pais) return false;
+                  if (sourceFilters.sector && (s.sector_foco || 'Sin sector') !== sourceFilters.sector) return false;
+                  return true;
+                }) || [];
+
+                if (loadingSources) {
+                  return (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  );
+                }
+                
+                if (sources?.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No hay fuentes configuradas</p>
+                    </div>
+                  );
+                }
+                
+                if (filteredSources.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No hay fuentes que coincidan con los filtros</p>
+                    </div>
+                  );
+                }
+
+                return viewMode.sources === 'grid' ? (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {filteredSources.map((source) => (
                     <Card key={source.id} className={`relative ${!source.activo ? 'opacity-60' : ''}`}>
                       <CardHeader className="pb-2">
                         <div className="flex items-start justify-between gap-2">
@@ -3122,47 +3168,48 @@ export default function KnowledgeBase() {
                       </CardContent>
                     </Card>
                   ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {sources?.map((source) => (
-                    <div key={source.id} className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 ${!source.activo ? 'opacity-60' : ''}`}>
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <Globe className="h-5 w-5 text-muted-foreground shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{source.nombre}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {source.tipo && <span>{TIPO_OPTIONS.find(t => t.value === source.tipo)?.label}</span>}
-                            {source.pais && <><span>•</span><span>{source.pais}</span></>}
-                            {source.tecnologias_encontradas > 0 && <><span>•</span><span>{source.tecnologias_encontradas} techs</span></>}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredSources.map((source) => (
+                      <div key={source.id} className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 ${!source.activo ? 'opacity-60' : ''}`}>
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <Globe className="h-5 w-5 text-muted-foreground shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium truncate">{source.nombre}</p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              {source.tipo && <span>{TIPO_OPTIONS.find(t => t.value === source.tipo)?.label}</span>}
+                              {source.pais && <><span>•</span><span>{source.pais}</span></>}
+                              {source.tecnologias_encontradas > 0 && <><span>•</span><span>{source.tecnologias_encontradas} techs</span></>}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {renderStars(source.calidad_score)}
-                        {!source.activo && <Badge variant="destructive" className="text-xs">Inactivo</Badge>}
-                        <Button size="sm" variant="outline" asChild>
-                          <a href={source.url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </Button>
-                        {canManage && (
-                          <>
-                            <Button size="sm" variant="ghost" onClick={() => handleEditSource(source)}>
-                              <Edit className="h-3 w-3" />
-                            </Button>
-                            {isAdmin && (
-                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteSourceMutation.mutate(source.id)}>
-                                <Trash2 className="h-3 w-3" />
+                        <div className="flex items-center gap-2">
+                          {renderStars(source.calidad_score)}
+                          {!source.activo && <Badge variant="destructive" className="text-xs">Inactivo</Badge>}
+                          <Button size="sm" variant="outline" asChild>
+                            <a href={source.url} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </Button>
+                          {canManage && (
+                            <>
+                              <Button size="sm" variant="ghost" onClick={() => handleEditSource(source)}>
+                                <Edit className="h-3 w-3" />
                               </Button>
-                            )}
-                          </>
-                        )}
+                              {isAdmin && (
+                                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteSourceMutation.mutate(source.id)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         )}
