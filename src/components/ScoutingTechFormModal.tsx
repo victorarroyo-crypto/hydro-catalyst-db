@@ -415,7 +415,6 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
     changeStatusMutation.mutate({
       id: technology.id,
       status: 'pending_approval',
-      reviewedBy: userId, // UUID del usuario
     }, {
       onSuccess: () => {
         onSuccess?.();
@@ -466,7 +465,6 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
     moveToRejectedMutation.mutate({
       scoutingId: technology.id,
       rejectionReason: rejectionReason.trim(),
-      rejectedBy: userId, // UUID del usuario
       rejectionStage: stage,
     }, {
       onSuccess: () => {

@@ -304,7 +304,7 @@ export const useMoveToRejected = () => {
     }: { 
       scoutingId: string; 
       rejectionReason: string; 
-      rejectedBy: string; 
+      rejectedBy?: string; 
       rejectionStage: 'analyst' | 'supervisor' | 'admin';
     }) => {
       // 1. Fetch the record from external DB
@@ -320,33 +320,38 @@ export const useMoveToRejected = () => {
       const record = scoutingRecord as ExternalScoutingQueueItem;
       
       // 2. Insert into rejected_technologies in external DB
+      const insertPayload: Record<string, unknown> = {
+        original_scouting_id: record.id,
+        nombre: record.nombre,
+        proveedor: record.proveedor,
+        pais: record.pais,
+        web: record.web,
+        email: record.email,
+        descripcion: record.descripcion,
+        tipo_sugerido: record.tipo_sugerido,
+        subcategoria: record.subcategoria,
+        sector: record.sector,
+        subsector: record.subsector,
+        aplicacion_principal: record.aplicacion_principal,
+        ventaja_competitiva: record.ventaja_competitiva,
+        innovacion: record.innovacion,
+        trl_estimado: record.trl_estimado,
+        casos_referencia: record.casos_referencia,
+        paises_actua: record.paises_actua,
+        comentarios_analista: record.comentarios_analista,
+        rejection_reason: rejectionReason,
+        rejection_category: rejectionStage,
+        rejected_at: new Date().toISOString(),
+        original_data: record as unknown as Record<string, unknown>,
+      };
+
+      if (rejectedBy) {
+        insertPayload.rejected_by = rejectedBy;
+      }
+
       const { error: insertError } = await externalSupabase
         .from('rejected_technologies')
-        .insert({
-          original_scouting_id: record.id,
-          nombre: record.nombre,
-          proveedor: record.proveedor,
-          pais: record.pais,
-          web: record.web,
-          email: record.email,
-          descripcion: record.descripcion,
-          tipo_sugerido: record.tipo_sugerido,
-          subcategoria: record.subcategoria,
-          sector: record.sector,
-          subsector: record.subsector,
-          aplicacion_principal: record.aplicacion_principal,
-          ventaja_competitiva: record.ventaja_competitiva,
-          innovacion: record.innovacion,
-          trl_estimado: record.trl_estimado,
-          casos_referencia: record.casos_referencia,
-          paises_actua: record.paises_actua,
-          comentarios_analista: record.comentarios_analista,
-          rejection_reason: rejectionReason,
-          rejection_category: rejectionStage,
-          rejected_by: rejectedBy,
-          rejected_at: new Date().toISOString(),
-          original_data: record as unknown as Record<string, unknown>,
-        });
+        .insert(insertPayload);
       
       if (insertError) throw new Error(`Error al mover a rechazadas: ${insertError.message}`);
       

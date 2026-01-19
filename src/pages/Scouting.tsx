@@ -176,7 +176,6 @@ const Scouting = () => {
       changeStatusMutation.mutate({
         id: approvalDialog.tech.id,
         status: 'pending_approval',
-        reviewedBy: userId, // UUID del usuario
       }, {
         onSuccess: () => {
           setApprovalDialog(null);
@@ -209,7 +208,6 @@ const Scouting = () => {
     moveToRejectedMutation.mutate({
       scoutingId: rejectionDialog.tech.id,
       rejectionReason: rejectionReason.trim(),
-      rejectedBy: userId, // UUID del usuario en lugar de email
       rejectionStage: rejectionDialog.stage,
     }, {
       onSuccess: () => {
