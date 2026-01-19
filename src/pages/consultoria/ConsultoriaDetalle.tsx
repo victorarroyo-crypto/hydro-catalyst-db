@@ -19,7 +19,9 @@ import {
   Loader2,
   FileDown,
   BookPlus,
-  BookCheck
+  BookCheck,
+  ChevronDown,
+  Download
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -31,6 +33,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -176,6 +184,9 @@ const ConsultoriaDetalle: React.FC = () => {
   const [showProgress, setShowProgress] = useState(false);
   const [isStartingDiagnosis, setIsStartingDiagnosis] = useState(false);
 
+  // Export state
+  const [isExporting, setIsExporting] = useState(false);
+
   // Publish to KB state
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -235,6 +246,54 @@ const ConsultoriaDetalle: React.FC = () => {
       title: 'Diagnóstico completado',
       description: 'Los resultados están disponibles',
     });
+  };
+
+  // Export report as DOCX
+  const exportDocx = async () => {
+    if (!data?.project) return;
+    
+    setIsExporting(true);
+    try {
+      const response = await fetch(`${API_URL}/api/projects/${id}/report/docx`);
+      
+      if (!response.ok) {
+        if (response.status === 400) {
+          toast({
+            title: 'Datos insuficientes',
+            description: 'El proyecto no tiene suficiente información para generar el informe.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        throw new Error('Error al generar el informe');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${data.project.name.replace(/\s+/g, '_')}_informe.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({ title: 'Informe DOCX descargado' });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: 'Error al exportar',
+        description: 'No se pudo generar el informe. Inténtalo de nuevo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Export report as PDF
+  const exportPdf = () => {
+    window.open(`${API_URL}/api/projects/${id}/report/pdf`, '_blank');
   };
 
   const handlePublishToKB = async () => {
@@ -389,14 +448,32 @@ const ConsultoriaDetalle: React.FC = () => {
                 </>
               )}
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => window.open(`${API_URL}/api/projects/${id}/report/pdf`, '_blank')}
-              disabled={!data?.stats || (data.stats.opportunities_count === 0 && data.stats.critical_risks === 0)}
-            >
-              <FileDown className="h-4 w-4 mr-2" />
-              Exportar PDF
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  disabled={isExporting || !data?.stats || (data.stats.opportunities_count === 0 && data.stats.critical_risks === 0)}
+                >
+                  {isExporting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileDown className="h-4 w-4 mr-2" />
+                  )}
+                  Exportar Informe
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportPdf}>
+                  <Download className="h-4 w-4 mr-2" />
+                  PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportDocx} disabled={isExporting}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  DOCX (Word)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               variant="outline"
               onClick={() => setShowPublishDialog(true)}
