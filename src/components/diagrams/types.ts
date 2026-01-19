@@ -2,6 +2,8 @@ export type NodeType = 'source' | 'treatment' | 'storage' | 'distribution' | 'di
 export type MediumType = 'water' | 'wastewater' | 'steam' | 'condensate' | 'recycled';
 export type AnnotationType = 'finding' | 'opportunity' | 'risk';
 export type DiagramLevel = 0 | 1 | 2;
+export type ChangeType = 'add' | 'modify' | 'remove';
+export type ElementType = 'node' | 'connection' | 'annotation';
 
 export interface DiagramNode {
   id: string;
@@ -41,6 +43,25 @@ export interface Diagram {
   updated_at: string;
 }
 
+export interface DiagramChange {
+  id?: string;
+  diagram_id: string;
+  scenario_id: string;
+  change_type: ChangeType;
+  element_type: ElementType;
+  element_id: string;
+  original_data?: Record<string, unknown>;
+  modified_data?: Record<string, unknown>;
+  created_at?: string;
+}
+
+export interface Scenario {
+  id: string;
+  name: string;
+  scenario_type: string;
+  is_baseline?: boolean;
+}
+
 export const NODE_TYPE_CONFIG: Record<NodeType, { label: string; color: string; icon: string }> = {
   source: { label: 'Fuente', color: '#3b82f6', icon: 'Droplets' },
   treatment: { label: 'Tratamiento', color: '#10b981', icon: 'Filter' },
@@ -62,4 +83,10 @@ export const ANNOTATION_CONFIG: Record<AnnotationType, { label: string; color: s
   finding: { label: 'Hallazgo', color: '#3b82f6', bgColor: '#dbeafe' },
   opportunity: { label: 'Oportunidad', color: '#22c55e', bgColor: '#dcfce7' },
   risk: { label: 'Riesgo', color: '#ef4444', bgColor: '#fee2e2' },
+};
+
+export const CHANGE_TYPE_CONFIG: Record<ChangeType, { label: string; borderColor: string; bgColor: string; textColor: string }> = {
+  add: { label: 'Añadido', borderColor: '#4CAF50', bgColor: 'rgba(76, 175, 80, 0.1)', textColor: '#2e7d32' },
+  modify: { label: 'Modificado', borderColor: '#FF9800', bgColor: 'rgba(255, 152, 0, 0.1)', textColor: '#e65100' },
+  remove: { label: 'Eliminado', borderColor: '#F44336', bgColor: 'rgba(244, 67, 54, 0.1)', textColor: '#c62828' },
 };
