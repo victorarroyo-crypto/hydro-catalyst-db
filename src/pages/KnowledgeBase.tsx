@@ -780,7 +780,57 @@ export default function KnowledgeBase() {
     },
   });
 
-  const resetSourceForm = () => {
+  // Bulk sync all sources to External DB
+  const syncAllSourcesMutation = useMutation({
+    mutationFn: async () => {
+      // Fetch all sources from Lovable Cloud DB
+      const { data: allSources, error: fetchError } = await supabase
+        .from("scouting_sources")
+        .select("*");
+      
+      if (fetchError) throw fetchError;
+      if (!allSources || allSources.length === 0) {
+        return { synced: 0 };
+      }
+
+      // Upsert all sources to External DB
+      const { error: syncError } = await externalSupabase
+        .from("scouting_sources")
+        .upsert(
+          allSources.map(s => ({
+            id: s.id,
+            nombre: s.nombre,
+            url: s.url,
+            tipo: s.tipo,
+            descripcion: s.descripcion,
+            pais: s.pais,
+            sector_foco: s.sector_foco,
+            tecnologias_foco: s.tecnologias_foco,
+            frecuencia_escaneo: s.frecuencia_escaneo,
+            calidad_score: s.calidad_score,
+            activo: s.activo,
+            notas: s.notas,
+            ultima_revision: s.ultima_revision,
+            proxima_revision: s.proxima_revision,
+            tecnologias_encontradas: s.tecnologias_encontradas,
+            created_at: s.created_at,
+            updated_at: s.updated_at,
+          })),
+          { onConflict: 'id' }
+        );
+
+      if (syncError) throw syncError;
+      return { synced: allSources.length };
+    },
+    onSuccess: (data) => {
+      toast.success(`${data.synced} fuentes sincronizadas a BD Externa`);
+    },
+    onError: (error) => {
+      toast.error("Error al sincronizar fuentes");
+      console.error('[syncAllSources] Error:', error);
+    },
+  });
+
     setSourceForm({
       nombre: '',
       url: '',
@@ -2743,6 +2793,21 @@ export default function KnowledgeBase() {
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
+                {canManage && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => syncAllSourcesMutation.mutate()}
+                    disabled={syncAllSourcesMutation.isPending}
+                  >
+                    {syncAllSourcesMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Database className="h-4 w-4 mr-2" />
+                    )}
+                    Sync BD Externa
+                  </Button>
+                )}
                 {canManage && (
                   <Button 
                     variant="outline" 
