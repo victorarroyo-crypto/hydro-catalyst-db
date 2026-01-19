@@ -58,64 +58,132 @@ const WorkflowProgress: React.FC<WorkflowProgressProps> = ({
     setCurrentStep(0);
     setTotalSteps(0);
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/projects/${projectId}/ws`);
-
-    ws.onopen = () => {
-      setConnected(true);
-      addMessage('Sistema', 'Conexión establecida');
+    // Get WebSocket URL from backend API URL
+    const getWebSocketUrl = () => {
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const wsProtocol = backendUrl.startsWith('https') ? 'wss' : 'ws';
+      const wsHost = backendUrl.replace(/^https?:\/\//, '');
+      return `${wsProtocol}://${wsHost}/api/projects/${projectId}/ws`;
     };
 
-    ws.onclose = () => {
-      setConnected(false);
-    };
+    let ws: WebSocket | null = null;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
 
-    ws.onerror = () => {
-      setConnected(false);
-      setStatus('failed');
-      addMessage('Sistema', 'Error de conexión');
-    };
-
-    ws.onmessage = (event) => {
+    // Try WebSocket first, fallback to polling if it fails
+    const tryWebSocket = () => {
       try {
-        const data = JSON.parse(event.data);
-        
-        switch (data.event) {
-          case 'step_started':
-            setCurrentStep(data.step);
-            setTotalSteps(data.total_steps);
-            setCurrentAgent(data.agent_name);
-            addMessage(data.agent_name, `Iniciando: ${data.description || 'Procesando...'}`);
-            break;
-            
-          case 'step_completed':
-            addMessage(data.agent_name, data.result_summary || 'Completado');
-            break;
-            
-          case 'workflow_completed':
-            setStatus('completed');
-            setCurrentAgent('');
-            addMessage('Sistema', 'Diagnóstico completado exitosamente');
-            onComplete(data.results);
-            break;
-            
-          case 'workflow_failed':
-            setStatus('failed');
-            setCurrentAgent('');
-            addMessage('Sistema', data.error || 'Error en el diagnóstico');
-            break;
-            
-          case 'agent_message':
-            addMessage(data.agent_name, data.message);
-            break;
-        }
-      } catch (e) {
-        console.error('Error parsing WebSocket message:', e);
+        ws = new WebSocket(getWebSocketUrl());
+
+        ws.onopen = () => {
+          setConnected(true);
+          addMessage('Sistema', 'Conexión establecida');
+          // Clear polling if WebSocket connected
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+        };
+
+        ws.onclose = () => {
+          setConnected(false);
+        };
+
+        ws.onerror = () => {
+          setConnected(false);
+          // Fallback to polling if WebSocket fails
+          if (!pollInterval) {
+            startPolling();
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            handleWorkflowEvent(data);
+          } catch (e) {
+            console.error('Error parsing WebSocket message:', e);
+          }
+        };
+      } catch (error) {
+        console.error('WebSocket connection failed, using polling:', error);
+        startPolling();
       }
     };
 
+    const handleWorkflowEvent = (data: any) => {
+      switch (data.event) {
+        case 'step_started':
+          setCurrentStep(data.step);
+          setTotalSteps(data.total_steps);
+          setCurrentAgent(data.agent_name);
+          addMessage(data.agent_name, `Iniciando: ${data.description || 'Procesando...'}`);
+          break;
+          
+        case 'step_completed':
+          addMessage(data.agent_name, data.result_summary || 'Completado');
+          break;
+          
+        case 'workflow_completed':
+          setStatus('completed');
+          setCurrentAgent('');
+          addMessage('Sistema', 'Diagnóstico completado exitosamente');
+          onComplete(data.results);
+          break;
+          
+        case 'workflow_failed':
+          setStatus('failed');
+          setCurrentAgent('');
+          addMessage('Sistema', data.error || 'Error en el diagnóstico');
+          break;
+          
+        case 'agent_message':
+          addMessage(data.agent_name, data.message);
+          break;
+      }
+    };
+
+    // Polling fallback
+    const startPolling = () => {
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      addMessage('Sistema', 'Usando modo polling...');
+      
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`${backendUrl}/api/projects/${projectId}/workflows/${workflowId}/status`);
+          if (!res.ok) return;
+          
+          const data = await res.json();
+          
+          if (data.status === 'completed') {
+            setStatus('completed');
+            setCurrentAgent('');
+            addMessage('Sistema', 'Diagnóstico completado exitosamente');
+            onComplete(data.results || {});
+            if (pollInterval) clearInterval(pollInterval);
+          } else if (data.status === 'failed') {
+            setStatus('failed');
+            setCurrentAgent('');
+            addMessage('Sistema', data.error || 'Error en el diagnóstico');
+            if (pollInterval) clearInterval(pollInterval);
+          } else {
+            setCurrentStep(data.current_step || 0);
+            setTotalSteps(data.total_steps || 4);
+            if (data.current_agent) {
+              setCurrentAgent(data.current_agent);
+            }
+          }
+        } catch (err) {
+          console.error('Polling error:', err);
+        }
+      }, 2000);
+    };
+
+    // Start with WebSocket attempt
+    tryWebSocket();
+
     return () => {
-      ws.close();
+      if (ws) ws.close();
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, [projectId, workflowId, onComplete, addMessage]);
 
