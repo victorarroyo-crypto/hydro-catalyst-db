@@ -16,7 +16,8 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  Loader2
+  Loader2,
+  FileDown
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -199,6 +200,14 @@ const ConsultoriaDetalle: React.FC = () => {
             >
               <Play className="h-4 w-4 mr-2" />
               Ejecutar Diagnóstico
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => window.open(`${API_URL}/api/projects/${id}/report/pdf`, '_blank')}
+              disabled={!stats || (stats.opportunities_count === 0 && stats.critical_risks === 0)}
+            >
+              <FileDown className="h-4 w-4 mr-2" />
+              Exportar PDF
             </Button>
           </div>
         </div>
