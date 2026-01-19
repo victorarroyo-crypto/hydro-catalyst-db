@@ -86,6 +86,20 @@ function isStuckProcessing(doc: KnowledgeDocument): boolean {
   return (now.getTime() - updatedAt.getTime()) > thirtyMinutes;
 }
 
+// Normalize URL for duplicate detection
+function normalizeUrl(url: string): string {
+  let normalized = url.toLowerCase().trim();
+  // Remove protocol
+  normalized = normalized.replace(/^https?:\/\//, '');
+  // Remove www.
+  normalized = normalized.replace(/^www\./, '');
+  // Remove trailing slash
+  normalized = normalized.replace(/\/$/, '');
+  // Remove query params and anchors
+  normalized = normalized.split('?')[0].split('#')[0];
+  return normalized;
+}
+
 // Function to group document parts
 function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
   // Flexible regex: supports "_parteXdeY.pdf" or " parteXdeY.pdf" (space or underscore)
@@ -709,9 +723,24 @@ export default function KnowledgeBase() {
   // Source mutations (dual-write: Lovable Cloud DB + External DB for scouting agents)
   const saveSourceMutation = useMutation({
     mutationFn: async (data: typeof sourceForm) => {
+      // Normalize URL to prevent duplicates
+      const normalizedUrl = normalizeUrl(data.url);
+      
+      // Check for existing source with same normalized URL (when creating new)
+      if (!editingSource) {
+        const { data: existingSources } = await supabase
+          .from("scouting_sources")
+          .select("id, url, nombre");
+        
+        const duplicate = existingSources?.find(s => normalizeUrl(s.url) === normalizedUrl);
+        if (duplicate) {
+          throw new Error(`Ya existe una fuente con URL similar: "${duplicate.nombre}"`);
+        }
+      }
+      
       const sourceData = {
         nombre: data.nombre,
-        url: data.url,
+        url: data.url.trim(), // Keep original URL but trimmed
         tipo: data.tipo || null,
         descripcion: data.descripcion || null,
         pais: data.pais || null,
@@ -1027,9 +1056,22 @@ export default function KnowledgeBase() {
         }
       }
 
-      // Check if already exists (based on alreadyExists flag)
+      // Check if already exists (based on alreadyExists flag or normalized URL check)
       if (source.alreadyExists) {
         toast.info(`"${source.nombre}" ya está en tu lista de fuentes`);
+        return;
+      }
+      
+      // Additional check: verify normalized URL doesn't exist
+      const normalizedUrl = normalizeUrl(source.url);
+      const { data: existingSources } = await externalSupabase
+        .from("scouting_sources")
+        .select("id, url, nombre");
+      
+      const duplicate = existingSources?.find(s => normalizeUrl(s.url) === normalizedUrl);
+      if (duplicate) {
+        toast.info(`"${source.nombre}" ya existe (URL similar a "${duplicate.nombre}")`);
+        setAiSourceResults(prev => prev.filter(s => s.url !== source.url));
         return;
       }
 
@@ -1037,7 +1079,7 @@ export default function KnowledgeBase() {
         .from("scouting_sources")
         .insert({
           nombre: source.nombre,
-          url: source.url,
+          url: source.url.trim(), // Keep original but trimmed
           descripcion: source.descripcion,
           tipo: tipoDb,
           pais: source.pais || null,
