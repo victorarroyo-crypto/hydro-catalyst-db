@@ -28,15 +28,27 @@ import { API_URL } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import WorkflowProgress from '@/components/consultoria/WorkflowProgress';
 
+interface ProjectData {
+  id: string;
+  name: string;
+  client_name: string | null;
+  plant_name: string | null;
+  status: string;
+  progress_percentage: number;
+}
+
+interface StatsData {
+  findings_count: number;
+  critical_risks: number;
+  quick_wins: number;
+  opportunities: number;
+  total_potential_savings: number;
+  workflows_count: number;
+  workflows_completed: number;
+}
+
 interface DashboardData {
-  project: {
-    id: string;
-    name: string;
-    client_name: string;
-    plant_name: string;
-    status: string;
-    progress_percentage: number;
-  };
+  project: ProjectData;
   stats: {
     documents_count: number;
     opportunities_count: number;
@@ -57,14 +69,51 @@ interface DashboardData {
 }
 
 const fetchDashboard = async (id: string): Promise<DashboardData> => {
-  const response = await fetch(`${API_URL}/api/projects/${id}/dashboard`);
-  if (!response.ok) {
-    if (response.status === 404) {
+  // Fetch project details and dashboard stats in parallel
+  const [projectRes, dashboardRes] = await Promise.all([
+    fetch(`${API_URL}/api/projects/${id}`),
+    fetch(`${API_URL}/api/projects/${id}/dashboard`)
+  ]);
+
+  if (!projectRes.ok) {
+    if (projectRes.status === 404) {
       throw new Error('Proyecto no encontrado');
     }
-    throw new Error('Error al cargar el dashboard');
+    throw new Error('Error al cargar el proyecto');
   }
-  return response.json();
+
+  const projectData = await projectRes.json();
+  const dashboardData: StatsData = dashboardRes.ok ? await dashboardRes.json() : {
+    findings_count: 0,
+    critical_risks: 0,
+    quick_wins: 0,
+    opportunities: 0,
+    total_potential_savings: 0,
+    workflows_count: 0,
+    workflows_completed: 0
+  };
+
+  // Transform the flat API responses into the expected structure
+  const project = projectData.data || projectData;
+  
+  return {
+    project: {
+      id: project.id || id,
+      name: project.name || 'Proyecto sin nombre',
+      client_name: project.client_name || null,
+      plant_name: project.plant_name || null,
+      status: project.status || 'draft',
+      progress_percentage: project.progress_percentage || 0
+    },
+    stats: {
+      documents_count: dashboardData.findings_count || 0,
+      opportunities_count: dashboardData.opportunities || dashboardData.quick_wins || 0,
+      critical_risks: dashboardData.critical_risks || 0,
+      total_potential_savings: dashboardData.total_potential_savings || 0
+    },
+    water_balance: null,
+    recent_workflows: []
+  };
 };
 
 const getStatusBadge = (status: string) => {
