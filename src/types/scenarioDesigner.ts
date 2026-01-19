@@ -28,12 +28,17 @@ export interface TechnologyConfig {
 export interface TreatmentTrain {
   id: string;
   name: string;
-  description: string;
-  order: number;
-  capacity_m3_day: number;
-  source_type: 'raw_water' | 'wastewater' | 'recycled' | 'rainwater';
-  target_use: string;
-  technologies: TechnologyConfig[];
+  description?: string;
+  order?: number;
+  capacity_m3_day?: number;
+  design_capacity_m3_day?: number; // Alias for capacity
+  source_type?: 'raw_water' | 'wastewater' | 'recycled' | 'rainwater';
+  target_use?: string;
+  technologies?: TechnologyConfig[];
+  // Visual builder fields
+  stages?: string[]; // ['MBR', 'RO', 'UV'] - simplified stage list
+  inlet_stream?: string;
+  outlet_quality?: string;
 }
 
 export interface ScenarioObjectives {
