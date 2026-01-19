@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, CheckCircle2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import {
   Form,
   FormControl,
@@ -26,6 +28,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { API_URL } from '@/lib/api';
+import TemplateSelectorCard, { Template } from '@/components/consultoria/TemplateSelectorCard';
 
 const projectSchema = z.object({
   name: z.string().trim().min(1, 'El nombre es requerido').max(200, 'Máximo 200 caracteres'),
@@ -61,31 +64,39 @@ const industrySectors = [
   'Otro',
 ];
 
-const createProject = async (data: ProjectFormData): Promise<{ id: string }> => {
-  const payload = {
-    ...data,
-    plant_capacity_m3_day: data.plant_capacity_m3_day === '' ? null : data.plant_capacity_m3_day,
-  };
-
-  const response = await fetch(`${API_URL}/api/projects`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Error al crear el proyecto');
-  }
-
-  return response.json();
-};
+interface CreateProjectResponse {
+  id: string;
+}
 
 export default function ConsultoriaNuevo() {
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Template state
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+
+  // Fetch templates on mount
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/projects/templates`);
+        if (response.ok) {
+          const data = await response.json();
+          setTemplates(data.templates || []);
+        }
+      } catch (error) {
+        console.error('Error fetching templates:', error);
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
+  // Get selected template data
+  const selectedTemplateData = templates.find(t => t.sector_id === selectedTemplate);
 
   const form = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
@@ -102,12 +113,71 @@ export default function ConsultoriaNuevo() {
     },
   });
 
+  // Update industry_sector when template is selected
+  useEffect(() => {
+    if (selectedTemplateData) {
+      const sectorMap: Record<string, string> = {
+        food: 'Alimentario',
+        alimentario: 'Alimentario',
+        beverage: 'Bebidas',
+        bebidas: 'Bebidas',
+        textile: 'Textil',
+        textil: 'Textil',
+        chemical: 'Químico',
+        quimico: 'Químico',
+        pharmaceutical: 'Farmacéutico',
+        farmaceutico: 'Farmacéutico',
+        paper: 'Papelero',
+        papelero: 'Papelero',
+        metalurgico: 'Metalúrgico',
+        automotive: 'Automotriz',
+        automotriz: 'Automotriz',
+      };
+      const normalizedId = selectedTemplateData.sector_id.toLowerCase();
+      const matchedSector = Object.entries(sectorMap).find(([key]) => 
+        normalizedId.includes(key)
+      );
+      if (matchedSector) {
+        form.setValue('industry_sector', matchedSector[1] as any);
+      }
+    }
+  }, [selectedTemplateData, form]);
+
+  const createProject = async (data: ProjectFormData): Promise<CreateProjectResponse> => {
+    const payload = {
+      ...data,
+      plant_capacity_m3_day: data.plant_capacity_m3_day === '' ? null : data.plant_capacity_m3_day,
+    };
+
+    // Use template endpoint if template is selected
+    const endpoint = selectedTemplate
+      ? `${API_URL}/api/projects/from-template/${selectedTemplate}`
+      : `${API_URL}/api/projects`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Error al crear el proyecto');
+    }
+
+    return response.json();
+  };
+
   const mutation = useMutation({
     mutationFn: createProject,
     onSuccess: (data) => {
       toast({
         title: 'Proyecto creado',
-        description: 'El proyecto se ha creado correctamente',
+        description: selectedTemplate 
+          ? 'El proyecto se ha creado con la plantilla seleccionada'
+          : 'El proyecto se ha creado correctamente',
       });
       navigate(`/consultoria/${data.id}`);
     },
@@ -139,6 +209,65 @@ export default function ConsultoriaNuevo() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {/* Template Selector */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Selecciona el Sector Industrial</CardTitle>
+              <CardDescription>
+                Elige una plantilla para preconfigurar el proyecto con documentos recomendados
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingTemplates ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : templates.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {templates.map((template) => (
+                    <TemplateSelectorCard
+                      key={template.sector_id}
+                      template={template}
+                      selected={selectedTemplate === template.sector_id}
+                      onSelect={() => setSelectedTemplate(
+                        selectedTemplate === template.sector_id ? null : template.sector_id
+                      )}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground py-4">
+                  No hay plantillas disponibles. Puedes continuar sin seleccionar una.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recommended Documents */}
+          {selectedTemplateData?.recommended_documents && selectedTemplateData.recommended_documents.length > 0 && (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" />
+                  Documentos Recomendados
+                </CardTitle>
+                <CardDescription>
+                  Estos documentos serán sugeridos para el diagnóstico del sector {selectedTemplateData.sector_name_es}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {selectedTemplateData.recommended_documents.map((doc, index) => (
+                    <div key={index} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span className="text-muted-foreground">{doc}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Información General */}
           <Card>
             <CardHeader>
@@ -345,7 +474,7 @@ export default function ConsultoriaNuevo() {
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Crear Proyecto
+              {selectedTemplate ? 'Crear con Plantilla' : 'Crear Proyecto'}
             </Button>
           </div>
         </form>
