@@ -958,12 +958,13 @@ export default function KnowledgeBase() {
     setAiSourceExplanation('');
 
     try {
-      // Fetch existing source names to avoid duplicates
+      // Fetch existing sources to avoid duplicates (both names and normalized URLs)
       const { data: existingSources } = await supabase
         .from("scouting_sources")
-        .select("nombre");
+        .select("nombre, url");
       
       const existingNames = existingSources?.map(s => s.nombre) || [];
+      const existingNormalizedUrls = existingSources?.map(s => normalizeUrl(s.url)) || [];
 
       // Call Railway backend endpoint
       const response = await fetch(`${API_URL}/api/sources/discover`, {
@@ -980,6 +981,7 @@ export default function KnowledgeBase() {
             sector: aiSourceFilters.sector || null,
           },
           existing_sources: existingNames,
+          existing_urls: existingNormalizedUrls, // Send normalized URLs for better duplicate detection
         }),
       });
 
