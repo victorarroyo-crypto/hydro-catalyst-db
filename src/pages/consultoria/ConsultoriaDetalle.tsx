@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
@@ -25,6 +25,8 @@ import { Badge } from '@/components/ui/badge';
 import { StatsCard } from '@/components/StatsCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { API_URL } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
+import WorkflowProgress from '@/components/consultoria/WorkflowProgress';
 
 interface DashboardData {
   project: {
@@ -103,12 +105,62 @@ const getWorkflowStatusLabel = (status: string) => {
 const ConsultoriaDetalle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Workflow progress state
+  const [runningWorkflowId, setRunningWorkflowId] = useState<string | null>(null);
+  const [showProgress, setShowProgress] = useState(false);
+  const [isStartingDiagnosis, setIsStartingDiagnosis] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['consultoria-dashboard', id],
     queryFn: () => fetchDashboard(id!),
     enabled: !!id,
   });
+
+  const handleStartDiagnosis = async () => {
+    if (!id) return;
+    
+    setIsStartingDiagnosis(true);
+    try {
+      const res = await fetch(`${API_URL}/api/projects/${id}/workflows/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflow_type: 'quick_diagnosis' })
+      });
+      const data = await res.json();
+      
+      if (data.success && data.workflow_id) {
+        setRunningWorkflowId(data.workflow_id);
+        setShowProgress(true);
+      } else {
+        toast({
+          title: 'Error',
+          description: data.message || 'No se pudo iniciar el diagnóstico',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Error al conectar con el servidor',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsStartingDiagnosis(false);
+    }
+  };
+
+  const handleWorkflowComplete = (results: any) => {
+    setShowProgress(false);
+    setRunningWorkflowId(null);
+    queryClient.invalidateQueries({ queryKey: ['consultoria-dashboard', id] });
+    toast({
+      title: 'Diagnóstico completado',
+      description: 'Los resultados están disponibles',
+    });
+  };
 
   if (isLoading) {
     return (
@@ -196,10 +248,25 @@ const ConsultoriaDetalle: React.FC = () => {
               Documentos
             </Button>
             <Button
-              onClick={() => navigate(`/consultoria/${id}/diagnostico`)}
+              onClick={handleStartDiagnosis}
+              disabled={showProgress || isStartingDiagnosis}
             >
-              <Play className="h-4 w-4 mr-2" />
-              Ejecutar Diagnóstico
+              {showProgress ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Diagnóstico en progreso...
+                </>
+              ) : isStartingDiagnosis ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Iniciando...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Iniciar Diagnóstico
+                </>
+              )}
             </Button>
             <Button
               variant="outline"
@@ -212,6 +279,15 @@ const ConsultoriaDetalle: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Workflow Progress */}
+      {showProgress && runningWorkflowId && (
+        <WorkflowProgress
+          projectId={id!}
+          workflowId={runningWorkflowId}
+          onComplete={handleWorkflowComplete}
+        />
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
