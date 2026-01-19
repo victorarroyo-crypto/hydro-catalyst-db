@@ -14,6 +14,7 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { Textarea } from '@/components/ui/textarea';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
 import { ScenariosSection } from '@/components/scenarios/ScenariosSection';
+import { DiagramsSection } from '@/components/diagrams/DiagramsSection';
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,7 @@ import {
   Plus,
   Trash2,
   BarChart3,
+  Network,
   FileText,
   Clock,
   Edit,
@@ -419,6 +421,10 @@ const ProjectDetail: React.FC = () => {
             <Building2 className="w-4 h-4" />
             Tecnologías ({projectTechnologies?.length || 0})
           </TabsTrigger>
+          <TabsTrigger value="diagrams" className="gap-2">
+            <Network className="w-4 h-4" />
+            Diagramas
+          </TabsTrigger>
           <TabsTrigger value="scenarios" className="gap-2">
             <BarChart3 className="w-4 h-4" />
             Escenarios
@@ -521,6 +527,10 @@ const ProjectDetail: React.FC = () => {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="diagrams" className="mt-6">
+          <DiagramsSection projectId={id!} />
         </TabsContent>
 
         <TabsContent value="scenarios" className="mt-6">
