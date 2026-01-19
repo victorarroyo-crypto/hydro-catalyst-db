@@ -1064,9 +1064,9 @@ export default function KnowledgeBase() {
         return;
       }
       
-      // Additional check: verify normalized URL doesn't exist
+      // Additional check: verify normalized URL doesn't exist in Lovable DB
       const normalizedUrl = normalizeUrl(source.url);
-      const { data: existingSources } = await externalSupabase
+      const { data: existingSources } = await supabase
         .from("scouting_sources")
         .select("id, url, nombre");
       
@@ -1077,27 +1077,42 @@ export default function KnowledgeBase() {
         return;
       }
 
-      const { error } = await externalSupabase
-        .from("scouting_sources")
-        .insert({
-          nombre: source.nombre,
-          url: source.url.trim(), // Keep original but trimmed
-          descripcion: source.descripcion,
-          tipo: tipoDb,
-          pais: source.pais || null,
-          sector_foco: sectorFoco,
-          calidad_score: 3,
-          activo: true,
-        });
+      const sourceData = {
+        nombre: source.nombre,
+        url: source.url.trim(),
+        descripcion: source.descripcion,
+        tipo: tipoDb,
+        pais: source.pais || null,
+        sector_foco: sectorFoco,
+        calidad_score: 3,
+        activo: true,
+      };
 
-      if (error) {
+      // 1. Insert in Lovable Cloud DB first and get the new ID
+      const { data: inserted, error: localError } = await supabase
+        .from("scouting_sources")
+        .insert(sourceData)
+        .select('id')
+        .single();
+
+      if (localError) {
         // Handle unique constraint violation
-        if (error.code === '23505') {
+        if (localError.code === '23505') {
           toast.info(`"${source.nombre}" ya existe en tu lista (URL duplicada)`);
           setAiSourceResults(prev => prev.filter(s => s.url !== source.url));
           return;
         }
-        throw error;
+        throw localError;
+      }
+
+      // 2. Sync to External DB (for scouting agents)
+      const { error: externalError } = await externalSupabase
+        .from("scouting_sources")
+        .upsert({ id: inserted.id, ...sourceData }, { onConflict: 'id' });
+      
+      if (externalError) {
+        console.error('[addAISourceToDb] Error syncing to external DB:', externalError);
+        // Don't fail - the source is saved locally, just log the sync error
       }
 
       queryClient.invalidateQueries({ queryKey: ["scouting-sources"] });
