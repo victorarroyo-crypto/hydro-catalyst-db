@@ -5,6 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-webhook-secret, content-type',
 }
 
+// BD Externa donde el frontend consulta
+const EXTERNAL_URL = 'https://ktzhrlcvluaptixngrsh.supabase.co';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -27,9 +30,10 @@ Deno.serve(async (req) => {
 
     console.log(`[WEBHOOK] Event: ${event}, Session: ${session_id}`)
 
+    // Conectar a BD EXTERNA (donde el frontend consulta)
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      EXTERNAL_URL,
+      Deno.env.get('EXTERNAL_SERVICE_ROLE_KEY') ?? ''
     )
 
     // 1. SIEMPRE hacer UPSERT de la sesión primero
@@ -83,7 +87,7 @@ Deno.serve(async (req) => {
         break
     }
 
-    // UPSERT sesión
+    // UPSERT sesión en BD externa
     const { error: sessionError } = await supabase
       .from('scouting_sessions')
       .upsert(sessionData, { onConflict: 'session_id' })
@@ -91,10 +95,10 @@ Deno.serve(async (req) => {
     if (sessionError) {
       console.error('[WEBHOOK] Session upsert error:', sessionError)
     } else {
-      console.log(`[WEBHOOK] Session upserted: ${session_id}`)
+      console.log(`[WEBHOOK] Session upserted to EXTERNAL DB: ${session_id}`)
     }
 
-    // 2. LUEGO insertar log
+    // 2. Insertar log en BD externa
     const { error: logError } = await supabase
       .from('scouting_session_logs')
       .insert({
