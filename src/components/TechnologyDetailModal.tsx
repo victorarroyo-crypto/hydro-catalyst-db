@@ -14,7 +14,7 @@ import { TRLBadge } from '@/components/TRLBadge';
 import { useToast } from '@/hooks/use-toast';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { syncProjectTechnologyInsert } from '@/lib/syncToExternal';
+import { comparisonProjectsService } from '@/services/comparisonProjectsService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Select,
@@ -81,18 +81,16 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
   const [isAddingToProject, setIsAddingToProject] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
-  // Fetch user's active projects
+  // Fetch user's active projects from external API
   const { data: userProjects } = useQuery({
     queryKey: ['user-projects-for-add', user?.id],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('projects')
-        .select('id, name, status')
-        .in('status', ['draft', 'active', 'on_hold'])
-        .order('updated_at', { ascending: false });
-      
-      if (error) throw error;
-      return data;
+      const response = await comparisonProjectsService.list({ status: 'active' });
+      const projects = response.projects || response.data || [];
+      // Filter for statuses that allow adding technologies
+      return projects.filter((p: any) => 
+        ['draft', 'active', 'on_hold'].includes(p.status)
+      );
     },
     enabled: !!user && open,
   });
@@ -152,15 +150,21 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     if (!user || !selectedProjectId) return;
     
     setIsAddingToProject(true);
-    const { data, error } = await externalSupabase.from('project_technologies').insert({
-      project_id: selectedProjectId,
-      technology_id: technology.id,
-      added_by: user.id,
-    }).select().single();
-    setIsAddingToProject(false);
+    try {
+      await comparisonProjectsService.addTechnology(selectedProjectId, {
+        technology_id: technology.id,
+      });
 
-    if (error) {
-      if (error.code === '23505') {
+      queryClient.invalidateQueries({ queryKey: ['project-technologies'] });
+      queryClient.invalidateQueries({ queryKey: ['project-tech-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['comparison-project', selectedProjectId] });
+      toast({
+        title: 'Añadida al proyecto',
+        description: 'La tecnología se ha añadido al proyecto',
+      });
+      setSelectedProjectId('');
+    } catch (error: any) {
+      if (error.message?.includes('duplicate') || error.message?.includes('already')) {
         toast({
           title: 'Ya añadida',
           description: 'Esta tecnología ya está en el proyecto seleccionado',
@@ -172,27 +176,8 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
           variant: 'destructive',
         });
       }
-    } else {
-      // Sync to external Supabase
-      try {
-        await syncProjectTechnologyInsert({
-          id: data.id,
-          project_id: selectedProjectId,
-          technology_id: technology.id,
-          added_by: user.id,
-          added_at: data.added_at,
-        });
-      } catch (syncError) {
-        console.error('External sync failed:', syncError);
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['project-technologies'] });
-      queryClient.invalidateQueries({ queryKey: ['project-tech-counts'] });
-      toast({
-        title: 'Añadida al proyecto',
-        description: 'La tecnología se ha añadido al proyecto',
-      });
-      setSelectedProjectId('');
+    } finally {
+      setIsAddingToProject(false);
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { comparisonProjectsService } from '@/services/comparisonProjectsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
@@ -237,44 +238,33 @@ const Technologies: React.FC = () => {
     setEditingTechnology(null);
   };
 
-  // Mutation to create project with technologies
+  // Mutation to create project with technologies using external API
   const createProjectMutation = useMutation({
     mutationFn: async (technologyIds: string[]) => {
-      // Create the project
-      const { data: projectData, error: projectError } = await externalSupabase
-        .from('projects')
-        .insert({
-          name: newProject.name,
-          description: newProject.description || null,
-          status: newProject.status,
-          target_date: newProject.target_date || null,
-          notes: newProject.notes || null,
-          created_by: user?.id,
-        })
-        .select('id')
-        .single();
+      // Create the project using comparisonProjectsService
+      const response = await comparisonProjectsService.create({
+        name: newProject.name,
+        description: newProject.description || undefined,
+        use_case: newProject.notes || undefined,
+        created_by: user?.id,
+      });
       
-      if (projectError) throw projectError;
+      const projectId = response.project?.id || response.id;
+      if (!projectId) throw new Error('Failed to create project');
 
       // Add technologies to the project
       if (technologyIds.length > 0) {
-        const projectTechnologies = technologyIds.map(techId => ({
-          project_id: projectData.id,
-          technology_id: techId,
-          added_by: user?.id,
-        }));
-
-        const { error: techError } = await externalSupabase
-          .from('project_technologies')
-          .insert(projectTechnologies);
-        
-        if (techError) throw techError;
+        for (const techId of technologyIds) {
+          await comparisonProjectsService.addTechnology(projectId, {
+            technology_id: techId,
+          });
+        }
       }
 
-      return projectData.id;
+      return projectId;
     },
     onSuccess: (projectId) => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['comparison-projects'] });
       setSaveProjectModalOpen(false);
       setNewProject({ name: '', description: '', status: 'draft', target_date: '', notes: '' });
       toast({ 

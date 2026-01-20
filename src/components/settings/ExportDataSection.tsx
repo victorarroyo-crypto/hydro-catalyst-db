@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { comparisonProjectsService } from '@/services/comparisonProjectsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,12 +18,17 @@ export const ExportDataSection: React.FC = () => {
 
     setIsExporting(true);
     try {
-      // Fetch user's data
-      const [profileData, favoritesData, projectsData] = await Promise.all([
-        externalSupabase.from('profiles').select('*').eq('user_id', user.id).single(),
+      // Fetch user's data from appropriate sources:
+      // - profiles: Lovable Supabase (auth-related)
+      // - user_favorites: External DB
+      // - projects: External API (comparisonProjectsService)
+      const [profileData, favoritesData, projectsResponse] = await Promise.all([
+        supabase.from('profiles').select('*').eq('user_id', user.id).single(),
         externalSupabase.from('user_favorites').select('*, technologies(*)').eq('user_id', user.id),
-        externalSupabase.from('projects').select('*').eq('created_by', user.id),
+        comparisonProjectsService.list(),
       ]);
+
+      const projectsData = projectsResponse.projects || projectsResponse.data || [];
 
       const exportData = {
         exported_at: new Date().toISOString(),
@@ -32,7 +39,7 @@ export const ExportDataSection: React.FC = () => {
         },
         profile: profileData.data,
         favorites: favoritesData.data,
-        projects: projectsData.data,
+        projects: projectsData,
       };
 
       // Create and download JSON file
@@ -46,8 +53,8 @@ export const ExportDataSection: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      // Log the action
-      await externalSupabase.from('audit_logs').insert({
+      // Log the action to Lovable Supabase (audit_logs is local)
+      await supabase.from('audit_logs').insert({
         user_id: user.id,
         action: 'EXPORT_DATA',
         entity_type: 'user_data',
