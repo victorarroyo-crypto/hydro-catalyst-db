@@ -190,17 +190,27 @@ export default function ConsultoriaNuevo() {
       ? `${API_URL}/api/projects/from-template/${selectedTemplate}`
       : `${API_URL}/api/projects`;
 
+    // For template endpoint, wrap the data in a 'project' object if needed
+    const body = selectedTemplate
+      ? { project: payload }
+      : payload;
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Error al crear el proyecto');
+      // Handle FastAPI validation errors
+      if (errorData.detail && Array.isArray(errorData.detail)) {
+        const messages = errorData.detail.map((e: any) => e.msg || 'Error de validación').join(', ');
+        throw new Error(messages);
+      }
+      throw new Error(errorData.message || errorData.detail || 'Error al crear el proyecto');
     }
 
     return response.json();
