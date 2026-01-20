@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import ScoutingActivityPanel from '@/components/scouting/ScoutingActivityPanel';
 import { ScoutingSummaryCard } from '@/components/scouting/ScoutingSummaryCard';
+import { extractSessionMetrics } from '@/lib/scoutingMetrics';
 import { toast } from 'sonner';
 import { 
   Activity, 
@@ -886,74 +887,81 @@ export default function ScoutingMonitor() {
                       session={selectedSessionData}
                       logs={logs || []}
                       showLogs={true}
+                      realTechCount={techCountsBySession?.[selectedSessionData.session_id]}
                     />
                   )}
                 </TabsContent>
 
                 <TabsContent value="metrics">
-                  {selectedSessionData && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Sitios Examinados</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <span className="text-3xl font-bold">
-                            {selectedSessionData.sites_examined || 0}
-                          </span>
-                        </CardContent>
-                      </Card>
-                      
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Tecnologías Encontradas</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <span className="text-3xl font-bold text-green-600">
-                            {selectedSessionData.technologies_found || 0}
-                          </span>
-                        </CardContent>
-                      </Card>
-                      
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Tecnologías Descartadas</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <span className="text-3xl font-bold text-orange-600">
-                            {selectedSessionData.technologies_discarded || 0}
-                          </span>
-                        </CardContent>
-                      </Card>
-                      
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Aprobadas</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <span className="text-3xl font-bold text-blue-600">
-                            {selectedSessionData.technologies_approved || 0}
-                          </span>
-                        </CardContent>
-                      </Card>
+                  {selectedSessionData && (() => {
+                    const metrics = extractSessionMetrics(
+                      selectedSessionData,
+                      techCountsBySession?.[selectedSessionData.session_id]
+                    );
+                    return (
+                      <div className="grid grid-cols-2 gap-4">
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm">Sitios Examinados</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <span className="text-3xl font-bold">
+                              {metrics.sitesExamined}
+                            </span>
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm">Tecnologías Encontradas</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <span className="text-3xl font-bold text-green-600">
+                              {metrics.technologiesFound}
+                            </span>
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm">Tecnologías Descartadas</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <span className="text-3xl font-bold text-orange-600">
+                              {metrics.technologiesDiscarded}
+                            </span>
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm">Aprobadas</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <span className="text-3xl font-bold text-blue-600">
+                              {metrics.technologiesApproved}
+                            </span>
+                          </CardContent>
+                        </Card>
 
-                      <Card className="col-span-2">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Progreso</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <Progress 
-                            value={selectedSessionData.progress_percentage} 
-                            className="h-3 mb-2"
-                          />
-                          <div className="flex justify-between text-sm text-muted-foreground">
-                            <span>Fase: {selectedSessionData.current_phase || 'N/A'}</span>
-                            <span>{selectedSessionData.progress_percentage}%</span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
+                        <Card className="col-span-2">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm">Progreso</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <Progress 
+                              value={selectedSessionData.progress_percentage} 
+                              className="h-3 mb-2"
+                            />
+                            <div className="flex justify-between text-sm text-muted-foreground">
+                              <span>Fase: {selectedSessionData.current_phase || 'N/A'}</span>
+                              <span>{selectedSessionData.progress_percentage}%</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    );
+                  })()}
                 </TabsContent>
 
                 <TabsContent value="summary">

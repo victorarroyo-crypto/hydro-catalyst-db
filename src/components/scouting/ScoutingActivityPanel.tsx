@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { extractSessionMetrics } from '@/lib/scoutingMetrics';
 
 interface ActivityTimelineItem {
   timestamp: string;
@@ -66,6 +67,7 @@ interface ScoutingActivityPanelProps {
   session: ScoutingSession;
   logs: ScoutingLog[];
   showLogs?: boolean;
+  realTechCount?: number;
 }
 
 const phaseConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -100,9 +102,13 @@ const getActivityColor = (message: string) => {
 export default function ScoutingActivityPanel({ 
   session, 
   logs,
-  showLogs = true 
+  showLogs = true,
+  realTechCount
 }: ScoutingActivityPanelProps) {
   const [logsExpanded, setLogsExpanded] = React.useState(false);
+  
+  // Use unified metrics extraction
+  const metrics = extractSessionMetrics(session, realTechCount);
   
   const currentPhaseConfig = phaseConfig[session.current_phase || 'initialization'] || phaseConfig.initialization;
   const PhaseIcon = currentPhaseConfig.icon;
@@ -191,14 +197,14 @@ export default function ScoutingActivityPanel({
         </CardContent>
       </Card>
 
-      {/* Metrics Grid */}
+      {/* Metrics Grid - Using unified metrics */}
       <div className="grid grid-cols-4 gap-3">
         <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-blue-600" />
               <span className="text-2xl font-bold text-blue-700 dark:text-blue-400">
-                {session.sites_examined || 0}
+                {metrics.sitesExamined}
               </span>
             </div>
             <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">Sitios</p>
@@ -210,7 +216,7 @@ export default function ScoutingActivityPanel({
             <div className="flex items-center gap-2">
               <Cpu className="w-4 h-4 text-green-600" />
               <span className="text-2xl font-bold text-green-700 dark:text-green-400">
-                {session.technologies_found || 0}
+                {metrics.technologiesFound}
               </span>
             </div>
             <p className="text-xs text-green-600 dark:text-green-400 mt-1">Encontradas</p>
@@ -222,7 +228,7 @@ export default function ScoutingActivityPanel({
             <div className="flex items-center gap-2">
               <XCircle className="w-4 h-4 text-red-600" />
               <span className="text-2xl font-bold text-red-700 dark:text-red-400">
-                {session.technologies_discarded || 0}
+                {metrics.technologiesDiscarded}
               </span>
             </div>
             <p className="text-xs text-red-600 dark:text-red-400 mt-1">Descartadas</p>
@@ -234,7 +240,7 @@ export default function ScoutingActivityPanel({
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-purple-600" />
               <span className="text-2xl font-bold text-purple-700 dark:text-purple-400">
-                {session.technologies_approved || 0}
+                {metrics.technologiesApproved}
               </span>
             </div>
             <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">Aprobadas</p>
