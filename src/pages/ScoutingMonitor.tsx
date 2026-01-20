@@ -238,7 +238,7 @@ export default function ScoutingMonitor() {
       const { count: reviewCount, error: reviewError } = await externalSupabase
         .from('scouting_queue')
         .select('*', { count: 'exact', head: true })
-        .in('queue_status', ['pending', 'review', 'reviewing']);
+        .in('status', ['pending', 'review', 'reviewing']);
       
       if (reviewError) throw reviewError;
       
@@ -246,7 +246,7 @@ export default function ScoutingMonitor() {
       const { count: pendingCount, error: pendingError } = await externalSupabase
         .from('scouting_queue')
         .select('*', { count: 'exact', head: true })
-        .eq('queue_status', 'pending_approval');
+        .eq('status', 'pending_approval');
       
       if (pendingError) throw pendingError;
       
