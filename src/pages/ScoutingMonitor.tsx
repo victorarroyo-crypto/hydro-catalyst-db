@@ -37,6 +37,7 @@ import { es } from 'date-fns/locale';
 // Alert thresholds
 const HEARTBEAT_WARNING_MS = 2 * 60 * 1000; // 2 minutes
 const HEARTBEAT_CRITICAL_MS = 4 * 60 * 1000; // 4 minutes
+const PHANTOM_SESSION_MS = 3 * 60 * 1000; // 3 minutes - mark as phantom if running with no activity
 
 interface ActivityTimelineItem {
   timestamp: string;
@@ -96,6 +97,7 @@ const statusConfig = {
   completed: { label: 'Completado', color: 'bg-green-500', icon: CheckCircle2 },
   failed: { label: 'Fallido', color: 'bg-red-500', icon: XCircle },
   cancelled: { label: 'Cancelado', color: 'bg-gray-500', icon: Clock },
+  phantom: { label: 'Fantasma', color: 'bg-yellow-500', icon: AlertTriangle },
 };
 
 const logLevelConfig = {
@@ -104,6 +106,25 @@ const logLevelConfig = {
   warning: { color: 'text-yellow-600', bg: 'bg-yellow-50' },
   error: { color: 'text-red-600', bg: 'bg-red-50' },
 };
+
+// Helper to detect phantom sessions (running but no real activity)
+function isPhantomSession(session: ScoutingSession, currentTime: Date): boolean {
+  if (session.status !== 'running') return false;
+  
+  const hasNoConfig = !session.config || Object.keys(session.config).length === 0;
+  const hasNoActivity = !session.activity_timeline || session.activity_timeline.length === 0;
+  const hasNoProgress = (session.progress_percentage || 0) === 0;
+  const hasNoPhase = !session.current_phase || session.current_phase === 'initializing';
+  const hasNoSites = (session.sites_examined || 0) === 0;
+  const hasNoTechs = (session.technologies_found || 0) === 0;
+  
+  // Session has been running for more than 3 minutes with no activity
+  const runningTime = currentTime.getTime() - new Date(session.started_at).getTime();
+  const runningTooLongWithNoActivity = runningTime > PHANTOM_SESSION_MS;
+  
+  // It's a phantom if it has no meaningful data after running for a while
+  return runningTooLongWithNoActivity && hasNoConfig && hasNoActivity && hasNoProgress && hasNoPhase && hasNoSites && hasNoTechs;
+}
 
 const alertIcons = {
   stuck_job: Timer,
@@ -742,7 +763,10 @@ export default function ScoutingMonitor() {
               ) : (
                 <div className="divide-y">
                   {sessions?.map((session) => {
-                    const config = statusConfig[session.status as keyof typeof statusConfig] || statusConfig.running;
+                    // Detect phantom sessions
+                    const isPhantom = isPhantomSession(session, currentTime);
+                    const effectiveStatus = isPhantom ? 'phantom' : session.status;
+                    const config = statusConfig[effectiveStatus as keyof typeof statusConfig] || statusConfig.running;
                     const StatusIcon = config.icon;
                     
                     return (
@@ -751,12 +775,13 @@ export default function ScoutingMonitor() {
                         onClick={() => setSelectedSession(session.session_id)}
                         className={`w-full p-4 text-left hover:bg-muted/50 transition-colors ${
                           selectedSession === session.session_id ? 'bg-muted' : ''
-                        }`}
+                        } ${isPhantom ? 'opacity-60' : ''}`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <StatusIcon className={`w-4 h-4 ${
+                                isPhantom ? 'text-yellow-500' :
                                 session.status === 'running' ? 'text-blue-500 animate-pulse' :
                                 session.status === 'completed' ? 'text-green-500' :
                                 session.status === 'failed' ? 'text-red-500' : 'text-gray-500'
@@ -764,15 +789,26 @@ export default function ScoutingMonitor() {
                               <span className="font-medium text-sm truncate">
                                 {session.session_id.slice(0, 8)}...
                               </span>
+                              {isPhantom && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0 border-yellow-500 text-yellow-600">
+                                  Fantasma
+                                </Badge>
+                              )}
                             </div>
                             
-                            {session.status === 'running' && (
+                            {session.status === 'running' && !isPhantom && (
                               <div className="mb-2">
                                 <Progress value={session.progress_percentage} className="h-1.5" />
                                 <span className="text-xs text-muted-foreground">
                                   {session.progress_percentage}% - {session.current_phase}
                                 </span>
                               </div>
+                            )}
+                            
+                            {isPhantom && (
+                              <p className="text-xs text-yellow-600 mb-2">
+                                Sesión sin actividad real detectada
+                              </p>
                             )}
                             
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -792,7 +828,10 @@ export default function ScoutingMonitor() {
                           </div>
                           
                           <div className="text-right">
-                            <Badge variant="outline" className="text-xs mb-1">
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs mb-1 ${isPhantom ? 'border-yellow-500 text-yellow-600' : ''}`}
+                            >
                               {config.label}
                             </Badge>
                             <p className="text-xs text-muted-foreground">

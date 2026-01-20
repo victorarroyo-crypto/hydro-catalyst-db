@@ -189,7 +189,45 @@ Deno.serve(async (req) => {
       }
 
       const payloadHash = hashPayload(body);
-      console.log(`[scouting-proxy] /run request: requestId=${idempotencyKey}, user=${userId}, hash=${payloadHash}`);
+      console.log(`[scouting-proxy] 📥 /run request:`, {
+        requestId: idempotencyKey,
+        userId,
+        payloadHash,
+        timestamp: new Date().toISOString(),
+      });
+
+      // === STEP 0: Check for recent PENDING request with same payload_hash (race protection) ===
+      // This catches double-clicks that generate different requestIds but same payload
+      const { data: recentPending, error: recentError } = await supabaseAdmin
+        .from('scouting_run_requests')
+        .select('request_id, job_id, status, created_at')
+        .eq('user_id', userId)
+        .eq('payload_hash', payloadHash)
+        .eq('status', 'pending')
+        .gt('created_at', new Date(Date.now() - 30 * 1000).toISOString()) // last 30 seconds
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!recentError && recentPending && recentPending.request_id !== idempotencyKey) {
+        console.log(`[scouting-proxy] ⏳ PAYLOAD DUPLICATE: Another pending request with same payload`, {
+          thisRequestId: idempotencyKey,
+          existingRequestId: recentPending.request_id,
+          payloadHash,
+        });
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Solicitud duplicada detectada, espera unos segundos',
+            details: { 
+              status: 409, 
+              error_type: 'duplicate_payload',
+              existing_request_id: recentPending.request_id
+            }
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
 
       // === STEP 1: Attempt ATOMIC INSERT (will fail on duplicate) ===
       const { error: insertError } = await supabaseAdmin
@@ -209,7 +247,7 @@ Deno.serve(async (req) => {
                            insertError.message?.includes('unique');
 
         if (isDuplicate) {
-          console.log(`[scouting-proxy] Duplicate requestId detected: ${idempotencyKey}`);
+          console.log(`[scouting-proxy] 🔁 Duplicate requestId detected: ${idempotencyKey}`);
           
           // === STEP 2: Fetch the existing record ===
           const { data: existingRequest, error: fetchError } = await supabaseAdmin
@@ -233,7 +271,10 @@ Deno.serve(async (req) => {
           // === STEP 3: Return based on existing record status ===
           if (existingRequest.job_id) {
             // Already processed successfully - return the same job_id (IDEMPOTENT HIT)
-            console.log(`[scouting-proxy] ✅ IDEMPOTENT HIT: requestId=${idempotencyKey} → job_id=${existingRequest.job_id}`);
+            console.log(`[scouting-proxy] ✅ IDEMPOTENT HIT:`, {
+              requestId: idempotencyKey,
+              jobId: existingRequest.job_id,
+            });
             return new Response(
               JSON.stringify({ 
                 success: true, 
@@ -298,10 +339,16 @@ Deno.serve(async (req) => {
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
           );
         }
+      } else {
+        console.log(`[scouting-proxy] 🏆 WON INSERT RACE for requestId=${idempotencyKey}`);
       }
 
       // === STEP 4: This request WON the race - proceed to call Railway ===
-      console.log(`[scouting-proxy] 🚀 AUTHORIZED to call Railway for requestId=${idempotencyKey}`);
+      console.log(`[scouting-proxy] 🚀 AUTHORIZED to call Railway:`, {
+        requestId: idempotencyKey,
+        userId,
+        payloadHash,
+      });
     }
     // ============ END ATOMIC IDEMPOTENCY LOGIC ============
 
@@ -347,21 +394,33 @@ Deno.serve(async (req) => {
     console.log(`[scouting-proxy] Response status=${res.status}`);
 
     // ============ UPDATE IDEMPOTENCY RECORD BASED ON RESPONSE ============
+    // NOTE: Only update columns that exist in the schema: job_id, status, expires_at
+    // The table does NOT have an 'updated_at' column
     if (isScoutingRunEndpoint(endpoint) && normalizedMethod === 'POST' && idempotencyKey) {
       if (res.ok && data?.job_id) {
-        // Success - store the job_id
-        const { error: updateError } = await supabaseAdmin
+        // Success - store the job_id (CRITICAL for idempotency to work)
+        const { error: updateError, count } = await supabaseAdmin
           .from('scouting_run_requests')
           .update({ 
             job_id: data.job_id, 
-            status: 'completed' 
+            status: 'completed',
+            // Extend expiry since this is a valid completed request
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hour TTL
           })
           .eq('request_id', idempotencyKey);
 
         if (updateError) {
-          console.error('[scouting-proxy] Error updating idempotency record with job_id:', updateError);
+          console.error('[scouting-proxy] ❌ CRITICAL: Failed to store job_id:', {
+            requestId: idempotencyKey,
+            jobId: data.job_id,
+            error: updateError,
+          });
         } else {
-          console.log(`[scouting-proxy] ✅ Stored job_id=${data.job_id} for requestId=${idempotencyKey}`);
+          console.log(`[scouting-proxy] ✅ STORED job_id:`, {
+            requestId: idempotencyKey,
+            jobId: data.job_id,
+            rowsUpdated: count,
+          });
         }
       } else if (!res.ok) {
         // Failed - mark as failed so retry is allowed
@@ -373,7 +432,7 @@ Deno.serve(async (req) => {
         if (updateError) {
           console.error('[scouting-proxy] Error updating idempotency record to failed:', updateError);
         } else {
-          console.log(`[scouting-proxy] ❌ Marked requestId=${idempotencyKey} as failed`);
+          console.log(`[scouting-proxy] ❌ Marked requestId=${idempotencyKey} as failed, status=${res.status}`);
         }
       }
     }
