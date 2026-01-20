@@ -9,6 +9,14 @@ export type DocumentProcessingStatus =
   | 'completed'            // Completado
   | 'failed';              // Error
 
+// Estado de una parte del documento
+export interface DocumentPart {
+  part_number: number;
+  status: DocumentProcessingStatus;
+  chunk_count: number;
+  id: string;
+}
+
 export interface DocumentProcessingState {
   success: boolean;
   document_id: string;
@@ -23,6 +31,31 @@ export interface DocumentProcessingState {
   error: string | null;
   created_at: string;
   completed_at: string | null;
+  // Campos para documentos divididos
+  is_split_document?: boolean;
+  total_parts?: number | null;
+  parts_completed?: number | null;
+  parts?: DocumentPart[] | null;
+}
+
+// Documento en lista con soporte para partes
+export interface ProjectDocumentWithParts {
+  id: string;
+  project_id: string;
+  filename: string;
+  document_type: string;
+  processing_status: string;
+  chunk_count: number;
+  file_size: number;
+  created_at: string;
+  mime_type?: string;
+  entities_count?: number;
+  processing_error?: string;
+  // Campos de documento dividido
+  is_split_document?: boolean;
+  total_parts?: number | null;
+  parent_document_id?: string | null;
+  part_number?: number | null;
 }
 
 export interface ProcessingStageInfo {

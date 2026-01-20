@@ -63,12 +63,23 @@ export function useDocumentProcessingStatus(
     let intervalId: NodeJS.Timeout | null = null;
     let isMounted = true;
 
+    const shouldStopPolling = (data: DocumentProcessingState): boolean => {
+      if (data.status === 'completed' || data.status === 'failed') {
+        return true;
+      }
+      // For split documents, stop when all parts are complete
+      if (data.is_split_document && data.parts_completed === data.total_parts) {
+        return true;
+      }
+      return false;
+    };
+
     const pollStatus = async () => {
       const data = await fetchStatus();
 
       if (isMounted && data) {
-        // Detener polling si completado o fallido
-        if (data.status === 'completed' || data.status === 'failed') {
+        // Detener polling si completado, fallido, o todas las partes procesadas
+        if (shouldStopPolling(data)) {
           if (intervalId) {
             clearInterval(intervalId);
             intervalId = null;
