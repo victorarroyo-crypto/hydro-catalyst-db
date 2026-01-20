@@ -62,7 +62,7 @@ export function ScopeSection({ briefing, onChange }: Props) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {SCOPE_AREAS.map(area => {
           const Icon = area.icon;
-          const scopeArea = briefing.scope_areas[area.key];
+          const scopeArea = briefing.scope_areas?.[area.key] ?? { enabled: false, notes: '' };
 
           return (
             <div
