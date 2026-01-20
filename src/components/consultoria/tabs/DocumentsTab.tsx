@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Scissors,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -122,7 +123,7 @@ function SplitDocumentItem({
   const allCompleted = partsCompleted === totalParts && totalParts > 0;
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="hover:shadow-md transition-shadow relative">
       <Collapsible open={isOpen} onOpenChange={handleToggle}>
         <CardContent className="p-4">
           <CollapsibleTrigger asChild>
@@ -169,6 +170,24 @@ function SplitDocumentItem({
               </div>
             </button>
           </CollapsibleTrigger>
+
+          {/* Delete button - outside the trigger */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-4 right-4 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(document.id, document.filename);
+            }}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+          </Button>
 
           {/* Expanded content */}
           <CollapsibleContent>
