@@ -84,7 +84,7 @@ export function EntitiesSummaryCard({ projectId }: EntitiesSummaryCardProps) {
             ))}
         </div>
 
-        {summary.equipment_list.length > 0 && (
+        {(summary.equipment_list?.length ?? 0) > 0 && (
           <div className="mt-4">
             <p className="text-xs font-medium text-muted-foreground mb-1">
               Equipos principales:
