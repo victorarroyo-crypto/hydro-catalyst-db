@@ -1,10 +1,8 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { TRLBadge } from '@/components/TRLBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Building2, MapPin, Tag } from 'lucide-react';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { Building2, MapPin, Tag, Layers, Grid3X3 } from 'lucide-react';
 import { QuickClassifyButton } from '@/components/QuickClassifyButton';
 import { DeleteTechnologyButton } from '@/components/DeleteTechnologyButton';
 import { DownloadTechnologyButton } from '@/components/DownloadTechnologyButton';
@@ -23,55 +21,16 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
   showQuickClassify = false,
   showActions = true,
 }) => {
-  const isUnclassified = (technology as any).tipo_id === null || (technology as any).tipo_id === undefined;
   const isInactive = technology.status === 'inactive';
   
-  // Fetch taxonomy data for display
-  const { data: taxonomyData } = useQuery({
-    queryKey: ['taxonomy-display', (technology as any).tipo_id, (technology as any).subcategoria_id, (technology as any).sector_id],
-    queryFn: async () => {
-      const tipoId = (technology as any).tipo_id;
-      const subcategoriaId = (technology as any).subcategoria_id;
-      const sectorId = (technology as any).sector_id;
-      
-      let tipo = null;
-      let subcategoria = null;
-      let sector = null;
-      
-      if (tipoId) {
-        const { data } = await externalSupabase
-          .from('taxonomy_tipos')
-          .select('codigo, nombre')
-          .eq('id', tipoId)
-          .maybeSingle();
-        tipo = data;
-      }
-      
-      if (subcategoriaId) {
-        const { data } = await externalSupabase
-          .from('taxonomy_subcategorias')
-          .select('codigo, nombre')
-          .eq('id', subcategoriaId)
-          .maybeSingle();
-        subcategoria = data;
-      }
-
-      if (sectorId) {
-        const { data } = await externalSupabase
-          .from('taxonomy_sectores')
-          .select('id, nombre')
-          .eq('id', sectorId)
-          .maybeSingle();
-        sector = data;
-      }
-      
-      return { tipo, subcategoria, sector };
-    },
-    enabled: !!(technology as any).tipo_id || !!(technology as any).subcategoria_id || !!(technology as any).sector_id,
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
-  });
-
-  const hasTaxonomy = taxonomyData?.tipo || taxonomyData?.subcategoria || taxonomyData?.sector;
+  // Legacy text fields (primary source - always available)
+  const legacyTipo = technology["Tipo de tecnología"];
+  const legacySubcat = technology["Subcategoría"];
+  const legacySector = technology["Sector y subsector"];
+  const hasLegacyTaxonomy = !!(legacyTipo || legacySubcat || legacySector);
+  
+  // Check if unclassified (no tipo in any form)
+  const isUnclassified = !legacyTipo && !(technology as any).tipo_id;
 
   return (
     <Card 
@@ -120,36 +79,28 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
         </div>
 
         <div className="mt-3 pt-3 border-t border-border space-y-2">
-          {/* New Taxonomy badges */}
-          {hasTaxonomy && (
+          {/* Taxonomy badges from legacy text fields */}
+          {hasLegacyTaxonomy && (
             <div className="flex flex-wrap gap-1.5">
-              {taxonomyData?.tipo && (
+              {legacyTipo && (
                 <Badge variant="default" className="text-xs gap-1">
                   <Tag className="w-3 h-3" />
-                  <span className="font-mono text-[10px] opacity-70">{taxonomyData.tipo.codigo}</span>
-                  {taxonomyData.tipo.nombre}
+                  {legacyTipo}
                 </Badge>
               )}
-              {taxonomyData?.subcategoria && (
-                <Badge variant="secondary" className="text-xs">
-                  <span className="font-mono text-[10px] opacity-70 mr-1">{taxonomyData.subcategoria.codigo}</span>
-                  {taxonomyData.subcategoria.nombre}
+              {legacySubcat && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  <Layers className="w-3 h-3" />
+                  {legacySubcat}
                 </Badge>
               )}
-              {taxonomyData?.sector && (
-                <Badge variant="outline" className="text-xs">
-                  <span className="font-mono text-[10px] opacity-70 mr-1">{taxonomyData.sector.id}</span>
-                  {taxonomyData.sector.nombre}
+              {legacySector && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Grid3X3 className="w-3 h-3" />
+                  {legacySector}
                 </Badge>
               )}
             </div>
-          )}
-          
-          {/* Fallback to legacy type if no taxonomy */}
-          {!hasTaxonomy && technology["Tipo de tecnología"] && !showQuickClassify && (
-            <Badge variant="outline" className="text-xs text-muted-foreground">
-              {technology["Tipo de tecnología"]}
-            </Badge>
           )}
           
           {/* Quick classify button for unclassified technologies */}
