@@ -18,6 +18,8 @@ export interface ExtractedMetrics {
   technologiesApproved: number;
   duplicatesSkipped: number;
   errorsCount: number;
+  /** True if technologiesFound came from realTechCount (verified DB count) */
+  isVerifiedCount: boolean;
 }
 
 /**
@@ -31,6 +33,9 @@ export function extractSessionMetrics(
   realTechCount?: number
 ): ExtractedMetrics {
   const summary = session.summary as Record<string, unknown> | null;
+
+  // Track if we're using the verified count
+  const isVerifiedCount = realTechCount !== undefined;
 
   // Technologies: prioritize realTechCount > summary > session
   const technologiesFound =
@@ -67,5 +72,6 @@ export function extractSessionMetrics(
     technologiesApproved,
     duplicatesSkipped,
     errorsCount,
+    isVerifiedCount,
   };
 }

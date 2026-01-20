@@ -274,8 +274,13 @@ export default function ScoutingActivityPanel({
               <span className="text-2xl font-bold text-green-700 dark:text-green-400">
                 {metrics.technologiesFound}
               </span>
+              {metrics.isVerifiedCount && (
+                <span className="text-xs text-green-500" title="Conteo verificado en cola">✓</span>
+              )}
             </div>
-            <p className="text-xs text-green-600 dark:text-green-400 mt-1">Encontradas</p>
+            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+              {metrics.isVerifiedCount ? 'En cola' : 'Encontradas'}
+            </p>
           </CardContent>
         </Card>
         
