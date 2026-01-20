@@ -80,6 +80,10 @@ function hashPayload(payload: unknown): string {
   return hash.toString(16);
 }
 
+// === IN-MEMORY RATE LIMITER (zero-latency protection against ~200ms duplicates) ===
+const userLastRunTimestamps = new Map<string, number>();
+const RATE_LIMIT_WINDOW_MS = 500; // 500ms hybrid window
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -186,6 +190,38 @@ Deno.serve(async (req) => {
           JSON.stringify({ success: false, error: 'Se requiere requestId para iniciar scouting' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
+      }
+
+      // === STEP -1: In-memory rate limiting (zero-latency protection for ~200ms duplicates) ===
+      const lastRunTime = userLastRunTimestamps.get(userId);
+      const nowMs = Date.now();
+
+      if (lastRunTime && (nowMs - lastRunTime) < RATE_LIMIT_WINDOW_MS) {
+        const msSinceLastRun = nowMs - lastRunTime;
+        console.log(`[scouting-proxy] 🚫 RATE LIMITED: User ${userId} tried again after ${msSinceLastRun}ms (limit: ${RATE_LIMIT_WINDOW_MS}ms)`);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Espera un momento antes de iniciar otro scouting',
+            details: { 
+              status: 429,
+              error_type: 'rate_limited',
+              retry_after_ms: RATE_LIMIT_WINDOW_MS - msSinceLastRun
+            }
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // Update timestamp BEFORE any DB operations (critical for timing)
+      userLastRunTimestamps.set(userId, nowMs);
+
+      // Cleanup old entries periodically to prevent memory leak
+      if (userLastRunTimestamps.size > 100) {
+        const cutoff = nowMs - 60000; // 1 minute
+        for (const [uid, ts] of userLastRunTimestamps.entries()) {
+          if (ts < cutoff) userLastRunTimestamps.delete(uid);
+        }
       }
 
       const payloadHash = hashPayload(body);
