@@ -207,8 +207,8 @@ const ScoutingNew = () => {
       return;
     }
     
-    // Extra debounce: ignore clicks within 2 seconds of last submit
-    if (now - lastSubmitTimeRef.current < 2000) {
+    // Hybrid debounce: 500ms window blocks duplicates (~200ms) while allowing intentional retries
+    if (now - lastSubmitTimeRef.current < 500) {
       console.warn(`[ScoutingNew] ❌ BLOCKED #${attemptNumber}: time debounce (${now - lastSubmitTimeRef.current}ms)`);
       return;
     }
