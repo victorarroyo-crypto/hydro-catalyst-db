@@ -183,24 +183,39 @@ const ScoutingNew = () => {
     },
   });
 
+  // Counter to track submission attempts for debugging
+  const attemptCounterRef = useRef(0);
+
   const handleStartScouting = useCallback(() => {
+    const attemptNumber = ++attemptCounterRef.current;
+    const now = Date.now();
+    
+    // === DETAILED INSTRUMENTATION FOR DEBUG ===
+    console.log(`[ScoutingNew] 📊 ATTEMPT #${attemptNumber}:`, {
+      timestamp: new Date().toISOString(),
+      msSinceLastSubmit: now - lastSubmitTimeRef.current,
+      submitLockRef: submitLockRef.current,
+      isSubmitting,
+      mutationPending: scoutingMutation.isPending,
+      currentRequestIdRef: currentRequestIdRef.current,
+    });
+
     // === SYNCHRONOUS LOCK CHECK (before React state) ===
     // This fires immediately, blocking any double-click in the same frame
     if (submitLockRef.current) {
-      console.log('[ScoutingNew] Blocked by synchronous lock');
+      console.warn(`[ScoutingNew] ❌ BLOCKED #${attemptNumber}: synchronous lock active`);
       return;
     }
     
     // Extra debounce: ignore clicks within 2 seconds of last submit
-    const now = Date.now();
     if (now - lastSubmitTimeRef.current < 2000) {
-      console.log('[ScoutingNew] Blocked by time debounce');
+      console.warn(`[ScoutingNew] ❌ BLOCKED #${attemptNumber}: time debounce (${now - lastSubmitTimeRef.current}ms)`);
       return;
     }
     
     // Also check React state (belt and suspenders)
     if (isSubmitting || scoutingMutation.isPending) {
-      console.log('[ScoutingNew] Blocked by React state');
+      console.warn(`[ScoutingNew] ❌ BLOCKED #${attemptNumber}: React state lock`);
       return;
     }
     
@@ -223,7 +238,12 @@ const ScoutingNew = () => {
     const requestId = generateRequestId();
     currentRequestIdRef.current = requestId;
     
-    console.log(`[ScoutingNew] 🚀 Iniciando scouting con requestId=${requestId}`);
+    console.log(`[ScoutingNew] ✅ AUTHORIZED #${attemptNumber}:`, {
+      requestId,
+      keywords: keywordList,
+      model: selectedModel,
+      timestamp: new Date().toISOString(),
+    });
     
     scoutingMutation.mutate({
       config: {
