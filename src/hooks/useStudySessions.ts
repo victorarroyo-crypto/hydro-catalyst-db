@@ -1,48 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { studySessionsService, StudySession, StudyLog } from '@/services/studySessionsService';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from '@/hooks/use-toast';
 
-export interface StudySession {
-  id: string;
-  study_id: string;
-  session_type: string;
-  status: string;
-  current_phase: string | null;
-  progress_percentage: number | null;
-  config: Record<string, unknown> | null;
-  summary: Record<string, unknown> | null;
-  error_message: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface StudySessionLog {
-  id: string;
-  session_id: string;
-  study_id: string;
-  phase: string | null;
-  level: string;
-  message: string;
-  details: Record<string, unknown> | null;
-  created_at: string;
-}
+// Re-export types for backwards compatibility
+export type { StudySession };
+export type StudySessionLog = StudyLog;
 
 export function useStudySessions(studyId: string | undefined) {
   return useQuery({
     queryKey: ['study-sessions', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      
-      const { data, error } = await externalSupabase
-        .from('study_sessions')
-        .select('*')
-        .eq('study_id', studyId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data as StudySession[];
+      // Use API to list sessions for this study
+      const response = await studySessionsService.list({ limit: 100 });
+      const sessions = response.sessions || response.data || response || [];
+      // Filter by study_id (topic field maps to study reference in new schema)
+      return sessions.filter((s: any) => s.id === studyId || s.topic === studyId) as StudySession[];
     },
     enabled: !!studyId,
   });
@@ -54,24 +28,19 @@ export function useActiveStudySession(studyId: string | undefined, sessionType?:
     queryFn: async () => {
       if (!studyId) return null;
       
-      let query = externalSupabase
-        .from('study_sessions')
-        .select('*')
-        .eq('study_id', studyId)
-        .in('status', ['pending', 'running']);
+      // Fetch sessions and filter for active ones
+      const response = await studySessionsService.list({ status: 'running', limit: 10 });
+      const sessions = response.sessions || response.data || response || [];
       
-      // Filter by session type if provided
-      if (sessionType) {
-        query = query.eq('session_type', sessionType);
-      }
+      // Find active session matching study and optionally session type
+      const activeSession = sessions.find((s: any) => {
+        const matchesStudy = s.id === studyId || s.topic === studyId;
+        const isActive = s.status === 'pending' || s.status === 'running';
+        const matchesType = !sessionType || s.current_phase === sessionType;
+        return matchesStudy && isActive && matchesType;
+      });
       
-      const { data, error } = await query
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data as StudySession | null;
+      return activeSession as StudySession | null;
     },
     enabled: !!studyId,
     refetchInterval: (query) => {
@@ -86,15 +55,8 @@ export function useStudySessionLogs(sessionId: string | undefined) {
     queryKey: ['study-session-logs', sessionId],
     queryFn: async () => {
       if (!sessionId) return [];
-      
-      const { data, error } = await externalSupabase
-        .from('study_session_logs')
-        .select('*')
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      return data as StudySessionLog[];
+      const response = await studySessionsService.listLogs(sessionId, { limit: 200 });
+      return (response.logs || response.data || response || []) as StudyLog[];
     },
     enabled: !!sessionId,
     refetchInterval: 2000, // Refetch logs every 2 seconds
@@ -114,6 +76,7 @@ export function useStartStudySession() {
       sessionType: string; 
       config?: Record<string, unknown>;
     }) => {
+      // Use local Lovable Supabase for edge functions (as per memory)
       const { data, error } = await externalSupabase.functions.invoke('study-start-session', {
         body: { study_id: studyId, session_type: sessionType, config },
       });

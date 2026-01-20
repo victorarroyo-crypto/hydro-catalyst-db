@@ -1,9 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { studySessionsService } from '@/services/studySessionsService';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useToast } from '@/hooks/use-toast';
+import { API_URL } from '@/lib/api';
 import type { Tables } from '@/integrations/supabase/types';
 
-// Types
+// Types - keeping backward compatibility
 export interface ScoutingStudy {
   id: string;
   name: string;
@@ -76,7 +78,6 @@ export interface StudyLonglistItem {
   web: string | null;
   confidence_score: number | null;
   already_in_db: boolean | null;
-  // Extended fields for complete tech sheets
   paises_actua: string | null;
   email: string | null;
   sector: string | null;
@@ -86,7 +87,6 @@ export interface StudyLonglistItem {
   ventaja_competitiva: string | null;
   innovacion: string | null;
   casos_referencia: string | null;
-  // Taxonomy IDs
   tipo_id: number | null;
   subcategoria_id: number | null;
   sector_id: string | null;
@@ -162,23 +162,24 @@ export interface StudyReport {
   created_at: string;
 }
 
-// Hooks for Studies
+// ============================================================================
+// SCOUTING STUDIES (Main entity - uses Railway API)
+// ============================================================================
+
+const STUDIES_URL = `${API_URL}/api/scouting-studies`;
+
 export function useScoutingStudies(status?: string) {
   return useQuery({
     queryKey: ['scouting-studies', status],
     queryFn: async () => {
-      let query = externalSupabase
-        .from('scouting_studies')
-        .select('*')
-        .order('updated_at', { ascending: false });
+      const searchParams = new URLSearchParams();
+      if (status) searchParams.append('status', status);
       
-      if (status) {
-        query = query.eq('status', status);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as ScoutingStudy[];
+      const url = searchParams.toString() ? `${STUDIES_URL}?${searchParams}` : STUDIES_URL;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch studies');
+      const data = await response.json();
+      return (data.studies || data.data || data || []) as ScoutingStudy[];
     },
   });
 }
@@ -188,13 +189,10 @@ export function useScoutingStudy(studyId: string | undefined) {
     queryKey: ['scouting-study', studyId],
     queryFn: async () => {
       if (!studyId) return null;
-      const { data, error } = await externalSupabase
-        .from('scouting_studies')
-        .select('*')
-        .eq('id', studyId)
-        .single();
-      if (error) throw error;
-      return data as ScoutingStudy;
+      const response = await fetch(`${STUDIES_URL}/${studyId}`);
+      if (!response.ok) throw new Error('Failed to fetch study');
+      const data = await response.json();
+      return (data.study || data) as ScoutingStudy;
     },
     enabled: !!studyId,
   });
@@ -206,22 +204,21 @@ export function useCreateStudy() {
 
   return useMutation({
     mutationFn: async (study: Partial<ScoutingStudy>) => {
-      const { data: { user } } = await externalSupabase.auth.getUser();
-      const { data, error } = await externalSupabase
-        .from('scouting_studies')
-        .insert({
-          name: study.name!,
+      const response = await fetch(STUDIES_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: study.name,
           description: study.description,
           problem_statement: study.problem_statement,
           context: study.context,
           objectives: study.objectives,
           constraints: study.constraints,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to create study');
+      const data = await response.json();
+      return data.study || data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scouting-studies'] });
@@ -239,14 +236,14 @@ export function useUpdateStudy() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<ScoutingStudy> & { id: string }) => {
-      const { data, error } = await externalSupabase
-        .from('scouting_studies')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const response = await fetch(`${STUDIES_URL}/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) throw new Error('Failed to update study');
+      const data = await response.json();
+      return { ...(data.study || data), id };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['scouting-studies'] });
@@ -265,11 +262,8 @@ export function useDeleteStudy() {
 
   return useMutation({
     mutationFn: async (studyId: string) => {
-      const { error } = await externalSupabase
-        .from('scouting_studies')
-        .delete()
-        .eq('id', studyId);
-      if (error) throw error;
+      const response = await fetch(`${STUDIES_URL}/${studyId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed to delete study');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scouting-studies'] });
@@ -281,19 +275,17 @@ export function useDeleteStudy() {
   });
 }
 
-// Hooks for Research (Phase 1)
+// ============================================================================
+// RESEARCH (Phase 1) - Uses studySessionsService
+// ============================================================================
+
 export function useStudyResearch(studyId: string | undefined) {
   return useQuery({
     queryKey: ['study-research', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await externalSupabase
-        .from('study_research')
-        .select('*')
-        .eq('study_id', studyId)
-        .order('relevance_score', { ascending: false });
-      if (error) throw error;
-      return data as StudyResearch[];
+      const response = await studySessionsService.listResearch(studyId);
+      return (response.research || response.data || response || []) as StudyResearch[];
     },
     enabled: !!studyId,
   });
@@ -305,25 +297,15 @@ export function useAddResearch() {
 
   return useMutation({
     mutationFn: async (research: Partial<StudyResearch>) => {
-      const { data: { user } } = await externalSupabase.auth.getUser();
-      const { data, error } = await externalSupabase
-        .from('study_research')
-        .insert({
-          study_id: research.study_id!,
-          title: research.title!,
-          source_type: research.source_type,
-          source_url: research.source_url,
-          authors: research.authors,
-          summary: research.summary,
-          key_findings: research.key_findings,
-          relevance_score: research.relevance_score,
-          knowledge_doc_id: research.knowledge_doc_id,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const response = await studySessionsService.addResearch(research.study_id!, {
+        title: research.title!,
+        source_type: research.source_type || undefined,
+        source_url: research.source_url || undefined,
+        summary: research.summary || undefined,
+        key_findings: research.key_findings || undefined,
+        relevance_score: research.relevance_score || undefined,
+      });
+      return { ...(response.research || response), study_id: research.study_id };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['study-research', data.study_id] });
@@ -341,22 +323,8 @@ export function useUpdateResearch() {
 
   return useMutation({
     mutationFn: async ({ id, study_id, ...updates }: Partial<StudyResearch> & { id: string; study_id: string }) => {
-      const { data, error } = await externalSupabase
-        .from('study_research')
-        .update({
-          title: updates.title,
-          source_type: updates.source_type,
-          source_url: updates.source_url,
-          authors: updates.authors,
-          summary: updates.summary,
-          key_findings: updates.key_findings,
-          relevance_score: updates.relevance_score,
-        })
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      return { ...data, study_id };
+      const response = await studySessionsService.updateResearch(study_id, id, updates);
+      return { ...(response.research || response), study_id };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['study-research', data.study_id] });
@@ -373,41 +341,13 @@ export function useDeleteResearch() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ researchId, studyId, knowledgeDocId, filePath }: { 
+    mutationFn: async ({ researchId, studyId }: { 
       researchId: string; 
       studyId: string; 
       knowledgeDocId?: string | null;
       filePath?: string | null;
     }) => {
-      // Delete the research record
-      const { error: researchError } = await externalSupabase
-        .from('study_research')
-        .delete()
-        .eq('id', researchId);
-      if (researchError) throw researchError;
-
-      // If there's an associated knowledge document, delete it and its chunks
-      if (knowledgeDocId) {
-        // Delete chunks first
-        await externalSupabase
-          .from('knowledge_chunks')
-          .delete()
-          .eq('document_id', knowledgeDocId);
-
-        // Delete the document record
-        await externalSupabase
-          .from('knowledge_documents')
-          .delete()
-          .eq('id', knowledgeDocId);
-      }
-
-      // If there's a file in storage, delete it
-      if (filePath) {
-        await externalSupabase.storage
-          .from('knowledge-documents')
-          .remove([filePath]);
-      }
-
+      await studySessionsService.deleteResearch(studyId, researchId);
       return { studyId };
     },
     onSuccess: (data) => {
@@ -420,19 +360,17 @@ export function useDeleteResearch() {
   });
 }
 
-// Hooks for Solutions (Phase 2)
+// ============================================================================
+// SOLUTIONS (Phase 2)
+// ============================================================================
+
 export function useStudySolutions(studyId: string | undefined) {
   return useQuery({
     queryKey: ['study-solutions', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await externalSupabase
-        .from('study_solutions')
-        .select('*')
-        .eq('study_id', studyId)
-        .order('priority', { ascending: false });
-      if (error) throw error;
-      return data as StudySolution[];
+      const response = await studySessionsService.listSolutions(studyId);
+      return (response.solutions || response.data || response || []) as StudySolution[];
     },
     enabled: !!studyId,
   });
@@ -444,26 +382,14 @@ export function useAddSolution() {
 
   return useMutation({
     mutationFn: async (solution: Partial<StudySolution>) => {
-      const { data: { user } } = await externalSupabase.auth.getUser();
-      const { data, error } = await externalSupabase
-        .from('study_solutions')
-        .insert({
-          study_id: solution.study_id!,
-          category: solution.category!,
-          name: solution.name!,
-          description: solution.description,
-          advantages: solution.advantages,
-          disadvantages: solution.disadvantages,
-          estimated_trl_range: solution.estimated_trl_range,
-          cost_range: solution.cost_range,
-          implementation_time: solution.implementation_time,
-          priority: solution.priority,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const response = await studySessionsService.addSolution(solution.study_id!, {
+        category: solution.category!,
+        name: solution.name!,
+        description: solution.description || undefined,
+        advantages: solution.advantages || undefined,
+        disadvantages: solution.disadvantages || undefined,
+      });
+      return { ...(response.solution || response), study_id: solution.study_id };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['study-solutions', data.study_id] });
@@ -475,7 +401,10 @@ export function useAddSolution() {
   });
 }
 
-// Hooks for Longlist (Phase 3)
+// ============================================================================
+// LONGLIST (Phase 3)
+// ============================================================================
+
 export type FullLonglistItem = Tables<'study_longlist'>;
 
 export function useStudyLonglist(studyId: string | undefined) {
@@ -483,17 +412,10 @@ export function useStudyLonglist(studyId: string | undefined) {
     queryKey: ['study-longlist', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await externalSupabase
-        .from('study_longlist')
-        .select('*')
-        .eq('study_id', studyId)
-        .order('added_at', { ascending: false });
-      if (error) throw error;
-      return data as FullLonglistItem[];
+      const response = await studySessionsService.listLonglist(studyId);
+      return (response.longlist || response.data || response || []) as FullLonglistItem[];
     },
     enabled: !!studyId,
-
-    // Fallback: if realtime misses an event, keep UI consistent without requiring manual refresh
     refetchInterval: 3000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -506,26 +428,18 @@ export function useAddToLonglist() {
 
   return useMutation({
     mutationFn: async (item: Partial<StudyLonglistItem>) => {
-      const { data: { user } } = await externalSupabase.auth.getUser();
-      const { data, error } = await externalSupabase
-        .from('study_longlist')
-        .insert({
-          study_id: item.study_id!,
-          technology_name: item.technology_name!,
-          technology_id: item.technology_id,
-          solution_id: item.solution_id,
-          provider: item.provider,
-          country: item.country,
-          trl: item.trl,
-          brief_description: item.brief_description,
-          inclusion_reason: item.inclusion_reason,
-          source: item.source,
-          added_by: user?.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const response = await studySessionsService.addToLonglist(item.study_id!, {
+        technology_name: item.technology_name!,
+        technology_id: item.technology_id || undefined,
+        solution_id: item.solution_id || undefined,
+        provider: item.provider || undefined,
+        country: item.country || undefined,
+        trl: item.trl || undefined,
+        brief_description: item.brief_description || undefined,
+        inclusion_reason: item.inclusion_reason || undefined,
+        source: item.source || undefined,
+      });
+      return { ...(response.item || response), study_id: item.study_id };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['study-longlist', data.study_id] });
@@ -543,15 +457,10 @@ export function useRemoveFromLonglist() {
 
   return useMutation({
     mutationFn: async ({ id, studyId }: { id: string; studyId: string }) => {
-      const { error } = await externalSupabase
-        .from('study_longlist')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      await studySessionsService.removeFromLonglist(studyId, id);
       return studyId;
     },
     onSuccess: (studyId) => {
-      // Invalidate both longlist and extracted technologies queries (same table, different filters)
       queryClient.invalidateQueries({ queryKey: ['study-longlist', studyId] });
       queryClient.invalidateQueries({ queryKey: ['study-extracted-technologies', studyId] });
       toast({ title: 'Tecnología eliminada' });
@@ -562,22 +471,17 @@ export function useRemoveFromLonglist() {
   });
 }
 
-// Hooks for Shortlist (Phase 4)
+// ============================================================================
+// SHORTLIST (Phase 4)
+// ============================================================================
+
 export function useStudyShortlist(studyId: string | undefined) {
   return useQuery({
     queryKey: ['study-shortlist', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await externalSupabase
-        .from('study_shortlist')
-        .select(`
-          *,
-          longlist:study_longlist(*)
-        `)
-        .eq('study_id', studyId)
-        .order('priority', { ascending: true });
-      if (error) throw error;
-      return data as StudyShortlistItem[];
+      const response = await studySessionsService.listShortlist(studyId);
+      return (response.shortlist || response.data || response || []) as StudyShortlistItem[];
     },
     enabled: !!studyId,
   });
@@ -589,21 +493,13 @@ export function useAddToShortlist() {
 
   return useMutation({
     mutationFn: async (item: Partial<StudyShortlistItem>) => {
-      const { data: { user } } = await externalSupabase.auth.getUser();
-      const { data, error } = await externalSupabase
-        .from('study_shortlist')
-        .insert({
-          study_id: item.study_id!,
-          longlist_id: item.longlist_id!,
-          selection_reason: item.selection_reason,
-          priority: item.priority,
-          notes: item.notes,
-          selected_by: user?.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const response = await studySessionsService.addToShortlist(item.study_id!, {
+        longlist_id: item.longlist_id!,
+        selection_reason: item.selection_reason || undefined,
+        priority: item.priority || undefined,
+        notes: item.notes || undefined,
+      });
+      return { ...(response.item || response), study_id: item.study_id };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['study-shortlist', data.study_id] });
@@ -622,11 +518,7 @@ export function useRemoveFromShortlist() {
 
   return useMutation({
     mutationFn: async ({ id, studyId }: { id: string; studyId: string }) => {
-      const { error } = await externalSupabase
-        .from('study_shortlist')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      await studySessionsService.removeFromShortlist(studyId, id);
       return studyId;
     },
     onSuccess: (studyId) => {
@@ -639,25 +531,17 @@ export function useRemoveFromShortlist() {
   });
 }
 
-// Hooks for Evaluations (Phase 5)
+// ============================================================================
+// EVALUATIONS (Phase 5)
+// ============================================================================
+
 export function useStudyEvaluations(studyId: string | undefined) {
   return useQuery({
     queryKey: ['study-evaluations', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await externalSupabase
-        .from('study_evaluations')
-        .select(`
-          *,
-          shortlist:study_shortlist(
-            *,
-            longlist:study_longlist(*)
-          )
-        `)
-        .eq('study_id', studyId)
-        .order('overall_score', { ascending: false });
-      if (error) throw error;
-      return data as StudyEvaluation[];
+      const response = await studySessionsService.listEvaluations(studyId);
+      return (response.evaluations || response.data || response || []) as StudyEvaluation[];
     },
     enabled: !!studyId,
   });
@@ -669,37 +553,9 @@ export function useUpsertEvaluation() {
 
   return useMutation({
     mutationFn: async (evaluation: Partial<StudyEvaluation>) => {
-      const { data: { user } } = await externalSupabase.auth.getUser();
-      const insertData = {
-        study_id: evaluation.study_id!,
-        shortlist_id: evaluation.shortlist_id!,
-        trl_score: evaluation.trl_score,
-        cost_score: evaluation.cost_score,
-        scalability_score: evaluation.scalability_score,
-        trl_notes: evaluation.trl_notes,
-        cost_notes: evaluation.cost_notes,
-        scalability_notes: evaluation.scalability_notes,
-        context_fit_score: evaluation.context_fit_score,
-        context_notes: evaluation.context_notes,
-        strengths: evaluation.strengths,
-        weaknesses: evaluation.weaknesses,
-        opportunities: evaluation.opportunities,
-        threats: evaluation.threats,
-        implementation_barriers: evaluation.implementation_barriers,
-        innovation_potential_score: evaluation.innovation_potential_score,
-        benchmark_notes: evaluation.benchmark_notes,
-        overall_score: evaluation.overall_score,
-        recommendation: evaluation.recommendation,
-        recommendation_notes: evaluation.recommendation_notes,
-        evaluated_by: user?.id,
-      };
-      const { data, error } = await externalSupabase
-        .from('study_evaluations')
-        .upsert(insertData, { onConflict: 'study_id,shortlist_id' })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const { shortlist, ...evalData } = evaluation;
+      const response = await studySessionsService.upsertEvaluation(evaluation.study_id!, evalData as any);
+      return { ...(response.evaluation || response), study_id: evaluation.study_id };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['study-evaluations', data.study_id] });
@@ -711,19 +567,17 @@ export function useUpsertEvaluation() {
   });
 }
 
-// Hooks for Reports
+// ============================================================================
+// REPORTS (Phase 6)
+// ============================================================================
+
 export function useStudyReports(studyId: string | undefined) {
   return useQuery({
     queryKey: ['study-reports', studyId],
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await externalSupabase
-        .from('study_reports')
-        .select('*')
-        .eq('study_id', studyId)
-        .order('version', { ascending: false });
-      if (error) throw error;
-      return data as StudyReport[];
+      const response = await studySessionsService.listReports(studyId);
+      return (response.reports || response.data || response || []) as StudyReport[];
     },
     enabled: !!studyId,
   });
@@ -735,38 +589,8 @@ export function useCreateReport() {
 
   return useMutation({
     mutationFn: async (report: Partial<StudyReport>) => {
-      const { data: { user } } = await externalSupabase.auth.getUser();
-      
-      // Get current max version
-      const { data: existing } = await externalSupabase
-        .from('study_reports')
-        .select('version')
-        .eq('study_id', report.study_id!)
-        .order('version', { ascending: false })
-        .limit(1);
-      
-      const nextVersion = (existing?.[0]?.version ?? 0) + 1;
-      
-      const { data, error } = await externalSupabase
-        .from('study_reports')
-        .insert({
-          study_id: report.study_id!,
-          title: report.title!,
-          version: nextVersion,
-          executive_summary: report.executive_summary,
-          methodology: report.methodology,
-          problem_analysis: report.problem_analysis,
-          solutions_overview: report.solutions_overview,
-          technology_comparison: report.technology_comparison,
-          recommendations: report.recommendations,
-          conclusions: report.conclusions,
-          generated_by: report.generated_by,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const response = await studySessionsService.createReport(report.study_id!, report);
+      return { ...(response.report || response), study_id: report.study_id };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['study-reports', data.study_id] });
@@ -784,22 +608,8 @@ export function useUpdateReport() {
 
   return useMutation({
     mutationFn: async ({ id, study_id, ...updates }: Partial<StudyReport> & { id: string; study_id: string }) => {
-      const { data, error } = await externalSupabase
-        .from('study_reports')
-        .update({
-          executive_summary: updates.executive_summary,
-          methodology: updates.methodology,
-          problem_analysis: updates.problem_analysis,
-          solutions_overview: updates.solutions_overview,
-          technology_comparison: updates.technology_comparison,
-          recommendations: updates.recommendations,
-          conclusions: updates.conclusions,
-        })
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      return { ...data, study_id };
+      const response = await studySessionsService.updateReport(study_id, id, updates);
+      return { ...(response.report || response), study_id };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['study-reports', data.study_id] });
@@ -811,7 +621,10 @@ export function useUpdateReport() {
   });
 }
 
-// Helper to get study stats
+// ============================================================================
+// STATS HELPER
+// ============================================================================
+
 export function useStudyStats(studyId: string | undefined) {
   const { data: research } = useStudyResearch(studyId);
   const { data: solutions } = useStudySolutions(studyId);

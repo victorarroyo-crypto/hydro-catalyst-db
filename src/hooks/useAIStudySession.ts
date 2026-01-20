@@ -190,10 +190,10 @@ export function useAIStudySession(studyId: string | undefined, sessionType?: AIS
     isActive: !!activeSession && ['pending', 'running'].includes(activeSession.status),
     isStarting: startSessionMutation.isPending,
     currentPhase: activeSession?.current_phase || null,
-    progress: activeSession?.progress_percentage || 0,
+    progress: (activeSession as any)?.progress_percentage || (activeSession as any)?.progress || 0,
     status: activeSession?.status as AIStudySessionState['status'] || 'idle',
     error: activeSession?.error_message || null,
-    logs,
+    logs: logs.map(l => ({ ...l, phase: l.phase || null, details: l.metadata || null })),
   };
 
   return {
