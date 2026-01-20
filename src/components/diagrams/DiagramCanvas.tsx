@@ -70,14 +70,18 @@ export function DiagramCanvas({
   // Store baseline when loading diagram
   useEffect(() => {
     if (diagram) {
+      const diagramNodes = diagram.nodes ?? [];
+      const diagramAnnotations = diagram.annotations ?? [];
+      const diagramConnections = diagram.connections ?? [];
+
       const flowNodes: Node[] = [
-        ...diagram.nodes.map((n) => ({
+        ...diagramNodes.map((n) => ({
           id: n.id,
           type: 'customNode',
           position: n.position,
           data: { label: n.label, nodeType: n.type, data: n.data },
         })),
-        ...diagram.annotations.map((a) => ({
+        ...diagramAnnotations.map((a) => ({
           id: a.id,
           type: 'annotation',
           position: a.position,
@@ -85,7 +89,7 @@ export function DiagramCanvas({
         })),
       ];
 
-      const flowEdges: Edge[] = diagram.connections.map((c) => ({
+      const flowEdges: Edge[] = diagramConnections.map((c) => ({
         id: c.id,
         source: c.source_node_id,
         target: c.target_node_id,
