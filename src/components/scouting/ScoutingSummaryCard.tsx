@@ -18,8 +18,8 @@ import {
   Copy,
   FileText
 } from 'lucide-react';
-import { format, differenceInSeconds } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { differenceInSeconds } from 'date-fns';
+import { extractSessionMetrics } from '@/lib/scoutingMetrics';
 
 interface ScoutingSession {
   id: string;
@@ -47,26 +47,12 @@ export const ScoutingSummaryCard: React.FC<ScoutingSummaryCardProps> = ({
   session, 
   realTechCount 
 }) => {
-  const summary = session.summary as Record<string, unknown> | null;
   const config = session.config as Record<string, unknown> | null;
 
-  // Extract data from summary with fallbacks
-  const technologiesInserted = (summary?.technologies_inserted as number) ?? 
-    (summary?.technologies_found as number) ?? 
-    realTechCount ?? 
-    session.technologies_found ?? 0;
-  
-  const duplicatesSkipped = (summary?.duplicates_skipped as number) ?? 
-    (summary?.duplicates as number) ?? 0;
-  
-  const errorsCount = (summary?.errors as number) ?? 
-    (summary?.errors_count as number) ?? 0;
-  
-  const sitesVisited = (summary?.sites_visited as number) ?? 
-    (summary?.sources_analyzed as number) ?? 
-    session.sites_examined ?? 0;
+  // Use unified metrics extraction
+  const metrics = extractSessionMetrics(session, realTechCount);
 
-  const modelUsed = (summary?.model as string) ?? 
+  const modelUsed = ((session.summary as Record<string, unknown>)?.model as string) ?? 
     (config?.model as string) ?? 
     'No especificado';
 
@@ -92,9 +78,6 @@ export const ScoutingSummaryCard: React.FC<ScoutingSummaryCardProps> = ({
   const isCompleted = session.status === 'completed';
   const isFailed = session.status === 'failed';
   const duration = getDuration();
-
-  // Use real count if available, otherwise use summary data
-  const displayTechCount = realTechCount ?? technologiesInserted;
 
   return (
     <div className="space-y-4">
@@ -129,26 +112,26 @@ export const ScoutingSummaryCard: React.FC<ScoutingSummaryCardProps> = ({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 bg-background rounded-lg border">
               <Search className="w-5 h-5 mx-auto mb-1 text-orange-500" />
-              <div className="text-2xl font-bold">{sitesVisited}</div>
+              <div className="text-2xl font-bold">{metrics.sitesExamined}</div>
               <div className="text-xs text-muted-foreground">Fuentes visitadas</div>
             </div>
             
             <div className="text-center p-3 bg-background rounded-lg border">
               <Cpu className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-              <div className="text-2xl font-bold text-blue-600">{displayTechCount}</div>
+              <div className="text-2xl font-bold text-blue-600">{metrics.technologiesFound}</div>
               <div className="text-xs text-muted-foreground">En cola de revisión</div>
             </div>
             
             <div className="text-center p-3 bg-background rounded-lg border">
               <Copy className="w-5 h-5 mx-auto mb-1 text-yellow-500" />
-              <div className="text-2xl font-bold text-yellow-600">{duplicatesSkipped}</div>
+              <div className="text-2xl font-bold text-yellow-600">{metrics.duplicatesSkipped}</div>
               <div className="text-xs text-muted-foreground">Duplicadas omitidas</div>
             </div>
             
             <div className="text-center p-3 bg-background rounded-lg border">
-              <AlertTriangle className={`w-5 h-5 mx-auto mb-1 ${errorsCount > 0 ? 'text-red-500' : 'text-green-500'}`} />
-              <div className={`text-2xl font-bold ${errorsCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {errorsCount}
+              <AlertTriangle className={`w-5 h-5 mx-auto mb-1 ${metrics.errorsCount > 0 ? 'text-red-500' : 'text-green-500'}`} />
+              <div className={`text-2xl font-bold ${metrics.errorsCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {metrics.errorsCount}
               </div>
               <div className="text-xs text-muted-foreground">Errores</div>
             </div>
@@ -175,12 +158,12 @@ export const ScoutingSummaryCard: React.FC<ScoutingSummaryCardProps> = ({
           <Separator />
 
           {/* Action Link */}
-          {displayTechCount > 0 && (
+          {metrics.technologiesFound > 0 && (
             <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg p-3">
               <div className="flex items-center gap-2">
                 <Database className="w-5 h-5 text-primary" />
                 <span className="text-sm">
-                  <strong>{displayTechCount}</strong> tecnología{displayTechCount !== 1 ? 's' : ''} disponible{displayTechCount !== 1 ? 's' : ''} para revisar
+                  <strong>{metrics.technologiesFound}</strong> tecnología{metrics.technologiesFound !== 1 ? 's' : ''} disponible{metrics.technologiesFound !== 1 ? 's' : ''} para revisar
                 </span>
               </div>
               <Button asChild size="sm" className="gap-1">
@@ -193,7 +176,7 @@ export const ScoutingSummaryCard: React.FC<ScoutingSummaryCardProps> = ({
           )}
 
           {/* No results message */}
-          {displayTechCount === 0 && isCompleted && (
+          {metrics.technologiesFound === 0 && isCompleted && (
             <div className="text-center py-4 text-muted-foreground">
               <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p>No se encontraron nuevas tecnologías en esta sesión</p>
@@ -244,13 +227,13 @@ export const ScoutingSummaryCard: React.FC<ScoutingSummaryCardProps> = ({
       )}
 
       {/* Raw Summary (collapsible for debugging) */}
-      {summary && (
+      {session.summary && (
         <details className="text-xs">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
             Ver datos completos (JSON)
           </summary>
           <pre className="mt-2 bg-muted p-3 rounded-lg overflow-x-auto text-xs">
-            {JSON.stringify(summary, null, 2)}
+            {JSON.stringify(session.summary, null, 2)}
           </pre>
         </details>
       )}
