@@ -1,11 +1,12 @@
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTaxonomy3Levels } from '@/hooks/useTaxonomy3Levels';
+import { useTechnologyStatsByTaxonomy } from '@/hooks/useTechnologyStatsByTaxonomy';
 import { TaxonomyTreeView } from '@/components/taxonomy/TaxonomyTreeView';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, Download, FileText, FolderTree, Layers, Tag, PieChart, BarChart3, TrendingUp } from 'lucide-react';
+import { AlertCircle, Download, FileText, FolderTree, Layers, Tag, PieChart, BarChart3, Database } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { generateTaxonomyDocumentation } from '@/lib/generateTaxonomyDocumentation';
@@ -16,55 +17,71 @@ import { Badge } from '@/components/ui/badge';
 const TaxonomyAdmin = () => {
   const { profile } = useAuth();
   const { taxonomyData, isLoading, error } = useTaxonomy3Levels();
+  const { data: techStats, isLoading: isLoadingTechStats } = useTechnologyStatsByTaxonomy();
   const [searchParams] = useSearchParams();
   const [isExporting, setIsExporting] = useState(false);
   
   const view = searchParams.get('view') || 'tree';
   const isAdmin = profile?.role === 'admin';
 
-  // Calculate detailed statistics
-  const stats = useMemo(() => {
-    if (!taxonomyData?.taxonomy) return null;
+  // Map tech types to taxonomy categories (moved to top level)
+  const techsByCategory = useMemo(() => {
+    if (!taxonomyData?.taxonomy || !techStats?.typeCounts) return [];
 
-    const categoryStats = Object.entries(taxonomyData.taxonomy).map(([codigo, categoria]) => {
-      const tiposCount = Object.keys(categoria.tipos).length;
-      const subcatsCount = Object.values(categoria.tipos).flat().length;
-      return {
-        codigo,
+    const categoryMap: Record<string, { nombre: string; tipos: { tipo: string; count: number }[]; totalCount: number }> = {};
+
+    // Initialize categories from taxonomy
+    Object.entries(taxonomyData.taxonomy).forEach(([codigo, categoria]) => {
+      categoryMap[codigo] = {
         nombre: categoria.nombre,
-        descripcion: categoria.descripcion,
-        tiposCount,
-        subcatsCount,
+        tipos: [],
+        totalCount: 0,
       };
     });
 
-    // Sort by subcategories count
-    const topCategories = [...categoryStats].sort((a, b) => b.subcatsCount - a.subcatsCount);
-
-    // Get all types with their subcategory counts
-    const typeStats: { nombre: string; categoria: string; subcatsCount: number }[] = [];
-    Object.entries(taxonomyData.taxonomy).forEach(([codigo, categoria]) => {
-      Object.entries(categoria.tipos).forEach(([tipo, subcats]) => {
-        typeStats.push({
-          nombre: tipo,
-          categoria: codigo,
-          subcatsCount: subcats.length,
-        });
+    // Map each technology type to its category
+    techStats.typeCounts.forEach(({ tipo, count }) => {
+      // Find which category this type belongs to
+      let foundCategory: string | null = null;
+      Object.entries(taxonomyData.taxonomy).forEach(([codigo, categoria]) => {
+        if (Object.keys(categoria.tipos).includes(tipo)) {
+          foundCategory = codigo;
+        }
       });
-    });
-    const topTypes = [...typeStats].sort((a, b) => b.subcatsCount - a.subcatsCount).slice(0, 10);
 
-    return {
-      categoryStats,
-      topCategories,
-      topTypes,
-      totalCategorias: taxonomyData.counts.categorias,
-      totalTipos: taxonomyData.counts.tipos,
-      totalSubcategorias: taxonomyData.counts.subcategorias,
-      avgTiposPorCategoria: (taxonomyData.counts.tipos / taxonomyData.counts.categorias).toFixed(1),
-      avgSubcatsPorTipo: (taxonomyData.counts.subcategorias / taxonomyData.counts.tipos).toFixed(1),
-    };
-  }, [taxonomyData]);
+      if (foundCategory && categoryMap[foundCategory]) {
+        categoryMap[foundCategory].tipos.push({ tipo, count });
+        categoryMap[foundCategory].totalCount += count;
+      }
+    });
+
+    // Convert to array and sort by total count
+    return Object.entries(categoryMap)
+      .map(([codigo, data]) => ({
+        codigo,
+        ...data,
+      }))
+      .filter(cat => cat.totalCount > 0)
+      .sort((a, b) => b.totalCount - a.totalCount);
+  }, [taxonomyData, techStats]);
+
+  const uncategorizedCount = useMemo(() => {
+    if (!taxonomyData?.taxonomy || !techStats?.typeCounts) return 0;
+    
+    let count = 0;
+    techStats.typeCounts.forEach(({ tipo, count: typeCount }) => {
+      let found = false;
+      Object.values(taxonomyData.taxonomy).forEach((categoria) => {
+        if (Object.keys(categoria.tipos).includes(tipo)) {
+          found = true;
+        }
+      });
+      if (!found) {
+        count += typeCount;
+      }
+    });
+    return count;
+  }, [taxonomyData, techStats]);
 
   const handleDownloadWord = async () => {
     if (!taxonomyData) {
@@ -211,122 +228,161 @@ const TaxonomyAdmin = () => {
     );
   }
 
-  // Stats view
-  if (view === 'stats' && stats) {
+  // Stats view - Technology statistics by Category and Type
+  if (view === 'stats') {
+    if (isLoadingTechStats) {
+      return (
+        <div className="container mx-auto py-8 px-4 space-y-6">
+          <Skeleton className="h-8 w-64" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+          <Skeleton className="h-[400px]" />
+        </div>
+      );
+    }
+
     return (
       <div className="container mx-auto py-8 px-4 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <PieChart className="h-6 w-6 text-primary" />
-              Estadísticas de Taxonomía
+              <Database className="h-6 w-6 text-primary" />
+              Estadísticas de Tecnologías
             </h1>
             <p className="text-muted-foreground mt-1">
-              Análisis detallado de la estructura de clasificación (v{taxonomyData.version})
+              Distribución de tecnologías por categoría y tipo
             </p>
           </div>
         </div>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardContent className="pt-6">
-              <div className="text-3xl font-bold text-primary">{stats.totalCategorias}</div>
-              <p className="text-sm text-muted-foreground">Categorías</p>
+              <div className="text-3xl font-bold text-primary">{techStats?.totalTechnologies || 0}</div>
+              <p className="text-sm text-muted-foreground">Total Tecnologías</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-3xl font-bold text-primary">{stats.totalTipos}</div>
-              <p className="text-sm text-muted-foreground">Tipos</p>
+              <div className="text-3xl font-bold text-primary">{techStats?.uniqueTypes || 0}</div>
+              <p className="text-sm text-muted-foreground">Tipos Únicos</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-3xl font-bold text-primary">{stats.totalSubcategorias}</div>
-              <p className="text-sm text-muted-foreground">Subcategorías</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-3xl font-bold text-primary">{stats.avgTiposPorCategoria}</div>
-              <p className="text-sm text-muted-foreground">Tipos/Categoría</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-3xl font-bold text-primary">{stats.avgSubcatsPorTipo}</div>
-              <p className="text-sm text-muted-foreground">Subcats/Tipo</p>
+              <div className="text-3xl font-bold text-primary">{techsByCategory.length}</div>
+              <p className="text-sm text-muted-foreground">Categorías con Datos</p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Categories breakdown */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FolderTree className="h-5 w-5" />
-                Distribución por Categoría
-              </CardTitle>
-              <CardDescription>
-                Tipos y subcategorías por categoría principal
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {stats.topCategories.map((cat) => {
-                const percentage = (cat.subcatsCount / stats.totalSubcategorias) * 100;
-                return (
-                  <div key={cat.codigo} className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="font-mono text-xs">
-                          {cat.codigo}
-                        </Badge>
-                        <span className="text-sm font-medium truncate max-w-[200px]">
-                          {cat.nombre}
-                        </span>
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {cat.tiposCount} tipos • {cat.subcatsCount} subcats
+        {/* Technologies by Category */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FolderTree className="h-5 w-5" />
+              Tecnologías por Categoría
+            </CardTitle>
+            <CardDescription>
+              Distribución de tecnologías agrupadas por categoría y tipo
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {techsByCategory.map((cat) => {
+              const percentage = techStats?.totalTechnologies 
+                ? (cat.totalCount / techStats.totalTechnologies) * 100 
+                : 0;
+              return (
+                <div key={cat.codigo} className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {cat.codigo}
+                      </Badge>
+                      <span className="font-medium">
+                        {cat.nombre}
                       </span>
                     </div>
-                    <Progress value={percentage} className="h-2" />
+                    <Badge variant="secondary">
+                      {cat.totalCount} tecnologías ({percentage.toFixed(1)}%)
+                    </Badge>
+                  </div>
+                  <Progress value={percentage} className="h-2" />
+                  
+                  {/* Types within this category */}
+                  <div className="ml-6 space-y-2">
+                    {cat.tipos.slice(0, 5).map((typeData) => (
+                      <div key={typeData.tipo} className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground truncate max-w-[300px]">
+                          {typeData.tipo}
+                        </span>
+                        <Badge variant="outline" className="ml-2">
+                          {typeData.count}
+                        </Badge>
+                      </div>
+                    ))}
+                    {cat.tipos.length > 5 && (
+                      <p className="text-xs text-muted-foreground">
+                        +{cat.tipos.length - 5} tipos más...
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {uncategorizedCount > 0 && (
+              <div className="space-y-2 border-t pt-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Sin categoría asignada</span>
+                  <Badge variant="destructive">{uncategorizedCount}</Badge>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top Types */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Top 15 Tipos de Tecnología
+            </CardTitle>
+            <CardDescription>
+              Los tipos con mayor cantidad de tecnologías
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {techStats?.typeCounts.slice(0, 15).map((typeData, idx) => {
+                const percentage = techStats.totalTechnologies 
+                  ? (typeData.count / techStats.totalTechnologies) * 100 
+                  : 0;
+                return (
+                  <div key={typeData.tipo} className="space-y-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-bold text-muted-foreground w-6">
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{typeData.tipo}</p>
+                      </div>
+                      <Badge>{typeData.count}</Badge>
+                    </div>
+                    <div className="ml-9">
+                      <Progress value={percentage} className="h-1" />
+                    </div>
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
-
-          {/* Top types */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Top 10 Tipos
-              </CardTitle>
-              <CardDescription>
-                Tipos con más subcategorías
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {stats.topTypes.map((type, idx) => (
-                  <div key={`${type.categoria}-${type.nombre}`} className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-muted-foreground w-6">
-                      {idx + 1}
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{type.nombre}</p>
-                      <p className="text-xs text-muted-foreground">{type.categoria}</p>
-                    </div>
-                    <Badge>{type.subcatsCount} subcats</Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
