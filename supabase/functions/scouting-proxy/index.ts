@@ -1,5 +1,6 @@
 // Lovable Cloud Function: proxy requests to the external scouting backend (avoids browser CORS)
-// Security: Implements endpoint allowlist, method validation, path traversal protection, and IDEMPOTENCY
+// Security: Implements endpoint allowlist, method validation, path traversal protection
+// IDEMPOTENCY: Uses ATOMIC INSERT to guarantee only ONE request per requestId calls Railway
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -65,6 +66,18 @@ function isMethodAllowed(method: string): boolean {
 // Check if this is the /api/scouting/run endpoint
 function isScoutingRunEndpoint(endpoint: string): boolean {
   return /^\/api\/scouting\/run\/?$/i.test(endpoint.toLowerCase().replace(/\/+$/, ''));
+}
+
+// Generate a stable hash of the payload for deduplication
+function hashPayload(payload: unknown): string {
+  const str = JSON.stringify(payload || {});
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(16);
 }
 
 Deno.serve(async (req) => {
@@ -164,7 +177,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ============ IDEMPOTENCY LOGIC FOR /api/scouting/run ============
+    // ============ ATOMIC IDEMPOTENCY LOGIC FOR /api/scouting/run ============
     if (isScoutingRunEndpoint(endpoint) && normalizedMethod === 'POST') {
       // Require idempotency key for /run endpoint
       if (!idempotencyKey) {
@@ -175,72 +188,122 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log(`[scouting-proxy] /run request with requestId=${idempotencyKey} by user ${userId}`);
+      const payloadHash = hashPayload(body);
+      console.log(`[scouting-proxy] /run request: requestId=${idempotencyKey}, user=${userId}, hash=${payloadHash}`);
 
-      // Try to insert idempotency record - if it exists, we get a conflict
-      const { data: existingRequest, error: checkError } = await supabaseAdmin
+      // === STEP 1: Attempt ATOMIC INSERT (will fail on duplicate) ===
+      const { error: insertError } = await supabaseAdmin
         .from('scouting_run_requests')
-        .select('request_id, job_id, status, created_at')
-        .eq('request_id', idempotencyKey)
-        .maybeSingle();
+        .insert({
+          request_id: idempotencyKey,
+          user_id: userId,
+          status: 'pending',
+          payload_hash: payloadHash,
+          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour TTL
+        });
 
-      if (checkError) {
-        console.error('[scouting-proxy] Error checking idempotency:', checkError);
-        // Continue anyway - don't fail the request due to idempotency check failure
-      }
+      if (insertError) {
+        // Check if this is a unique constraint violation (duplicate request_id)
+        const isDuplicate = insertError.code === '23505' || 
+                           insertError.message?.includes('duplicate') ||
+                           insertError.message?.includes('unique');
 
-      if (existingRequest) {
-        // Request already exists
-        if (existingRequest.job_id) {
-          // Already processed successfully - return the same job_id
-          console.log(`[scouting-proxy] Idempotent hit: requestId=${idempotencyKey} already has job_id=${existingRequest.job_id}`);
-          return new Response(
-            JSON.stringify({ 
-              success: true, 
-              data: { job_id: existingRequest.job_id },
-              idempotent: true,
-              message: 'Request ya procesado, devolviendo job_id existente'
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-          );
-        } else if (existingRequest.status === 'pending') {
-          // Still processing (race condition) - return 409 to client
-          console.log(`[scouting-proxy] Idempotent race: requestId=${idempotencyKey} is still pending`);
+        if (isDuplicate) {
+          console.log(`[scouting-proxy] Duplicate requestId detected: ${idempotencyKey}`);
+          
+          // === STEP 2: Fetch the existing record ===
+          const { data: existingRequest, error: fetchError } = await supabaseAdmin
+            .from('scouting_run_requests')
+            .select('request_id, job_id, status, created_at')
+            .eq('request_id', idempotencyKey)
+            .single();
+
+          if (fetchError || !existingRequest) {
+            console.error('[scouting-proxy] Error fetching duplicate record:', fetchError);
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                error: 'Error verificando idempotencia, reintenta con nuevo requestId',
+                details: { error_type: 'idempotency_check_failed' }
+              }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            );
+          }
+
+          // === STEP 3: Return based on existing record status ===
+          if (existingRequest.job_id) {
+            // Already processed successfully - return the same job_id (IDEMPOTENT HIT)
+            console.log(`[scouting-proxy] ✅ IDEMPOTENT HIT: requestId=${idempotencyKey} → job_id=${existingRequest.job_id}`);
+            return new Response(
+              JSON.stringify({ 
+                success: true, 
+                data: { job_id: existingRequest.job_id },
+                idempotent: true,
+                message: 'Request ya procesado, devolviendo job_id existente'
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            );
+          } else if (existingRequest.status === 'pending') {
+            // Still processing (race condition) - tell client to wait
+            console.log(`[scouting-proxy] ⏳ RACE DETECTED: requestId=${idempotencyKey} still pending`);
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                error: 'Request en proceso, espera unos segundos',
+                details: { status: 409, error_type: 'processing' }
+              }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            );
+          } else if (existingRequest.status === 'failed') {
+            // Previous attempt failed - allow retry by deleting old record and re-inserting
+            console.log(`[scouting-proxy] 🔄 Previous failed, allowing retry for requestId=${idempotencyKey}`);
+            await supabaseAdmin
+              .from('scouting_run_requests')
+              .delete()
+              .eq('request_id', idempotencyKey);
+            
+            // Re-insert with pending status
+            const { error: reinsertError } = await supabaseAdmin
+              .from('scouting_run_requests')
+              .insert({
+                request_id: idempotencyKey,
+                user_id: userId,
+                status: 'pending',
+                payload_hash: payloadHash,
+                expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+              });
+            
+            if (reinsertError) {
+              console.error('[scouting-proxy] Error re-inserting after failed:', reinsertError);
+              return new Response(
+                JSON.stringify({ 
+                  success: false, 
+                  error: 'Error procesando retry, genera nuevo requestId',
+                  details: { error_type: 'retry_failed' }
+                }),
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+              );
+            }
+            // Continue to call Railway
+          }
+        } else {
+          // Some other database error - FAIL CLOSED (do NOT call Railway)
+          console.error('[scouting-proxy] Database error during idempotency check:', insertError);
           return new Response(
             JSON.stringify({ 
               success: false, 
-              error: 'Request en proceso, espera unos segundos',
-              details: { status: 409, error_type: 'processing' }
+              error: 'Error de base de datos, reintenta',
+              details: { error_type: 'database_error' }
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
           );
         }
-        // If status is 'failed', allow retry by continuing
       }
 
-      // Insert new idempotency record (or update if failed)
-      const { error: insertError } = await supabaseAdmin
-        .from('scouting_run_requests')
-        .upsert({
-          request_id: idempotencyKey,
-          user_id: userId,
-          status: 'pending',
-          payload_hash: JSON.stringify(body).slice(0, 500), // Store truncated payload for debugging
-          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour TTL
-        }, { 
-          onConflict: 'request_id',
-          ignoreDuplicates: false 
-        });
-
-      if (insertError) {
-        console.error('[scouting-proxy] Error inserting idempotency record:', insertError);
-        // Continue anyway - we'll still call Railway
-      }
-
-      // Now proceed to call Railway
-      console.log(`[scouting-proxy] Proceeding to Railway for requestId=${idempotencyKey}`);
+      // === STEP 4: This request WON the race - proceed to call Railway ===
+      console.log(`[scouting-proxy] 🚀 AUTHORIZED to call Railway for requestId=${idempotencyKey}`);
     }
-    // ============ END IDEMPOTENCY LOGIC ============
+    // ============ END ATOMIC IDEMPOTENCY LOGIC ============
 
     console.log(`[scouting-proxy] ${normalizedMethod} ${endpoint} by user ${userId} (${userRole})`);
 
@@ -298,7 +361,7 @@ Deno.serve(async (req) => {
         if (updateError) {
           console.error('[scouting-proxy] Error updating idempotency record with job_id:', updateError);
         } else {
-          console.log(`[scouting-proxy] Stored job_id=${data.job_id} for requestId=${idempotencyKey}`);
+          console.log(`[scouting-proxy] ✅ Stored job_id=${data.job_id} for requestId=${idempotencyKey}`);
         }
       } else if (!res.ok) {
         // Failed - mark as failed so retry is allowed
@@ -309,6 +372,8 @@ Deno.serve(async (req) => {
 
         if (updateError) {
           console.error('[scouting-proxy] Error updating idempotency record to failed:', updateError);
+        } else {
+          console.log(`[scouting-proxy] ❌ Marked requestId=${idempotencyKey} as failed`);
         }
       }
     }
