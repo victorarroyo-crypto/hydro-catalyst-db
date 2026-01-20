@@ -303,53 +303,6 @@ const Dashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Classification Progress - Only for Admin/Supervisor */}
-      {isInternalUser && stats?.statusBreakdown && stats?.totalTechnologies > 0 && (
-        <Card className="border-primary/20">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Tag className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Progreso de Clasificación</CardTitle>
-                <CardDescription>Tecnologías con taxonomía asignada</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const classified = stats.totalTechnologies - stats.statusBreakdown.pendingClassification;
-              const percentage = Math.round((classified / stats.totalTechnologies) * 100);
-              return (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {classified.toLocaleString()} de {stats.totalTechnologies.toLocaleString()} tecnologías clasificadas
-                    </span>
-                    <span className="font-bold text-primary">{percentage}%</span>
-                  </div>
-                  <Progress value={percentage} className="h-3" />
-                  <div className="grid grid-cols-2 gap-4 pt-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-primary" />
-                      <span className="text-sm text-muted-foreground">
-                        Clasificadas: <span className="font-medium text-foreground">{classified.toLocaleString()}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-muted" />
-                      <span className="text-sm text-muted-foreground">
-                        Pendientes: <span className="font-medium text-foreground">{stats.statusBreakdown.pendingClassification.toLocaleString()}</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Pending Suggestions Widget - Only for Admin/Supervisor */}
       {canReviewEdits && pendingEdits && pendingEdits.total > 0 && (
@@ -410,27 +363,25 @@ const Dashboard: React.FC = () => {
         <h2 className="text-xl font-display font-semibold mb-4">Accesos Rápidos</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {quickActions.map((action) => (
-            <Card key={action.href} className="card-hover group">
-              <CardHeader className="pb-3">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-all duration-300 group-hover:scale-110 ${
-                  action.variant === 'primary' ? 'bg-primary text-primary-foreground' :
-                  action.variant === 'secondary' ? 'bg-secondary text-secondary-foreground' :
-                  'bg-accent text-accent-foreground'
-                }`}>
-                  <action.icon className="w-6 h-6" />
-                </div>
-                <CardTitle className="text-lg">{action.title}</CardTitle>
-                <CardDescription>{action.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild variant="ghost" className="p-0 h-auto font-medium group-hover:text-primary">
-                  <Link to={action.href} className="flex items-center gap-2">
+            <Link key={action.href} to={action.href} className="block group">
+              <Card className="h-full transition-all duration-200 hover:shadow-lg hover:border-primary/30">
+                <CardContent className="p-6">
+                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-105 ${
+                    action.variant === 'primary' ? 'bg-primary text-primary-foreground' :
+                    action.variant === 'secondary' ? 'bg-secondary text-secondary-foreground' :
+                    'bg-accent text-accent-foreground'
+                  }`}>
+                    <action.icon className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">{action.title}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">{action.description}</p>
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-foreground group-hover:text-primary transition-colors">
                     Acceder
                     <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+                  </span>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       </div>
