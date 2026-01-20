@@ -11,6 +11,7 @@ import {
   Clock,
   Scissors,
   Trash2,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -79,43 +80,33 @@ const documentTypes = [
 // Component to render a split document with accordion
 function SplitDocumentItem({
   document,
-  projectId,
+  allDocuments,
   onDelete,
   isDeleting,
 }: {
   document: Document;
-  projectId: string;
+  allDocuments: Document[];
   onDelete: (id: string, filename: string) => void;
   isDeleting: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [parts, setParts] = useState<DocumentPart[]>([]);
-  const [loadingParts, setLoadingParts] = useState(false);
-
-  const fetchParts = async () => {
-    if (parts.length > 0) return; // Already loaded
-    
-    setLoadingParts(true);
-    try {
-      const response = await fetch(
-        `${API_URL}/api/projects/${projectId}/documents/${document.id}/parts`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setParts(data.parts || data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching parts:', error);
-    } finally {
-      setLoadingParts(false);
-    }
-  };
+  
+  // Filter parts from allDocuments - they have parent_document_id matching this document's id
+  const parts: DocumentPart[] = allDocuments
+    .filter(doc => doc.parent_document_id === document.id)
+    .map(doc => ({
+      id: doc.id,
+      filename: doc.filename,
+      part_number: doc.part_number || 0,
+      processing_status: doc.processing_status,
+      chunk_count: doc.chunk_count || 0,
+    }))
+    .sort((a, b) => a.part_number - b.part_number);
+  
+  console.log('SplitDocumentItem - document.id:', document.id, 'parts found:', parts.length, parts);
 
   const handleToggle = (open: boolean) => {
     setIsOpen(open);
-    if (open) {
-      fetchParts();
-    }
   };
 
   const partsCompleted = parts.filter(p => p.processing_status === 'completed').length;
@@ -189,17 +180,11 @@ function SplitDocumentItem({
             )}
           </Button>
 
-          {/* Expanded content */}
           <CollapsibleContent>
             <div className="mt-4 pl-14 space-y-2">
-              {loadingParts ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Cargando partes...
-                </div>
-              ) : parts.length === 0 ? (
+              {parts.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-2">
-                  No se encontraron partes para este documento.
+                  No se encontraron partes para este documento. (ID: {document.id})
                 </p>
               ) : (
                 parts.map((part) => (
@@ -269,11 +254,14 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
       const data = await response.json();
       const allDocs = data.documents || data.data || (Array.isArray(data) ? data : []) as Document[];
       
-      // Filter out child parts - only show parent documents
+      // Separate parent documents from child parts
       const parentDocs = allDocs.filter((doc: Document) => !doc.parent_document_id);
+      const childParts = allDocs.filter((doc: Document) => !!doc.parent_document_id);
       
       return {
         documents: parentDocs,
+        allDocuments: allDocs,
+        childParts: childParts,
         count: parentDocs.length
       };
     },
@@ -281,6 +269,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
   });
 
   const documents = data?.documents || [];
+  const allDocuments = data?.allDocuments || [];
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -441,7 +430,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
                 <SplitDocumentItem
                   key={doc.id}
                   document={doc}
-                  projectId={projectId}
+                  allDocuments={allDocuments}
                   onDelete={handleDelete}
                   isDeleting={deletingId === doc.id}
                 />
