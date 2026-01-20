@@ -118,8 +118,15 @@ export const ScoutingSummaryCard: React.FC<ScoutingSummaryCardProps> = ({
             
             <div className="text-center p-3 bg-background rounded-lg border">
               <Cpu className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-              <div className="text-2xl font-bold text-blue-600">{metrics.technologiesFound}</div>
-              <div className="text-xs text-muted-foreground">En cola de revisión</div>
+              <div className="text-2xl font-bold text-blue-600 flex items-center justify-center gap-1">
+                {metrics.technologiesFound}
+                {metrics.isVerifiedCount && (
+                  <span className="text-xs text-green-500" title="Conteo verificado en cola">✓</span>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {metrics.isVerifiedCount ? 'En cola (verificado)' : 'Encontradas (sin verificar)'}
+              </div>
             </div>
             
             <div className="text-center p-3 bg-background rounded-lg border">
