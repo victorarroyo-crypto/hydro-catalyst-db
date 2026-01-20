@@ -82,25 +82,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ projectId, onDeletePro
                 <div className="p-4 rounded-lg bg-muted/50">
                   <p className="text-sm text-muted-foreground">Costo Total</p>
                   <p className="text-2xl font-bold text-green-600">
-                    ${llmUsage.total_cost.toFixed(2)}
+                    ${(llmUsage.total_cost ?? 0).toFixed(2)}
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
                   <p className="text-sm text-muted-foreground">Tokens Totales</p>
                   <p className="text-2xl font-bold">
-                    {llmUsage.total_tokens.toLocaleString()}
+                    {(llmUsage.total_tokens ?? 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
                   <p className="text-sm text-muted-foreground">Input Tokens</p>
                   <p className="text-lg font-semibold">
-                    {llmUsage.input_tokens.toLocaleString()}
+                    {(llmUsage.input_tokens ?? 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
                   <p className="text-sm text-muted-foreground">Output Tokens</p>
                   <p className="text-lg font-semibold">
-                    {llmUsage.output_tokens.toLocaleString()}
+                    {(llmUsage.output_tokens ?? 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -115,13 +115,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ projectId, onDeletePro
                         key={i}
                         className="flex items-center justify-between p-3 rounded-lg border"
                       >
-                        <span className="font-medium">{item.model}</span>
+                        <span className="font-medium">{item.model || 'Desconocido'}</span>
                         <div className="flex items-center gap-4 text-sm">
                           <span className="text-muted-foreground">
-                            {item.tokens.toLocaleString()} tokens
+                            {(item.tokens ?? 0).toLocaleString()} tokens
                           </span>
                           <span className="text-green-600 font-medium">
-                            ${item.cost.toFixed(2)}
+                            ${(item.cost ?? 0).toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -140,13 +140,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ projectId, onDeletePro
                         key={i}
                         className="flex items-center justify-between p-3 rounded-lg border"
                       >
-                        <span className="font-medium">{item.agent}</span>
+                        <span className="font-medium">{item.agent || 'Desconocido'}</span>
                         <div className="flex items-center gap-4 text-sm">
                           <span className="text-muted-foreground">
-                            {item.tokens.toLocaleString()} tokens
+                            {(item.tokens ?? 0).toLocaleString()} tokens
                           </span>
                           <span className="text-green-600 font-medium">
-                            ${item.cost.toFixed(2)}
+                            ${(item.cost ?? 0).toFixed(2)}
                           </span>
                         </div>
                       </div>
