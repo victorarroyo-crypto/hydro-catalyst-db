@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useQueryClient } from '@tanstack/react-query';
 import { useActiveStudySession, useStudySessionLogs, useStartStudySession } from './useStudySessions';
+import { studySessionsService } from '@/services/studySessionsService';
 import { toast } from '@/hooks/use-toast';
-
 export type AISessionPhase = 
   | 'research' 
   | 'solutions' 
@@ -160,15 +160,8 @@ export function useAIStudySession(studyId: string | undefined, sessionType?: AIS
     if (!activeSession?.id) return;
 
     try {
-      const { error } = await externalSupabase
-        .from('study_sessions')
-        .update({
-          status: 'cancelled',
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', activeSession.id);
-
-      if (error) throw error;
+      // Use studySessionsService instead of direct Supabase access
+      await studySessionsService.cancelSession(activeSession.id);
 
       queryClient.invalidateQueries({ queryKey: ['study-sessions', studyId] });
       queryClient.invalidateQueries({ queryKey: ['study-session-active', studyId] });

@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { comparisonProjectsService } from '@/services/comparisonProjectsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { StatsCard } from '@/components/StatsCard';
@@ -62,10 +63,17 @@ const Dashboard: React.FC = () => {
         highTrlQuery = highTrlQuery.eq('status', 'active');
       }
       
+      // Fetch projects count from external API
+      const projectsResponse = await comparisonProjectsService.list();
+      const projectsList = projectsResponse.projects || projectsResponse.data || [];
+      const activeProjectsCount = projectsList.filter((p: any) => 
+        ['active', 'in_progress', 'draft'].includes(p.status)
+      ).length;
+
       const baseQueries = [
         techQuery,
         highTrlQuery,
-        externalSupabase.from('projects').select('id', { count: 'exact', head: true }).in('status', ['active', 'in_progress', 'draft']),
+        Promise.resolve({ count: activeProjectsCount }), // projects count from API
         externalSupabase.from('casos_de_estudio').select('id', { count: 'exact', head: true }),
         externalSupabase.from('technological_trends').select('id', { count: 'exact', head: true }),
       ];
