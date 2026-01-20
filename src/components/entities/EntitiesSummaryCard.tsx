@@ -73,7 +73,7 @@ export function EntitiesSummaryCard({ projectId }: EntitiesSummaryCardProps) {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-3 gap-2 text-sm">
-          {Object.entries(summary.by_type)
+          {Object.entries(summary.by_type || {})
             .filter(([, count]) => count > 0)
             .map(([type, count]) => (
               <div key={type} className="flex items-center gap-1">
