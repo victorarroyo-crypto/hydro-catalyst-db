@@ -65,6 +65,7 @@ interface QueueItem {
   web?: string;
   suggestedType?: string;
   suggestedSubcategory?: string;
+  sector?: string;
   competitiveAdvantage?: string;
   relevanceReason?: string;
 }
@@ -317,9 +318,9 @@ export const ScoutingTechDetailModal = ({
               <div className="space-y-4">
                 <h4 className="font-medium text-sm flex items-center gap-2">
                   <FileText className="w-4 h-4" />
-                  Clasificación sugerida
+                  Clasificación
                 </h4>
-                <div className="grid grid-cols-2 gap-4 pl-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pl-6">
                   <div>
                     <Label className="text-xs text-muted-foreground">Tipo</Label>
                     {isEditing ? (
@@ -329,7 +330,7 @@ export const ScoutingTechDetailModal = ({
                         className="mt-1"
                       />
                     ) : (
-                      <p className="text-sm">{technology.suggestedType || 'No asignado'}</p>
+                      <p className="text-sm font-medium">{technology.suggestedType || <span className="text-muted-foreground">Sin tipo</span>}</p>
                     )}
                   </div>
                   <div>
@@ -341,7 +342,19 @@ export const ScoutingTechDetailModal = ({
                         className="mt-1"
                       />
                     ) : (
-                      <p className="text-sm">{technology.suggestedSubcategory || 'No asignada'}</p>
+                      <p className="text-sm font-medium">{technology.suggestedSubcategory || <span className="text-muted-foreground">Sin subcategoría</span>}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Sector</Label>
+                    {isEditing ? (
+                      <Input
+                        value={(editedData as any).sector ?? technology.sector ?? ''}
+                        onChange={(e) => setEditedData({ ...editedData, sector: e.target.value } as any)}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-sm font-medium">{technology.sector || <span className="text-muted-foreground">Sin sector</span>}</p>
                     )}
                   </div>
                 </div>
@@ -469,7 +482,7 @@ export const ScoutingTechDetailModal = ({
                     pais: technology.country || '',
                     tipo_sugerido: technology.suggestedType || '',
                     subcategoria: technology.suggestedSubcategory || '',
-                    sector: '',
+                    sector: technology.sector || '',
                     descripcion: technology.description || '',
                     aplicacion_principal: '',
                     ventaja_competitiva: technology.competitiveAdvantage || '',
