@@ -342,7 +342,7 @@ const ConsultoriaDetalle: React.FC = () => {
 
         <div className="mt-6">
           <TabsContent value="overview">
-            <OverviewTab stats={safeStats} waterBalance={water_balance} recentWorkflows={recent_workflows} onStartDiagnosis={handleStartDiagnosis} isStartingDiagnosis={isStartingDiagnosis} showProgress={showProgress} />
+            <OverviewTab projectId={id!} stats={safeStats} waterBalance={water_balance} recentWorkflows={recent_workflows} onStartDiagnosis={handleStartDiagnosis} isStartingDiagnosis={isStartingDiagnosis} showProgress={showProgress} />
           </TabsContent>
           <TabsContent value="documents"><DocumentsTab projectId={id!} /></TabsContent>
           <TabsContent value="workflows"><WorkflowsTab projectId={id!} onWorkflowComplete={handleWorkflowComplete} /></TabsContent>

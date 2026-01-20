@@ -47,6 +47,7 @@ import ScenarioDesignerPage from "./pages/consultoria/ScenarioDesignerPage";
 
 import ProjectBriefingPage from "./pages/consultoria/ProjectBriefingPage";
 import ProjectResearchPage from "./pages/consultoria/ProjectResearchPage";
+import EntitiesListPage from "./pages/consultoria/EntitiesListPage";
 import AdvisorLanding from "./pages/advisor/AdvisorLanding";
 import AdvisorAuth from "./pages/advisor/AdvisorAuth";
 import AdvisorChat from "./pages/advisor/AdvisorChat";
@@ -92,6 +93,7 @@ const App = () => (
               <Route path="/consultoria/projects/:projectId/briefing" element={<ProjectBriefingPage />} />
               <Route path="/consultoria/projects/:projectId/research" element={<ProjectResearchPage />} />
               <Route path="/consultoria/:id" element={<ConsultoriaDetalle />} />
+              <Route path="/consultoria/:id/entities" element={<EntitiesListPage />} />
               <Route path="/consultoria/:id/diagnostico" element={<ConsultoriaDiagnostico />} />
               <Route path="/consultoria/:id/documentos" element={<ConsultoriaDocumentos />} />
               <Route path="/consultoria/:id/scenarios/designer" element={<ScenarioDesignerPage />} />

@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatsCard } from '@/components/StatsCard';
+import { EntitiesSummaryCard, EquipmentListCard, WaterParametersCard } from '@/components/entities';
 
 interface StatsData {
   documents_count: number;
@@ -39,6 +40,7 @@ interface Workflow {
 }
 
 interface OverviewTabProps {
+  projectId: string;
   stats: StatsData;
   waterBalance: WaterBalance | null;
   recentWorkflows: Workflow[];
@@ -72,6 +74,7 @@ const getWorkflowStatusLabel = (status: string) => {
 };
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
+  projectId,
   stats,
   waterBalance,
   recentWorkflows,
@@ -222,6 +225,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* Entities Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <EntitiesSummaryCard projectId={projectId} />
+        <EquipmentListCard projectId={projectId} />
+        <WaterParametersCard projectId={projectId} />
       </div>
     </div>
   );
