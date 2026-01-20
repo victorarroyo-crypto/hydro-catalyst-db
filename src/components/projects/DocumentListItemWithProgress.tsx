@@ -23,11 +23,13 @@ import {
   Trash2,
   Loader2,
   Scissors,
-  Brain
+  Brain,
+  Layers
 } from 'lucide-react';
 import { useDocumentProcessingStatus, isActiveProcessing } from '@/services/documentProcessingService';
+import { DocumentPartsAccordion } from './DocumentPartsAccordion';
 import { PROCESSING_STAGES } from '@/types/documentProcessing';
-import type { DocumentProcessingStatus } from '@/types/documentProcessing';
+import type { DocumentProcessingStatus, ProjectDocumentWithParts, DocumentPart } from '@/types/documentProcessing';
 
 interface ProjectDocument {
   id: string;
@@ -40,6 +42,11 @@ interface ProjectDocument {
   chunk_count?: number;
   entities_count?: number;
   processing_error?: string;
+  // Support for split documents
+  is_split_document?: boolean;
+  total_parts?: number | null;
+  parent_document_id?: string | null;
+  part_number?: number | null;
 }
 
 interface DocumentListItemWithProgressProps {
@@ -123,6 +130,161 @@ export function DocumentListItemWithProgress({
     shouldPoll
   );
 
+  // If this is a child part of a split document, don't render (parent accordion shows it)
+  if (document.parent_document_id) {
+    return null;
+  }
+
+  // If this is a split document with parts, show the accordion
+  if (liveStatus?.is_split_document && liveStatus.parts && liveStatus.parts.length > 0) {
+    const docData: ProjectDocumentWithParts = {
+      id: document.id,
+      project_id: projectId,
+      filename: document.filename,
+      document_type: document.document_type,
+      processing_status: liveStatus.status,
+      chunk_count: liveStatus.chunks_created,
+      file_size: document.file_size || 0,
+      created_at: document.created_at,
+      is_split_document: true,
+      total_parts: liveStatus.total_parts,
+    };
+
+    return (
+      <div className="relative">
+        <DocumentPartsAccordion
+          document={docData}
+          parts={liveStatus.parts}
+          totalChunks={liveStatus.chunks_created}
+        />
+        {/* Delete button overlay */}
+        <div className="absolute top-4 right-4">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar documento?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta acción no se puede deshacer. Se eliminará permanentemente el documento "{document.filename}" y todas sus partes.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => onDelete(document.id, document.filename)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Eliminar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if document data indicates a split document (from initial load, before polling)
+  if (document.is_split_document && document.total_parts && document.total_parts > 0) {
+    const docData: ProjectDocumentWithParts = {
+      id: document.id,
+      project_id: projectId,
+      filename: document.filename,
+      document_type: document.document_type,
+      processing_status: document.processing_status,
+      chunk_count: document.chunk_count || 0,
+      file_size: document.file_size || 0,
+      created_at: document.created_at,
+      is_split_document: true,
+      total_parts: document.total_parts,
+    };
+
+    // If we don't have live parts data yet, show loading indicator
+    return (
+      <Card className="hover:shadow-md transition-shadow">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="shrink-0 text-muted-foreground">
+              <FileIcon className="h-8 w-8" />
+            </div>
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="font-medium truncate" title={document.filename}>
+                    {document.filename}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <Badge variant="outline" className="text-xs">
+                      {documentTypeLabels[document.document_type] || document.document_type}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs gap-1">
+                      <Layers className="h-3 w-3" />
+                      {document.total_parts} partes
+                    </Badge>
+                    {shouldPoll && (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-muted-foreground hidden sm:block">
+                    {formatDate(document.created_at)}
+                  </span>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        disabled={isDeleting}
+                      >
+                        {isDeleting ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar documento?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta acción no se puede deshacer. Se eliminará permanentemente el documento "{document.filename}" y todas sus partes.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => onDelete(document.id, document.filename)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Eliminar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // Use live status if available, otherwise fall back to document data
   const currentStatus = (liveStatus?.stage || document.processing_status) as DocumentProcessingStatus;
   const stageInfo = PROCESSING_STAGES[currentStatus] || PROCESSING_STAGES.pending;
@@ -136,6 +298,7 @@ export function DocumentListItemWithProgress({
 
   const typeLabel = documentTypeLabels[document.document_type] || document.document_type;
 
+  // Standard single document view
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">

@@ -4,11 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Upload, FileText, CheckCircle2, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Upload, FileText, CheckCircle2, Loader2, AlertCircle, Layers } from 'lucide-react';
 import { DocumentProcessingProgress } from './DocumentProcessingProgress';
+import { DocumentPartsAccordion } from './DocumentPartsAccordion';
 import { useDocumentProcessingStatus } from '@/services/documentProcessingService';
 import { toast } from 'sonner';
 import { API_URL } from '@/lib/api';
+import type { ProjectDocumentWithParts } from '@/types/documentProcessing';
 
 const DOCUMENT_TYPES = [
   { value: 'pid', label: 'P&ID / Diagrama de proceso' },
@@ -20,6 +23,9 @@ const DOCUMENT_TYPES = [
   { value: 'manual', label: 'Manual de operación' },
   { value: 'other', label: 'Otro' },
 ];
+
+// Aumentar límite a 50MB para permitir archivos grandes
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 interface DocumentUploadWithProgressProps {
   projectId: string;
@@ -33,6 +39,7 @@ export function DocumentUploadWithProgress({
   const [documentType, setDocumentType] = useState('other');
   const [uploading, setUploading] = useState(false);
   const [uploadedDocId, setUploadedDocId] = useState<string | null>(null);
+  const [showLargeFileInfo, setShowLargeFileInfo] = useState(false);
 
   // Polling del estado de procesamiento
   const { status: processingStatus } = useDocumentProcessingStatus(
@@ -47,6 +54,15 @@ export function DocumentUploadWithProgress({
     const file = acceptedFiles[0];
     setUploading(true);
     setUploadedDocId(null);
+
+    // Mostrar info si el archivo es grande
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > 10) {
+      setShowLargeFileInfo(true);
+      toast.info(`Archivo grande (${fileSizeMB.toFixed(1)}MB) - se dividirá en partes`);
+    } else {
+      setShowLargeFileInfo(false);
+    }
 
     try {
       const formData = new FormData();
@@ -91,15 +107,51 @@ export function DocumentUploadWithProgress({
       'image/*': ['.jpg', '.jpeg', '.png'],
     },
     maxFiles: 1,
+    maxSize: MAX_FILE_SIZE,
     disabled: uploading,
   });
 
   const handleReset = () => {
     setUploadedDocId(null);
+    setShowLargeFileInfo(false);
     onUploadComplete?.();
   };
 
-  // Si está procesando, mostrar progreso
+  // Si está procesando un documento con partes
+  if (processingStatus?.is_split_document && processingStatus.parts && processingStatus.parts.length > 0) {
+    const isComplete = processingStatus.status === 'completed' || 
+      processingStatus.parts_completed === processingStatus.total_parts;
+
+    const docData: ProjectDocumentWithParts = {
+      id: processingStatus.document_id,
+      project_id: projectId,
+      filename: processingStatus.filename,
+      document_type: documentType,
+      processing_status: processingStatus.status,
+      chunk_count: processingStatus.chunks_created,
+      file_size: 0,
+      created_at: processingStatus.created_at,
+      is_split_document: true,
+      total_parts: processingStatus.total_parts,
+    };
+
+    return (
+      <div className="space-y-4">
+        <DocumentPartsAccordion
+          document={docData}
+          parts={processingStatus.parts}
+          totalChunks={processingStatus.chunks_created}
+        />
+        {isComplete && (
+          <Button variant="outline" onClick={handleReset} className="w-full">
+            Subir otro documento
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // Si está procesando un documento normal (sin partes)
   if (processingStatus && processingStatus.status !== 'completed' && processingStatus.status !== 'failed') {
     return <DocumentProcessingProgress status={processingStatus} />;
   }
@@ -155,6 +207,16 @@ export function DocumentUploadWithProgress({
   return (
     <Card>
       <CardContent className="p-6 space-y-4">
+        {showLargeFileInfo && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Los archivos mayores a 10MB se dividen automáticamente en partes
+              para un procesamiento más eficiente.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Selector de tipo */}
         <div className="space-y-2">
           <Label htmlFor="doc-type">Tipo de documento</Label>
@@ -204,7 +266,11 @@ export function DocumentUploadWithProgress({
                 Arrastra un archivo o haz clic para seleccionar
               </p>
               <p className="text-xs text-muted-foreground/70 mt-2">
-                PDF, DOCX, XLSX, JPG, PNG (máx. 10MB)
+                PDF, DOCX, XLSX, JPG, PNG (máx. 50MB)
+              </p>
+              <p className="text-xs text-muted-foreground/50 mt-1 flex items-center justify-center gap-1">
+                <Layers className="h-3 w-3" />
+                Los PDFs grandes se dividen automáticamente en partes
               </p>
             </>
           )}
