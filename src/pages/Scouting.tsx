@@ -334,7 +334,7 @@ const Scouting = () => {
         <Button asChild>
           <Link to="/scouting/new">
             <Rocket className="w-4 h-4 mr-2" />
-            Nuevo Scouting
+            Nueva Búsqueda
           </Link>
         </Button>
       </div>
@@ -500,7 +500,7 @@ const Scouting = () => {
               <Button asChild>
                 <Link to="/scouting/new">
                   <Rocket className="w-4 h-4 mr-2" />
-                  Iniciar Scouting
+                  Nueva Búsqueda
                 </Link>
               </Button>
             </CardContent>
