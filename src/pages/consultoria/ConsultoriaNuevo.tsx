@@ -227,7 +227,7 @@ export default function ConsultoriaNuevo() {
         description: data.message || 'El proyecto se ha creado correctamente',
       });
       // Navigate to the project detail page using the ID from response
-      navigate(`/consultoria/projects/${data.project.id}`);
+      navigate(`/consultoria/${data.project.id}`);
     },
     onError: (error: Error) => {
       toast({
