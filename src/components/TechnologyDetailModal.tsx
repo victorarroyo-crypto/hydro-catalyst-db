@@ -486,42 +486,17 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
               <Tag className="w-4 h-4" />
-              Clasificación (Taxonomía 3 Niveles)
+              Clasificación
             </h3>
             <div className="bg-muted/30 rounded-lg p-4 space-y-3">
-              {/* Categorías */}
+              {/* Tipo de tecnología */}
               <div className="flex items-start gap-3 py-2">
                 <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground mb-1">Categorías</p>
+                  <p className="text-xs text-muted-foreground mb-1">Tipo de tecnología</p>
                   <div className="flex flex-wrap gap-2">
-                    {(t as any).categorias && (t as any).categorias.length > 0 ? (
-                      (t as any).categorias.map((cat: string) => (
-                        <Badge key={cat} variant="default" className="text-xs">
-                          <span className="font-mono mr-1">{cat}</span>
-                        </Badge>
-                      ))
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Tipos */}
-              <div className="flex items-start gap-3 py-2">
-                <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground mb-1">Tipos</p>
-                  <div className="flex flex-wrap gap-2">
-                    {(t as any).tipos && (t as any).tipos.length > 0 ? (
-                      (t as any).tipos.map((tipo: string) => (
-                        <Badge key={tipo} variant="secondary" className="text-xs">
-                          {tipo}
-                        </Badge>
-                      ))
-                    ) : t["Tipo de tecnología"] ? (
-                      <Badge variant="outline" className="text-muted-foreground">
+                    {t["Tipo de tecnología"] ? (
+                      <Badge variant="default" className="text-xs">
                         {t["Tipo de tecnología"]}
                       </Badge>
                     ) : (
@@ -531,20 +506,14 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Subcategorías */}
+              {/* Subcategoría */}
               <div className="flex items-start gap-3 py-2">
                 <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground mb-1">Subcategorías</p>
+                  <p className="text-xs text-muted-foreground mb-1">Subcategoría</p>
                   <div className="flex flex-wrap gap-2">
-                    {(t as any).subcategorias && (t as any).subcategorias.length > 0 ? (
-                      (t as any).subcategorias.map((sub: string) => (
-                        <Badge key={sub} variant="outline" className="text-xs">
-                          {sub}
-                        </Badge>
-                      ))
-                    ) : t["Subcategoría"] ? (
-                      <Badge variant="outline" className="text-muted-foreground text-xs">
+                    {t["Subcategoría"] ? (
+                      <Badge variant="secondary" className="text-xs">
                         {t["Subcategoría"]}
                       </Badge>
                     ) : (
