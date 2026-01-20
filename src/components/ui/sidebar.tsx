@@ -151,8 +151,10 @@ const Sidebar = React.forwardRef<
   }
 
   if (isMobile) {
+    // Exclude ref from props when rendering Sheet (function component can't receive refs)
+    const { ref: _excludedRef, ...sheetProps } = props as any;
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
+      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...sheetProps}>
         <SheetContent
           data-sidebar="sidebar"
           data-mobile="true"
