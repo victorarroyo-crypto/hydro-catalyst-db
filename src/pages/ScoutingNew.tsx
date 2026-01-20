@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { 
   Rocket,
@@ -23,10 +23,22 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useLLMModels, getDefaultModel, formatModelCost } from '@/hooks/useLLMModels';
 
+// Generate unique UUID for idempotency
+function generateRequestId(): string {
+  return crypto.randomUUID();
+}
+
 // Proxy helper - calls to Railway backend via Lovable Cloud Edge Function
-async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): Promise<T> {
+// Now includes requestId for idempotency
+async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown, requestId?: string): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (requestId) {
+    headers['X-Idempotency-Key'] = requestId;
+  }
+
   const { data, error } = await supabase.functions.invoke('scouting-proxy', {
-    body: { endpoint, method, body },
+    body: { endpoint, method, body, requestId },
+    headers,
   });
 
   if (error) throw new Error(error.message);
@@ -40,15 +52,16 @@ async function proxyFetch<T>(endpoint: string, method = 'GET', body?: unknown): 
   return data.data as T;
 }
 
-// API functions via proxy
+// API functions via proxy - now with requestId for /run endpoint
 const runScouting = async (params: { 
   config: { keywords: string[]; tipo: string; trl_min: number | null; instructions?: string };
   model: string;
+  requestId: string;
 }) => {
   return proxyFetch<{ job_id: string }>('/api/scouting/run', 'POST', {
     config: params.config,
     model: params.model,
-  });
+  }, params.requestId);
 };
 
 const cancelScouting = async (jobId: string) => {
@@ -71,6 +84,9 @@ const ScoutingNew = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
+  
+  // Ref para el requestId - se genera una vez por intento de submit y se mantiene estable
+  const currentRequestIdRef = useRef<string | null>(null);
 
   // LLM Models from Railway
   const { data: llmData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useLLMModels();
@@ -173,6 +189,13 @@ const ScoutingNew = () => {
       return;
     }
     
+    // Generar un nuevo requestId ÚNICO para este intento
+    // Se almacena en ref para que si hay un re-render no cambie
+    const requestId = generateRequestId();
+    currentRequestIdRef.current = requestId;
+    
+    console.log(`[ScoutingNew] Iniciando scouting con requestId=${requestId}`);
+    
     // Bloquear ANTES de la mutación
     setIsSubmitting(true);
     
@@ -184,6 +207,7 @@ const ScoutingNew = () => {
         instructions: instructions || undefined,
       },
       model: selectedModel,
+      requestId,
     });
   };
 

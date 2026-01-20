@@ -1047,6 +1047,39 @@ export type Database = {
           },
         ]
       }
+      scouting_run_requests: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          job_id: string | null
+          payload_hash: string | null
+          request_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          job_id?: string | null
+          payload_hash?: string | null
+          request_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          job_id?: string | null
+          payload_hash?: string | null
+          request_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       scouting_session_logs: {
         Row: {
           created_at: string
