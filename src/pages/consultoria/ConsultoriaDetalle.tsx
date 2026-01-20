@@ -1,27 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { 
   ArrowLeft, 
-  FileText, 
-  Lightbulb, 
   AlertTriangle, 
-  Euro,
-  Droplets,
   Building2,
   MapPin,
-  Play,
-  Clock,
-  CheckCircle2,
-  XCircle,
   Loader2,
-  FileDown,
   BookPlus,
   BookCheck,
-  ChevronDown,
-  Download
+  LayoutDashboard,
+  FileText,
+  Cpu,
+  Droplets,
+  Search,
+  GitBranch,
+  Network,
+  FileOutput,
+  Settings
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -33,20 +29,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StatsCard } from '@/components/StatsCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { API_URL } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import WorkflowProgress from '@/components/consultoria/WorkflowProgress';
+import {
+  OverviewTab,
+  DocumentsTab,
+  WorkflowsTab,
+  FindingsTab,
+  WaterBalanceTab,
+  ScenariosTab,
+  DiagramsTab,
+  ReportsTab,
+  SettingsTab,
+} from '@/components/consultoria/tabs';
 
 interface ProjectData {
   id: string;
@@ -56,16 +57,6 @@ interface ProjectData {
   status: string;
   progress_percentage: number;
   published_to_kb?: boolean;
-}
-
-interface StatsData {
-  findings_count: number;
-  critical_risks: number;
-  quick_wins: number;
-  opportunities: number;
-  total_potential_savings: number;
-  workflows_count: number;
-  workflows_completed: number;
 }
 
 interface DashboardData {
@@ -89,32 +80,31 @@ interface DashboardData {
   }>;
 }
 
+const PROJECT_TABS = [
+  { id: 'overview', label: 'Resumen', icon: LayoutDashboard },
+  { id: 'documents', label: 'Documentos', icon: FileText },
+  { id: 'workflows', label: 'Análisis', icon: Cpu },
+  { id: 'water-balance', label: 'Balance', icon: Droplets },
+  { id: 'findings', label: 'Hallazgos', icon: Search },
+  { id: 'scenarios', label: 'Escenarios', icon: GitBranch },
+  { id: 'diagrams', label: 'Diagramas', icon: Network },
+  { id: 'reports', label: 'Informes', icon: FileOutput },
+  { id: 'settings', label: 'Config', icon: Settings },
+];
+
 const fetchDashboard = async (id: string): Promise<DashboardData> => {
-  // Fetch project details and dashboard stats in parallel
   const [projectRes, dashboardRes] = await Promise.all([
     fetch(`${API_URL}/api/projects/${id}`),
     fetch(`${API_URL}/api/projects/${id}/dashboard`)
   ]);
 
   if (!projectRes.ok) {
-    if (projectRes.status === 404) {
-      throw new Error('Proyecto no encontrado');
-    }
+    if (projectRes.status === 404) throw new Error('Proyecto no encontrado');
     throw new Error('Error al cargar el proyecto');
   }
 
   const projectData = await projectRes.json();
-  const dashboardData: StatsData = dashboardRes.ok ? await dashboardRes.json() : {
-    findings_count: 0,
-    critical_risks: 0,
-    quick_wins: 0,
-    opportunities: 0,
-    total_potential_savings: 0,
-    workflows_count: 0,
-    workflows_completed: 0
-  };
-
-  // Transform the flat API responses into the expected structure
+  const dashboardData = dashboardRes.ok ? await dashboardRes.json() : {};
   const project = projectData.data || projectData;
   
   return {
@@ -139,7 +129,7 @@ const fetchDashboard = async (id: string): Promise<DashboardData> => {
 };
 
 const getStatusBadge = (status: string) => {
-  const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
     draft: { label: 'Borrador', variant: 'secondary' },
     active: { label: 'Activo', variant: 'default' },
     completed: { label: 'Completado', variant: 'outline' },
@@ -149,45 +139,16 @@ const getStatusBadge = (status: string) => {
   return <Badge variant={config.variant}>{config.label}</Badge>;
 };
 
-const getWorkflowStatusIcon = (status: string) => {
-  switch (status) {
-    case 'completed':
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-    case 'running':
-      return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
-    case 'failed':
-      return <XCircle className="h-4 w-4 text-red-500" />;
-    case 'pending':
-    default:
-      return <Clock className="h-4 w-4 text-muted-foreground" />;
-  }
-};
-
-const getWorkflowStatusLabel = (status: string) => {
-  const labels: Record<string, string> = {
-    pending: 'Pendiente',
-    running: 'Ejecutando',
-    completed: 'Completado',
-    failed: 'Error',
-  };
-  return labels[status] || status;
-};
-
 const ConsultoriaDetalle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Workflow progress state
+  const [activeTab, setActiveTab] = useState('overview');
   const [runningWorkflowId, setRunningWorkflowId] = useState<string | null>(null);
   const [showProgress, setShowProgress] = useState(false);
   const [isStartingDiagnosis, setIsStartingDiagnosis] = useState(false);
-
-  // Export state
-  const [isExporting, setIsExporting] = useState(false);
-
-  // Publish to KB state
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isPublishedToKB, setIsPublishedToKB] = useState(false);
@@ -198,7 +159,6 @@ const ConsultoriaDetalle: React.FC = () => {
     enabled: !!id,
   });
 
-  // Update published state when data loads
   useEffect(() => {
     if (data?.project) {
       setIsPublishedToKB(data.project.published_to_kb || false);
@@ -207,7 +167,6 @@ const ConsultoriaDetalle: React.FC = () => {
 
   const handleStartDiagnosis = async () => {
     if (!id) return;
-    
     setIsStartingDiagnosis(true);
     try {
       const res = await fetch(`${API_URL}/api/projects/${id}/workflows/run`, {
@@ -215,147 +174,73 @@ const ConsultoriaDetalle: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workflow_type: 'quick_diagnosis' })
       });
-      const data = await res.json();
-      
-      if (data.success && data.workflow_id) {
-        setRunningWorkflowId(data.workflow_id);
+      const result = await res.json();
+      if (result.success && result.workflow_id) {
+        setRunningWorkflowId(result.workflow_id);
         setShowProgress(true);
       } else {
-        toast({
-          title: 'Error',
-          description: data.message || 'No se pudo iniciar el diagnóstico',
-          variant: 'destructive',
-        });
+        toast({ title: 'Error', description: result.message || 'No se pudo iniciar', variant: 'destructive' });
       }
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Error al conectar con el servidor',
-        variant: 'destructive',
-      });
+    } catch {
+      toast({ title: 'Error', description: 'Error al conectar', variant: 'destructive' });
     } finally {
       setIsStartingDiagnosis(false);
     }
   };
 
-  const handleWorkflowComplete = (results: any) => {
+  const handleWorkflowComplete = () => {
     setShowProgress(false);
     setRunningWorkflowId(null);
     queryClient.invalidateQueries({ queryKey: ['consultoria-dashboard', id] });
-    toast({
-      title: 'Diagnóstico completado',
-      description: 'Los resultados están disponibles',
-    });
-  };
-
-  // Export report as DOCX
-  const exportDocx = async () => {
-    if (!data?.project) return;
-    
-    setIsExporting(true);
-    try {
-      const response = await fetch(`${API_URL}/api/projects/${id}/report/docx`);
-      
-      if (!response.ok) {
-        if (response.status === 400) {
-          toast({
-            title: 'Datos insuficientes',
-            description: 'El proyecto no tiene suficiente información para generar el informe.',
-            variant: 'destructive',
-          });
-          return;
-        }
-        throw new Error('Error al generar el informe');
-      }
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${data.project.name.replace(/\s+/g, '_')}_informe.docx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      toast({ title: 'Informe DOCX descargado' });
-    } catch (error) {
-      console.error('Export error:', error);
-      toast({
-        title: 'Error al exportar',
-        description: 'No se pudo generar el informe. Inténtalo de nuevo.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // Export report as PDF
-  const exportPdf = () => {
-    window.open(`${API_URL}/api/projects/${id}/report/pdf`, '_blank');
+    toast({ title: 'Diagnóstico completado' });
   };
 
   const handlePublishToKB = async () => {
     if (!id) return;
-    
     setIsPublishing(true);
     try {
       const response = await fetch(`${API_URL}/api/projects/${id}/publish-to-kb`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-
       const result = await response.json();
-
       if (result.success) {
         setIsPublishedToKB(true);
         setShowPublishDialog(false);
-        toast({
-          title: 'Publicado correctamente',
-          description: `Caso de estudio creado con ID: ${result.case_study_id}`,
-        });
+        toast({ title: 'Publicado correctamente' });
         queryClient.invalidateQueries({ queryKey: ['consultoria-dashboard', id] });
       } else {
-        toast({
-          title: 'Error al publicar',
-          description: result.detail || 'No se pudo publicar a la base de conocimiento',
-          variant: 'destructive',
-        });
+        toast({ title: 'Error', description: result.detail || 'No se pudo publicar', variant: 'destructive' });
       }
-    } catch (error) {
-      console.error('Publish to KB error:', error);
-      toast({
-        title: 'Error de conexión',
-        description: 'No se pudo conectar con el servidor',
-        variant: 'destructive',
-      });
+    } catch {
+      toast({ title: 'Error de conexión', variant: 'destructive' });
     } finally {
       setIsPublishing(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!id) return;
+    try {
+      await fetch(`${API_URL}/api/projects/${id}`, { method: 'DELETE' });
+      toast({ title: 'Proyecto eliminado' });
+      navigate('/consultoria');
+    } catch {
+      toast({ title: 'Error al eliminar', variant: 'destructive' });
     }
   };
 
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Skeleton className="h-10 w-10" />
-          <Skeleton className="h-8 w-64" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Skeleton className="h-64" />
-          <Skeleton className="h-64" />
-        </div>
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-96 w-full" />
       </div>
     );
   }
 
-  if (error) {
+  if (error || !data?.project) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <Card className="max-w-md w-full">
@@ -363,34 +248,25 @@ const ConsultoriaDetalle: React.FC = () => {
             <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
             <h2 className="text-lg font-semibold mb-2">Error al cargar el proyecto</h2>
             <p className="text-muted-foreground mb-4">
-              {error instanceof Error ? error.message : 'Ha ocurrido un error inesperado'}
+              {error instanceof Error ? error.message : 'Error inesperado'}
             </p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={() => navigate('/consultoria')}>
-                Volver
-              </Button>
-            </div>
+            <Button variant="outline" onClick={() => navigate('/consultoria')}>Volver</Button>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  if (!data || !data.project) return null;
-
   const { project, stats, water_balance, recent_workflows = [] } = data;
   const safeStats = stats || { documents_count: 0, opportunities_count: 0, critical_risks: 0, total_potential_savings: 0 };
+  const hasFindings = safeStats.opportunities_count > 0 || safeStats.critical_risks > 0;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate('/consultoria')}
-          >
+          <Button variant="ghost" size="icon" onClick={() => navigate('/consultoria')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1">
@@ -400,284 +276,82 @@ const ConsultoriaDetalle: React.FC = () => {
               {isPublishedToKB && (
                 <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                   <BookCheck className="h-3 w-3 mr-1" />
-                  En Base de Conocimiento
+                  En KB
                 </Badge>
               )}
             </div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
               {project.client_name && (
                 <span className="flex items-center gap-1">
-                  <Building2 className="h-4 w-4" />
-                  {project.client_name}
+                  <Building2 className="h-4 w-4" />{project.client_name}
                 </span>
               )}
               {project.plant_name && (
                 <span className="flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
-                  {project.plant_name}
+                  <MapPin className="h-4 w-4" />{project.plant_name}
                 </span>
               )}
             </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              onClick={() => navigate(`/consultoria/${id}/documentos`)}
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Documentos
-            </Button>
-            <Button
-              onClick={handleStartDiagnosis}
-              disabled={showProgress || isStartingDiagnosis}
-            >
-              {showProgress ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Diagnóstico en progreso...
-                </>
-              ) : isStartingDiagnosis ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Iniciando...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4 mr-2" />
-                  Iniciar Diagnóstico
-                </>
-              )}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  disabled={isExporting || !data?.stats || (data.stats.opportunities_count === 0 && data.stats.critical_risks === 0)}
-                >
-                  {isExporting ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <FileDown className="h-4 w-4 mr-2" />
-                  )}
-                  Exportar Informe
-                  <ChevronDown className="h-4 w-4 ml-2" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={exportPdf}>
-                  <Download className="h-4 w-4 mr-2" />
-                  PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportDocx} disabled={isExporting}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  DOCX (Word)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              variant="outline"
-              onClick={() => setShowPublishDialog(true)}
-              disabled={
-                !data?.stats || 
-                (data.stats.opportunities_count === 0 && data.stats.critical_risks === 0) || 
-                isPublishedToKB ||
-                isPublishing
-              }
-              title={
-                isPublishedToKB
-                  ? "Este proyecto ya está publicado en la base de conocimiento"
-                  : (data?.stats?.opportunities_count === 0 && data?.stats?.critical_risks === 0)
-                    ? "Ejecuta un diagnóstico primero para poder publicar"
-                    : "Publicar hallazgos a la base de conocimiento global"
-              }
-            >
-              {isPublishedToKB ? (
-                <>
-                  <BookCheck className="h-4 w-4 mr-2" />
-                  Publicado en KB
-                </>
-              ) : (
-                <>
-                  <BookPlus className="h-4 w-4 mr-2" />
-                  Publicar a KB
-                </>
-              )}
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowPublishDialog(true)}
+            disabled={!hasFindings || isPublishedToKB || isPublishing}
+          >
+            {isPublishedToKB ? <BookCheck className="h-4 w-4 mr-2" /> : <BookPlus className="h-4 w-4 mr-2" />}
+            {isPublishedToKB ? 'Publicado' : 'Publicar a KB'}
+          </Button>
         </div>
       </div>
 
       {/* Workflow Progress */}
       {showProgress && runningWorkflowId && (
-        <WorkflowProgress
-          projectId={id!}
-          workflowId={runningWorkflowId}
-          onComplete={handleWorkflowComplete}
-        />
+        <WorkflowProgress projectId={id!} workflowId={runningWorkflowId} onComplete={handleWorkflowComplete} />
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Documentos"
-          value={safeStats.documents_count}
-          icon={FileText}
-          variant="default"
-        />
-        <StatsCard
-          title="Oportunidades"
-          value={safeStats.opportunities_count}
-          icon={Lightbulb}
-          variant="primary"
-          className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-green-500/10"
-        />
-        <StatsCard
-          title="Riesgos Críticos"
-          value={safeStats.critical_risks}
-          icon={AlertTriangle}
-          variant="default"
-          className="border-red-500/20 bg-gradient-to-br from-red-500/5 to-red-500/10"
-        />
-        <StatsCard
-          title="Ahorro Potencial"
-          value={`€${(safeStats.total_potential_savings || 0).toLocaleString('es-ES')}/año`}
-          icon={Euro}
-          variant="default"
-          className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-purple-500/10"
-        />
-      </div>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="flex-wrap h-auto gap-1">
+          {PROJECT_TABS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <TabsTrigger key={tab.id} value={tab.id} className="gap-2">
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
 
-      {/* Two Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Water Balance */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Droplets className="h-5 w-5 text-blue-500" />
-              Balance Hídrico
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {water_balance ? (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center py-2 border-b">
-                  <span className="text-muted-foreground">Consumo Total</span>
-                  <span className="font-semibold">{water_balance.total_intake_m3_day.toLocaleString('es-ES')} m³/día</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b">
-                  <span className="text-muted-foreground">Coste Anual</span>
-                  <span className="font-semibold">€{water_balance.total_water_cost_annual.toLocaleString('es-ES')}</span>
-                </div>
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-muted-foreground">Eficiencia</span>
-                  <span className="font-semibold">{water_balance.water_efficiency_percent}%</span>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Droplets className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground">
-                  Ejecuta un diagnóstico para calcular el balance hídrico
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="mt-6">
+          <TabsContent value="overview">
+            <OverviewTab stats={safeStats} waterBalance={water_balance} recentWorkflows={recent_workflows} onStartDiagnosis={handleStartDiagnosis} isStartingDiagnosis={isStartingDiagnosis} showProgress={showProgress} />
+          </TabsContent>
+          <TabsContent value="documents"><DocumentsTab projectId={id!} /></TabsContent>
+          <TabsContent value="workflows"><WorkflowsTab projectId={id!} onWorkflowComplete={handleWorkflowComplete} /></TabsContent>
+          <TabsContent value="water-balance"><WaterBalanceTab projectId={id!} /></TabsContent>
+          <TabsContent value="findings"><FindingsTab projectId={id!} /></TabsContent>
+          <TabsContent value="scenarios"><ScenariosTab projectId={id!} /></TabsContent>
+          <TabsContent value="diagrams"><DiagramsTab projectId={id!} /></TabsContent>
+          <TabsContent value="reports"><ReportsTab projectId={id!} projectName={project.name} hasFindings={hasFindings} /></TabsContent>
+          <TabsContent value="settings"><SettingsTab projectId={id!} onDeleteProject={handleDeleteProject} /></TabsContent>
+        </div>
+      </Tabs>
 
-        {/* Recent Workflows */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Workflows Recientes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recent_workflows.length > 0 ? (
-              <div className="space-y-3">
-                {recent_workflows.map((workflow) => (
-                  <div
-                    key={workflow.id}
-                    className="flex items-center justify-between py-2 border-b last:border-0"
-                  >
-                    <div className="flex items-center gap-3">
-                      {getWorkflowStatusIcon(workflow.status)}
-                      <div>
-                        <p className="font-medium">{workflow.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(new Date(workflow.created_at), "d 'de' MMMM, HH:mm", { locale: es })}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge variant="outline">
-                      {getWorkflowStatusLabel(workflow.status)}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Clock className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground">
-                  No hay workflows ejecutados
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Publish to KB Dialog */}
+      {/* Publish Dialog */}
       <AlertDialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
-        <AlertDialogContent className="max-w-md">
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <BookPlus className="h-5 w-5 text-primary" />
-              Publicar a Base de Conocimiento
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-4">
-                <p>
-                  Esta acción compilará todos los hallazgos del proyecto en un caso de estudio
-                  y lo añadirá a la base de conocimiento global.
-                </p>
-                
-                <div className="bg-muted p-3 rounded-md text-sm">
-                  <p className="font-medium mb-2">El caso de estudio incluirá:</p>
-                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                    <li>Resumen ejecutivo del proyecto</li>
-                    <li>Hallazgos y oportunidades identificadas</li>
-                    <li>Tecnologías recomendadas</li>
-                    <li>Métricas de ahorro y ROI</li>
-                    <li>Lecciones aprendidas</li>
-                  </ul>
-                </div>
-                
-                <p className="text-amber-600 text-sm flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  Una vez publicado, el caso de estudio será visible para futuros análisis
-                  de otros proyectos del mismo sector.
-                </p>
-              </div>
+            <AlertDialogTitle>Publicar a Base de Conocimiento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción compilará todos los hallazgos en un caso de estudio y lo añadirá a la base de conocimiento global.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPublishing}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handlePublishToKB}
-              disabled={isPublishing}
-            >
-              {isPublishing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Publicando...
-                </>
-              ) : (
-                <>
-                  <BookPlus className="h-4 w-4 mr-2" />
-                  Publicar
-                </>
-              )}
+            <AlertDialogAction onClick={handlePublishToKB} disabled={isPublishing}>
+              {isPublishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BookPlus className="h-4 w-4 mr-2" />}
+              {isPublishing ? 'Publicando...' : 'Publicar'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
