@@ -644,7 +644,7 @@ export default function ScoutingMonitor() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -724,14 +724,16 @@ export default function ScoutingMonitor() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Sitios Examinados
+              Fallidas Hoy
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
-              <Globe className="w-5 h-5 text-orange-500" />
+              <XCircle className="w-5 h-5 text-red-500" />
               <span className="text-2xl font-bold">
-                {sessions?.reduce((acc, s) => acc + (s.sites_examined || 0), 0) || 0}
+                {failedSessions.filter(s => 
+                  new Date(s.completed_at || s.updated_at || '').toDateString() === new Date().toDateString()
+                ).length}
               </span>
             </div>
           </CardContent>
@@ -820,10 +822,6 @@ export default function ScoutingMonitor() {
                                  techCountsBySession[session.session_id] !== (session.technologies_found || 0) && (
                                   <span className="text-primary font-medium">✓</span>
                                 )}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Globe className="w-3 h-3" />
-                                {session.sites_examined || 0}
                               </span>
                             </div>
                           </div>
