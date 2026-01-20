@@ -3,29 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { 
   Upload, 
   FileText, 
-  Trash2, 
   Loader2,
-  File,
-  FileSpreadsheet,
-  FileImage,
-  FilePieChart
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -37,27 +20,24 @@ import {
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { API_URL } from '@/lib/api';
+import { DocumentListItemWithProgress } from '@/components/projects/DocumentListItemWithProgress';
 
 interface Document {
   id: string;
   filename: string;
   document_type: string;
-  processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+  processing_status: 'pending' | 'processing' | 'chunking' | 'embedding' | 'extracting_entities' | 'completed' | 'failed';
   created_at: string;
   file_size?: number;
   mime_type?: string;
+  chunk_count?: number;
+  entities_count?: number;
+  processing_error?: string;
 }
 
 interface DocumentsTabProps {
   projectId: string;
 }
-
-const statusConfig: Record<string, { label: string; className: string }> = {
-  pending: { label: 'Pendiente', className: 'bg-gray-500 hover:bg-gray-600' },
-  processing: { label: 'Procesando', className: 'bg-yellow-500 hover:bg-yellow-600' },
-  completed: { label: 'Completado', className: 'bg-green-500 hover:bg-green-600' },
-  failed: { label: 'Error', className: 'bg-red-500 hover:bg-red-600' },
-};
 
 const documentTypes = [
   { value: 'pid', label: 'P&ID (Diagrama de Proceso e Instrumentación)' },
@@ -65,55 +45,10 @@ const documentTypes = [
   { value: 'datasheet', label: 'Datasheet (Fichas técnicas de equipos)' },
   { value: 'invoice', label: 'Factura (Facturas de agua, químicos, energía)' },
   { value: 'report', label: 'Informe (Informes previos, auditorías)' },
+  { value: 'permit', label: 'Permiso / Autorización' },
+  { value: 'manual', label: 'Manual de operación' },
   { value: 'other', label: 'Otro' },
 ];
-
-const documentTypeLabels: Record<string, string> = {
-  pid: 'P&ID',
-  analytics: 'Analíticas',
-  datasheet: 'Datasheet',
-  invoice: 'Factura',
-  report: 'Informe',
-  water_analysis: 'Análisis de agua',
-  consumption_report: 'Informe de consumo',
-  technical_spec: 'Especificación técnica',
-  other: 'Otro',
-};
-
-const getFileIcon = (filename: string, mimeType?: string) => {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  
-  if (mimeType?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
-    return FileImage;
-  }
-  if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
-    return FileSpreadsheet;
-  }
-  if (['pdf'].includes(ext || '')) {
-    return FilePieChart;
-  }
-  if (['doc', 'docx', 'txt', 'md'].includes(ext || '')) {
-    return FileText;
-  }
-  return File;
-};
-
-const formatFileSize = (bytes?: number) => {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('es-ES', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-};
 
 export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
   const { toast } = useToast();
@@ -267,9 +202,9 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
       </div>
 
       {/* Tip */}
-      <Card className="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/50 dark:border-blue-800/50">
+      <Card className="bg-accent/50 border-accent">
         <CardContent className="py-3 px-4">
-          <p className="text-sm text-blue-700 dark:text-blue-300">
+          <p className="text-sm text-muted-foreground">
             💡 <strong>Tip:</strong> Los documentos se procesan automáticamente para extraer datos.
             Los agentes de IA usarán esta información en el análisis.
           </p>
@@ -293,86 +228,15 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
         </Card>
       ) : (
         <div className="space-y-3">
-          {documents.map((doc) => {
-            const FileIcon = getFileIcon(doc.filename, doc.mime_type);
-            const status = statusConfig[doc.processing_status] || statusConfig.pending;
-            const typeLabel = documentTypeLabels[doc.document_type] || doc.document_type;
-
-            return (
-              <Card key={doc.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    <div className="shrink-0 text-muted-foreground">
-                      <FileIcon className="h-8 w-8" />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="font-medium truncate" title={doc.filename}>
-                            {doc.filename}
-                          </h3>
-                          <div className="flex flex-wrap items-center gap-2 mt-1">
-                            <Badge variant="outline" className="text-xs">
-                              {typeLabel}
-                            </Badge>
-                            <Badge className={`text-xs text-white ${status.className}`}>
-                              {status.label}
-                            </Badge>
-                            {doc.file_size && (
-                              <span className="text-xs text-muted-foreground">
-                                {formatFileSize(doc.file_size)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs text-muted-foreground hidden sm:block">
-                            {formatDate(doc.created_at)}
-                          </span>
-                          
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                disabled={deletingId === doc.id}
-                              >
-                                {deletingId === doc.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>¿Eliminar documento?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Esta acción no se puede deshacer. Se eliminará permanentemente el documento "{doc.filename}".
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleDelete(doc.id, doc.filename)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Eliminar
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {documents.map((doc) => (
+            <DocumentListItemWithProgress
+              key={doc.id}
+              document={doc}
+              projectId={projectId}
+              onDelete={handleDelete}
+              isDeleting={deletingId === doc.id}
+            />
+          ))}
         </div>
       )}
 
