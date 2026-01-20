@@ -128,12 +128,14 @@ export interface ResearchSource {
   language: string;
   summary?: string;
   key_points: string[];
+  key_findings?: string[];
   extracted_data?: Record<string, unknown>;
   relevance_score?: number;
   relevance_notes?: string;
   found_by_agent?: string;
   verified: boolean;
   verified_at?: string;
+  status?: 'pending' | 'verified' | 'starred';
   created_at: string;
 }
 
@@ -161,6 +163,13 @@ export type ConclusionType =
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type Severity = 'info' | 'minor' | 'moderate' | 'major' | 'critical';
 
+export interface HumanReview {
+  approved?: boolean;
+  rejection_reason?: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+}
+
 export interface AgentConclusion {
   id: string;
   project_id: string;
@@ -169,8 +178,10 @@ export interface AgentConclusion {
   phase?: string;
   conclusion_type: ConclusionType;
   title: string;
+  content: string;
   description: string;
   details?: Record<string, unknown>;
+  evidence?: string[];
   supporting_source_ids: string[];
   priority: Priority;
   severity?: Severity;
@@ -178,6 +189,7 @@ export interface AgentConclusion {
   show_in_summary: boolean;
   consultant_reviewed: boolean;
   consultant_notes?: string;
+  human_review?: HumanReview;
   dismissed: boolean;
   created_at: string;
 }

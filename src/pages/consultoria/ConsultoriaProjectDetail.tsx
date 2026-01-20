@@ -1,12 +1,11 @@
 import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Building2, MapPin, Droplets, Calendar, Loader2, AlertCircle, FileText, BarChart3, Layers, Settings } from 'lucide-react';
+import { ArrowLeft, Building2, MapPin, Droplets, Calendar, Loader2, AlertCircle, FileText, BarChart3, Layers, Settings, ClipboardList, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import { API_URL } from '@/lib/api';
 
 interface Project {
@@ -134,6 +133,22 @@ export default function ConsultoriaProjectDetail() {
               </p>
             )}
           </div>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link to={`/consultoria/projects/${projectId}/briefing`}>
+              <ClipboardList className="mr-2 h-4 w-4" />
+              Completar Briefing
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link to={`/consultoria/projects/${projectId}/research`}>
+              <Search className="mr-2 h-4 w-4" />
+              Ver Investigación
+            </Link>
+          </Button>
         </div>
       </div>
 
