@@ -4,10 +4,17 @@ import {
   Upload, 
   FileText, 
   Loader2,
+  ChevronDown,
+  ChevronRight,
+  Layers,
+  CheckCircle2,
+  Clock,
+  Scissors,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -17,6 +24,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { API_URL } from '@/lib/api';
@@ -33,6 +45,19 @@ interface Document {
   chunk_count?: number;
   entities_count?: number;
   processing_error?: string;
+  // Split document fields
+  is_split_document?: boolean;
+  total_parts?: number | null;
+  parent_document_id?: string | null;
+  part_number?: number | null;
+}
+
+interface DocumentPart {
+  id: string;
+  filename: string;
+  part_number: number;
+  processing_status: string;
+  chunk_count: number;
 }
 
 interface DocumentsTabProps {
@@ -50,6 +75,163 @@ const documentTypes = [
   { value: 'other', label: 'Otro' },
 ];
 
+// Component to render a split document with accordion
+function SplitDocumentItem({
+  document,
+  projectId,
+  onDelete,
+  isDeleting,
+}: {
+  document: Document;
+  projectId: string;
+  onDelete: (id: string, filename: string) => void;
+  isDeleting: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [parts, setParts] = useState<DocumentPart[]>([]);
+  const [loadingParts, setLoadingParts] = useState(false);
+
+  const fetchParts = async () => {
+    if (parts.length > 0) return; // Already loaded
+    
+    setLoadingParts(true);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/projects/${projectId}/documents/${document.id}/parts`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setParts(data.parts || data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching parts:', error);
+    } finally {
+      setLoadingParts(false);
+    }
+  };
+
+  const handleToggle = (open: boolean) => {
+    setIsOpen(open);
+    if (open) {
+      fetchParts();
+    }
+  };
+
+  const partsCompleted = parts.filter(p => p.processing_status === 'completed').length;
+  const totalParts = document.total_parts || parts.length;
+  const allCompleted = partsCompleted === totalParts && totalParts > 0;
+
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <Collapsible open={isOpen} onOpenChange={handleToggle}>
+        <CardContent className="p-4">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-3 w-full text-left group">
+              {/* Expand icon */}
+              <div className="shrink-0 text-muted-foreground group-hover:text-foreground transition-colors">
+                {isOpen ? (
+                  <ChevronDown className="h-5 w-5" />
+                ) : (
+                  <ChevronRight className="h-5 w-5" />
+                )}
+              </div>
+
+              {/* File icon */}
+              <FileText className="h-8 w-8 text-muted-foreground shrink-0" />
+
+              {/* Filename and info */}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-medium truncate" title={document.filename}>
+                  {document.filename}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {document.chunk_count || 0} chunks total
+                </p>
+              </div>
+
+              {/* Badges */}
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant="secondary" className="gap-1">
+                  <Layers className="h-3 w-3" />
+                  {totalParts} partes
+                </Badge>
+                {parts.length > 0 && (
+                  <Badge 
+                    variant="outline" 
+                    className={allCompleted 
+                      ? 'text-green-600 border-green-200 dark:text-green-400 dark:border-green-800' 
+                      : ''
+                    }
+                  >
+                    {partsCompleted}/{totalParts} completadas
+                  </Badge>
+                )}
+              </div>
+            </button>
+          </CollapsibleTrigger>
+
+          {/* Expanded content */}
+          <CollapsibleContent>
+            <div className="mt-4 pl-14 space-y-2">
+              {loadingParts ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando partes...
+                </div>
+              ) : parts.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  No se encontraron partes para este documento.
+                </p>
+              ) : (
+                parts.map((part) => (
+                  <div 
+                    key={part.id} 
+                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground/50 font-mono text-xs">└</span>
+                      <span className="text-sm">
+                        Parte {part.part_number} de {totalParts}
+                      </span>
+                      {part.chunk_count > 0 && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Scissors className="h-3 w-3" />
+                          {part.chunk_count} chunks
+                        </span>
+                      )}
+                    </div>
+                    <Badge 
+                      variant={part.processing_status === 'completed' ? 'default' : 'secondary'}
+                      className={part.processing_status === 'completed' 
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' 
+                        : ''
+                      }
+                    >
+                      {part.processing_status === 'completed' ? (
+                        <>
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Completado
+                        </>
+                      ) : part.processing_status === 'failed' ? (
+                        'Error'
+                      ) : (
+                        <>
+                          <Clock className="h-3 w-3 mr-1" />
+                          Procesando...
+                        </>
+                      )}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
+          </CollapsibleContent>
+        </CardContent>
+      </Collapsible>
+    </Card>
+  );
+}
+
 export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,9 +248,14 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
       const response = await fetch(`${API_URL}/api/projects/${projectId}/documents`);
       if (!response.ok) throw new Error('Error al cargar documentos');
       const data = await response.json();
+      const allDocs = data.documents || data.data || (Array.isArray(data) ? data : []) as Document[];
+      
+      // Filter out child parts - only show parent documents
+      const parentDocs = allDocs.filter((doc: Document) => !doc.parent_document_id);
+      
       return {
-        documents: data.documents || data.data || (Array.isArray(data) ? data : []) as Document[],
-        count: data.count || data.documents?.length || 0
+        documents: parentDocs,
+        count: parentDocs.length
       };
     },
     enabled: !!projectId,
@@ -228,15 +415,31 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
         </Card>
       ) : (
         <div className="space-y-3">
-          {documents.map((doc) => (
-            <DocumentListItemWithProgress
-              key={doc.id}
-              document={doc}
-              projectId={projectId}
-              onDelete={handleDelete}
-              isDeleting={deletingId === doc.id}
-            />
-          ))}
+          {documents.map((doc) => {
+            // If this is a split document, render with accordion
+            if (doc.is_split_document) {
+              return (
+                <SplitDocumentItem
+                  key={doc.id}
+                  document={doc}
+                  projectId={projectId}
+                  onDelete={handleDelete}
+                  isDeleting={deletingId === doc.id}
+                />
+              );
+            }
+
+            // Regular document
+            return (
+              <DocumentListItemWithProgress
+                key={doc.id}
+                document={doc}
+                projectId={projectId}
+                onDelete={handleDelete}
+                isDeleting={deletingId === doc.id}
+              />
+            );
+          })}
         </div>
       )}
 
