@@ -12,6 +12,8 @@ import {
   Scissors,
   Trash2,
   AlertCircle,
+  Eye,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -77,16 +79,27 @@ const documentTypes = [
   { value: 'other', label: 'Otro' },
 ];
 
+// Helper function to view/download a document
+const handleViewDocument = (projectId: string, documentId: string, filename: string) => {
+  // Open the document download endpoint in a new tab
+  const url = `${API_URL}/api/projects/${projectId}/documents/${documentId}/download`;
+  window.open(url, '_blank');
+};
+
 // Component to render a split document with accordion
 function SplitDocumentItem({
   document,
   allDocuments,
+  projectId,
   onDelete,
+  onView,
   isDeleting,
 }: {
   document: Document;
   allDocuments: Document[];
+  projectId: string;
   onDelete: (id: string, filename: string) => void;
+  onView: (documentId: string, filename: string) => void;
   isDeleting: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -162,23 +175,38 @@ function SplitDocumentItem({
             </button>
           </CollapsibleTrigger>
 
-          {/* Delete button - outside the trigger */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-4 right-4 text-muted-foreground hover:text-destructive"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(document.id, document.filename);
-            }}
-            disabled={isDeleting}
-          >
-            {isDeleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </Button>
+          {/* Action buttons - outside the trigger */}
+          <div className="absolute top-4 right-4 flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                onView(document.id, document.filename);
+              }}
+              title="Ver documento"
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(document.id, document.filename);
+              }}
+              disabled={isDeleting}
+              title="Eliminar documento"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
 
           <CollapsibleContent>
             <div className="mt-4 pl-14 space-y-2">
@@ -431,7 +459,9 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({ projectId }) => {
                   key={doc.id}
                   document={doc}
                   allDocuments={allDocuments}
+                  projectId={projectId}
                   onDelete={handleDelete}
+                  onView={(documentId, filename) => handleViewDocument(projectId, documentId, filename)}
                   isDeleting={deletingId === doc.id}
                 />
               );

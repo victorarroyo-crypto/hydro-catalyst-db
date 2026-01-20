@@ -24,12 +24,14 @@ import {
   Loader2,
   Scissors,
   Brain,
-  Layers
+  Layers,
+  Eye,
 } from 'lucide-react';
 import { useDocumentProcessingStatus, isActiveProcessing } from '@/services/documentProcessingService';
 import { DocumentPartsAccordion } from './DocumentPartsAccordion';
 import { PROCESSING_STAGES } from '@/types/documentProcessing';
 import type { DocumentProcessingStatus, ProjectDocumentWithParts, DocumentPart } from '@/types/documentProcessing';
+import { API_URL } from '@/lib/api';
 
 interface ProjectDocument {
   id: string;
@@ -157,8 +159,20 @@ export function DocumentListItemWithProgress({
           parts={liveStatus.parts}
           totalChunks={liveStatus.chunks_created}
         />
-        {/* Delete button overlay */}
-        <div className="absolute top-4 right-4">
+        {/* Action buttons overlay */}
+        <div className="absolute top-4 right-4 flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-primary"
+            onClick={() => {
+              const url = `${API_URL}/api/projects/${projectId}/documents/${document.id}/download`;
+              window.open(url, '_blank');
+            }}
+            title="Ver documento"
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
@@ -166,6 +180,7 @@ export function DocumentListItemWithProgress({
                 size="icon"
                 className="h-8 w-8 text-muted-foreground hover:text-destructive"
                 disabled={isDeleting}
+                title="Eliminar documento"
               >
                 {isDeleting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -243,6 +258,18 @@ export function DocumentListItemWithProgress({
                   <span className="text-xs text-muted-foreground hidden sm:block">
                     {formatDate(document.created_at)}
                   </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-primary"
+                    onClick={() => {
+                      const url = `${API_URL}/api/projects/${projectId}/documents/${document.id}/download`;
+                      window.open(url, '_blank');
+                    }}
+                    title="Ver documento"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
@@ -250,6 +277,7 @@ export function DocumentListItemWithProgress({
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         disabled={isDeleting}
+                        title="Eliminar documento"
                       >
                         {isDeleting ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -334,6 +362,20 @@ export function DocumentListItemWithProgress({
                   {formatDate(document.created_at)}
                 </span>
                 
+                {/* View button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-primary"
+                  onClick={() => {
+                    const url = `${API_URL}/api/projects/${projectId}/documents/${document.id}/download`;
+                    window.open(url, '_blank');
+                  }}
+                  title="Ver documento"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
@@ -341,6 +383,7 @@ export function DocumentListItemWithProgress({
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       disabled={isDeleting}
+                      title="Eliminar documento"
                     >
                       {isDeleting ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
