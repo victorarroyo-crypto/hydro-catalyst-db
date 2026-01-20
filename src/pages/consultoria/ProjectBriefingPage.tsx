@@ -136,11 +136,17 @@ export default function ProjectBriefingPage() {
 
   return (
     <div className="container max-w-4xl mx-auto py-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Briefing del Proyecto</h1>
-        <p className="text-muted-foreground">
-          Define los objetivos y alcance para guiar la investigación
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Briefing del Proyecto</h1>
+          <p className="text-muted-foreground">
+            Define los objetivos y alcance para guiar la investigación
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => navigate(`/consultoria/${projectId}`)}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Volver al Proyecto
+        </Button>
       </div>
 
       <div className="space-y-2">
