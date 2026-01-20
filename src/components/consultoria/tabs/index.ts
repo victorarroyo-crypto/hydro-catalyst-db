@@ -1,0 +1,9 @@
+export { OverviewTab } from './OverviewTab';
+export { DocumentsTab } from './DocumentsTab';
+export { WorkflowsTab } from './WorkflowsTab';
+export { FindingsTab } from './FindingsTab';
+export { WaterBalanceTab } from './WaterBalanceTab';
+export { ScenariosTab } from './ScenariosTab';
+export { DiagramsTab } from './DiagramsTab';
+export { ReportsTab } from './ReportsTab';
+export { SettingsTab } from './SettingsTab';
