@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { comparisonProjectsService, ComparisonProject, ProjectTechnology } from '@/services/comparisonProjectsService';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { syncProjectTechnologyDelete, syncProjectTechnologyInsert } from '@/lib/syncToExternal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -76,24 +76,28 @@ interface Project {
   name: string;
   description: string | null;
   status: string;
-  target_date: string | null;
-  notes: string | null;
+  use_case?: string | null;
+  target_industry?: string | null;
+  comparison_results?: Record<string, any>;
   created_at: string;
+  updated_at: string;
   created_by: string | null;
 }
 
-interface ProjectTechnology {
+interface ProjectTech {
   id: string;
   technology_id: string;
+  user_notes?: string;
+  user_rating?: number;
+  tags?: string[];
   added_at: string;
   technology: Technology;
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-  draft: { label: 'Borrador', color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
   active: { label: 'Activo', color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' },
-  on_hold: { label: 'En espera', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-  closed: { label: 'Cerrado', color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30' },
+  completed: { label: 'Completado', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+  archived: { label: 'Archivado', color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30' },
 };
 
 const ProjectDetail: React.FC = () => {
@@ -113,9 +117,9 @@ const ProjectDetail: React.FC = () => {
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
-    status: 'draft',
-    target_date: '',
-    notes: '',
+    status: 'active',
+    use_case: '',
+    target_industry: '',
   });
 
   // Export report as DOCX
@@ -124,7 +128,7 @@ const ProjectDetail: React.FC = () => {
     
     setIsExporting(true);
     try {
-      const response = await fetch(`${API_URL}/api/projects/${id}/report/docx`);
+      const response = await fetch(`${API_URL}/api/technology-comparison-projects/${id}/report/docx`);
       
       if (!response.ok) {
         if (response.status === 400) {
@@ -170,54 +174,27 @@ const ProjectDetail: React.FC = () => {
     window.print();
   };
 
-  // Fetch project
+  // Fetch project from API
   const { data: project, isLoading: loadingProject } = useQuery({
-    queryKey: ['project', id],
+    queryKey: ['comparison-project', id],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('projects')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data as Project | null;
+      const response = await comparisonProjectsService.get(id!);
+      return (response.project || response) as Project | null;
     },
     enabled: !!id,
   });
 
-  // Fetch project technologies
+  // Fetch project technologies from API
   const { data: projectTechnologies, isLoading: loadingTechs } = useQuery({
-    queryKey: ['project-technologies', id],
+    queryKey: ['comparison-project-technologies', id],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('project_technologies')
-        .select(`
-          id,
-          technology_id,
-          added_at,
-          technology:technologies(
-            id,
-            "Nombre de la tecnología",
-            "Tipo de tecnología",
-            "Proveedor / Empresa",
-            "País de origen",
-            "Grado de madurez (TRL)",
-            "Ventaja competitiva clave",
-            "Aplicación principal",
-            "Web de la empresa"
-          )
-        `)
-        .eq('project_id', id)
-        .order('added_at', { ascending: false });
-      
-      if (error) throw error;
-      return data as unknown as ProjectTechnology[];
+      const response = await comparisonProjectsService.listTechnologies(id!);
+      return (response.technologies || response.data || response || []) as ProjectTech[];
     },
     enabled: !!id,
   });
 
-  // Search technologies for adding
+  // Search technologies for adding (from external catalog)
   const { data: searchResults } = useQuery({
     queryKey: ['search-technologies', searchQuery],
     queryFn: async () => {
@@ -238,16 +215,12 @@ const ProjectDetail: React.FC = () => {
   // Update project mutation
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<Project>) => {
-      const { error } = await externalSupabase
-        .from('projects')
-        .update(data)
-        .eq('id', id);
-      
-      if (error) throw error;
+      const response = await comparisonProjectsService.update(id!, data as any);
+      return response.project || response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project', id] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['comparison-project', id] });
+      queryClient.invalidateQueries({ queryKey: ['comparison-projects'] });
       setEditModalOpen(false);
       toast({ title: 'Proyecto actualizado' });
     },
@@ -259,33 +232,13 @@ const ProjectDetail: React.FC = () => {
   // Add technology to project
   const addTechMutation = useMutation({
     mutationFn: async (technologyId: string) => {
-      const { data, error } = await externalSupabase
-        .from('project_technologies')
-        .insert({
-          project_id: id,
-          technology_id: technologyId,
-          added_by: user?.id,
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-
-      // Sync to external Supabase
-      try {
-        await syncProjectTechnologyInsert({
-          id: data.id,
-          project_id: id,
-          technology_id: technologyId,
-          added_by: user?.id,
-          added_at: data.added_at,
-        });
-      } catch (syncError) {
-        console.error('External sync failed:', syncError);
-      }
+      const response = await comparisonProjectsService.addTechnology(id!, {
+        technology_id: technologyId,
+      });
+      return response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project-technologies', id] });
+      queryClient.invalidateQueries({ queryKey: ['comparison-project-technologies', id] });
       setSearchQuery('');
       toast({ title: 'Tecnología añadida al proyecto' });
     },
@@ -296,23 +249,11 @@ const ProjectDetail: React.FC = () => {
 
   // Remove technology from project
   const removeTechMutation = useMutation({
-    mutationFn: async (projectTechId: string) => {
-      const { error } = await externalSupabase
-        .from('project_technologies')
-        .delete()
-        .eq('id', projectTechId);
-      
-      if (error) throw error;
-
-      // Sync deletion to external Supabase
-      try {
-        await syncProjectTechnologyDelete(projectTechId);
-      } catch (syncError) {
-        console.error('External sync failed:', syncError);
-      }
+    mutationFn: async (technologyId: string) => {
+      await comparisonProjectsService.removeTechnology(id!, technologyId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project-technologies', id] });
+      queryClient.invalidateQueries({ queryKey: ['comparison-project-technologies', id] });
       toast({ title: 'Tecnología eliminada del proyecto' });
     },
     onError: () => {
@@ -325,9 +266,9 @@ const ProjectDetail: React.FC = () => {
       setEditForm({
         name: project.name,
         description: project.description || '',
-        status: project.status || 'draft',
-        target_date: project.target_date || '',
-        notes: project.notes || '',
+        status: project.status || 'active',
+        use_case: project.use_case || '',
+        target_industry: project.target_industry || '',
       });
       setEditModalOpen(true);
     }
@@ -337,9 +278,9 @@ const ProjectDetail: React.FC = () => {
     updateMutation.mutate({
       name: editForm.name,
       description: editForm.description || null,
-      status: editForm.status,
-      target_date: editForm.target_date || null,
-      notes: editForm.notes || null,
+      status: editForm.status as any,
+      use_case: editForm.use_case || null,
+      target_industry: editForm.target_industry || null,
     });
   };
 
@@ -401,7 +342,7 @@ const ProjectDetail: React.FC = () => {
     );
   }
 
-  const status = statusConfig[project.status] || statusConfig.draft;
+  const status = statusConfig[project.status] || statusConfig.active;
   const technologies = projectTechnologies?.map(pt => pt.technology).filter(Boolean) || [];
 
   return (
@@ -468,13 +409,10 @@ const ProjectDetail: React.FC = () => {
           <CardContent className="pt-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Clock className="w-4 h-4" />
-              <span className="text-sm">Fecha objetivo</span>
+              <span className="text-sm">Industria</span>
             </div>
             <p className="font-medium">
-              {project.target_date 
-                ? new Date(project.target_date).toLocaleDateString('es-ES')
-                : '—'
-              }
+              {project.target_industry || '—'}
             </p>
           </CardContent>
         </Card>
@@ -515,7 +453,7 @@ const ProjectDetail: React.FC = () => {
           </TabsTrigger>
           <TabsTrigger value="notes" className="gap-2">
             <FileText className="w-4 h-4" />
-            Notas
+            Caso de uso
           </TabsTrigger>
         </TabsList>
 
@@ -529,11 +467,9 @@ const ProjectDetail: React.FC = () => {
                   Comparar
                 </Button>
               )}
-              <Button asChild>
-                <Link to="/technologies">
-                  <Search className="w-4 h-4 mr-2" />
-                  Elegir tecnologías
-                </Link>
+              <Button onClick={() => setAddTechModalOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Añadir tecnología
               </Button>
             </div>
           </div>
@@ -548,13 +484,11 @@ const ProjectDetail: React.FC = () => {
                 <Building2 className="w-12 h-12 text-muted-foreground/50 mb-4" />
                 <h4 className="font-medium text-foreground mb-2">Sin tecnologías</h4>
                 <p className="text-muted-foreground text-center mb-4">
-                  Añade tecnologías a este proyecto para evaluarlas
+                  Añade tecnologías a este proyecto para compararlas
                 </p>
-                <Button asChild>
-                  <Link to="/technologies">
-                    <Search className="w-4 h-4 mr-2" />
-                    Elegir tecnologías
-                  </Link>
+                <Button onClick={() => setAddTechModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Añadir tecnología
                 </Button>
               </CardContent>
             </Card>
@@ -577,7 +511,7 @@ const ProjectDetail: React.FC = () => {
                         variant="ghost"
                         size="icon"
                         className="shrink-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => removeTechMutation.mutate(pt.id)}
+                        onClick={() => removeTechMutation.mutate(pt.technology_id)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -595,6 +529,11 @@ const ProjectDetail: React.FC = () => {
                         <MapPin className="w-3 h-3" />
                         {pt.technology["País de origen"]}
                       </div>
+                    )}
+                    {pt.user_notes && (
+                      <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+                        {pt.user_notes}
+                      </p>
                     )}
                     <button 
                       onClick={() => {
@@ -624,17 +563,17 @@ const ProjectDetail: React.FC = () => {
         <TabsContent value="notes" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Notas del proyecto</CardTitle>
-              <CardDescription>Notas internas sobre este proyecto</CardDescription>
+              <CardTitle className="text-lg">Caso de uso</CardTitle>
+              <CardDescription>Contexto y objetivo de este proyecto de comparación</CardDescription>
             </CardHeader>
             <CardContent>
-              {project.notes ? (
+              {project.use_case ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <p className="whitespace-pre-wrap">{project.notes}</p>
+                  <p className="whitespace-pre-wrap">{project.use_case}</p>
                 </div>
               ) : (
                 <p className="text-muted-foreground text-sm">
-                  No hay notas. Haz clic en "Editar" para añadir notas al proyecto.
+                  No hay caso de uso definido. Haz clic en "Editar" para añadirlo.
                 </p>
               )}
             </CardContent>
@@ -677,31 +616,29 @@ const ProjectDetail: React.FC = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">🟡 Borrador</SelectItem>
                     <SelectItem value="active">🟢 Activo</SelectItem>
-                    <SelectItem value="on_hold">🔵 En espera</SelectItem>
-                    <SelectItem value="closed">⚫ Cerrado</SelectItem>
+                    <SelectItem value="completed">✅ Completado</SelectItem>
+                    <SelectItem value="archived">📦 Archivado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label htmlFor="target_date">Fecha objetivo</Label>
+                <Label htmlFor="target_industry">Industria objetivo</Label>
                 <Input
-                  id="target_date"
-                  type="date"
-                  value={editForm.target_date}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, target_date: e.target.value }))}
+                  id="target_industry"
+                  value={editForm.target_industry}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, target_industry: e.target.value }))}
                 />
               </div>
             </div>
             <div>
-              <Label htmlFor="notes">Notas internas</Label>
+              <Label htmlFor="use_case">Caso de uso</Label>
               <Textarea
-                id="notes"
-                value={editForm.notes}
-                onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                id="use_case"
+                value={editForm.use_case}
+                onChange={(e) => setEditForm(prev => ({ ...prev, use_case: e.target.value }))}
                 rows={4}
-                placeholder="Notas sobre el proyecto, cliente, requisitos..."
+                placeholder="Describe el caso de uso y objetivo de esta comparación..."
               />
             </div>
           </div>
@@ -767,7 +704,7 @@ const ProjectDetail: React.FC = () => {
             )}
             
             <p className="text-xs text-muted-foreground">
-              También puedes añadir tecnologías desde la página de Tecnologías usando el botón "Añadir a proyecto"
+              Busca tecnologías del catálogo para añadirlas a este proyecto de comparación
             </p>
           </div>
           <DialogFooter>

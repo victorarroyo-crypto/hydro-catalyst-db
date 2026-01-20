@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { comparisonProjectsService, ComparisonProject } from '@/services/comparisonProjectsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,10 +50,13 @@ interface Project {
   name: string;
   description: string | null;
   status: string;
-  target_date: string | null;
-  notes: string | null;
+  target_date?: string | null;
+  use_case?: string | null;
+  target_industry?: string | null;
+  notes?: string | null;
   created_at: string;
   created_by: string | null;
+  selected_technology_ids?: string[];
 }
 
 const statusConfig: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
@@ -61,6 +64,8 @@ const statusConfig: Record<string, { label: string; emoji: string; color: string
   active: { label: 'Activo', emoji: '🟢', color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' },
   on_hold: { label: 'En espera', emoji: '🔵', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
   closed: { label: 'Cerrado', emoji: '⚫', color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30' },
+  completed: { label: 'Completado', emoji: '✅', color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' },
+  archived: { label: 'Archivado', emoji: '📦', color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30' },
 };
 
 const Projects: React.FC = () => {
@@ -74,41 +79,17 @@ const Projects: React.FC = () => {
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
-    status: 'draft',
-    target_date: '',
-    notes: '',
+    status: 'active',
+    use_case: '',
+    target_industry: '',
   });
 
-  // Fetch projects with technology count
+  // Fetch projects from API
   const { data: projects, isLoading } = useQuery({
-    queryKey: ['projects', user?.id],
+    queryKey: ['comparison-projects', user?.id],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('projects')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data as Project[];
-    },
-    enabled: !!user,
-  });
-
-  // Fetch technology counts for each project
-  const { data: techCounts } = useQuery({
-    queryKey: ['project-tech-counts'],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('project_technologies')
-        .select('project_id');
-      
-      if (error) throw error;
-      
-      const counts: Record<string, number> = {};
-      data?.forEach(pt => {
-        counts[pt.project_id] = (counts[pt.project_id] || 0) + 1;
-      });
-      return counts;
+      const response = await comparisonProjectsService.list();
+      return (response.projects || response.data || response || []) as Project[];
     },
     enabled: !!user,
   });
@@ -116,23 +97,19 @@ const Projects: React.FC = () => {
   // Create project mutation
   const createMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await externalSupabase
-        .from('projects')
-        .insert({
-          name: newProject.name,
-          description: newProject.description || null,
-          status: newProject.status,
-          target_date: newProject.target_date || null,
-          notes: newProject.notes || null,
-          created_by: user?.id,
-        });
-      
-      if (error) throw error;
+      const response = await comparisonProjectsService.create({
+        name: newProject.name,
+        description: newProject.description || undefined,
+        use_case: newProject.use_case || undefined,
+        target_industry: newProject.target_industry || undefined,
+        created_by: user?.id,
+      });
+      return response.project || response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['comparison-projects'] });
       setCreateModalOpen(false);
-      setNewProject({ name: '', description: '', status: 'draft', target_date: '', notes: '' });
+      setNewProject({ name: '', description: '', status: 'active', use_case: '', target_industry: '' });
       toast({ title: 'Proyecto creado' });
     },
     onError: () => {
@@ -143,23 +120,10 @@ const Projects: React.FC = () => {
   // Delete project mutation
   const deleteMutation = useMutation({
     mutationFn: async (projectId: string) => {
-      // First delete project technologies
-      await externalSupabase
-        .from('project_technologies')
-        .delete()
-        .eq('project_id', projectId);
-      
-      // Then delete the project
-      const { error } = await externalSupabase
-        .from('projects')
-        .delete()
-        .eq('id', projectId);
-      
-      if (error) throw error;
+      await comparisonProjectsService.delete(projectId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      queryClient.invalidateQueries({ queryKey: ['project-tech-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['comparison-projects'] });
       setDeleteDialogOpen(false);
       setProjectToDelete(null);
       toast({ title: 'Proyecto eliminado' });
@@ -181,17 +145,17 @@ const Projects: React.FC = () => {
     setDeleteDialogOpen(true);
   };
 
-  const getStatus = (status: string) => statusConfig[status] || statusConfig.draft;
+  const getStatus = (status: string) => statusConfig[status] || statusConfig.active;
 
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground mb-2">
-            Mis Proyectos
+            Mis Proyectos de Comparación
           </h1>
           <p className="text-muted-foreground">
-            Gestiona tus proyectos y evalúa tecnologías
+            Gestiona tus proyectos y compara tecnologías del catálogo
           </p>
         </div>
         <Button onClick={() => setCreateModalOpen(true)}>
@@ -212,7 +176,7 @@ const Projects: React.FC = () => {
               No tienes proyectos todavía
             </h3>
             <p className="text-muted-foreground text-center max-w-md mb-6">
-              Crea tu primer proyecto para empezar a organizar y evaluar tecnologías del agua.
+              Crea tu primer proyecto para empezar a organizar y comparar tecnologías del agua.
             </p>
             <Button onClick={() => setCreateModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
@@ -224,7 +188,7 @@ const Projects: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects?.map((project) => {
             const status = getStatus(project.status);
-            const techCount = techCounts?.[project.id] || 0;
+            const techCount = project.selected_technology_ids?.length || 0;
             
             return (
               <Link key={project.id} to={`/projects/${project.id}`}>
@@ -258,10 +222,9 @@ const Projects: React.FC = () => {
                         <Calendar className="w-3 h-3" />
                         {new Date(project.created_at).toLocaleDateString('es-ES')}
                       </div>
-                      {project.target_date && (
+                      {project.target_industry && (
                         <div className="flex items-center gap-1">
-                          <span className="text-xs">Objetivo:</span>
-                          {new Date(project.target_date).toLocaleDateString('es-ES')}
+                          <span className="text-xs">{project.target_industry}</span>
                         </div>
                       )}
                     </div>
@@ -288,14 +251,14 @@ const Projects: React.FC = () => {
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Nuevo Proyecto</DialogTitle>
+            <DialogTitle>Nuevo Proyecto de Comparación</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label htmlFor="name">Nombre del proyecto *</Label>
               <Input
                 id="name"
-                placeholder="Ej: Planta EDAR Valencia"
+                placeholder="Ej: Comparativa tratamiento terciario"
                 value={newProject.name}
                 onChange={(e) => setNewProject(prev => ({ ...prev, name: e.target.value }))}
               />
@@ -304,7 +267,7 @@ const Projects: React.FC = () => {
               <Label htmlFor="description">Descripción</Label>
               <Textarea
                 id="description"
-                placeholder="Describe el objetivo del proyecto..."
+                placeholder="Describe el objetivo del proyecto de comparación..."
                 value={newProject.description}
                 onChange={(e) => setNewProject(prev => ({ ...prev, description: e.target.value }))}
                 rows={3}
@@ -312,41 +275,23 @@ const Projects: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="status">Estado</Label>
-                <Select
-                  value={newProject.status}
-                  onValueChange={(value) => setNewProject(prev => ({ ...prev, status: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">🟡 Borrador</SelectItem>
-                    <SelectItem value="active">🟢 Activo</SelectItem>
-                    <SelectItem value="on_hold">🔵 En espera</SelectItem>
-                    <SelectItem value="closed">⚫ Cerrado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="target_date">Fecha objetivo</Label>
+                <Label htmlFor="use_case">Caso de uso</Label>
                 <Input
-                  id="target_date"
-                  type="date"
-                  value={newProject.target_date}
-                  onChange={(e) => setNewProject(prev => ({ ...prev, target_date: e.target.value }))}
+                  id="use_case"
+                  placeholder="Ej: Reutilización industrial"
+                  value={newProject.use_case}
+                  onChange={(e) => setNewProject(prev => ({ ...prev, use_case: e.target.value }))}
                 />
               </div>
-            </div>
-            <div>
-              <Label htmlFor="notes">Notas internas</Label>
-              <Textarea
-                id="notes"
-                placeholder="Notas sobre el proyecto, cliente, requisitos..."
-                value={newProject.notes}
-                onChange={(e) => setNewProject(prev => ({ ...prev, notes: e.target.value }))}
-                rows={3}
-              />
+              <div>
+                <Label htmlFor="target_industry">Industria objetivo</Label>
+                <Input
+                  id="target_industry"
+                  placeholder="Ej: Farmacéutica"
+                  value={newProject.target_industry}
+                  onChange={(e) => setNewProject(prev => ({ ...prev, target_industry: e.target.value }))}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
