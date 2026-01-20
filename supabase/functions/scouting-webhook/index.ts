@@ -50,12 +50,28 @@ Deno.serve(async (req) => {
         sessionData.current_phase = data?.phase || 'init'
         sessionData.started_at = data?.started_at || new Date().toISOString()
         sessionData.config = data?.config || {}
-        sessionData.progress_percentage = 0
+        sessionData.progress_percentage = data?.progress_pct || 0
+        // Nuevos campos v2.5
+        sessionData.phase_details = {
+          phase_index: data?.phase_index || 0,
+          total_phases: data?.total_phases || 7,
+          current_agent: data?.current_agent || 'Sistema',
+          description: data?.description || ''
+        }
         break
         
       case 'progress':
         sessionData.current_phase = data?.phase
-        sessionData.progress_percentage = data?.progress_percentage || 0
+        sessionData.current_activity = data?.activity || data?.description
+        sessionData.progress_percentage = data?.progress_pct || 0
+        // Nuevos campos v2.5
+        sessionData.phase_details = {
+          phase_index: data?.phase_index || 0,
+          total_phases: data?.total_phases || 7,
+          current_agent: data?.current_agent || '',
+          description: data?.description || '',
+          elapsed_seconds: data?.elapsed_seconds || 0
+        }
         if (data?.metrics) {
           sessionData.technologies_found = data.metrics.technologies_found || 0
           sessionData.technologies_approved = data.metrics.technologies_approved || 0
@@ -65,10 +81,18 @@ Deno.serve(async (req) => {
         break
         
       case 'activity':
-      case 'site_start':
-      case 'site_complete':
         sessionData.current_activity = data?.message
         sessionData.current_site = data?.site
+        break
+
+      case 'technology_found':
+        // Incrementar contador y registrar en timeline
+        sessionData.current_activity = `🔬 Tecnología encontrada: ${data?.technology_name}`
+        break
+
+      case 'tech_decision':
+        // Decisión sobre tecnología
+        sessionData.current_activity = data?.message
         break
         
       case 'session_complete':
@@ -77,13 +101,26 @@ Deno.serve(async (req) => {
         sessionData.summary = data?.summary || {}
         sessionData.current_phase = 'completed'
         sessionData.progress_percentage = 100
+        sessionData.current_activity = null
+        // Guardar métricas finales del summary
+        if (data?.summary?.metrics) {
+          sessionData.technologies_found = data.summary.metrics.technologies_found || 0
+          sessionData.technologies_approved = data.summary.metrics.technologies_approved || 0
+          sessionData.technologies_discarded = data.summary.metrics.technologies_discarded || 0
+          sessionData.sites_examined = data.summary.metrics.sources_checked || 0
+        }
         break
         
       case 'error':
         if (data?.critical) {
           sessionData.status = 'failed'
           sessionData.error_message = data?.message
+          sessionData.completed_at = new Date().toISOString()
         }
+        break
+
+      case 'warning':
+        // Solo registrar en logs, no cambiar estado
         break
     }
 
@@ -98,15 +135,20 @@ Deno.serve(async (req) => {
       console.log(`[WEBHOOK] Session upserted to EXTERNAL DB: ${session_id}`)
     }
 
-    // 2. Insertar log en BD externa
+    // 2. Insertar log en BD externa (con nivel correcto)
+    const logLevel = event === 'error' ? 'error' : 
+                     event === 'warning' ? 'warning' : 
+                     event === 'tech_decision' && data?.decision === 'approved' ? 'success' :
+                     'info'
+    
     const { error: logError } = await supabase
       .from('scouting_session_logs')
       .insert({
         session_id: session_id,
         timestamp: timestamp || new Date().toISOString(),
-        level: event === 'error' ? 'error' : 'info',
-        phase: data?.phase || sessionData.current_phase,
-        message: data?.message || event,
+        level: logLevel,
+        phase: data?.phase || event,
+        message: data?.message || `[${event}] ${data?.description || ''}`,
         details: data || {}
       })
 

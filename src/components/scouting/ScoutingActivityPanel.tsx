@@ -71,13 +71,14 @@ interface ScoutingActivityPanelProps {
 }
 
 const phaseConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
+  init: { label: 'Inicializando', icon: Zap, color: 'text-gray-500' },
   initialization: { label: 'Inicializando', icon: Zap, color: 'text-gray-500' },
-  searching: { label: 'Buscando fuentes', icon: Search, color: 'text-blue-500' },
-  collecting: { label: 'Recolectando datos', icon: Globe, color: 'text-cyan-500' },
-  analyzing: { label: 'Analizando con IA', icon: Sparkles, color: 'text-purple-500' },
-  extracting: { label: 'Extrayendo tecnologías', icon: FileText, color: 'text-orange-500' },
-  filtering: { label: 'Filtrando resultados', icon: Target, color: 'text-yellow-500' },
-  saving: { label: 'Guardando', icon: CheckCircle2, color: 'text-green-500' },
+  analyzing: { label: 'Analizando BD', icon: Search, color: 'text-blue-500' },
+  researching: { label: 'Investigando', icon: Globe, color: 'text-cyan-500' },
+  validating: { label: 'Validando', icon: Target, color: 'text-purple-500' },
+  extracting: { label: 'Extrayendo', icon: FileText, color: 'text-orange-500' },
+  evaluating: { label: 'Evaluando', icon: Sparkles, color: 'text-yellow-500' },
+  completing: { label: 'Finalizando', icon: CheckCircle2, color: 'text-green-500' },
   completed: { label: 'Completado', icon: CheckCircle2, color: 'text-green-600' },
   failed: { label: 'Fallido', icon: XCircle, color: 'text-red-500' },
 };
@@ -110,8 +111,23 @@ export default function ScoutingActivityPanel({
   // Use unified metrics extraction
   const metrics = extractSessionMetrics(session, realTechCount);
   
-  const currentPhaseConfig = phaseConfig[session.current_phase || 'initialization'] || phaseConfig.initialization;
+  const currentPhaseConfig = phaseConfig[session.current_phase || 'init'] || phaseConfig.init;
   const PhaseIcon = currentPhaseConfig.icon;
+  
+  // Extract phase details from session
+  const phaseDetails = session.phase_details as Record<string, unknown> | null;
+  const phaseIndex = (phaseDetails?.phase_index as number) ?? 0;
+  const totalPhases = (phaseDetails?.total_phases as number) ?? 7;
+  const currentAgent = (phaseDetails?.current_agent as string) || '';
+  const elapsedSeconds = (phaseDetails?.elapsed_seconds as number) ?? 0;
+  
+  // Format elapsed time
+  const formatElapsed = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+  };
   
   // Generate timeline from logs or activity_timeline
   const timeline = useMemo(() => {
@@ -164,24 +180,64 @@ export default function ScoutingActivityPanel({
       {/* Current Phase & Progress */}
       <Card className={`border-2 ${isRunning ? 'border-primary/50 bg-primary/5' : 'border-border'}`}>
         <CardContent className="pt-4">
+          {/* Agent & Phase Header */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <PhaseIcon className={`w-5 h-5 ${currentPhaseConfig.color} ${isRunning ? 'animate-pulse' : ''}`} />
-              <span className="font-medium">{currentPhaseConfig.label}</span>
+              <div>
+                <span className="font-medium">{currentPhaseConfig.label}</span>
+                {currentAgent && isRunning && (
+                  <p className="text-xs text-muted-foreground">
+                    Agente: <span className="font-medium text-primary">{currentAgent}</span>
+                  </p>
+                )}
+              </div>
             </div>
-            <Badge variant={isRunning ? 'default' : 'secondary'}>
-              {session.progress_percentage}%
-            </Badge>
+            <div className="text-right">
+              <Badge variant={isRunning ? 'default' : 'secondary'}>
+                {session.progress_percentage}%
+              </Badge>
+              {isRunning && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Fase {phaseIndex + 1}/{totalPhases}
+                </p>
+              )}
+            </div>
           </div>
           
-          <Progress 
-            value={session.progress_percentage} 
-            className="h-2 mb-3" 
-          />
+          {/* Progress Bar with Phase Markers */}
+          <div className="relative mb-3">
+            <Progress 
+              value={session.progress_percentage} 
+              className="h-2" 
+            />
+            {isRunning && (
+              <div className="flex justify-between mt-1">
+                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                  <div 
+                    key={i}
+                    className={`w-2 h-2 rounded-full ${
+                      i < phaseIndex ? 'bg-primary' : 
+                      i === phaseIndex ? 'bg-primary animate-pulse' : 
+                      'bg-muted'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Elapsed Time */}
+          {isRunning && elapsedSeconds > 0 && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mb-3">
+              <Clock className="w-3 h-3" />
+              <span>Tiempo: {formatElapsed(elapsedSeconds)}</span>
+            </div>
+          )}
           
           {/* Current Activity */}
           {currentActivity && isRunning && (
-            <div className="mt-3 p-3 bg-background rounded-lg border">
+            <div className="p-3 bg-background rounded-lg border">
               <p className="text-xs text-muted-foreground mb-1">Actividad actual:</p>
               <p className={`text-sm font-medium ${getActivityColor(currentActivity)}`}>
                 {currentActivity}
