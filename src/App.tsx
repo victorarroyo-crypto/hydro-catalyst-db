@@ -44,7 +44,7 @@ import ConsultoriaDetalle from "./pages/consultoria/ConsultoriaDetalle";
 import ConsultoriaDiagnostico from "./pages/consultoria/ConsultoriaDiagnostico";
 import ConsultoriaDocumentos from "./pages/consultoria/ConsultoriaDocumentos";
 import ScenarioDesignerPage from "./pages/consultoria/ScenarioDesignerPage";
-import ConsultoriaProjectDetail from "./pages/consultoria/ConsultoriaProjectDetail";
+
 import ProjectBriefingPage from "./pages/consultoria/ProjectBriefingPage";
 import ProjectResearchPage from "./pages/consultoria/ProjectResearchPage";
 import AdvisorLanding from "./pages/advisor/AdvisorLanding";
@@ -88,7 +88,7 @@ const App = () => (
               <Route path="/studies/:studyId" element={<StudyDetail />} />
               <Route path="/consultoria" element={<ConsultoriaList />} />
               <Route path="/consultoria/nuevo" element={<ConsultoriaNuevo />} />
-              <Route path="/consultoria/projects/:projectId" element={<ConsultoriaProjectDetail />} />
+              
               <Route path="/consultoria/projects/:projectId/briefing" element={<ProjectBriefingPage />} />
               <Route path="/consultoria/projects/:projectId/research" element={<ProjectResearchPage />} />
               <Route path="/consultoria/:id" element={<ConsultoriaDetalle />} />

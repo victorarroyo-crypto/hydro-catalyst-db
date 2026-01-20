@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { 
   ArrowLeft, 
   AlertTriangle, 
@@ -17,7 +18,9 @@ import {
   GitBranch,
   Network,
   FileOutput,
-  Settings
+  Settings,
+  ClipboardList,
+  FlaskConical
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -293,14 +296,28 @@ const ConsultoriaDetalle: React.FC = () => {
               )}
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => setShowPublishDialog(true)}
-            disabled={!hasFindings || isPublishedToKB || isPublishing}
-          >
-            {isPublishedToKB ? <BookCheck className="h-4 w-4 mr-2" /> : <BookPlus className="h-4 w-4 mr-2" />}
-            {isPublishedToKB ? 'Publicado' : 'Publicar a KB'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link to={`/consultoria/projects/${id}/briefing`}>
+                <ClipboardList className="h-4 w-4 mr-2" />
+                Completar Briefing
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to={`/consultoria/projects/${id}/research`}>
+                <FlaskConical className="h-4 w-4 mr-2" />
+                Ver Investigación
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowPublishDialog(true)}
+              disabled={!hasFindings || isPublishedToKB || isPublishing}
+            >
+              {isPublishedToKB ? <BookCheck className="h-4 w-4 mr-2" /> : <BookPlus className="h-4 w-4 mr-2" />}
+              {isPublishedToKB ? 'Publicado' : 'Publicar a KB'}
+            </Button>
+          </div>
         </div>
       </div>
 
