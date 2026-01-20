@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { 
   Rocket,
@@ -85,8 +85,13 @@ const ScoutingNew = () => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
   
-  // Ref para el requestId - se genera una vez por intento de submit y se mantiene estable
+  // === ANTI-DOUBLE-CLICK REFS ===
+  // Synchronous lock that blocks immediately (before React state updates)
+  const submitLockRef = useRef(false);
+  // Store the requestId for the current submission attempt
   const currentRequestIdRef = useRef<string | null>(null);
+  // Timestamp of last submission to add extra debounce
+  const lastSubmitTimeRef = useRef<number>(0);
 
   // LLM Models from Railway
   const { data: llmData, isLoading: llmModelsLoading, isError: llmModelsError, refetch: refetchLLMModels } = useLLMModels();
@@ -155,7 +160,10 @@ const ScoutingNew = () => {
       toast.error(`Error: ${errorMessage}`, { id: 'scouting-start' });
     },
     onSettled: () => {
+      // Release all locks after mutation completes
       setIsSubmitting(false);
+      submitLockRef.current = false;
+      currentRequestIdRef.current = null;
     },
   });
 
@@ -175,9 +183,26 @@ const ScoutingNew = () => {
     },
   });
 
-  const handleStartScouting = () => {
-    // Prevenir doble-clic inmediatamente
-    if (isSubmitting || scoutingMutation.isPending) return;
+  const handleStartScouting = useCallback(() => {
+    // === SYNCHRONOUS LOCK CHECK (before React state) ===
+    // This fires immediately, blocking any double-click in the same frame
+    if (submitLockRef.current) {
+      console.log('[ScoutingNew] Blocked by synchronous lock');
+      return;
+    }
+    
+    // Extra debounce: ignore clicks within 2 seconds of last submit
+    const now = Date.now();
+    if (now - lastSubmitTimeRef.current < 2000) {
+      console.log('[ScoutingNew] Blocked by time debounce');
+      return;
+    }
+    
+    // Also check React state (belt and suspenders)
+    if (isSubmitting || scoutingMutation.isPending) {
+      console.log('[ScoutingNew] Blocked by React state');
+      return;
+    }
     
     const keywordList = keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
     if (keywordList.length === 0) {
@@ -189,15 +214,16 @@ const ScoutingNew = () => {
       return;
     }
     
-    // Generar un nuevo requestId ÚNICO para este intento
-    // Se almacena en ref para que si hay un re-render no cambie
+    // === ACQUIRE LOCKS IMMEDIATELY ===
+    submitLockRef.current = true;
+    lastSubmitTimeRef.current = now;
+    setIsSubmitting(true);
+    
+    // Generate a new requestId UNIQUE for this attempt
     const requestId = generateRequestId();
     currentRequestIdRef.current = requestId;
     
-    console.log(`[ScoutingNew] Iniciando scouting con requestId=${requestId}`);
-    
-    // Bloquear ANTES de la mutación
-    setIsSubmitting(true);
+    console.log(`[ScoutingNew] 🚀 Iniciando scouting con requestId=${requestId}`);
     
     scoutingMutation.mutate({
       config: {
@@ -209,7 +235,7 @@ const ScoutingNew = () => {
       model: selectedModel,
       requestId,
     });
-  };
+  }, [keywords, selectedModel, tipo, trlMin, instructions, isSubmitting, scoutingMutation]);
 
   return (
     <div className="container mx-auto py-6 space-y-6">
