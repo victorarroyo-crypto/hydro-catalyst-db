@@ -230,23 +230,31 @@ export default function ScoutingMonitor() {
     },
   });
 
-  // Fetch scouting queue counts from external DB
+  // Fetch scouting queue counts from external DB - matching useScoutingData.ts logic exactly
   const { data: queueCounts } = useQuery({
     queryKey: ['scouting-queue-counts-monitor'],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
+      // Count review statuses (pending, review, reviewing) - same as useScoutingData
+      const { count: reviewCount, error: reviewError } = await externalSupabase
         .from('scouting_queue')
-        .select('status');
+        .select('*', { count: 'exact', head: true })
+        .in('queue_status', ['pending', 'review', 'reviewing']);
       
-      if (error) throw error;
+      if (reviewError) throw reviewError;
       
-      const counts = {
-        total: data?.length || 0,
-        pending: data?.filter((d: { status: string }) => d.status === 'pending').length || 0,
-        review: data?.filter((d: { status: string }) => d.status === 'review').length || 0,
-        pending_approval: data?.filter((d: { status: string }) => d.status === 'pending_approval').length || 0,
+      // Count pending_approval
+      const { count: pendingCount, error: pendingError } = await externalSupabase
+        .from('scouting_queue')
+        .select('*', { count: 'exact', head: true })
+        .eq('queue_status', 'pending_approval');
+      
+      if (pendingError) throw pendingError;
+      
+      return {
+        review: reviewCount || 0,
+        pending_approval: pendingCount || 0,
+        total: (reviewCount || 0) + (pendingCount || 0)
       };
-      return counts;
     },
     refetchInterval: 30000,
   });
@@ -526,7 +534,10 @@ export default function ScoutingMonitor() {
     };
   }, [selectedSession, refetchLogs]);
 
-  const activeSessions = sessions?.filter(s => s.status === 'running') || [];
+  const runningSessions = sessions?.filter(s => s.status === 'running') || [];
+  const reallyActiveSessions = runningSessions.filter(s => !isPhantomSession(s, currentTime));
+  const phantomSessions = runningSessions.filter(s => isPhantomSession(s, currentTime));
+  const activeSessions = reallyActiveSessions; // Use real active for badges/alerts
   const completedSessions = sessions?.filter(s => s.status === 'completed') || [];
   const failedSessions = sessions?.filter(s => s.status === 'failed') || [];
 
@@ -654,7 +665,13 @@ export default function ScoutingMonitor() {
           <CardContent>
             <div className="flex items-center gap-2">
               <Activity className="w-5 h-5 text-blue-500" />
-              <span className="text-2xl font-bold">{activeSessions.length}</span>
+              <span className="text-2xl font-bold">{reallyActiveSessions.length}</span>
+              {phantomSessions.length > 0 && (
+                <span className="text-xs text-amber-500 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  +{phantomSessions.length} fantasma
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>
