@@ -66,7 +66,9 @@ const industrySectors = [
 ];
 
 interface CreateProjectResponse {
-  id: string;
+  success: boolean;
+  project: { id: string; [key: string]: unknown };
+  message: string;
 }
 
 export default function ConsultoriaNuevo() {
@@ -180,17 +182,20 @@ export default function ConsultoriaNuevo() {
   }, [selectedTemplateData, form]);
 
   const createProject = async (data: ProjectFormData): Promise<CreateProjectResponse> => {
+    // Build payload matching the Railway API contract
     const payload = {
-      ...data,
-      plant_capacity_m3_day: data.plant_capacity_m3_day === '' ? null : data.plant_capacity_m3_day,
+      name: data.name,
+      description: data.description || undefined,
+      client_name: data.client_name || undefined,
+      client_contact: data.client_contact || undefined,
+      industry_sector: data.industry_sector || undefined,
+      plant_name: data.plant_name || undefined,
+      plant_location: data.plant_location || undefined,
+      plant_capacity_m3_day: data.plant_capacity_m3_day === '' ? undefined : data.plant_capacity_m3_day,
     };
 
-    // Use template endpoint if template is selected
-    const endpoint = selectedTemplate
-      ? `${API_URL}/api/projects/from-template/${selectedTemplate}`
-      : `${API_URL}/api/projects`;
-
-    const response = await fetch(endpoint, {
+    // Always POST to Railway external API
+    const response = await fetch(`${API_URL}/api/projects`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -219,11 +224,10 @@ export default function ConsultoriaNuevo() {
     onSuccess: (data) => {
       toast({
         title: 'Proyecto creado',
-        description: selectedTemplate 
-          ? 'El proyecto se ha creado con la plantilla seleccionada'
-          : 'El proyecto se ha creado correctamente',
+        description: data.message || 'El proyecto se ha creado correctamente',
       });
-      navigate(`/consultoria/${data.id}`);
+      // Navigate to the project detail page using the ID from response
+      navigate(`/consultoria/projects/${data.project.id}`);
     },
     onError: (error: Error) => {
       toast({
