@@ -381,8 +381,20 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   }
 
   const statusInfo = getStatusBadge(caseStudy.status);
-  const recommendedTechs = technologies?.filter(t => t.role === 'Recomendada') || [];
-  const evaluatedTechs = technologies?.filter(t => t.role === 'Evaluada') || [];
+  
+  // Normalizar roles: soportar inglés (recommended/evaluated) y español (Recomendada/Evaluada)
+  const normalizeRole = (role: string): 'recommended' | 'evaluated' => {
+    const lower = (role || '').toLowerCase();
+    if (lower === 'recommended' || lower === 'recomendada') return 'recommended';
+    return 'evaluated';
+  };
+  
+  console.log('[CaseStudyDetailView] Technologies roles:', 
+    technologies?.map(t => ({ name: t.technology_name, role: t.role }))
+  );
+  
+  const recommendedTechs = technologies?.filter(t => normalizeRole(t.role) === 'recommended') || [];
+  const evaluatedTechs = technologies?.filter(t => normalizeRole(t.role) === 'evaluated') || [];
 
   // ═══════════════════════════════════════════════════════════════════
   // EXTRACT DATA FROM original_data WITH FALLBACK TO DIRECT FIELDS
@@ -408,10 +420,10 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                        od.caso_titulo || 
                        'Sin título';
   
-  // Client/Entity: direct column -> NEW context.company -> LEGACY caso_cliente
-  const displayClient = caseStudy.entity_type || 
-                        od.context?.company || 
+  // Client/Entity: NEW context.company -> LEGACY caso_cliente -> entity_type as last resort
+  const displayClient = od.context?.company || 
                         od.caso_cliente || 
+                        caseStudy.entity_type || 
                         null;
   
   // Country: direct column -> NEW classification.country -> LEGACY caso_pais
