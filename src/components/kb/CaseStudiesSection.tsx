@@ -226,18 +226,40 @@ export const CaseStudiesSection: React.FC = () => {
   };
 
   // Fetch case studies with new fields
-  const { data: caseStudies, isLoading } = useQuery({
+  const { data: caseStudies, isLoading, error: caseStudiesError } = useQuery({
     queryKey: ['case-studies-enhanced'],
     queryFn: async () => {
+      console.log('[CaseStudies] Fetching from external Supabase...');
+      console.log('[CaseStudies] External URL:', 'ktzhrlcvluaptixngrsh.supabase.co');
+      
       const { data, error } = await externalSupabase
         .from('casos_de_estudio')
         .select('id, name, description, entity_type, country, sector, technology_types, status, quality_score, roi_percent, created_at')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      console.log('[CaseStudies] Query result:', { data, error, count: data?.length });
+      
+      // Log specific case if exists
+      const targetCase = data?.find(cs => cs.id === 'd49c7751-e7e2-419f-ae8b-1f23843b1c54');
+      console.log('[CaseStudies] Target case d49c7751...:', targetCase || 'NOT FOUND');
+
+      if (error) {
+        console.error('[CaseStudies] Query error:', error);
+        throw error;
+      }
       return data as CaseStudy[];
     },
   });
+  
+  // Log when data changes
+  React.useEffect(() => {
+    console.log('[CaseStudies] Current data state:', { 
+      caseStudies: caseStudies?.length, 
+      isLoading, 
+      error: caseStudiesError,
+      firstFew: caseStudies?.slice(0, 3).map(cs => ({ id: cs.id, name: cs.name.substring(0, 30) }))
+    });
+  }, [caseStudies, isLoading, caseStudiesError]);
 
   // Filter case studies
   const filteredCases = caseStudies?.filter(cs => {
