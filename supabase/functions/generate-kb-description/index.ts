@@ -24,14 +24,35 @@ serve(async (req) => {
 
     const RAILWAY_API_URL = Deno.env.get('RAILWAY_API_URL');
     const RAILWAY_SYNC_SECRET = Deno.env.get('RAILWAY_SYNC_SECRET');
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!RAILWAY_API_URL || !RAILWAY_SYNC_SECRET) {
       console.error('[generate-kb-description] Missing RAILWAY_API_URL or RAILWAY_SYNC_SECRET');
       throw new Error('Railway configuration is missing');
     }
 
-    const railwayUrl = `${RAILWAY_API_URL}/api/kb/document/${documentId}/generate-description`;
-    console.log('[generate-kb-description] Calling Railway:', railwayUrl);
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[generate-kb-description] Missing Supabase configuration');
+      throw new Error('Supabase configuration is missing');
+    }
+
+    // Fetch document details from Supabase
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data: doc, error: docError } = await supabase
+      .from('knowledge_documents')
+      .select('name, category, sector')
+      .eq('id', documentId)
+      .single();
+
+    if (docError || !doc) {
+      console.error('[generate-kb-description] Document not found:', docError);
+      throw new Error('Document not found');
+    }
+
+    // Call Railway API with document info
+    const railwayUrl = `${RAILWAY_API_URL}/api/kb/generate-description`;
+    console.log('[generate-kb-description] Calling Railway:', railwayUrl, { fileName: doc.name, category: doc.category, sector: doc.sector });
 
     const response = await fetch(railwayUrl, {
       method: 'POST',
@@ -39,6 +60,11 @@ serve(async (req) => {
         'Content-Type': 'application/json',
         'X-Sync-Secret': RAILWAY_SYNC_SECRET,
       },
+      body: JSON.stringify({
+        fileName: doc.name,
+        category: doc.category || 'technical_guide',
+        sector: doc.sector || 'general',
+      }),
     });
 
     if (!response.ok) {
@@ -48,9 +74,9 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log('[generate-kb-description] Railway response received');
+    console.log('[generate-kb-description] Railway response received:', data);
 
-    // Extract description from ai_analysis
+    // Extract description from response
     const description = data.ai_analysis?.description || data.description || '';
 
     return new Response(
