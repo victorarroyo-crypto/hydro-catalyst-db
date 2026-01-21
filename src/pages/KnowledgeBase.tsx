@@ -38,6 +38,32 @@ import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
 import { getModelPricing, formatCost, estimateCostFromTotal } from "@/lib/aiModelPricing";
 import { useLLMModels, getDefaultModel, formatModelCost } from "@/hooks/useLLMModels";
 import { API_URL } from "@/lib/api";
+
+// Helper function to call KB Railway proxy (server-side secret handling)
+const callKBProxy = async (endpoint: string, payload?: any): Promise<any> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('No autenticado');
+
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kb-railway-proxy`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ endpoint, method: 'POST', payload }),
+    }
+  );
+
+  const data = await response.json();
+  
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || data.error || `Error ${response.status}`);
+  }
+  
+  return data;
+};
 import {
   Dialog,
   DialogContent,
@@ -594,24 +620,10 @@ export default function KnowledgeBase() {
       }
       console.log("[KB-UPLOAD] Document registered in DB:", doc.id);
 
-      console.log("[KB-UPLOAD] Calling Railway API to process document...");
+      console.log("[KB-UPLOAD] Calling Railway API via proxy to process document...");
       try {
-        const processResponse = await fetch(`${API_URL}/api/kb/process`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
-          },
-          body: JSON.stringify({ document_id: doc.id }),
-        });
-
-        if (!processResponse.ok) {
-          const errorData = await processResponse.json().catch(() => ({}));
-          console.error("[KB-UPLOAD] Processing error:", errorData);
-          toast.error("Documento subido pero hubo un error al procesarlo");
-        } else {
-          console.log("[KB-UPLOAD] Processing initiated successfully");
-        }
+        await callKBProxy('/api/kb/process', { document_id: doc.id });
+        console.log("[KB-UPLOAD] Processing initiated successfully");
       } catch (processError) {
         console.error("[KB-UPLOAD] Processing error:", processError);
         toast.error("Documento subido pero hubo un error al procesarlo");
@@ -1341,16 +1353,7 @@ export default function KnowledgeBase() {
     toast.info(`Enviando "${docName}" a procesar...`, { duration: 2000 });
     
     try {
-      const response = await fetch(`${API_URL}/api/kb/reprocess/${docId}`, {
-        method: 'POST',
-        headers: {
-          'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
-        },
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
-        throw new Error(errorData.error || `Error ${response.status}`);
-      }
+      await callKBProxy(`/api/kb/reprocess/${docId}`);
       
       // Mark as recently sent for visual feedback
       setRecentlySentParts(prev => new Set(prev).add(docId));
@@ -1379,16 +1382,7 @@ export default function KnowledgeBase() {
   // Legacy mutation for compatibility (uses granular state now)
   const reprocessMutation = useMutation({
     mutationFn: async (docId: string) => {
-      const response = await fetch(`${API_URL}/api/kb/reprocess/${docId}`, {
-        method: 'POST',
-        headers: {
-          'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
-        },
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
-        throw new Error(errorData.error || `Error ${response.status}`);
-      }
+      await callKBProxy(`/api/kb/reprocess/${docId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
@@ -1518,26 +1512,14 @@ export default function KnowledgeBase() {
     }
   };
 
-  // Generate AI description for an existing document via Railway API
+  // Generate AI description for an existing document via Railway API (through proxy)
   const handleGenerateDescriptionForDoc = async (doc: KnowledgeDocument) => {
     setGeneratingDescId(doc.id);
     try {
-      console.log('Generate description:', doc.id); // Debug
-      console.log('Secret:', import.meta.env.VITE_SYNC_WEBHOOK_SECRET);
+      console.log('Generate description via proxy:', doc.id);
       
-      const response = await fetch(`${API_URL}/api/kb/document/${doc.id}/generate-description`, {
-        method: 'POST',
-        headers: {
-          'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
-        },
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Error ${response.status}: ${error}`);
-      }
-
-      const data = await response.json();
+      const data = await callKBProxy(`/api/kb/document/${doc.id}/generate-description`);
+      
       // data.ai_analysis contiene: suggested_title, description, keywords, suggested_category
       const aiAnalysis = data.ai_analysis;
       
@@ -1800,18 +1782,8 @@ export default function KnowledgeBase() {
     
     for (const doc of toReprocess) {
       try {
-        const response = await fetch(`${API_URL}/api/kb/reprocess/${doc.id}`, {
-          method: 'POST',
-          headers: {
-            'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
-          },
-        });
-        if (!response.ok) {
-          errorCount++;
-          console.error(`Error reprocessing ${doc.name}:`, response.status);
-        } else {
-          successCount++;
-        }
+        await callKBProxy(`/api/kb/reprocess/${doc.id}`);
+        successCount++;
       } catch (err) {
         errorCount++;
         console.error(`Error reprocessing ${doc.name}:`, err);
