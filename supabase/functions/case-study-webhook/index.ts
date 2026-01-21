@@ -222,21 +222,29 @@ async function queueFlatTechnologiesForScouting(
       continue;
     }
     
+    // ═══════════════════════════════════════════════════════════════════
+    // EXTRAER DATOS DE ficha.* SI NO EXISTEN EN NIVEL RAÍZ
+    // ═══════════════════════════════════════════════════════════════════
+    const ficha = (tech as any).ficha || {};
+    
     const insertData: Record<string, unknown> = {
-      "Nombre de la tecnología": tech.nombre,
-      "Proveedor / Empresa": tech.proveedor || null,
-      "Web de la empresa": tech.web || null,
-      "Aplicación principal": tech.aplicacion || null,
-      "Descripción técnica breve": tech.descripcion || null,
-      "Ventaja competitiva clave": tech.ventaja || null,
-      "Porque es innovadora": tech.innovacion || null,
-      "Comentarios del analista": tech.comentarios || `Rol: ${tech.rol || 'No especificado'}`,
-      "Casos de referencia": tech.referencias || null,
+      "Nombre de la tecnología": tech.nombre || ficha.nombre || (tech as any).technology_name,
+      "Proveedor / Empresa": tech.proveedor || ficha.proveedor || (tech as any).provider || null,
+      "Web de la empresa": tech.web || ficha.web || null,
+      "Aplicación principal": tech.aplicacion || ficha.aplicacion || null,
+      "Descripción técnica breve": tech.descripcion || ficha.descripcion || null,
+      "Ventaja competitiva clave": tech.ventaja || ficha.ventaja || null,
+      "Porque es innovadora": tech.innovacion || ficha.innovacion || null,
+      "Comentarios del analista": tech.comentarios || ficha.comentarios || `Rol: ${tech.rol || ficha.rol || 'No especificado'}`,
+      "Casos de referencia": tech.referencias || ficha.referencias || null,
       source: 'case_study',
       priority: 'normal',
       queue_status: 'pending',
       case_study_id: caseStudyId,
     };
+    
+    console.log(`[CASE-STUDY-WEBHOOK] Inserting tech: "${insertData["Nombre de la tecnología"]}", proveedor: "${insertData["Proveedor / Empresa"]}", web: "${insertData["Web de la empresa"]}"`);
+    
 
     const { error } = await supabase.from('scouting_queue').insert(insertData);
     
@@ -635,25 +643,32 @@ serve(async (req) => {
         console.log('[WEBHOOK] ============================================');
         
         // Mapear tecnologías Railway → UI (español → inglés)
-        const mappedTechnologies = rawTechnologies.map((tech: any) => ({
-          name: tech.nombre || tech.name || '',
-          provider: tech.proveedor || tech.provider || '',
-          website: tech.web || tech.website || '',
-          description: tech.descripcion || tech.description || '',
-          role: tech.rol || tech.role || 'identified',
-          trl: tech.trl || null,
-          application: tech.aplicacion || tech.application || '',
-          advantage: tech.ventaja || tech.advantage || '',
-          innovation: tech.innovacion || tech.innovation || '',
-          references: tech.referencias || tech.references || '',
-          comments: tech.comentarios || tech.comments || '',
-          found_in_db: tech.found_in_db || false,
-          technology_id: tech.technology_id || null,
-          // Mantener campos originales por compatibilidad
-          nombre: tech.nombre,
-          proveedor: tech.proveedor,
-          web: tech.web,
-        }));
+        // ═══════════════════════════════════════════════════════════════════
+        // IMPORTANTE: Los datos pueden venir en tech.ficha.* o directamente en tech.*
+        // ═══════════════════════════════════════════════════════════════════
+        const mappedTechnologies = rawTechnologies.map((tech: any) => {
+          const ficha = tech.ficha || {};
+          return {
+            name: tech.nombre || ficha.nombre || tech.name || tech.technology_name || '',
+            provider: tech.proveedor || ficha.proveedor || tech.provider || '',
+            website: tech.web || ficha.web || tech.website || '',
+            description: tech.descripcion || ficha.descripcion || tech.description || '',
+            role: tech.rol || ficha.rol || tech.role || 'identified',
+            trl: tech.trl || ficha.trl || null,
+            application: tech.aplicacion || ficha.aplicacion || tech.application || '',
+            advantage: tech.ventaja || ficha.ventaja || tech.advantage || '',
+            innovation: tech.innovacion || ficha.innovacion || tech.innovation || '',
+            references: tech.referencias || ficha.referencias || tech.references || '',
+            comments: tech.comentarios || ficha.comentarios || tech.comments || '',
+            found_in_db: tech.found_in_db || false,
+            technology_id: tech.technology_id || null,
+            // Mantener campos originales por compatibilidad (extraer de ficha si no existen)
+            nombre: tech.nombre || ficha.nombre,
+            proveedor: tech.proveedor || ficha.proveedor,
+            web: tech.web || ficha.web,
+            descripcion: tech.descripcion || ficha.descripcion,
+          };
+        });
         
         // ═══════════════════════════════════════════════════════════════════
         // v12.7+ SIMILAR_CASES: CHECK ROOT LEVEL FIRST (payload.similar_cases)
