@@ -31,6 +31,7 @@ import {
   Users,
   Globe,
   Sparkles,
+  SendHorizonal,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -151,6 +152,24 @@ interface CaseStudyTechnology {
   role: string;
   technology_id: string | null;
   scouting_queue_id: string | null;
+  // Datos completos para enviar a scouting
+  application_data?: {
+    descripcion?: string;
+    pais?: string;
+    web?: string;
+    email?: string;
+    trl?: number;
+    tipo?: string;
+    subcategoria?: string;
+    sector?: string;
+    aplicacion_principal?: string;
+    ventaja_competitiva?: string;
+    innovacion?: string;
+    casos_referencia?: string;
+    paises_actua?: string;
+    [key: string]: any;
+  } | null;
+  selection_rationale?: string | null;
 }
 
 export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
@@ -168,6 +187,9 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   
   // Review modal state
   const [reviewJobId, setReviewJobId] = useState<string | null>(null);
+  
+  // State for sending to scouting queue
+  const [sendingTechId, setSendingTechId] = useState<string | null>(null);
 
   // Fetch case study
   const { data: caseStudy, isLoading } = useQuery({
@@ -347,6 +369,70 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     } finally {
       setIsDeleting(false);
       setDeleteDialogOpen(false);
+    }
+  };
+
+  // Send technology to scouting queue for review
+  const handleSendToScoutingQueue = async (tech: CaseStudyTechnology) => {
+    if (tech.technology_id || tech.scouting_queue_id) {
+      toast.error('Esta tecnología ya está vinculada o en revisión');
+      return;
+    }
+    
+    setSendingTechId(tech.id);
+    
+    try {
+      const ad = tech.application_data || {};
+      
+      // Insert into scouting_queue with proper column names (spaces in column names)
+      const { data, error } = await externalSupabase
+        .from('scouting_queue')
+        .insert({
+          'Nombre de la tecnología': tech.technology_name,
+          'Proveedor / Empresa': tech.provider || ad.proveedor || null,
+          'País de origen': ad.pais || ad.country || null,
+          'Paises donde actua': ad.paises_actua || null,
+          'Web de la empresa': ad.web || null,
+          'Email de contacto': ad.email || null,
+          'Descripción técnica breve': ad.descripcion || ad.description || null,
+          'Tipo de tecnología': ad.tipo || ad.type || 'Por clasificar',
+          'Subcategoría': ad.subcategoria || null,
+          'Sector y subsector': ad.sector || null,
+          'Aplicación principal': ad.aplicacion_principal || null,
+          'Ventaja competitiva clave': ad.ventaja_competitiva || null,
+          'Porque es innovadora': ad.innovacion || null,
+          'Grado de madurez (TRL)': ad.trl || null,
+          'Casos de referencia': ad.casos_referencia || null,
+          'Comentarios del analista': tech.selection_rationale || ad.comentarios_analista || 
+            `Extraída del caso de estudio: ${caseStudy?.name}`,
+          source: 'case_study',
+          case_study_id: caseStudyId,
+          queue_status: 'review',
+        })
+        .select('id')
+        .single();
+      
+      if (error) throw error;
+      
+      // Update case_study_technologies with the new scouting_queue_id
+      await externalSupabase
+        .from('case_study_technologies')
+        .update({ scouting_queue_id: data.id })
+        .eq('id', tech.id);
+      
+      // Invalidate queries to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ['case-study-technologies', caseStudyId] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+      queryClient.invalidateQueries({ queryKey: ['scouting-counts'] });
+      
+      toast.success('Tecnología enviada a revisión', {
+        description: `${tech.technology_name} está ahora en la cola de scouting`
+      });
+    } catch (error: any) {
+      console.error('Error sending to scouting queue:', error);
+      toast.error('Error al enviar a revisión', { description: error.message });
+    } finally {
+      setSendingTechId(null);
     }
   };
 
@@ -775,12 +861,31 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                         </div>
                         {getTechStatusBadge(tech)}
                       </div>
-                      {tech.technology_id && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                          Ver ficha
-                          <ExternalLink className="h-3 w-3" />
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {tech.technology_id && (
+                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+                            Ver ficha
+                            <ExternalLink className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {/* Send to review button for unlinked technologies */}
+                        {!tech.technology_id && !tech.scouting_queue_id && (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-7 text-xs gap-1"
+                            onClick={() => handleSendToScoutingQueue(tech)}
+                            disabled={sendingTechId === tech.id}
+                          >
+                            {sendingTechId === tech.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <SendHorizonal className="h-3 w-3" />
+                            )}
+                            Enviar a revisión
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -793,12 +898,31 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 <p className="text-xs text-muted-foreground mb-2">Evaluadas</p>
                 <div className="space-y-2">
                   {evaluatedTechs.map((tech) => (
-                    <div key={tech.id} className="flex items-center gap-2">
-                      <Badge variant="outline" className="py-1">
-                        {tech.technology_name}
-                        {tech.provider && ` (${tech.provider})`}
-                      </Badge>
-                      {getTechStatusBadge(tech)}
+                    <div key={tech.id} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="py-1">
+                          {tech.technology_name}
+                          {tech.provider && ` (${tech.provider})`}
+                        </Badge>
+                        {getTechStatusBadge(tech)}
+                      </div>
+                      {/* Send to review button for unlinked technologies */}
+                      {!tech.technology_id && !tech.scouting_queue_id && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 text-xs gap-1"
+                          onClick={() => handleSendToScoutingQueue(tech)}
+                          disabled={sendingTechId === tech.id}
+                        >
+                          {sendingTechId === tech.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <SendHorizonal className="h-3 w-3" />
+                          )}
+                          Revisar
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -813,14 +937,33 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 </p>
                 <div className="space-y-2">
                   {technologies.map((tech) => (
-                    <div key={tech.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{tech.technology_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {tech.provider && `${tech.provider} • `}Rol: {tech.role || 'Sin rol'}
-                        </p>
+                    <div key={tech.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{tech.technology_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {tech.provider && `${tech.provider} • `}Rol: {tech.role || 'Sin rol'}
+                          </p>
+                        </div>
+                        {getTechStatusBadge(tech)}
                       </div>
-                      {getTechStatusBadge(tech)}
+                      {/* Send to review button for unlinked technologies */}
+                      {!tech.technology_id && !tech.scouting_queue_id && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-7 text-xs gap-1 ml-2"
+                          onClick={() => handleSendToScoutingQueue(tech)}
+                          disabled={sendingTechId === tech.id}
+                        >
+                          {sendingTechId === tech.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <SendHorizonal className="h-3 w-3" />
+                          )}
+                          Enviar a revisión
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
