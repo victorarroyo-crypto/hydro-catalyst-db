@@ -1799,12 +1799,15 @@ export default function KnowledgeBase() {
     
     for (const doc of toReprocess) {
       try {
-        const { error } = await externalSupabase.functions.invoke('process-knowledge-document', {
-          body: { documentId: doc.id, forceReprocess: true },
+        const response = await fetch(`${API_URL}/api/kb/reprocess/${doc.id}`, {
+          method: 'POST',
+          headers: {
+            'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+          },
         });
-        if (error) {
+        if (!response.ok) {
           errorCount++;
-          console.error(`Error reprocessing ${doc.name}:`, error);
+          console.error(`Error reprocessing ${doc.name}:`, response.status);
         } else {
           successCount++;
         }
