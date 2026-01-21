@@ -544,7 +544,11 @@ export const NewCaseStudyModal: React.FC<NewCaseStudyModalProps> = ({
   };
 
   const handleProcessingCompleted = async (jobId: string) => {
-    // Move to form step instead of closing
+    // Notify parent to refresh case studies list immediately
+    if (onCompleted) {
+      onCompleted();
+    }
+    // Move to form step
     setCurrentJobId(jobId);
     setStep('form');
   };

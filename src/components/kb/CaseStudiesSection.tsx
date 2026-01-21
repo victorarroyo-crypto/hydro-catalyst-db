@@ -186,6 +186,7 @@ export const CaseStudiesSection: React.FC = () => {
     refetchActiveJob();
     queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
     queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
+    queryClient.invalidateQueries({ queryKey: ['case-study-jobs-map'] });
     toast.success('Procesamiento completado');
   };
   
@@ -790,6 +791,8 @@ export const CaseStudiesSection: React.FC = () => {
           // Refresh case studies list after processing completes
           queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
           queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
+          queryClient.invalidateQueries({ queryKey: ['case-study-jobs-map'] });
+          refetchActiveJob();
         }}
       />
 
