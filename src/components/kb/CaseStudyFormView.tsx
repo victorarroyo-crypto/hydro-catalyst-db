@@ -886,8 +886,25 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
   const buildApplicationData = (tech: Technology): Record<string, any> | null => {
     const data: Record<string, any> = {};
     
-    // Datos que NO van a la ficha estándar
-    if (tech.countriesActive) data.provider_countries_active = tech.countriesActive;
+    // ═══════════════════════════════════════════════════════════════════
+    // CAMPOS PRINCIPALES DE LA FICHA (obligatorios para ver en el modal)
+    // ═══════════════════════════════════════════════════════════════════
+    if (tech.description) data.descripcion = tech.description;
+    if (tech.trl) data.trl = tech.trl;
+    if (tech.type) data.tipo = tech.type;
+    if (tech.subcategory) data.subcategoria = tech.subcategory;
+    if (tech.sector) data.sector = tech.sector;
+    if (tech.web) data.web = tech.web;
+    if (tech.email) data.email = tech.email;
+    if (tech.country) data.pais = tech.country;
+    if (tech.mainApplication) data.aplicacion_principal = tech.mainApplication;
+    if (tech.innovationAdvantages) data.ventaja_competitiva = tech.innovationAdvantages;
+    if (tech.references) data.casos_referencia = tech.references;
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // CAMPOS SECUNDARIOS/TÉCNICOS (información adicional)
+    // ═══════════════════════════════════════════════════════════════════
+    if (tech.countriesActive) data.paises_actua = tech.countriesActive;
     if (tech.capacity) data.capacity = tech.capacity;
     if (tech.removalEfficiency) data.removal_efficiency = tech.removalEfficiency;
     if (tech.footprint) data.footprint = tech.footprint;
