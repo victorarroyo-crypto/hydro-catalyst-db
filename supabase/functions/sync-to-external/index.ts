@@ -181,6 +181,42 @@ Deno.serve(async (req) => {
         break
       }
 
+      case 'DELETE_BATCH': {
+        const filterConfig = body.filter || {}
+        const col = filterConfig.column as string
+        const op = filterConfig.operator as string
+        const val = filterConfig.value
+        console.log(`DELETE_BATCH - Removing records from ${table} where ${col} ${op} ${val}`)
+        
+        // Build query step by step to avoid type recursion
+        const deleteBuilder = externalSupabase.from(table).delete()
+        let finalQuery
+        
+        switch (op) {
+          case 'ilike':
+            finalQuery = deleteBuilder.ilike(col, val)
+            break
+          case 'eq':
+            finalQuery = deleteBuilder.filter(col, 'eq', val)
+            break
+          case 'in':
+            finalQuery = deleteBuilder.filter(col, 'in', `(${val.join(',')})`)
+            break
+          default:
+            throw new Error(`Unsupported operator: ${op}`)
+        }
+
+        const deleteResult = await finalQuery.select('id')
+
+        if (deleteResult.error) {
+          const formatted = formatError(deleteResult.error)
+          console.error(`DELETE_BATCH Error on ${table}:`, JSON.stringify(formatted, null, 2))
+          throw new Error(`DELETE_BATCH failed: ${formatted.message} - ${JSON.stringify(formatted.details)}`)
+        }
+        result = { action: 'DELETE_BATCH', deleted: deleteResult.data?.length || 0 }
+        break
+      }
+
       case 'UPSERT': {
         // Clean the record before upserting
         const cleanedRecord = cleanRecordForSync(table, record)
