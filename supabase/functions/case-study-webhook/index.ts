@@ -433,12 +433,12 @@ serve(async (req) => {
         console.log(`[CASE-STUDY-WEBHOOK] similar_found (INFO): ${similarCases.length} similar cases detected`);
         
         // Get existing job to preserve result_data
-        const { data: existingJob } = await supabase
+        const { data: existingJobArr } = await supabase
           .from('case_study_jobs')
           .select('result_data, case_study_id')
           .eq('id', job_id)
-          .single();
         
+        const existingJob = existingJobArr?.[0]
         const existingResultData = (existingJob?.result_data as Record<string, unknown>) || {};
         
         // v12.4: Store as preview info ONLY - DO NOT change status to awaiting_user_decision
@@ -475,12 +475,12 @@ serve(async (req) => {
       console.log(`[CASE-STUDY-WEBHOOK] user_decision (POST-creation): ${decision}, merge_target_id: ${mergeTargetId}`);
       
       // Get existing job to preserve result_data
-      const { data: existingJob } = await supabase
+      const { data: existingJobArr } = await supabase
         .from('case_study_jobs')
         .select('result_data, case_study_id')
         .eq('id', job_id)
-        .single();
       
+      const existingJob = existingJobArr?.[0]
       const existingResultData = (existingJob?.result_data as Record<string, unknown>) || {};
       
       // Store the merge decision in result_data (case already exists)
@@ -524,12 +524,12 @@ serve(async (req) => {
       // Store all data in result_data (MERGE with existing), without filtering fields
       if (data) {
         // Fetch existing job to preserve previous result_data accumulated across events
-        const { data: existingJob } = await supabase
+        const { data: existingJobArr } = await supabase
           .from('case_study_jobs')
           .select('result_data')
           .eq('id', job_id)
-          .single();
 
+        const existingJob = existingJobArr?.[0]
         const existingResultData = (existingJob?.result_data as Record<string, unknown>) || {};
 
         // ✅ FIX: Railway puede enviar data.result_data anidado - aplanarlo
@@ -723,12 +723,12 @@ serve(async (req) => {
       console.log('[CASE-STUDY-WEBHOOK] data keys:', data ? Object.keys(data) : 'none');
 
       // Get case_study_id from job
-      const { data: jobData } = await supabase
+      const { data: jobDataArr } = await supabase
         .from('case_study_jobs')
         .select('case_study_id')
         .eq('id', job_id)
-        .single();
 
+      const jobData = jobDataArr?.[0]
       const caseStudyId = jobData?.case_study_id || null;
       console.log('[CASE-STUDY-WEBHOOK] case_study_id:', caseStudyId);
       
@@ -903,13 +903,40 @@ serve(async (req) => {
 
     console.log(`[CASE-STUDY-WEBHOOK] Will update job ${job_id} with:`, JSON.stringify(updateData).slice(0, 1000))
 
-    // Perform the update
-    const { data: updatedJob, error: updateError } = await supabase
+    // First check if the job exists
+    const { data: existingJobCheck, error: checkError } = await supabase
+      .from('case_study_jobs')
+      .select('id')
+      .eq('id', job_id)
+      .maybeSingle()
+
+    if (checkError) {
+      console.error('[CASE-STUDY-WEBHOOK] Error checking job existence:', checkError)
+    }
+
+    if (!existingJobCheck) {
+      console.warn(`[CASE-STUDY-WEBHOOK] ⚠️ Job ${job_id} not found in database - skipping update`)
+      console.warn(`[CASE-STUDY-WEBHOOK] This may happen if the job was created in Railway but not yet synced to Supabase`)
+      
+      // Return success anyway to not block Railway's webhook retry
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          warning: 'Job not found',
+          job_id, 
+          event,
+          message: 'Job does not exist in database yet. This webhook event was acknowledged but not processed.'
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Perform the update - use select() without .single() to avoid PGRST116 error
+    const { data: updatedJobs, error: updateError } = await supabase
       .from('case_study_jobs')
       .update(updateData)
       .eq('id', job_id)
       .select('id, progress_percentage, current_phase, status')
-      .single()
 
     if (updateError) {
       console.error('[CASE-STUDY-WEBHOOK] Error updating job:', updateError)
@@ -918,6 +945,7 @@ serve(async (req) => {
       throw updateError
     }
 
+    const updatedJob = updatedJobs?.[0]
     console.log(`[CASE-STUDY-WEBHOOK] Job ${job_id} updated successfully:`)
     console.log(`[CASE-STUDY-WEBHOOK]   - Progress: ${updatedJob?.progress_percentage}%`)
     console.log(`[CASE-STUDY-WEBHOOK]   - Phase: ${updatedJob?.current_phase}`)
@@ -938,10 +966,33 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('[CASE-STUDY-WEBHOOK] Unhandled error:', error)
+    console.error('[CASE-STUDY-WEBHOOK] ============ UNHANDLED ERROR ============')
+    console.error('[CASE-STUDY-WEBHOOK] Error object:', error)
+    
+    if (error instanceof Error) {
+      console.error('[CASE-STUDY-WEBHOOK] Error message:', error.message)
+      console.error('[CASE-STUDY-WEBHOOK] Error stack:', error.stack)
+    }
+    
+    // Try to get request body for debugging
+    try {
+      const bodyText = await req.text?.() || 'Unable to read body'
+      console.error('[CASE-STUDY-WEBHOOK] Request body preview:', bodyText.slice(0, 1000))
+    } catch {
+      console.error('[CASE-STUDY-WEBHOOK] Could not read request body')
+    }
+    
+    console.error('[CASE-STUDY-WEBHOOK] =========================================')
+    
     const message = error instanceof Error ? error.message : 'Unknown error'
+    const stack = error instanceof Error ? error.stack : undefined
+    
     return new Response(
-      JSON.stringify({ error: message }),
+      JSON.stringify({ 
+        error: message, 
+        stack: stack,
+        timestamp: new Date().toISOString()
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
