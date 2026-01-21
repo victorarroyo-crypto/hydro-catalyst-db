@@ -161,13 +161,28 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   const { data: caseStudy, isLoading } = useQuery({
     queryKey: ['case-study-detail', caseStudyId],
     queryFn: async () => {
+      console.log('[CaseStudyDetail] ════════════════════════════════════════════');
+      console.log('[CaseStudyDetail] Fetching case study:', caseStudyId);
+      
       const { data, error } = await externalSupabase
         .from('casos_de_estudio')
         .select('*')
         .eq('id', caseStudyId)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[CaseStudyDetail] Error fetching case study:', error);
+        throw error;
+      }
+      
+      console.log('[CaseStudyDetail] ✓ Case study loaded:', {
+        id: data?.id,
+        name: data?.name,
+        sector: data?.sector,
+        hasOriginalData: !!data?.original_data,
+        originalDataKeys: data?.original_data ? Object.keys(data.original_data).slice(0, 10) : []
+      });
+      
       // Cast through unknown to handle JSON type conversion
       return data as unknown as CaseStudyFull;
     },
@@ -177,12 +192,23 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   const { data: technologies } = useQuery({
     queryKey: ['case-study-technologies', caseStudyId],
     queryFn: async () => {
+      console.log('[CaseStudyDetail] Fetching technologies for case:', caseStudyId);
+      
       const { data, error } = await externalSupabase
         .from('case_study_technologies')
-        .select('id, technology_name, provider, role, technology_id, scouting_queue_id')
+        .select('*')
         .eq('case_study_id', caseStudyId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[CaseStudyDetail] Error fetching technologies:', error);
+        throw error;
+      }
+      
+      console.log('[CaseStudyDetail] ✓ Technologies loaded:', data?.length || 0);
+      if (data && data.length > 0) {
+        console.log('[CaseStudyDetail] Sample technology:', JSON.stringify(data[0], null, 2).slice(0, 500));
+      }
+      
       return data as CaseStudyTechnology[];
     },
   });

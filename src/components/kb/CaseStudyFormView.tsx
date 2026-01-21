@@ -91,6 +91,147 @@ const ensureString = (value: unknown): string => {
   return '';
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// NORMALIZACIÓN ROBUSTA DE TECNOLOGÍAS - Soporta múltiples estructuras de Railway
+// ═══════════════════════════════════════════════════════════════════════════════
+interface NormalizedTech {
+  id: string;
+  name: string;
+  provider: string;
+  role: 'Recomendada' | 'Evaluada';
+  status: 'new' | 'linked' | 'sent_to_scouting';
+  linkedTechId?: string;
+  description: string;
+  trl: number | null;
+  type: string;
+  subcategory: string;
+  sector: string;
+  web: string;
+  email: string;
+  country: string;
+  mainApplication: string;
+  innovationAdvantages: string;
+  references: string;
+  countriesActive: string;
+  capacity: string;
+  removalEfficiency: string;
+  footprint: string;
+  powerConsumption: string;
+  otherSpecs: Record<string, any> | null;
+  priceRange: string;
+  opexEstimate: string;
+  businessModel: string;
+  leadTime: string;
+  rationale: string;
+}
+
+/**
+ * Normaliza una tecnología desde cualquier estructura de Railway/webhook
+ * Soporta: ficha anidada, campos planos, structure v12.7+, case_study_technologies
+ */
+const normalizeTechnology = (raw: any, index: number): NormalizedTech => {
+  console.log(`[normalizeTech] Raw tech ${index}:`, JSON.stringify(raw, null, 2).slice(0, 500));
+  
+  const ficha = raw.ficha || {};
+  
+  // Nombre: múltiples fallbacks
+  const name = raw.technology_name || raw.nombre || raw.name || ficha.nombre || ficha.name || '';
+  
+  // Proveedor: múltiples fallbacks  
+  const provider = raw.provider || raw.proveedor || ficha.proveedor || ficha.provider || '';
+  
+  // Role: mapear inglés/español
+  let role: 'Recomendada' | 'Evaluada' = 'Evaluada';
+  const rawRole = (raw.role || raw.rol || ficha.role || '').toLowerCase();
+  if (rawRole === 'recommended' || rawRole === 'recomendada') {
+    role = 'Recomendada';
+  }
+  
+  // Status: determinar si está vinculada
+  let status: 'new' | 'linked' | 'sent_to_scouting' = 'new';
+  if (raw.technology_id || raw.linkedTechId) status = 'linked';
+  else if (raw.scouting_queue_id) status = 'sent_to_scouting';
+  else if (raw.status) status = raw.status;
+  
+  // Descripción técnica
+  const description = 
+    raw.technical_description || 
+    raw.description || 
+    raw.descripcion ||
+    ficha.descripcion || 
+    ficha.description || 
+    ficha.technical_description ||
+    raw.selection_rationale ||
+    '';
+  
+  // TRL
+  const trl = raw.trl_estimated || raw.trl || ficha.trl || ficha.trl_estimated || null;
+  
+  // Clasificación
+  const type = raw.type_suggested || raw.type || raw.tipo || ficha.tipo || ficha.type || '';
+  const subcategory = raw.subcategory_suggested || raw.subcategory || raw.subcategoria || ficha.subcategoria || '';
+  const sector = raw.sector_suggested || raw.sector || ficha.sector || '';
+  
+  // Contacto y ubicación
+  const web = 
+    raw.provider_url || raw.web || raw.url || raw.website ||
+    ficha.web || ficha.url || ficha.provider_url || ficha.website || '';
+  const email = raw.provider_email || raw.email || ficha.email || ficha.provider_email || '';
+  const country = raw.provider_country || raw.country || raw.pais || ficha.pais || ficha.country || '';
+  
+  // Campos de aplicación
+  const mainApplication = raw.main_application || raw.aplicacion_principal || ficha.aplicacion_principal || '';
+  const innovationAdvantages = raw.innovation_advantages || raw.ventaja_competitiva || ficha.ventaja_competitiva || '';
+  const references = raw.references || raw.referencias || ficha.referencias || '';
+  
+  // Campos técnicos extendidos
+  const countriesActive = raw.provider_countries_active || raw.paises_activos || ficha.paises_activos || '';
+  const capacity = raw.capacity || raw.capacidad || ficha.capacidad || '';
+  const removalEfficiency = raw.removal_efficiency || raw.eficiencia_remocion || ficha.eficiencia_remocion || '';
+  const footprint = raw.footprint || raw.huella || ficha.huella || '';
+  const powerConsumption = raw.power_consumption || raw.consumo_energia || ficha.consumo_energia || '';
+  const otherSpecs = raw.other_specs || raw.otras_specs || ficha.otras_specs || null;
+  const priceRange = raw.price_range || raw.rango_precio || ficha.rango_precio || '';
+  const opexEstimate = raw.opex_estimate || raw.opex_estimado || ficha.opex_estimado || '';
+  const businessModel = raw.business_model || raw.modelo_negocio || ficha.modelo_negocio || '';
+  const leadTime = raw.lead_time || raw.tiempo_entrega || ficha.tiempo_entrega || '';
+  const rationale = raw.rationale || raw.selection_rationale || raw.justificacion || ficha.justificacion || '';
+  
+  const normalized: NormalizedTech = {
+    id: raw.id || String(index + 1),
+    name,
+    provider,
+    role,
+    status,
+    linkedTechId: raw.technology_id || raw.linkedTechId,
+    description,
+    trl,
+    type,
+    subcategory,
+    sector,
+    web,
+    email,
+    country,
+    mainApplication,
+    innovationAdvantages,
+    references,
+    countriesActive,
+    capacity,
+    removalEfficiency,
+    footprint,
+    powerConsumption,
+    otherSpecs,
+    priceRange,
+    opexEstimate,
+    businessModel,
+    leadTime,
+    rationale,
+  };
+  
+  console.log(`[normalizeTech] Normalized ${index}: name="${name}", provider="${provider}", role="${role}"`);
+  return normalized;
+};
+
 interface Technology {
   id: string;
   name: string;
@@ -329,214 +470,335 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
   // Technology detail modal state
   const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
 
-  // Load data from job
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // CARGA DE DATOS: Prioriza caso existente → luego job → con fallbacks v12.7+
+  // ═══════════════════════════════════════════════════════════════════════════════
   useEffect(() => {
-    const loadJobData = async () => {
+    const loadData = async () => {
+      console.log('[CaseStudyForm] ════════════════════════════════════════════');
+      console.log('[CaseStudyForm] Loading data for jobId:', jobId);
+      console.log('[CaseStudyForm] existingCaseId:', existingCaseId);
+      
       try {
-        const { data: job, error } = await externalSupabase
+        // ───────────────────────────────────────────────────────────────────────
+        // PASO 1: Si hay caso existente, cargar desde casos_de_estudio
+        // ───────────────────────────────────────────────────────────────────────
+        let caseData: any = null;
+        let caseStudyId: string | null = existingCaseId || null;
+        
+        // First, check if job has case_study_id
+        const { data: job, error: jobError } = await externalSupabase
           .from('case_study_jobs')
-          .select('result_data, quality_score')
+          .select('result_data, quality_score, case_study_id')
           .eq('id', jobId)
           .single();
-
-        if (error) throw error;
-
-        if (job?.quality_score) {
-          setQualityScore(job.quality_score);
-        }
-
-        if (job?.result_data) {
-          const data = job.result_data as ResultData;
-          const extracted = data.extracted;
           
-          // Try nested Railway structure first
-          if (extracted) {
-            console.log('Loading from nested Railway structure:', extracted);
-            
-            setTitle(ensureString(extracted.title));
-            setSector(ensureString(extracted.sector));
-            setCountry(ensureString(extracted.country));
-            setSubsector(ensureString(extracted.subsector));
-            
-            // Problem
-            setProblemDescription(ensureString(extracted.problem?.description));
-            if (extracted.problem?.parameters && extracted.problem.parameters.length > 0) {
-              setProblemParameters(extracted.problem.parameters.map((p, i) => ({
-                id: String(i + 1),
-                name: p.name,
-                value: String(p.value),
-                unit: p.unit,
-              })));
-            }
-            
-            // Solution
-            setSolutionDescription(ensureString(extracted.solution?.description));
-            if (extracted.solution?.treatment_train && Array.isArray(extracted.solution.treatment_train)) {
-              setTreatmentTrain(extracted.solution.treatment_train);
-            }
-            
-            // Results
-            setResultsDescription(ensureString(extracted.results?.description));
-            if (extracted.results?.dqo_final) {
-              setDqoFinal(String(extracted.results.dqo_final));
-            }
-            if (extracted.results?.reduction) {
-              setReduction(String(extracted.results.reduction));
-            }
-            
-            // Economic
-            if (extracted.economic) {
-              if (extracted.economic.capex) setCapex(String(extracted.economic.capex));
-              if (extracted.economic.opex) setOpex(String(extracted.economic.opex));
-              if (extracted.economic.payback) setPayback(String(extracted.economic.payback));
-              if (extracted.economic.roi) setRoi(String(extracted.economic.roi));
-              setRoiJustification(ensureString(extracted.economic.roi_justification));
-              setEconomicOpen(true);
-            }
-            
-            // Lessons learned - can be string or object from Railway
-            const lessonsValue = ensureString(extracted.lessons_learned);
-            if (lessonsValue) {
-              setLessonsLearned(lessonsValue);
-              setLessonsOpen(true);
-            }
-          } else {
-            // Fallback to legacy flat structure
-            console.log('Loading from flat legacy structure:', data);
-            
-            setTitle(ensureString(data.title));
-            setSector(ensureString(data.sector));
-            setCountry(ensureString(data.country));
-            setSubsector(ensureString(data.subsector));
-            setProblemDescription(ensureString(data.problemDescription));
-            setSolutionDescription(ensureString(data.solutionDescription));
-            setResultsDescription(ensureString(data.resultsDescription));
-            if (data.dqoFinal) setDqoFinal(String(data.dqoFinal));
-            if (data.reduction) setReduction(String(data.reduction));
-            if (data.capex) setCapex(String(data.capex));
-            if (data.opex) setOpex(String(data.opex));
-            if (data.payback) setPayback(String(data.payback));
-            if (data.roi) setRoi(String(data.roi));
-            setRoiJustification(ensureString(data.roiJustification));
-            setLessonsLearned(ensureString(data.lessonsLearned));
-            if (data.treatmentTrain && Array.isArray(data.treatmentTrain)) setTreatmentTrain(data.treatmentTrain);
-            
-            if (data.problemParameters && data.problemParameters.length > 0) {
-              setProblemParameters(data.problemParameters.map((p, i) => ({
-                id: String(i + 1),
-                name: p.name,
-                value: String(p.value),
-                unit: p.unit,
-              })));
-            }
-            
-            // Auto-expand sections if they have data
-            if (data.capex || data.opex || data.payback || data.roi) {
-              setEconomicOpen(true);
-            }
-            if (data.lessonsLearned) {
-              setLessonsOpen(true);
-            }
+        if (jobError) {
+          console.error('[CaseStudyForm] Error loading job:', jobError);
+        } else {
+          console.log('[CaseStudyForm] Job loaded:', {
+            hasResultData: !!job?.result_data,
+            qualityScore: job?.quality_score,
+            caseStudyId: job?.case_study_id
+          });
+          
+          if (job?.quality_score) {
+            setQualityScore(job.quality_score);
           }
           
-          // Technologies handling - supports both Railway object and legacy array
-          if (data.technologies) {
-            let techArray: { name: string; provider?: string; role?: string; description?: string; trl_estimated?: number; type_suggested?: string }[] = [];
-            
-            // Check if it's Railway's object structure (has technologies_found or technologies_new)
-            if (typeof data.technologies === 'object' && !Array.isArray(data.technologies)) {
-              const techData = data.technologies as RailwayTechnologiesObject;
-              console.log('[CaseStudyForm] Railway technologies object:', techData);
-              
-              // Combine technologies_found and technologies_new
-              if (techData.technologies_found?.length) {
-                console.log('[CaseStudyForm] Found technologies_found:', techData.technologies_found.length);
-                techArray = [...techArray, ...techData.technologies_found.map(t => ({ ...t, status: 'linked' as const }))];
-              }
-              if (techData.technologies_new?.length) {
-                console.log('[CaseStudyForm] Found technologies_new:', techData.technologies_new.length);
-                techArray = [...techArray, ...techData.technologies_new];
-              }
-            } 
-            // Legacy array structure
-            else if (Array.isArray(data.technologies) && data.technologies.length > 0) {
-              console.log('[CaseStudyForm] Legacy technologies array:', data.technologies.length);
-              techArray = data.technologies;
-            }
-            
-            // Map to form format with full Railway fields
-            if (techArray.length > 0) {
-              console.log('[CaseStudyForm] Setting technologies:', techArray.length);
-              setTechnologies(techArray.map((t: any, i) => {
-                // Map English roles to Spanish
-                let mappedRole: 'Recomendada' | 'Evaluada' = 'Evaluada';
-                if (t.role) {
-                  const roleLower = t.role.toLowerCase();
-                  if (roleLower === 'recommended' || roleLower === 'recomendada') {
-                    mappedRole = 'Recomendada';
-                  }
-                }
-                
-                return {
-                  id: String(i + 1),
-                  name: t.name,
-                  provider: t.provider || '',
-                  role: mappedRole,
-                  status: t.status || 'new',
-                  
-                  // Classification → Ficha estándar
-                  type: t.type_suggested || t.type || '',
-                  subcategory: t.subcategory_suggested || '',
-                  sector: t.sector_suggested || '',
-                  
-                  // Description & Innovation → Ficha estándar
-                  description: t.technical_description || t.description || '',
-                  mainApplication: t.main_application || '',
-                  innovationAdvantages: t.innovation_advantages || '',
-                  references: t.references || '',
-                  
-                  // Contact & Location → Ficha estándar
-                  web: t.provider_url || t.web || t.url || t.website || '',
-                  email: t.provider_email || '',
-                  country: t.provider_country || '',
-                  
-                  // TRL → Ficha estándar
-                  trl: t.trl_estimated || t.trl || null,
-                  
-                  // Campos para application_data (no van a ficha estándar)
-                  countriesActive: t.provider_countries_active || '',
-                  capacity: t.capacity || '',
-                  removalEfficiency: t.removal_efficiency || '',
-                  footprint: t.footprint || '',
-                  powerConsumption: t.power_consumption || '',
-                  otherSpecs: t.other_specs || null,
-                  priceRange: t.price_range || '',
-                  opexEstimate: t.opex_estimate || '',
-                  businessModel: t.business_model || '',
-                  leadTime: t.lead_time || '',
-                  rationale: t.rationale || '',
-                };
-              }));
-            }
-          }
-          
-          // Quality score from review or legacy
-          if (data.review?.quality_score) {
-            setQualityScore(data.review.quality_score);
-          } else if (data.qualityScore) {
-            setQualityScore(data.qualityScore);
+          // Use case_study_id from job if not provided
+          if (!caseStudyId && job?.case_study_id) {
+            caseStudyId = job.case_study_id;
+            console.log('[CaseStudyForm] Using case_study_id from job:', caseStudyId);
           }
         }
+        
+        // Load case study if we have an ID
+        if (caseStudyId) {
+          const { data: existingCase, error: caseError } = await externalSupabase
+            .from('casos_de_estudio')
+            .select('*')
+            .eq('id', caseStudyId)
+            .single();
+            
+          if (caseError) {
+            console.error('[CaseStudyForm] Error loading existing case:', caseError);
+          } else if (existingCase) {
+            caseData = existingCase;
+            console.log('[CaseStudyForm] ✓ Existing case loaded:', {
+              id: caseData.id,
+              name: caseData.name,
+              hasOriginalData: !!caseData.original_data,
+              originalDataKeys: caseData.original_data ? Object.keys(caseData.original_data) : []
+            });
+          }
+        }
+        
+        // ───────────────────────────────────────────────────────────────────────
+        // PASO 2: Extraer datos con fallbacks
+        // Prioridad: columnas DB → original_data → job.result_data
+        // ───────────────────────────────────────────────────────────────────────
+        const od = caseData?.original_data || {};
+        const resultData = job?.result_data as ResultData || {};
+        const extracted = resultData.extracted || {};
+        
+        console.log('[CaseStudyForm] Data sources:', {
+          hasDbColumns: !!caseData?.name,
+          hasOriginalData: Object.keys(od).length > 0,
+          originalDataSample: Object.keys(od).slice(0, 10),
+          hasResultData: Object.keys(resultData).length > 0,
+          hasExtracted: Object.keys(extracted).length > 0
+        });
+        
+        // Title: DB column → original_data.caso_titulo → extracted.title
+        const loadedTitle = 
+          caseData?.name || 
+          od.caso_titulo || 
+          extracted.title || 
+          resultData.title || 
+          '';
+        setTitle(ensureString(loadedTitle));
+        console.log('[CaseStudyForm] Title:', loadedTitle);
+        
+        // Sector
+        const loadedSector = 
+          caseData?.sector || 
+          od.caso_sector ||
+          extracted.sector || 
+          resultData.sector || 
+          '';
+        setSector(ensureString(loadedSector));
+        
+        // Country
+        const loadedCountry = 
+          caseData?.country || 
+          od.caso_pais || 
+          extracted.country || 
+          resultData.country || 
+          '';
+        setCountry(ensureString(loadedCountry));
+        
+        // Subsector
+        const loadedSubsector = 
+          caseData?.subsector_industrial ||
+          od.caso_subsector ||
+          extracted.subsector || 
+          resultData.subsector || 
+          '';
+        setSubsector(ensureString(loadedSubsector));
+        
+        // Problem description
+        const loadedProblem = 
+          caseData?.description ||
+          od.caso_descripcion_problema ||
+          extracted.problem?.description ||
+          resultData.problemDescription ||
+          '';
+        setProblemDescription(ensureString(loadedProblem));
+        console.log('[CaseStudyForm] Problem loaded:', loadedProblem?.slice?.(0, 100));
+        
+        // Solution description
+        const loadedSolution = 
+          caseData?.solution_applied ||
+          od.caso_solucion_aplicada ||
+          extracted.solution?.description ||
+          resultData.solutionDescription ||
+          '';
+        setSolutionDescription(ensureString(loadedSolution));
+        console.log('[CaseStudyForm] Solution loaded:', loadedSolution?.slice?.(0, 100));
+        
+        // Results description
+        const loadedResults = 
+          caseData?.results_achieved ||
+          od.caso_resultados ||
+          extracted.results?.description ||
+          resultData.resultsDescription ||
+          '';
+        setResultsDescription(ensureString(loadedResults));
+        console.log('[CaseStudyForm] Results loaded:', loadedResults?.slice?.(0, 100));
+        
+        // Treatment train
+        const loadedTrain = 
+          caseData?.treatment_train ||
+          od.tren_tratamiento ||
+          extracted.solution?.treatment_train ||
+          resultData.treatmentTrain ||
+          [];
+        if (Array.isArray(loadedTrain) && loadedTrain.length > 0) {
+          setTreatmentTrain(loadedTrain);
+        }
+        
+        // Problem parameters
+        const loadedParams = caseData?.problem_parameters || od.parametros_problema || extracted.problem?.parameters;
+        if (loadedParams) {
+          if (Array.isArray(loadedParams) && loadedParams.length > 0) {
+            setProblemParameters(loadedParams.map((p: any, i: number) => ({
+              id: String(i + 1),
+              name: p.name || p.nombre || '',
+              value: String(p.value || p.valor || ''),
+              unit: p.unit || p.unidad || '',
+            })));
+          } else if (typeof loadedParams === 'object') {
+            // Handle JSONB format: { "DQO": { value: 1000, unit: "mg/L" } }
+            const paramsArray = Object.entries(loadedParams).map(([name, data]: [string, any], i) => ({
+              id: String(i + 1),
+              name,
+              value: String(data.value || ''),
+              unit: data.unit || '',
+            }));
+            if (paramsArray.length > 0) {
+              setProblemParameters(paramsArray);
+            }
+          }
+        }
+        
+        // Economic data
+        const loadedCapex = caseData?.capex || od.capex || extracted.economic?.capex || resultData.capex;
+        const loadedOpex = caseData?.opex_year || od.opex || extracted.economic?.opex || resultData.opex;
+        const loadedPayback = caseData?.payback_months || od.payback || extracted.economic?.payback || resultData.payback;
+        const loadedRoi = caseData?.roi_percent || od.roi_percent || extracted.economic?.roi || resultData.roi;
+        const loadedRoiRationale = caseData?.roi_rationale || od.roi_justificacion || extracted.economic?.roi_justification || resultData.roiJustification;
+        
+        if (loadedCapex) setCapex(String(loadedCapex));
+        if (loadedOpex) setOpex(String(loadedOpex));
+        if (loadedPayback) setPayback(String(loadedPayback));
+        if (loadedRoi) setRoi(String(loadedRoi));
+        if (loadedRoiRationale) setRoiJustification(ensureString(loadedRoiRationale));
+        if (loadedCapex || loadedOpex || loadedPayback || loadedRoi) {
+          setEconomicOpen(true);
+        }
+        
+        // Lessons learned
+        const loadedLessons = 
+          caseData?.lessons_learned ||
+          od.lecciones_aprendidas ||
+          extracted.lessons_learned ||
+          resultData.lessonsLearned ||
+          '';
+        if (loadedLessons) {
+          setLessonsLearned(ensureString(loadedLessons));
+          setLessonsOpen(true);
+        }
+        
+        // Results parameters
+        const resultsParams = caseData?.results_parameters || od.parametros_resultados;
+        if (resultsParams) {
+          if (resultsParams.DQO_final || resultsParams['DQO final']) {
+            setDqoFinal(String(resultsParams.DQO_final?.value || resultsParams['DQO final']?.value || ''));
+          }
+          if (resultsParams.Reduccion || resultsParams.reduccion) {
+            setReduction(String(resultsParams.Reduccion?.value || resultsParams.reduccion?.value || ''));
+          }
+        } else if (extracted.results) {
+          if (extracted.results.dqo_final) setDqoFinal(String(extracted.results.dqo_final));
+          if (extracted.results.reduction) setReduction(String(extracted.results.reduction));
+        }
+        
+        // Quality score
+        const loadedQuality = caseData?.quality_score || od.quality_score || resultData.review?.quality_score || resultData.qualityScore;
+        if (loadedQuality) {
+          setQualityScore(loadedQuality);
+        }
+        
+        // ───────────────────────────────────────────────────────────────────────
+        // PASO 3: Cargar tecnologías - Prioridad: case_study_technologies → original_data → job
+        // ───────────────────────────────────────────────────────────────────────
+        console.log('[CaseStudyForm] ────────────────────────────────────────────');
+        console.log('[CaseStudyForm] Loading technologies...');
+        
+        let loadedTechnologies: Technology[] = [];
+        
+        // OPCIÓN A: Cargar desde case_study_technologies (fuente principal)
+        if (caseStudyId) {
+          const { data: dbTechs, error: techError } = await externalSupabase
+            .from('case_study_technologies')
+            .select('*')
+            .eq('case_study_id', caseStudyId);
+            
+          if (techError) {
+            console.error('[CaseStudyForm] Error loading technologies from DB:', techError);
+          } else if (dbTechs && dbTechs.length > 0) {
+            console.log('[CaseStudyForm] ✓ Loaded', dbTechs.length, 'technologies from case_study_technologies');
+            console.log('[CaseStudyForm] Sample tech:', JSON.stringify(dbTechs[0], null, 2).slice(0, 500));
+            
+            loadedTechnologies = dbTechs.map((t, i) => normalizeTechnology(t, i) as Technology);
+          }
+        }
+        
+        // OPCIÓN B: Fallback a original_data.technologies
+        if (loadedTechnologies.length === 0 && od.technologies) {
+          console.log('[CaseStudyForm] Fallback: Loading from original_data.technologies');
+          console.log('[CaseStudyForm] original_data.technologies type:', typeof od.technologies);
+          
+          let rawTechs: any[] = [];
+          
+          if (Array.isArray(od.technologies)) {
+            rawTechs = od.technologies;
+          } else if (typeof od.technologies === 'object') {
+            // Railway object structure
+            const techObj = od.technologies as RailwayTechnologiesObject;
+            console.log('[CaseStudyForm] Technologies object keys:', Object.keys(techObj));
+            rawTechs = [
+              ...(techObj.technologies_found || []),
+              ...(techObj.technologies_new || [])
+            ];
+          }
+          
+          if (rawTechs.length > 0) {
+            console.log('[CaseStudyForm] ✓ Found', rawTechs.length, 'technologies in original_data');
+            loadedTechnologies = rawTechs.map((t, i) => normalizeTechnology(t, i) as Technology);
+          }
+        }
+        
+        // OPCIÓN C: Fallback a job.result_data.technologies
+        if (loadedTechnologies.length === 0 && resultData.technologies) {
+          console.log('[CaseStudyForm] Fallback: Loading from job.result_data.technologies');
+          
+          let rawTechs: any[] = [];
+          
+          if (Array.isArray(resultData.technologies)) {
+            rawTechs = resultData.technologies;
+          } else if (typeof resultData.technologies === 'object') {
+            const techObj = resultData.technologies as RailwayTechnologiesObject;
+            rawTechs = [
+              ...(techObj.technologies_found || []),
+              ...(techObj.technologies_new || [])
+            ];
+          }
+          
+          if (rawTechs.length > 0) {
+            console.log('[CaseStudyForm] ✓ Found', rawTechs.length, 'technologies in result_data');
+            loadedTechnologies = rawTechs.map((t, i) => normalizeTechnology(t, i) as Technology);
+          }
+        }
+        
+        // Set technologies
+        if (loadedTechnologies.length > 0) {
+          console.log('[CaseStudyForm] ════════════════════════════════════════════');
+          console.log('[CaseStudyForm] ✓ TOTAL TECHNOLOGIES LOADED:', loadedTechnologies.length);
+          console.log('[CaseStudyForm] First 3 tech names:', loadedTechnologies.slice(0, 3).map(t => t.name));
+          setTechnologies(loadedTechnologies);
+        } else {
+          console.warn('[CaseStudyForm] ⚠ NO TECHNOLOGIES FOUND');
+          console.log('[CaseStudyForm] Debug info:', {
+            caseStudyId,
+            hasOriginalData: !!od,
+            odTechnologiesType: typeof od.technologies,
+            hasResultData: !!resultData,
+            resultDataTechnologiesType: typeof resultData.technologies
+          });
+        }
+        
       } catch (error) {
-        console.error('Error loading job data:', error);
+        console.error('[CaseStudyForm] Error loading data:', error);
         toast.error('Error al cargar los datos del procesamiento');
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadJobData();
-  }, [jobId]);
+    loadData();
+  }, [jobId, existingCaseId]);
 
   const addParameter = () => {
     setProblemParameters([
