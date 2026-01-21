@@ -560,8 +560,8 @@ export default function KnowledgeBase() {
       const filePath = `${authData.user.id}/${Date.now()}-${file.name}`;
       console.log("[KB-UPLOAD] Uploading to path:", filePath);
 
-      // IMPORTANT: bucket used by the backend processor
-      const { error: uploadError } = await externalSupabase.storage
+      // Upload to Lovable Cloud storage (where edge function reads from)
+      const { error: uploadError } = await supabase.storage
         .from("knowledge-documents")
         .upload(filePath, file);
 
@@ -571,7 +571,8 @@ export default function KnowledgeBase() {
       }
       console.log("[KB-UPLOAD] File uploaded to storage successfully");
 
-      const { data: doc, error: docError } = await externalSupabase
+      // Insert into Lovable Cloud database (where edge function queries)
+      const { data: doc, error: docError } = await supabase
         .from("knowledge_documents")
         .insert({
           name: file.name,
