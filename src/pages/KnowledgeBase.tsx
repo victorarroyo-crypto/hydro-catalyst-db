@@ -1462,61 +1462,67 @@ export default function KnowledgeBase() {
     e.target.value = "";
   };
 
-  // Generate description with AI
+  // Generate description with AI using Railway backend
   const handleGenerateDescription = async () => {
     if (!selectedFile) return;
     
     setGeneratingDescription(true);
     try {
-      const { data, error } = await externalSupabase.functions.invoke('generate-document-description', {
-        body: {
+      const response = await fetch(`${API_URL}/api/kb/generate-description`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           fileName: selectedFile.name,
           category: uploadCategory,
           sector: uploadSector,
-        },
+        }),
       });
 
-      if (error) throw error;
-      
-      if (data.error) {
-        toast.error(data.error);
-        return;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error generando descripción');
       }
 
+      const data = await response.json();
       setUploadDescription(data.description || '');
       toast.success("Descripción generada");
     } catch (error) {
       console.error('Generate description error:', error);
-      toast.error("Error al generar descripción");
+      toast.error(error instanceof Error ? error.message : "Error al generar descripción");
     } finally {
       setGeneratingDescription(false);
     }
   };
 
-  // Generate AI description for an existing document
+  // Generate AI description for an existing document using Railway backend
   const handleGenerateDescriptionForDoc = async (doc: KnowledgeDocument) => {
     setGeneratingDescId(doc.id);
     try {
-      const { data, error } = await externalSupabase.functions.invoke('generate-document-description', {
-        body: {
+      const response = await fetch(`${API_URL}/api/kb/generate-description`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           fileName: doc.name,
           category: doc.category,
           sector: doc.sector,
-        },
+        }),
       });
 
-      if (error) throw error;
-      
-      if (data.error) {
-        toast.error(data.error);
-        return;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error generando descripción');
       }
 
+      const data = await response.json();
       setEditingDescription(data.description || '');
       toast.success("Descripción generada");
     } catch (error) {
       console.error('Generate description error:', error);
-      toast.error("Error al generar descripción");
+      toast.error(error instanceof Error ? error.message : "Error al generar descripción");
     } finally {
       setGeneratingDescId(null);
     }
