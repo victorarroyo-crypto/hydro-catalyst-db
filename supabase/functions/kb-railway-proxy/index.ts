@@ -164,10 +164,10 @@ serve(async (req) => {
     console.log('[kb-railway-proxy] Railway response:', { 
       status: response.status, 
       ok: response.ok,
-      hasData: !!responseData 
+      responseData,
     });
 
-    // Return response to client
+    // Return response to client with full error details
     return new Response(JSON.stringify({
       success: response.ok,
       status: response.status,
