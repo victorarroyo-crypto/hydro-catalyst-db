@@ -382,16 +382,20 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
 
   const statusInfo = getStatusBadge(caseStudy.status);
   
-  // Normalizar roles: soportar inglés (recommended/evaluated) y español (Recomendada/Evaluada)
+  // Normalizar roles: soportar Railway (primary/secondary/support) y legacy (recommended/evaluated/Recomendada/Evaluada)
   const normalizeRole = (role: string): 'recommended' | 'evaluated' => {
     const lower = (role || '').toLowerCase();
-    if (lower === 'recommended' || lower === 'recomendada') return 'recommended';
+    // Railway usa: primary, secondary, support
+    // Legacy/Manual: recommended, evaluated, Recomendada, Evaluada
+    if (lower === 'primary' || lower === 'recommended' || lower === 'recomendada') {
+      return 'recommended';
+    }
+    // secondary, support, evaluated, evaluada -> all considered "evaluated"
     return 'evaluated';
   };
   
-  console.log('[CaseStudyDetailView] Technologies roles:', 
-    technologies?.map(t => ({ name: t.technology_name, role: t.role }))
-  );
+  console.log('[CaseStudyDetailView] Technologies raw:', technologies);
+  console.log('[CaseStudyDetailView] Unique roles:', [...new Set(technologies?.map(t => t.role) || [])]);
   
   const recommendedTechs = technologies?.filter(t => normalizeRole(t.role) === 'recommended') || [];
   const evaluatedTechs = technologies?.filter(t => normalizeRole(t.role) === 'evaluated') || [];
@@ -801,7 +805,29 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
               </div>
             )}
 
-            {recommendedTechs.length === 0 && evaluatedTechs.length === 0 && (
+            {/* Fallback: show ALL technologies if filters don't match */}
+            {recommendedTechs.length === 0 && evaluatedTechs.length === 0 && technologies && technologies.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Todas las tecnologías ({technologies.length})
+                </p>
+                <div className="space-y-2">
+                  {technologies.map((tech) => (
+                    <div key={tech.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{tech.technology_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {tech.provider && `${tech.provider} • `}Rol: {tech.role || 'Sin rol'}
+                        </p>
+                      </div>
+                      {getTechStatusBadge(tech)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(!technologies || technologies.length === 0) && (
               <div className="text-center py-4">
                 <p className="text-sm text-muted-foreground mb-3">No hay tecnologías asociadas</p>
                 {associatedJob?.jobId && (
