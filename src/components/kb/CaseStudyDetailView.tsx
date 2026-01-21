@@ -393,31 +393,31 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     try {
       const ad = tech.application_data || {};
       
-      // Insert into scouting_queue with snake_case columns (external DB schema)
+      // Insert into scouting_queue with correct column names (spaces and accents)
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .insert({
-          nombre: tech.technology_name,
-          proveedor: tech.provider || ad.proveedor || null,
-          pais_origen: ad.pais || ad.country || null,
-          paises_actua: ad.paises_actua || null,
-          web: ad.web || null,
-          email: ad.email || null,
-          descripcion: ad.descripcion || ad.description || null,
-          tipo_tecnologia: ad.tipo || ad.type || 'Por clasificar',
-          subcategoria: ad.subcategoria || null,
-          sector: ad.sector || null,
-          aplicacion: ad.aplicacion_principal || null,
-          ventaja_competitiva: ad.ventaja_competitiva || null,
-          innovacion: ad.innovacion || null,
-          trl: ad.trl || null,
-          casos_referencia: ad.casos_referencia || null,
-          comentarios: tech.selection_rationale || ad.comentarios_analista || 
+          "Nombre de la tecnología": tech.technology_name,
+          "Tipo de tecnología": ad.tipo || ad.type || 'Sin clasificar',
+          "Proveedor / Empresa": tech.provider || ad.proveedor || null,
+          "País de origen": ad.pais || ad.country || null,
+          "Paises donde actua": ad.paises_actua || null,
+          "Web de la empresa": ad.web || null,
+          "Email de contacto": ad.email || null,
+          "Descripción técnica breve": ad.descripcion || ad.description || null,
+          "Subcategoría": ad.subcategoria || null,
+          "Sector y subsector": ad.sector || null,
+          "Aplicación principal": ad.aplicacion_principal || null,
+          "Ventaja competitiva clave": ad.ventaja_competitiva || null,
+          "Porque es innovadora": ad.innovacion || null,
+          "Grado de madurez (TRL)": ad.trl || null,
+          "Casos de referencia": ad.casos_referencia || null,
+          "Comentarios del analista": tech.selection_rationale || ad.comentarios_analista || 
             `Extraída del caso de estudio: ${caseStudy?.name}`,
           source: 'case_study',
           case_study_id: caseStudyId,
-          status: 'review',
-          fecha_scouting: new Date().toISOString().split('T')[0],
+          queue_status: 'review',
+          "Fecha de scouting": new Date().toISOString().split('T')[0],
         })
         .select('id')
         .single();
