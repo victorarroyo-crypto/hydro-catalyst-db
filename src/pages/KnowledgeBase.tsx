@@ -1522,6 +1522,8 @@ export default function KnowledgeBase() {
   const handleGenerateDescriptionForDoc = async (doc: KnowledgeDocument) => {
     setGeneratingDescId(doc.id);
     try {
+      console.log('Generate description:', doc.id); // Debug
+      
       const response = await fetch(`${API_URL}/api/kb/document/${doc.id}/generate-description`, {
         method: 'POST',
         headers: {
@@ -1530,15 +1532,20 @@ export default function KnowledgeBase() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
-        throw new Error(errorData.error || `Error ${response.status}`);
+        const error = await response.text();
+        throw new Error(`Error ${response.status}: ${error}`);
       }
 
       const data = await response.json();
-      const description = data.ai_analysis?.description || data.description || '';
+      // data.ai_analysis contiene: suggested_title, description, keywords, suggested_category
+      const aiAnalysis = data.ai_analysis;
       
-      setEditingDescription(description);
-      toast.success("Descripción generada");
+      if (aiAnalysis?.description) {
+        setEditingDescription(aiAnalysis.description);
+        toast.success("Descripción generada con IA");
+      } else {
+        toast.warning("No se pudo generar descripción");
+      }
     } catch (error) {
       console.error('Generate description error:', error);
       toast.error(error instanceof Error ? error.message : "Error al generar descripción");
