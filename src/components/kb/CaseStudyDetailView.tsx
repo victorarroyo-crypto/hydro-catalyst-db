@@ -118,11 +118,23 @@ interface CaseStudyFull {
   lessons_learned: string | null;
   created_at: string;
   entity_type?: string | null;
-  // original_data contains the full webhook payload with caso_* fields
+  // original_data - supports both new nested structure (v12.7+) and legacy flat fields
   original_data?: {
+    // NEW STRUCTURE (CaseStudyCrew v12.7+)
+    classification?: { country?: string; sector?: string; subsector?: string };
+    context?: { company?: string; industrial_context?: string };
+    problem?: { title?: string; description?: string; initial_situation?: string };
+    methodology?: { treatment_approach?: string; technologies_used?: string[] };
+    results?: { summary?: string; improvements?: string; metrics?: any };
+    economics?: { investment?: number; savings?: number; payback?: number; roi?: number };
+    lessons_learned?: { key_lessons?: string; recommendations?: string };
+    technologies_full?: any[];
+    technologies_summary?: { total_in_case?: number; found_in_db?: number; new_for_scouting?: number };
+    // LEGACY STRUCTURE (webhook flat fields)
     caso_titulo?: string;
     caso_cliente?: string;
     caso_pais?: string;
+    caso_sector?: string;
     caso_descripcion_problema?: string;
     caso_solucion_aplicada?: string;
     caso_resultados?: string;
@@ -374,26 +386,73 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
 
   // ═══════════════════════════════════════════════════════════════════
   // EXTRACT DATA FROM original_data WITH FALLBACK TO DIRECT FIELDS
+  // Supports both NEW structure (v12.7+) and LEGACY flat fields
   // ═══════════════════════════════════════════════════════════════════
   const od = caseStudy.original_data || {};
   
-  // Title: use name field, fallback to original_data.caso_titulo
-  const displayTitle = caseStudy.name || od.caso_titulo || 'Sin título';
+  // DEBUG LOGS - will help identify data structure
+  console.log('[CaseStudyDetailView] ════════════════════════════════════════════');
+  console.log('[CaseStudyDetailView] caseStudy:', caseStudy);
+  console.log('[CaseStudyDetailView] original_data keys:', Object.keys(od));
+  console.log('[CaseStudyDetailView] od.classification:', od.classification);
+  console.log('[CaseStudyDetailView] od.problem:', od.problem);
+  console.log('[CaseStudyDetailView] od.results:', od.results);
+  console.log('[CaseStudyDetailView] od.economics:', od.economics);
+  console.log('[CaseStudyDetailView] od.methodology:', od.methodology);
+  console.log('[CaseStudyDetailView] technologies count:', technologies?.length);
+  console.log('[CaseStudyDetailView] ════════════════════════════════════════════');
   
-  // Client/Entity: use entity_type field, fallback to original_data.caso_cliente
-  const displayClient = caseStudy.entity_type || od.caso_cliente || null;
+  // Title: direct column -> NEW structure -> LEGACY structure
+  const displayTitle = caseStudy.name || 
+                       od.problem?.title || 
+                       od.caso_titulo || 
+                       'Sin título';
   
-  // Country: use country field, fallback to original_data.caso_pais
-  const displayCountry = caseStudy.country || od.caso_pais || null;
+  // Client/Entity: direct column -> NEW context.company -> LEGACY caso_cliente
+  const displayClient = caseStudy.entity_type || 
+                        od.context?.company || 
+                        od.caso_cliente || 
+                        null;
   
-  // Description: use description field, fallback to original_data.caso_descripcion_problema
-  const displayDescriptionRaw = caseStudy.description || od.caso_descripcion_problema || '';
+  // Country: direct column -> NEW classification.country -> LEGACY caso_pais
+  const displayCountry = caseStudy.country || 
+                         od.classification?.country || 
+                         od.caso_pais || 
+                         null;
   
-  // Solution: use solution_applied field, fallback to original_data.caso_solucion_aplicada
-  const displaySolution = caseStudy.solution_applied || od.caso_solucion_aplicada || null;
+  // Sector: direct column -> NEW classification.sector -> LEGACY caso_sector
+  const displaySector = caseStudy.sector || 
+                        od.classification?.sector || 
+                        od.caso_sector || 
+                        null;
   
-  // Results: use results_achieved field, fallback to original_data.caso_resultados
-  const displayResults = caseStudy.results_achieved || od.caso_resultados || null;
+  // Description (Problem): direct column -> NEW problem.description -> problem.initial_situation -> LEGACY
+  const displayDescriptionRaw = caseStudy.description || 
+                                od.problem?.description || 
+                                od.problem?.initial_situation ||
+                                od.caso_descripcion_problema || 
+                                '';
+  
+  // Solution: direct column -> NEW methodology.treatment_approach -> LEGACY caso_solucion_aplicada
+  const displaySolution = caseStudy.solution_applied || 
+                          od.methodology?.treatment_approach || 
+                          od.caso_solucion_aplicada || 
+                          null;
+  
+  // Results: direct column -> NEW results.summary -> results.improvements -> LEGACY
+  const displayResults = caseStudy.results_achieved || 
+                         od.results?.summary || 
+                         od.results?.improvements ||
+                         od.caso_resultados || 
+                         null;
+
+  // Economics: direct columns -> NEW economics.* structure
+  const econ = od.economics || {};
+  const displayCapex = caseStudy.capex ?? econ.investment ?? null;
+  const displayOpex = caseStudy.opex_year ?? econ.savings ?? null;
+  const displayPayback = caseStudy.payback_months ?? econ.payback ?? null;
+  const displayRoi = caseStudy.roi_percent ?? econ.roi ?? null;
+  const displayQuality = caseStudy.quality_score ?? od.quality_score ?? null;
 
   // Get problem parameters
   const problemParams = caseStudy.problem_parameters || {};
@@ -425,8 +484,8 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
           <div>
             <h1 className="text-2xl font-bold">{displayTitle}</h1>
             <div className="flex items-center gap-2 mt-2">
-              <Badge className={getSectorBadge(caseStudy.sector)}>
-                {getSectorLabel(caseStudy.sector)}
+              <Badge className={getSectorBadge(displaySector)}>
+                {getSectorLabel(displaySector)}
               </Badge>
               <Badge className={statusInfo.color}>
                 {statusInfo.label}
@@ -488,7 +547,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 <Building2 className="h-3 w-3" />
                 Sector
               </p>
-              <p className="font-medium">{getSectorLabel(caseStudy.sector)}</p>
+              <p className="font-medium">{getSectorLabel(displaySector)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -500,8 +559,8 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Puntuación de Calidad</p>
               <div className="flex items-center gap-2">
-                <Progress value={caseStudy.quality_score || 0} className="h-2 flex-1" />
-                <span className="text-sm font-medium">{caseStudy.quality_score || 0}/100</span>
+                <Progress value={displayQuality || 0} className="h-2 flex-1" />
+                <span className="text-sm font-medium">{displayQuality || 0}/100</span>
               </div>
             </div>
           </div>
@@ -515,7 +574,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 ROI
               </p>
               <p className="font-semibold text-lg text-accent">
-                {caseStudy.roi_percent !== null ? `${caseStudy.roi_percent}%` : '—'}
+                {displayRoi !== null ? `${displayRoi}%` : '—'}
               </p>
             </div>
             <div className="space-y-1">
@@ -523,14 +582,14 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 <DollarSign className="h-3 w-3" />
                 CAPEX
               </p>
-              <p className="font-semibold text-lg">{formatCurrency(caseStudy.capex)}</p>
+              <p className="font-semibold text-lg">{formatCurrency(displayCapex)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <DollarSign className="h-3 w-3" />
                 OPEX Anual
               </p>
-              <p className="font-semibold text-lg">{formatCurrency(caseStudy.opex_year)}</p>
+              <p className="font-semibold text-lg">{formatCurrency(displayOpex)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -538,7 +597,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 Payback
               </p>
               <p className="font-semibold text-lg">
-                {caseStudy.payback_months !== null ? `${caseStudy.payback_months} meses` : '—'}
+                {displayPayback !== null ? `${displayPayback} meses` : '—'}
               </p>
             </div>
             <div className="space-y-1">
