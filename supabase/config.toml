@@ -113,3 +113,6 @@ verify_jwt = false
 
 [functions.receive-scouting-technology]
 verify_jwt = false
+
+[functions.kb-railway-proxy]
+verify_jwt = false
