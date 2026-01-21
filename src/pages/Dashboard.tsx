@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { comparisonProjectsService } from '@/services/comparisonProjectsService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -119,15 +120,15 @@ const Dashboard: React.FC = () => {
   const { data: pendingEdits } = useQuery({
     queryKey: ['pending-edits-dashboard'],
     queryFn: async () => {
-      // Fetch pending technology edits
-      const { data: editsData, error: editsError } = await externalSupabase
+      // Fetch pending technology edits from main Cloud database
+      const { data: editsData, error: editsError } = await supabase
         .from('technology_edits')
         .select('edit_type')
         .eq('status', 'pending');
       
       if (editsError) throw editsError;
       
-      // Fetch technologies pending review
+      // Fetch technologies pending review from external database
       const { count: reviewCount, error: reviewError } = await externalSupabase
         .from('technologies')
         .select('id', { count: 'exact', head: true })
