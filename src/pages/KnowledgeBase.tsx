@@ -40,7 +40,7 @@ import { useLLMModels, getDefaultModel, formatModelCost } from "@/hooks/useLLMMo
 import { API_URL } from "@/lib/api";
 
 // Helper function to call KB Railway proxy (server-side secret handling)
-const callKBProxy = async (endpoint: string, payload?: any): Promise<any> => {
+const callKBProxy = async (endpoint: string, method: 'GET' | 'POST' = 'POST', payload?: any): Promise<any> => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('No autenticado');
 
@@ -52,7 +52,7 @@ const callKBProxy = async (endpoint: string, payload?: any): Promise<any> => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ endpoint, method: 'POST', payload }),
+      body: JSON.stringify({ endpoint, method, payload }),
     }
   );
 
@@ -622,7 +622,7 @@ export default function KnowledgeBase() {
 
       console.log("[KB-UPLOAD] Calling Railway API via proxy to process document...");
       try {
-        await callKBProxy('/api/kb/process', { document_id: doc.id });
+        await callKBProxy('/api/kb/process', 'POST', { document_id: doc.id });
         console.log("[KB-UPLOAD] Processing initiated successfully");
       } catch (processError) {
         console.error("[KB-UPLOAD] Processing error:", processError);
@@ -1435,23 +1435,18 @@ export default function KnowledgeBase() {
   // Download document handler
   const handleDownloadDocument = async (doc: KnowledgeDocument) => {
     try {
-      const { data, error } = await externalSupabase.storage
-        .from('knowledge-documents')
-        .download(doc.file_path);
+      console.log('Download document via proxy:', doc.id);
+      const data = await callKBProxy(`/api/kb/document/${doc.id}/download`, 'GET');
       
-      if (error) throw error;
-      
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = doc.name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      if (data.download_url) {
+        // Open the pre-signed download URL in a new tab
+        window.open(data.download_url, '_blank');
+      } else {
+        throw new Error('No se recibió URL de descarga');
+      }
     } catch (error) {
       console.error('Download error:', error);
-      toast.error('Error al descargar el documento');
+      toast.error(error instanceof Error ? error.message : 'Error al descargar el documento');
     }
   };
 

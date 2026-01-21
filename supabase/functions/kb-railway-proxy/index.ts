@@ -9,12 +9,13 @@ const corsHeaders = {
 // Allowed KB endpoints
 const ALLOWED_ENDPOINT_PATTERNS = [
   /^\/api\/kb\/document\/[a-f0-9-]+\/generate-description$/,
+  /^\/api\/kb\/document\/[a-f0-9-]+\/download$/,
   /^\/api\/kb\/reprocess\/[a-f0-9-]+$/,
   /^\/api\/kb\/process$/,
   /^\/api\/kb\/generate-description$/,
 ];
 
-const ALLOWED_METHODS = ['POST'];
+const ALLOWED_METHODS = ['POST', 'GET'];
 const ALLOWED_ROLES = ['admin', 'supervisor', 'analyst'];
 
 function isEndpointAllowed(endpoint: string): boolean {
