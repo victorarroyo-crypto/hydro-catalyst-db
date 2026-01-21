@@ -1444,9 +1444,15 @@ export default function KnowledgeBase() {
       } else {
         throw new Error('No se recibió URL de descarga');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Download error:', error);
-      toast.error(error instanceof Error ? error.message : 'Error al descargar el documento');
+      // Check if it's a document without stored URL (processed before fix)
+      const errorMsg = error?.message || '';
+      if (errorMsg.includes('500') || errorMsg.includes('not found') || errorMsg.includes('no file_url')) {
+        toast.error('Este documento fue procesado antes del fix de URLs. Reprocésalo para habilitar la descarga.');
+      } else {
+        toast.error(errorMsg || 'Error al descargar el documento');
+      }
     }
   };
 
