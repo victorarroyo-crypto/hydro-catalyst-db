@@ -117,6 +117,19 @@ interface CaseStudyFull {
   results_parameters: Record<string, { value: number; unit: string }> | null;
   lessons_learned: string | null;
   created_at: string;
+  entity_type?: string | null;
+  // original_data contains the full webhook payload with caso_* fields
+  original_data?: {
+    caso_titulo?: string;
+    caso_cliente?: string;
+    caso_pais?: string;
+    caso_descripcion_problema?: string;
+    caso_solucion_aplicada?: string;
+    caso_resultados?: string;
+    technologies?: any[];
+    quality_score?: number;
+    [key: string]: any;
+  } | null;
 }
 
 interface CaseStudyTechnology {
@@ -333,6 +346,29 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   const recommendedTechs = technologies?.filter(t => t.role === 'Recomendada') || [];
   const evaluatedTechs = technologies?.filter(t => t.role === 'Evaluada') || [];
 
+  // ═══════════════════════════════════════════════════════════════════
+  // EXTRACT DATA FROM original_data WITH FALLBACK TO DIRECT FIELDS
+  // ═══════════════════════════════════════════════════════════════════
+  const od = caseStudy.original_data || {};
+  
+  // Title: use name field, fallback to original_data.caso_titulo
+  const displayTitle = caseStudy.name || od.caso_titulo || 'Sin título';
+  
+  // Client/Entity: use entity_type field, fallback to original_data.caso_cliente
+  const displayClient = caseStudy.entity_type || od.caso_cliente || null;
+  
+  // Country: use country field, fallback to original_data.caso_pais
+  const displayCountry = caseStudy.country || od.caso_pais || null;
+  
+  // Description: use description field, fallback to original_data.caso_descripcion_problema
+  const displayDescriptionRaw = caseStudy.description || od.caso_descripcion_problema || '';
+  
+  // Solution: use solution_applied field, fallback to original_data.caso_solucion_aplicada
+  const displaySolution = caseStudy.solution_applied || od.caso_solucion_aplicada || null;
+  
+  // Results: use results_achieved field, fallback to original_data.caso_resultados
+  const displayResults = caseStudy.results_achieved || od.caso_resultados || null;
+
   // Get problem parameters
   const problemParams = caseStudy.problem_parameters || {};
   const problemParamsList = Object.entries(problemParams).map(([name, data]) => ({
@@ -347,11 +383,10 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   const reduction = resultsParams['Reduccion'];
 
   // Truncate description
-  const descriptionText = caseStudy.description || '';
-  const shouldTruncate = descriptionText.length > 200;
+  const shouldTruncate = displayDescriptionRaw.length > 200;
   const displayedDescription = descriptionExpanded || !shouldTruncate
-    ? descriptionText
-    : descriptionText.slice(0, 200) + '...';
+    ? displayDescriptionRaw
+    : displayDescriptionRaw.slice(0, 200) + '...';
 
   return (
     <div className="space-y-6">
@@ -362,7 +397,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">{caseStudy.name}</h1>
+            <h1 className="text-2xl font-bold">{displayTitle}</h1>
             <div className="flex items-center gap-2 mt-2">
               <Badge className={getSectorBadge(caseStudy.sector)}>
                 {getSectorLabel(caseStudy.sector)}
@@ -407,13 +442,20 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Users className="h-3 w-3" />
+                Cliente
+              </p>
+              <p className="font-medium">{displayClient || '—'}</p>
+            </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
                 País
               </p>
-              <p className="font-medium">{caseStudy.country || '—'}</p>
+              <p className="font-medium">{displayCountry || '—'}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -539,7 +581,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {caseStudy.solution_applied || 'Sin descripción'}
+              {displaySolution || 'Sin descripción'}
             </p>
             
             {caseStudy.treatment_train && caseStudy.treatment_train.length > 0 && (
@@ -575,7 +617,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {caseStudy.results_achieved || 'Sin descripción'}
+              {displayResults || 'Sin descripción'}
             </p>
             
             {(dqoFinal || reduction) && (
