@@ -1514,6 +1514,16 @@ export default function KnowledgeBase() {
 
   // Generate AI description for an existing document via Railway API (through proxy)
   const handleGenerateDescriptionForDoc = async (doc: KnowledgeDocument) => {
+    // Validate document status before calling API
+    if (doc.status === 'failed') {
+      toast.error("No se puede generar descripción para un documento con error. Reprocésalo primero.");
+      return;
+    }
+    if (doc.status === 'processing' || doc.status === 'pending') {
+      toast.warning("El documento aún se está procesando. Espera a que termine.");
+      return;
+    }
+    
     setGeneratingDescId(doc.id);
     try {
       console.log('Generate description via proxy:', doc.id);
