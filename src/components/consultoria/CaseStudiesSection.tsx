@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { BookOpen, Lightbulb, Wrench, Loader2 } from 'lucide-react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { BookOpen, Lightbulb, Wrench, Loader2, MapPin, Building2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { API_URL } from '@/lib/api';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 interface CaseStudy {
   id: string;
-  title: string;
-  sector: string;
-  summary: string;
+  name: string;
+  description: string | null;
+  sector: string | null;
+  country: string | null;
+  technology_types: string[] | null;
   created_at: string;
-  key_findings_count: number;
-  technologies_count: number;
-  total_savings_eur: number;
 }
 
 interface CaseStudiesSectionProps {
@@ -24,23 +24,21 @@ const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
   limit = 5,
   onCaseStudyClick 
 }) => {
-  const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: caseStudies, isLoading } = useQuery({
+    queryKey: ['case-studies-section', limit],
+    queryFn: async () => {
+      const { data, error } = await externalSupabase
+        .from('casos_de_estudio')
+        .select('id, name, description, sector, country, technology_types, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      
+      if (error) throw error;
+      return data as CaseStudy[];
+    },
+  });
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/kb/case-studies?limit=${limit}`)
-      .then(res => res.json())
-      .then(data => {
-        setCaseStudies(data.case_studies || []);
-        setLoading(false);
-      })
-      .catch(error => {
-        console.error('Error fetching case studies:', error);
-        setLoading(false);
-      });
-  }, [limit]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="py-8">
@@ -60,18 +58,18 @@ const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
             <BookOpen className="mr-2 h-5 w-5 text-primary" />
             Casos de Estudio Recientes
           </span>
-          <Badge variant="secondary">{caseStudies.length}</Badge>
+          <Badge variant="secondary">{caseStudies?.length || 0}</Badge>
         </CardTitle>
         <CardDescription>
-          Proyectos publicados en la base de conocimiento global
+          Proyectos reales de tratamiento de agua con problema, solución y tecnologías aplicadas
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {caseStudies.length === 0 ? (
+        {!caseStudies || caseStudies.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
             <p>No hay casos de estudio publicados aún</p>
-            <p className="text-sm">Completa un diagnóstico y publícalo para crear el primero</p>
+            <p className="text-sm">Sube documentos de proyectos para crear casos de estudio</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -83,34 +81,46 @@ const CaseStudiesSection: React.FC<CaseStudiesSectionProps> = ({
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h4 className="font-medium">{cs.title}</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-                      {cs.summary}
-                    </p>
-                    <div className="flex items-center gap-3 mt-2">
-                      <Badge variant="outline">{cs.sector}</Badge>
+                    <h4 className="font-medium">{cs.name}</h4>
+                    {cs.description && (
+                      <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+                        {cs.description}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-3 mt-2 flex-wrap">
+                      {cs.sector && (
+                        <Badge variant="outline" className="text-xs">
+                          <Building2 className="h-3 w-3 mr-1" />
+                          {cs.sector}
+                        </Badge>
+                      )}
+                      {cs.country && (
+                        <Badge variant="outline" className="text-xs">
+                          <MapPin className="h-3 w-3 mr-1" />
+                          {cs.country}
+                        </Badge>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {new Date(cs.created_at).toLocaleDateString('es-ES')}
                       </span>
                     </div>
                   </div>
-                  <div className="text-right ml-4">
-                    <p className="text-lg font-bold text-green-600">
-                      €{cs.total_savings_eur.toLocaleString('es-ES')}
-                    </p>
-                    <p className="text-xs text-muted-foreground">ahorro potencial</p>
+                </div>
+                {cs.technology_types && cs.technology_types.length > 0 && (
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    {cs.technology_types.slice(0, 3).map((tech, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-xs">
+                        <Wrench className="h-3 w-3 mr-1" />
+                        {tech}
+                      </Badge>
+                    ))}
+                    {cs.technology_types.length > 3 && (
+                      <Badge variant="secondary" className="text-xs">
+                        +{cs.technology_types.length - 3} más
+                      </Badge>
+                    )}
                   </div>
-                </div>
-                <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-                  <span className="flex items-center">
-                    <Lightbulb className="h-3 w-3 mr-1" />
-                    {cs.key_findings_count} hallazgos
-                  </span>
-                  <span className="flex items-center">
-                    <Wrench className="h-3 w-3 mr-1" />
-                    {cs.technologies_count} tecnologías
-                  </span>
-                </div>
+                )}
               </div>
             ))}
           </div>
