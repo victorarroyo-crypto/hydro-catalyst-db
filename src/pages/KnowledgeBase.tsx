@@ -600,7 +600,7 @@ export default function KnowledgeBase() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+            'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
           },
           body: JSON.stringify({ document_id: doc.id }),
         });
@@ -1344,7 +1344,7 @@ export default function KnowledgeBase() {
       const response = await fetch(`${API_URL}/api/kb/reprocess/${docId}`, {
         method: 'POST',
         headers: {
-          'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+          'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
         },
       });
       if (!response.ok) {
@@ -1382,7 +1382,7 @@ export default function KnowledgeBase() {
       const response = await fetch(`${API_URL}/api/kb/reprocess/${docId}`, {
         method: 'POST',
         headers: {
-          'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+          'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
         },
       });
       if (!response.ok) {
@@ -1527,7 +1527,7 @@ export default function KnowledgeBase() {
       const response = await fetch(`${API_URL}/api/kb/document/${doc.id}/generate-description`, {
         method: 'POST',
         headers: {
-          'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+          'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
         },
       });
 
@@ -1802,7 +1802,7 @@ export default function KnowledgeBase() {
         const response = await fetch(`${API_URL}/api/kb/reprocess/${doc.id}`, {
           method: 'POST',
           headers: {
-            'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+            'X-Sync-Secret': import.meta.env.VITE_SYNC_WEBHOOK_SECRET || '',
           },
         });
         if (!response.ok) {
