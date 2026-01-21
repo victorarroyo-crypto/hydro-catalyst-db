@@ -1523,6 +1523,7 @@ export default function KnowledgeBase() {
     setGeneratingDescId(doc.id);
     try {
       console.log('Generate description:', doc.id); // Debug
+      console.log('Secret:', import.meta.env.VITE_SYNC_WEBHOOK_SECRET);
       
       const response = await fetch(`${API_URL}/api/kb/document/${doc.id}/generate-description`, {
         method: 'POST',
