@@ -234,7 +234,7 @@ export const CaseStudiesSection: React.FC = () => {
       
       const { data, error } = await externalSupabase
         .from('casos_de_estudio')
-        .select('id, name, description, entity_type, country, sector, technology_types, quality_score, roi_percent, created_at')
+        .select('*')
         .order('created_at', { ascending: false });
 
       console.log('[CaseStudies] Query result:', { count: data?.length, error });
@@ -244,8 +244,13 @@ export const CaseStudiesSection: React.FC = () => {
         throw error;
       }
       
-      // Add default status since external DB doesn't have this column
-      return (data || []).map(cs => ({ ...cs, status: 'approved' })) as CaseStudy[];
+      // Map with defaults for columns that may not exist in external DB
+      return (data || []).map(cs => ({
+        ...cs,
+        status: cs.status ?? 'approved',
+        quality_score: cs.quality_score ?? null,
+        roi_percent: cs.roi_percent ?? null,
+      })) as CaseStudy[];
     },
   });
 
