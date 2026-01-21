@@ -594,7 +594,7 @@ export default function KnowledgeBase() {
       console.log("[KB-UPLOAD] Document registered in DB:", doc.id);
 
       console.log("[KB-UPLOAD] Invoking process-knowledge-document function...");
-      const { error: processError } = await externalSupabase.functions.invoke(
+      const { error: processError } = await supabase.functions.invoke(
         "process-knowledge-document",
         { body: { documentId: doc.id } }
       );
@@ -1330,7 +1330,7 @@ export default function KnowledgeBase() {
     toast.info(`Enviando "${docName}" a procesar...`, { duration: 2000 });
     
     try {
-      const { error } = await externalSupabase.functions.invoke('process-knowledge-document', {
+      const { error } = await supabase.functions.invoke('process-knowledge-document', {
         body: { documentId: docId, forceReprocess: true }
       });
       if (error) throw error;
@@ -1362,7 +1362,7 @@ export default function KnowledgeBase() {
   // Legacy mutation for compatibility (uses granular state now)
   const reprocessMutation = useMutation({
     mutationFn: async (docId: string) => {
-      const { error } = await externalSupabase.functions.invoke('process-knowledge-document', {
+      const { error } = await supabase.functions.invoke('process-knowledge-document', {
         body: { documentId: docId, forceReprocess: true }
       });
       if (error) throw error;
