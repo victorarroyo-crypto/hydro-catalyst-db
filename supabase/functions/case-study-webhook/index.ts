@@ -27,7 +27,7 @@ type WebhookEvent =
   | 'user_decision'  // Frontend user decision (create new / merge)
   
   // Estados finales
-  | 'saving' | 'completed' | 'complete' | 'failed' | 'error'
+  | 'saving' | 'completed' | 'complete' | 'processing_complete' | 'failed' | 'error'
   
   // Legacy v10 (compatibilidad)
   | 'pending' | 'uploading' | 'extracting' | 'extraction_complete'
@@ -107,6 +107,7 @@ interface WebhookPayload {
   technologies?: RailwayTechnologyFlat[]
   quality_score?: number
   similar_cases?: SimilarCase[]
+  case_study_id?: string  // UUID del caso en Railway
   
   data?: {
     progress?: number
@@ -362,9 +363,9 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Map event to status - handle both 'complete' and 'completed'
+    // Map event to status - handle 'complete', 'completed', and 'processing_complete'
     let status: string
-    if (event === 'completed' || event === 'complete') {
+    if (event === 'completed' || event === 'complete' || event === 'processing_complete') {
       status = 'completed'
     } else if (event === 'failed' || event === 'error') {
       status = 'failed'
@@ -487,8 +488,8 @@ serve(async (req) => {
       console.log(`[CASE-STUDY-WEBHOOK] POST-creation decision: ${decision === 'merge' ? `merge with ${mergeTargetId}` : 'keep both cases'}`);
     }
 
-    // Completed event - full data extraction
-    if (event === 'completed' || event === 'complete') {
+    // Completed event - full data extraction (handles completed, complete, processing_complete)
+    if (event === 'completed' || event === 'complete' || event === 'processing_complete') {
       updateData.completed_at = timestamp || new Date().toISOString()
       updateData.progress_percentage = 100
       
@@ -771,6 +772,16 @@ serve(async (req) => {
             console.log('[CASE-STUDY-WEBHOOK] → results_achieved:', resultadosToSave.slice(0, 80) + '...');
           }
           
+          // ═══════════════════════════════════════════════════════════════════
+          // GUARDAR original_data CON TODO EL PAYLOAD COMPLETO
+          // ═══════════════════════════════════════════════════════════════════
+          caseUpdateData.original_data = {
+            ...payload,
+            _webhook_received_at: new Date().toISOString(),
+            _event: event,
+          };
+          console.log('[CASE-STUDY-WEBHOOK] → original_data: payload completo guardado');
+          
           const fieldsToUpdate = Object.keys(caseUpdateData).length - 1;
           if (fieldsToUpdate > 0) {
             const { error: caseError } = await supabase
@@ -781,7 +792,7 @@ serve(async (req) => {
             if (caseError) {
               console.error('[CASE-STUDY-WEBHOOK] ❌ Error actualizando caso:', caseError.message);
             } else {
-              console.log(`[CASE-STUDY-WEBHOOK] ✅ Caso actualizado: ${fieldsToUpdate} campos`);
+              console.log(`[CASE-STUDY-WEBHOOK] ✅ Caso actualizado: ${fieldsToUpdate} campos (incl. original_data)`);
             }
           }
         }
