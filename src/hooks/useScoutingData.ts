@@ -318,31 +318,32 @@ export const useMoveToRejected = () => {
       if (!scoutingRecord) throw new Error('Registro no encontrado');
       
       const record = scoutingRecord as ExternalScoutingQueueItem;
+      const rec = record as unknown as Record<string, unknown>;
       
       // 2. Insert into rejected_technologies in external DB
+      // The external table uses column names with spaces/accents (not snake_case)
       const insertPayload: Record<string, unknown> = {
         original_scouting_id: record.id,
-        nombre: record.nombre,
-        proveedor: record.proveedor,
-        pais: record.pais,
-        web: record.web,
-        email: record.email,
-        descripcion: record.descripcion,
-        tipo_sugerido: record.tipo_sugerido,
-        subcategoria: record.subcategoria,
-        sector: record.sector,
-        subsector: record.subsector,
-        aplicacion_principal: record.aplicacion_principal,
-        ventaja_competitiva: record.ventaja_competitiva,
-        innovacion: record.innovacion,
-        trl_estimado: record.trl_estimado,
-        casos_referencia: record.casos_referencia,
-        paises_actua: record.paises_actua,
-        comentarios_analista: record.comentarios_analista,
+        "Nombre de la tecnología": rec["Nombre de la tecnología"] || '',
+        "Tipo de tecnología": rec["Tipo de tecnología"] || 'Sin clasificar',
+        "Proveedor / Empresa": rec["Proveedor / Empresa"],
+        "País de origen": rec["País de origen"],
+        "Web de la empresa": rec["Web de la empresa"],
+        "Email de contacto": rec["Email de contacto"],
+        "Descripción técnica breve": rec["Descripción técnica breve"],
+        "Subcategoría": rec["Subcategoría"],
+        "Sector y subsector": rec["Sector y subsector"],
+        subsector_industrial: rec.subsector_industrial,
+        "Aplicación principal": rec["Aplicación principal"],
+        "Ventaja competitiva clave": rec["Ventaja competitiva clave"],
+        "Porque es innovadora": rec["Porque es innovadora"],
+        "Grado de madurez (TRL)": rec["Grado de madurez (TRL)"],
+        "Casos de referencia": rec["Casos de referencia"],
+        "Paises donde actua": rec["Paises donde actua"],
+        "Comentarios del analista": rec["Comentarios del analista"],
+        "Fecha de scouting": rec["Fecha de scouting"],
         rejection_reason: rejectionReason,
         rejection_category: rejectionStage,
-        rejected_at: new Date().toISOString(),
-        original_data: record as unknown as Record<string, unknown>,
       };
 
       if (rejectedBy) {
