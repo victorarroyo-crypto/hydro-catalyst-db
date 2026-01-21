@@ -24,6 +24,7 @@ import {
   Info,
 } from 'lucide-react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { supabase } from '@/integrations/supabase/client'; // Lovable Supabase for broadcasts
 import { cn } from '@/lib/utils';
 import { SimilarCasesModal, SimilarCase } from './SimilarCasesModal';
 
@@ -220,43 +221,81 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
     fetchJob();
   }, [jobId, onCompleted]);
 
-  // Subscribe to realtime updates
+  // Subscribe to Lovable broadcast channel for real-time updates from webhook
   useEffect(() => {
-    console.log(`[ProcessingView] Subscribing to realtime updates for job ${jobId}`);
+    console.log(`[ProcessingView] Subscribing to broadcast channel for job ${jobId}`);
     
-    const channel = externalSupabase
-      .channel(`case_study_job_${jobId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'case_study_jobs',
-          filter: `id=eq.${jobId}`,
-        },
-        (payload) => {
-          console.log('[ProcessingView] Realtime update received:', payload.new);
-          const newData = payload.new as CaseStudyJob;
-          setJob(newData);
+    const channel = supabase
+      .channel(`case-study-progress-${jobId}`)
+      .on('broadcast', { event: 'progress' }, (payload) => {
+        console.log('[ProcessingView] Broadcast received:', payload);
+        
+        const data = payload.payload;
+        if (!data) return;
+        
+        // Map broadcast payload to job state
+        setJob(prev => {
+          const status = data.status || prev?.status || 'processing';
+          const newJob: CaseStudyJob = {
+            id: jobId,
+            status: status as JobStatus,
+            current_phase: data.event || data.current_phase || prev?.current_phase || null,
+            progress_percentage: data.progress ?? data.progress_percentage ?? prev?.progress_percentage ?? 0,
+            error_message: data.error_message || prev?.error_message || null,
+            quality_score: data.quality_score ?? prev?.quality_score,
+            technologies_found: data.technologies_count ?? data.technologies_found ?? prev?.technologies_found,
+            technologies_new: data.technologies_new ?? prev?.technologies_new,
+            case_study_id: data.case_study_id || prev?.case_study_id,
+            result_data: data.result_data || prev?.result_data,
+          };
           
-          if (newData.status === 'completed') {
-            console.log('[ProcessingView] Job completed, calling onCompleted');
-            onCompleted(newData.id);
-          }
-          
-          // v12.4: similar_found is INFO only, no automatic modal during processing
-          // Modal shown post-completion via has_similar_cases flag
+          console.log('[ProcessingView] Updated job state:', newJob);
+          return newJob;
+        });
+        
+        // Check for completion
+        if (data.status === 'completed') {
+          console.log('[ProcessingView] Job completed via broadcast');
+          onCompleted(jobId);
         }
-      )
+      })
       .subscribe((status) => {
-        console.log(`[ProcessingView] Subscription status: ${status}`);
+        console.log(`[ProcessingView] Broadcast subscription status: ${status}`);
       });
 
     return () => {
-      console.log(`[ProcessingView] Unsubscribing from job ${jobId}`);
-      externalSupabase.removeChannel(channel);
+      console.log(`[ProcessingView] Unsubscribing from broadcast channel for job ${jobId}`);
+      supabase.removeChannel(channel);
     };
   }, [jobId, onCompleted]);
+
+  // Polling fallback: fetch from external DB every 5 seconds
+  useEffect(() => {
+    if (job?.status === 'completed' || job?.status === 'failed') {
+      return; // Stop polling when job is done
+    }
+
+    const pollInterval = setInterval(async () => {
+      console.log('[ProcessingView] Polling external DB for job status');
+      const { data, error } = await externalSupabase
+        .from('case_study_jobs')
+        .select('id, status, current_phase, progress_percentage, error_message, quality_score, technologies_found, technologies_new, case_study_id, result_data')
+        .eq('id', jobId)
+        .single();
+
+      if (!error && data) {
+        console.log('[ProcessingView] Poll result:', data);
+        const jobData = data as CaseStudyJob;
+        setJob(jobData);
+
+        if (jobData.status === 'completed') {
+          onCompleted(jobData.id);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [jobId, job?.status, onCompleted]);
 
   const handleSimilarDecisionMade = () => {
     // Refetch job state after decision
