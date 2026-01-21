@@ -47,6 +47,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateCaseStudyWordDocument } from '@/lib/generateCaseStudyWordDocument';
 import { toast } from 'sonner';
 import { CaseStudyFormView } from './CaseStudyFormView';
+import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
+import type { Technology } from '@/types/database';
 
 // Sector options (same as in CaseStudiesSection)
 const SECTOR_OPTIONS = [
@@ -190,6 +192,13 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   
   // State for sending to scouting queue
   const [sendingTechId, setSendingTechId] = useState<string | null>(null);
+  
+  // Modal states for viewing tech sheets
+  const [selectedTechFromDB, setSelectedTechFromDB] = useState<Technology | null>(null);
+  const [techModalOpen, setTechModalOpen] = useState(false);
+  const [selectedCaseTech, setSelectedCaseTech] = useState<CaseStudyTechnology | null>(null);
+  const [caseTechModalOpen, setCaseTechModalOpen] = useState(false);
+  const [isLoadingTech, setIsLoadingTech] = useState(false);
 
   // Fetch case study
   const { data: caseStudy, isLoading } = useQuery({
@@ -384,30 +393,31 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     try {
       const ad = tech.application_data || {};
       
-      // Insert into scouting_queue with proper column names (spaces in column names)
+      // Insert into scouting_queue with snake_case columns (external DB schema)
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .insert({
-          'Nombre de la tecnología': tech.technology_name,
-          'Proveedor / Empresa': tech.provider || ad.proveedor || null,
-          'País de origen': ad.pais || ad.country || null,
-          'Paises donde actua': ad.paises_actua || null,
-          'Web de la empresa': ad.web || null,
-          'Email de contacto': ad.email || null,
-          'Descripción técnica breve': ad.descripcion || ad.description || null,
-          'Tipo de tecnología': ad.tipo || ad.type || 'Por clasificar',
-          'Subcategoría': ad.subcategoria || null,
-          'Sector y subsector': ad.sector || null,
-          'Aplicación principal': ad.aplicacion_principal || null,
-          'Ventaja competitiva clave': ad.ventaja_competitiva || null,
-          'Porque es innovadora': ad.innovacion || null,
-          'Grado de madurez (TRL)': ad.trl || null,
-          'Casos de referencia': ad.casos_referencia || null,
-          'Comentarios del analista': tech.selection_rationale || ad.comentarios_analista || 
+          nombre: tech.technology_name,
+          proveedor: tech.provider || ad.proveedor || null,
+          pais_origen: ad.pais || ad.country || null,
+          paises_actua: ad.paises_actua || null,
+          web: ad.web || null,
+          email: ad.email || null,
+          descripcion: ad.descripcion || ad.description || null,
+          tipo_tecnologia: ad.tipo || ad.type || 'Por clasificar',
+          subcategoria: ad.subcategoria || null,
+          sector: ad.sector || null,
+          aplicacion: ad.aplicacion_principal || null,
+          ventaja_competitiva: ad.ventaja_competitiva || null,
+          innovacion: ad.innovacion || null,
+          trl: ad.trl || null,
+          casos_referencia: ad.casos_referencia || null,
+          comentarios: tech.selection_rationale || ad.comentarios_analista || 
             `Extraída del caso de estudio: ${caseStudy?.name}`,
           source: 'case_study',
           case_study_id: caseStudyId,
-          queue_status: 'review',
+          status: 'review',
+          fecha_scouting: new Date().toISOString().split('T')[0],
         })
         .select('id')
         .single();
@@ -433,6 +443,31 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
       toast.error('Error al enviar a revisión', { description: error.message });
     } finally {
       setSendingTechId(null);
+    }
+  };
+
+  // Handle viewing technology sheet
+  const handleViewTechSheet = async (tech: CaseStudyTechnology) => {
+    if (tech.technology_id) {
+      // LINKED: fetch full data from technologies table
+      setIsLoadingTech(true);
+      const { data } = await externalSupabase
+        .from('technologies')
+        .select('*')
+        .eq('id', tech.technology_id)
+        .maybeSingle();
+      
+      setIsLoadingTech(false);
+      if (data) {
+        setSelectedTechFromDB(data as Technology);
+        setTechModalOpen(true);
+      } else {
+        toast.error('No se encontró la tecnología en la base de datos');
+      }
+    } else {
+      // NOT LINKED: open simplified modal with application_data
+      setSelectedCaseTech(tech);
+      setCaseTechModalOpen(true);
     }
   };
 
@@ -862,12 +897,16 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                         {getTechStatusBadge(tech)}
                       </div>
                       <div className="flex items-center gap-2">
-                        {tech.technology_id && (
-                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                            Ver ficha
-                            <ExternalLink className="h-3 w-3" />
-                          </Button>
-                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 text-xs gap-1"
+                          onClick={() => handleViewTechSheet(tech)}
+                          disabled={isLoadingTech}
+                        >
+                          Ver ficha
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
                         {/* Send to review button for unlinked technologies */}
                         {!tech.technology_id && !tech.scouting_queue_id && (
                           <Button 
@@ -906,23 +945,34 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                         </Badge>
                         {getTechStatusBadge(tech)}
                       </div>
-                      {/* Send to review button for unlinked technologies */}
-                      {!tech.technology_id && !tech.scouting_queue_id && (
+                      <div className="flex items-center gap-1">
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           className="h-6 text-xs gap-1"
-                          onClick={() => handleSendToScoutingQueue(tech)}
-                          disabled={sendingTechId === tech.id}
+                          onClick={() => handleViewTechSheet(tech)}
+                          disabled={isLoadingTech}
                         >
-                          {sendingTechId === tech.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <SendHorizonal className="h-3 w-3" />
-                          )}
-                          Revisar
+                          Ver ficha
                         </Button>
-                      )}
+                        {/* Send to review button for unlinked technologies */}
+                        {!tech.technology_id && !tech.scouting_queue_id && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 text-xs gap-1"
+                            onClick={() => handleSendToScoutingQueue(tech)}
+                            disabled={sendingTechId === tech.id}
+                          >
+                            {sendingTechId === tech.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <SendHorizonal className="h-3 w-3" />
+                            )}
+                            Revisar
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -947,6 +997,16 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                         </div>
                         {getTechStatusBadge(tech)}
                       </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 text-xs gap-1"
+                        onClick={() => handleViewTechSheet(tech)}
+                        disabled={isLoadingTech}
+                      >
+                        Ver ficha
+                        <ExternalLink className="h-3 w-3" />
+                      </Button>
                       {/* Send to review button for unlinked technologies */}
                       {!tech.technology_id && !tech.scouting_queue_id && (
                         <Button 
@@ -1105,6 +1165,135 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 queryClient.invalidateQueries({ queryKey: ['case-study-detail', caseStudyId] });
               }}
             />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal for LINKED technology from catalog */}
+      <TechnologyDetailModal
+        technology={selectedTechFromDB}
+        open={techModalOpen}
+        onOpenChange={setTechModalOpen}
+      />
+
+      {/* Modal for UNLINKED technology with application_data */}
+      <Dialog open={caseTechModalOpen} onOpenChange={setCaseTechModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Cpu className="h-5 w-5 text-primary" />
+              {selectedCaseTech?.technology_name}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedCaseTech && (
+            <div className="space-y-4">
+              {/* Provider and Country */}
+              <div className="flex flex-wrap gap-4 text-sm">
+                {selectedCaseTech.provider && (
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    <span>{selectedCaseTech.provider}</span>
+                  </div>
+                )}
+                {selectedCaseTech.application_data?.pais && (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span>{selectedCaseTech.application_data.pais}</span>
+                  </div>
+                )}
+                {selectedCaseTech.application_data?.trl && (
+                  <Badge variant="outline">TRL {selectedCaseTech.application_data.trl}</Badge>
+                )}
+              </div>
+
+              {/* Classification */}
+              <div className="flex flex-wrap gap-2">
+                {selectedCaseTech.application_data?.tipo && (
+                  <Badge>{selectedCaseTech.application_data.tipo}</Badge>
+                )}
+                {selectedCaseTech.application_data?.subcategoria && (
+                  <Badge variant="secondary">{selectedCaseTech.application_data.subcategoria}</Badge>
+                )}
+                {selectedCaseTech.application_data?.sector && (
+                  <Badge variant="outline">{selectedCaseTech.application_data.sector}</Badge>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Description */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Descripción</p>
+                <p className="text-sm">{selectedCaseTech.application_data?.descripcion || 'Sin información'}</p>
+              </div>
+
+              {/* Main Application */}
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Aplicación principal</p>
+                <p className="text-sm">{selectedCaseTech.application_data?.aplicacion_principal || 'Sin información'}</p>
+              </div>
+
+              {/* Competitive Advantage */}
+              <div className="bg-primary/5 rounded-lg p-3 border border-primary/10">
+                <p className="text-xs font-medium text-primary mb-1">Ventaja competitiva</p>
+                <p className="text-sm">{selectedCaseTech.application_data?.ventaja_competitiva || 'Sin información'}</p>
+              </div>
+
+              {/* Innovation */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Por qué es innovadora</p>
+                <p className="text-sm">{selectedCaseTech.application_data?.innovacion || 'Sin información'}</p>
+              </div>
+
+              {/* Selection Rationale */}
+              {selectedCaseTech.selection_rationale && (
+                <div className="bg-accent/5 rounded-lg p-3 border border-accent/10">
+                  <p className="text-xs font-medium text-accent mb-1">Por qué se seleccionó</p>
+                  <p className="text-sm">{selectedCaseTech.selection_rationale}</p>
+                </div>
+              )}
+
+              {/* Links */}
+              {selectedCaseTech.application_data?.web && (
+                <div className="flex items-center gap-2 pt-2">
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <a
+                    href={selectedCaseTech.application_data.web.startsWith('http') 
+                      ? selectedCaseTech.application_data.web 
+                      : `https://${selectedCaseTech.application_data.web}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                  >
+                    {selectedCaseTech.application_data.web}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              )}
+
+              {/* Footer with status and send to review button */}
+              <div className="pt-4 border-t flex justify-between items-center">
+                {getTechStatusBadge(selectedCaseTech)}
+                {!selectedCaseTech.technology_id && !selectedCaseTech.scouting_queue_id && (
+                  <Button 
+                    onClick={() => {
+                      handleSendToScoutingQueue(selectedCaseTech);
+                      setCaseTechModalOpen(false);
+                    }}
+                    disabled={sendingTechId === selectedCaseTech.id}
+                    className="gap-2"
+                  >
+                    {sendingTechId === selectedCaseTech.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <SendHorizonal className="h-4 w-4" />
+                    )}
+                    Enviar a revisión
+                  </Button>
+                )}
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
