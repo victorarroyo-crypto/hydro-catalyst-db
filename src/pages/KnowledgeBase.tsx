@@ -444,9 +444,9 @@ export default function KnowledgeBase() {
   const canManage = userRole === "admin" || userRole === "supervisor" || userRole === "analyst";
   const isAdmin = userRole === "admin";
 
-  // Real-time subscription for document status updates
+  // Real-time subscription for document status updates (Lovable Cloud)
   useEffect(() => {
-    const channel = externalSupabase
+    const channel = supabase
       .channel('doc-status-changes')
       .on(
         'postgres_changes',
@@ -472,7 +472,7 @@ export default function KnowledgeBase() {
       .subscribe();
 
     return () => { 
-      externalSupabase.removeChannel(channel); 
+      supabase.removeChannel(channel); 
     };
   }, [queryClient]);
 
@@ -510,11 +510,11 @@ export default function KnowledgeBase() {
 
   const STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024;
 
-  // Fetch documents
+  // Fetch documents from Lovable Cloud (source of truth for KB documents)
   const { data: documents, isLoading: loadingDocs } = useQuery({
     queryKey: ["knowledge-documents"],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
+      const { data, error } = await supabase
         .from("knowledge_documents")
         .select("*")
         .order("created_at", { ascending: false });
@@ -644,13 +644,13 @@ export default function KnowledgeBase() {
 
   const deleteMutation = useMutation({
     mutationFn: async (doc: KnowledgeDocument) => {
-      // Delete associated chunks first
-      await externalSupabase.from("knowledge_chunks").delete().eq("document_id", doc.id);
+      // Delete associated chunks first (from Lovable Cloud)
+      await supabase.from("knowledge_chunks").delete().eq("document_id", doc.id);
       
-      // Delete from storage
-      await externalSupabase.storage.from("knowledge-documents").remove([doc.file_path]);
+      // Delete from storage (Lovable Cloud)
+      await supabase.storage.from("knowledge-documents").remove([doc.file_path]);
 
-      const { error } = await externalSupabase
+      const { error } = await supabase
         .from("knowledge_documents")
         .delete()
         .eq("id", doc.id);
@@ -670,14 +670,14 @@ export default function KnowledgeBase() {
   const deleteGroupMutation = useMutation({
     mutationFn: async (parts: KnowledgeDocument[]) => {
       for (const part of parts) {
-        // Delete associated chunks
-        await externalSupabase.from("knowledge_chunks").delete().eq("document_id", part.id);
+        // Delete associated chunks (Lovable Cloud)
+        await supabase.from("knowledge_chunks").delete().eq("document_id", part.id);
         
-        // Delete from storage
-        await externalSupabase.storage.from("knowledge-documents").remove([part.file_path]);
+        // Delete from storage (Lovable Cloud)
+        await supabase.storage.from("knowledge-documents").remove([part.file_path]);
 
-        // Delete document record
-        const { error } = await externalSupabase
+        // Delete document record (Lovable Cloud)
+        const { error } = await supabase
           .from("knowledge_documents")
           .delete()
           .eq("id", part.id);
@@ -696,7 +696,7 @@ export default function KnowledgeBase() {
 
   const renameMutation = useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const { error } = await externalSupabase
+      const { error } = await supabase
         .from("knowledge_documents")
         .update({ name })
         .eq("id", id);
@@ -733,7 +733,7 @@ export default function KnowledgeBase() {
           newName = `${newBaseName}.pdf`;
         }
         
-        const { error } = await externalSupabase
+        const { error } = await supabase
           .from("knowledge_documents")
           .update({ name: newName })
           .eq("id", part.id);
@@ -1393,10 +1393,10 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Update document description
+  // Update document description (Lovable Cloud)
   const updateDescriptionMutation = useMutation({
     mutationFn: async ({ docId, description }: { docId: string; description: string }) => {
-      const { error } = await externalSupabase
+      const { error } = await supabase
         .from('knowledge_documents')
         .update({ description, updated_at: new Date().toISOString() })
         .eq('id', docId);
@@ -1413,10 +1413,10 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Update document category/sector mutation
+  // Update document category/sector mutation (Lovable Cloud)
   const updateCategoryMutation = useMutation({
     mutationFn: async ({ docId, category, sector }: { docId: string; category: string | null; sector: string | null }) => {
-      const { error } = await externalSupabase
+      const { error } = await supabase
         .from('knowledge_documents')
         .update({ category, sector, updated_at: new Date().toISOString() })
         .eq('id', docId);
