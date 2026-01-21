@@ -39,26 +39,29 @@ import { getModelPricing, formatCost, estimateCostFromTotal } from "@/lib/aiMode
 import { useLLMModels, getDefaultModel, formatModelCost } from "@/hooks/useLLMModels";
 import { API_URL } from "@/lib/api";
 
-// Helper function to call KB Railway proxy (server-side secret handling)
-const callKBProxy = async (endpoint: string, method: 'GET' | 'POST' = 'POST', payload?: any): Promise<any> => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('No autenticado');
+// Railway API configuration for Knowledge Base operations
+const KB_API_BASE = import.meta.env.VITE_API_URL || 'https://watertech-scouting-production.up.railway.app';
+const KB_SYNC_SECRET = import.meta.env.VITE_SYNC_WEBHOOK_SECRET || 'wt-sync-2026-secure';
 
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kb-railway-proxy`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ endpoint, method, payload }),
-    }
-  );
+// Direct Railway API call for KB operations
+const callKBRailway = async (endpoint: string, method: 'GET' | 'POST' = 'POST', payload?: any): Promise<any> => {
+  const headers: Record<string, string> = {
+    'X-Sync-Secret': KB_SYNC_SECRET,
+  };
+  
+  if (method === 'POST' && payload) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(`${KB_API_BASE}${endpoint}`, {
+    method,
+    headers,
+    body: payload ? JSON.stringify(payload) : undefined,
+  });
 
   const data = await response.json();
   
-  if (!response.ok || !data.success) {
+  if (!response.ok) {
     throw new Error(data.message || data.error || `Error ${response.status}`);
   }
   
@@ -620,9 +623,9 @@ export default function KnowledgeBase() {
       }
       console.log("[KB-UPLOAD] Document registered in DB:", doc.id);
 
-      console.log("[KB-UPLOAD] Calling Railway API via proxy to process document...");
+      console.log("[KB-UPLOAD] Calling Railway API directly to process document...");
       try {
-        await callKBProxy('/api/kb/process', 'POST', { document_id: doc.id });
+        await callKBRailway('/api/kb/process', 'POST', { document_id: doc.id });
         console.log("[KB-UPLOAD] Processing initiated successfully");
       } catch (processError) {
         console.error("[KB-UPLOAD] Processing error:", processError);
@@ -1353,7 +1356,7 @@ export default function KnowledgeBase() {
     toast.info(`Enviando "${docName}" a procesar...`, { duration: 2000 });
     
     try {
-      await callKBProxy(`/api/kb/reprocess/${docId}`);
+      await callKBRailway(`/api/kb/reprocess/${docId}`);
       
       // Mark as recently sent for visual feedback
       setRecentlySentParts(prev => new Set(prev).add(docId));
@@ -1382,7 +1385,7 @@ export default function KnowledgeBase() {
   // Legacy mutation for compatibility (uses granular state now)
   const reprocessMutation = useMutation({
     mutationFn: async (docId: string) => {
-      await callKBProxy(`/api/kb/reprocess/${docId}`);
+      await callKBRailway(`/api/kb/reprocess/${docId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
@@ -1432,11 +1435,11 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Download document handler
+  // Download document handler - direct Railway call
   const handleDownloadDocument = async (doc: KnowledgeDocument) => {
     try {
-      console.log('Download document via proxy:', doc.id);
-      const data = await callKBProxy(`/api/kb/document/${doc.id}/download`, 'GET');
+      console.log('Download document via Railway:', doc.id);
+      const data = await callKBRailway(`/api/kb/document/${doc.id}/download`, 'GET');
       
       if (data.download_url) {
         // Open the pre-signed download URL in a new tab
@@ -1527,9 +1530,9 @@ export default function KnowledgeBase() {
     
     setGeneratingDescId(doc.id);
     try {
-      console.log('Generate description via proxy:', doc.id);
+      console.log('Generate description via Railway:', doc.id);
       
-      const data = await callKBProxy(`/api/kb/document/${doc.id}/generate-description`);
+      const data = await callKBRailway(`/api/kb/document/${doc.id}/generate-description`);
       
       // data.ai_analysis contiene: suggested_title, description, keywords, suggested_category
       const aiAnalysis = data.ai_analysis;
@@ -1793,7 +1796,7 @@ export default function KnowledgeBase() {
     
     for (const doc of toReprocess) {
       try {
-        await callKBProxy(`/api/kb/reprocess/${doc.id}`);
+        await callKBRailway(`/api/kb/reprocess/${doc.id}`);
         successCount++;
       } catch (err) {
         errorCount++;
