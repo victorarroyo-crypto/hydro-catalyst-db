@@ -1496,28 +1496,21 @@ export default function KnowledgeBase() {
     }
   };
 
-  // Generate AI description for an existing document using Railway backend
+  // Generate AI description for an existing document via Edge Function → Railway
   const handleGenerateDescriptionForDoc = async (doc: KnowledgeDocument) => {
     setGeneratingDescId(doc.id);
     try {
-      const response = await fetch(`${API_URL}/api/kb/generate-description`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileName: doc.name,
-          category: doc.category,
-          sector: doc.sector,
-        }),
+      // Call Edge Function which securely adds the X-Sync-Secret header
+      const { data, error } = await supabase.functions.invoke('generate-kb-description', {
+        body: { documentId: doc.id },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Error generando descripción');
+      if (error) throw error;
+      
+      if (data.error) {
+        throw new Error(data.error);
       }
 
-      const data = await response.json();
       setEditingDescription(data.description || '');
       toast.success("Descripción generada");
     } catch (error) {
