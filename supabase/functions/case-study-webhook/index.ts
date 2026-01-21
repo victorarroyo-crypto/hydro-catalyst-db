@@ -94,6 +94,20 @@ interface SimilarCase {
 interface WebhookPayload {
   event: WebhookEvent
   job_id: string
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // v12.7+ ROOT LEVEL FIELDS - CaseStudyCrew sends these at payload root
+  // ═══════════════════════════════════════════════════════════════════
+  caso_titulo?: string
+  caso_cliente?: string
+  caso_pais?: string
+  caso_descripcion_problema?: string
+  caso_solucion_aplicada?: string
+  caso_resultados?: string
+  technologies?: RailwayTechnologyFlat[]
+  quality_score?: number
+  similar_cases?: SimilarCase[]
+  
   data?: {
     progress?: number
     quality_score?: number
@@ -129,23 +143,15 @@ interface WebhookPayload {
     decision?: 'create_new' | 'merge'
     merge_target_id?: string
     
-    // ═══════════════════════════════════════════════════════════════
-    // v13 ESTRUCTURA PLANA (completed event) - Campos directos en data
-    // ═══════════════════════════════════════════════════════════════
-    
-    // Campos del caso (prefijo caso_)
+    // Legacy: v13 ESTRUCTURA PLANA en data (backward compat)
     caso_titulo?: string
     caso_cliente?: string
     caso_pais?: string
     caso_descripcion_problema?: string
     caso_solucion_aplicada?: string
     caso_resultados?: string
-    
-    // Array de tecnologías plano
     technologies?: RailwayTechnologyFlat[]
-    
-    // IDs y conteos
-    case_study_id?: string  // UUID del caso en Railway
+    case_study_id?: string
     technologies_found_in_db?: number
   }
   timestamp?: string
@@ -311,11 +317,27 @@ serve(async (req) => {
 
     const payload: WebhookPayload = await req.json()
     const { event, job_id, data, timestamp } = payload
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // v12.7+ ROOT LEVEL EXTRACTION - Read fields from payload root first
+    // ═══════════════════════════════════════════════════════════════════
+    const rootCasoTitulo = payload.caso_titulo;
+    const rootCasoCliente = payload.caso_cliente;
+    const rootCasoPais = payload.caso_pais;
+    const rootCasoDescripcion = payload.caso_descripcion_problema;
+    const rootCasoSolucion = payload.caso_solucion_aplicada;
+    const rootCasoResultados = payload.caso_resultados;
+    const rootTechnologies = payload.technologies;
+    const rootQualityScore = payload.quality_score;
+    const rootSimilarCases = payload.similar_cases;
 
     console.log(`[CASE-STUDY-WEBHOOK] ==========================================`)
     console.log(`[CASE-STUDY-WEBHOOK] Received event: "${event}" for job: ${job_id}`)
     console.log(`[CASE-STUDY-WEBHOOK] Progress: ${data?.progress}`)
     console.log(`[CASE-STUDY-WEBHOOK] Phase label: ${PHASE_LABELS[event] || event}`)
+    console.log(`[CASE-STUDY-WEBHOOK] ROOT-level caso_titulo: ${rootCasoTitulo?.slice(0, 50) || 'null'}`)
+    console.log(`[CASE-STUDY-WEBHOOK] ROOT-level technologies: ${rootTechnologies?.length || 0} items`)
+    console.log(`[CASE-STUDY-WEBHOOK] ROOT-level quality_score: ${rootQualityScore}`)
     console.log(`[CASE-STUDY-WEBHOOK] Full data:`, JSON.stringify(data || {}).slice(0, 1000))
     console.log(`[CASE-STUDY-WEBHOOK] Timestamp: ${timestamp}`)
 
@@ -470,14 +492,20 @@ serve(async (req) => {
       updateData.completed_at = timestamp || new Date().toISOString()
       updateData.progress_percentage = 100
       
-      if (data?.quality_score !== undefined) {
-        updateData.quality_score = data.quality_score
+      // ═══════════════════════════════════════════════════════════════════
+      // v12.7+ READ FROM ROOT LEVEL FIRST, fallback to data.*
+      // ═══════════════════════════════════════════════════════════════════
+      const finalQualityScore = rootQualityScore ?? data?.quality_score;
+      if (finalQualityScore !== undefined) {
+        updateData.quality_score = finalQualityScore
       }
-      if (data?.total_technologies !== undefined) {
-        updateData.technologies_found = data.total_technologies
-      } else if (data?.technologies_found !== undefined) {
-        updateData.technologies_found = data.technologies_found
+      
+      // Technologies count - check root first, then data
+      const finalTechnologiesCount = rootTechnologies?.length ?? data?.total_technologies ?? data?.technologies_found;
+      if (finalTechnologiesCount !== undefined) {
+        updateData.technologies_found = finalTechnologiesCount
       }
+      
       if (data?.new_for_scouting !== undefined) {
         updateData.technologies_new = data.new_for_scouting
       } else if (data?.technologies_new !== undefined) {
@@ -506,51 +534,67 @@ serve(async (req) => {
         const { result_data: _nested, ...dataWithoutNested } = data as any;
         
         // ═══════════════════════════════════════════════════════════════════
-        // MAPEO Railway → UI: Crear estructura "extracted" para CaseStudyFormView
-        // Railway envía: caso_titulo, caso_cliente, caso_pais, etc.
-        // UI espera: extracted.title, extracted.sector, extracted.country, etc.
+        // v12.7+ MAPEO Railway → UI: READ FROM ROOT LEVEL FIRST
+        // Campos ahora vienen en payload.caso_titulo, NO payload.data.caso_titulo
         // ═══════════════════════════════════════════════════════════════════
         const rawData = { ...dataWithoutNested, ...(nestedResultData || {}) };
         
+        // Use ROOT-level fields with fallback to data.* for backward compatibility
+        const finalCasoTitulo = rootCasoTitulo || rawData.caso_titulo || '';
+        const finalCasoCliente = rootCasoCliente || rawData.caso_cliente || '';
+        const finalCasoPais = rootCasoPais || rawData.caso_pais || '';
+        const finalCasoDescripcion = rootCasoDescripcion || rawData.caso_descripcion_problema || '';
+        const finalCasoSolucion = rootCasoSolucion || rawData.caso_solucion_aplicada || '';
+        const finalCasoResultados = rootCasoResultados || rawData.caso_resultados || '';
+        
         // 🔍 DEBUG: Ver estructura exacta de datos recibidos
-        console.log('[WEBHOOK] ============ DEBUG TECHNOLOGIES ============');
+        console.log('[WEBHOOK] ============ DEBUG v12.7 ROOT FIELDS ============');
+        console.log('[WEBHOOK] ROOT caso_titulo:', rootCasoTitulo?.slice(0, 50) || 'null');
+        console.log('[WEBHOOK] ROOT caso_cliente:', rootCasoCliente || 'null');
+        console.log('[WEBHOOK] ROOT caso_pais:', rootCasoPais || 'null');
+        console.log('[WEBHOOK] ROOT technologies count:', rootTechnologies?.length || 0);
+        console.log('[WEBHOOK] ROOT quality_score:', rootQualityScore);
         console.log('[WEBHOOK] dataWithoutNested keys:', Object.keys(dataWithoutNested));
         console.log('[WEBHOOK] nestedResultData keys:', nestedResultData ? Object.keys(nestedResultData as object) : 'null');
         console.log('[WEBHOOK] rawData keys:', Object.keys(rawData));
-        console.log('[WEBHOOK] data.technologies type:', typeof (data as any).technologies);
-        console.log('[WEBHOOK] data.technologies isArray:', Array.isArray((data as any).technologies));
-        console.log('[WEBHOOK] rawData.technologies type:', typeof rawData.technologies);
-        console.log('[WEBHOOK] rawData.technologies isArray:', Array.isArray(rawData.technologies));
+        console.log('[WEBHOOK] FINAL caso_titulo:', finalCasoTitulo?.slice(0, 50) || 'empty');
         
-        // Log raw structure for debugging
-        if ((data as any).technologies) {
-          console.log('[WEBHOOK] data.technologies preview:', 
-            JSON.stringify((data as any).technologies)?.slice(0, 500) || 'undefined'
+        // Log technologies from root
+        if (rootTechnologies) {
+          console.log('[WEBHOOK] ROOT technologies preview:', 
+            JSON.stringify(rootTechnologies)?.slice(0, 500) || 'undefined'
           );
         }
         
         const extractedForUI = {
-          title: rawData.caso_titulo || '',
-          sector: rawData.caso_cliente || '',
-          country: rawData.caso_pais || '',
+          title: finalCasoTitulo,
+          sector: finalCasoCliente,
+          country: finalCasoPais,
           problem: {
-            description: rawData.caso_descripcion_problema || '',
+            description: finalCasoDescripcion,
             parameters: [],
           },
           solution: {
-            description: rawData.caso_solucion_aplicada || '',
+            description: finalCasoSolucion,
             treatment_train: [],
           },
           results: {
-            description: rawData.caso_resultados || '',
+            description: finalCasoResultados,
           },
         };
         
-        // ✅ FIX: Buscar technologies en MÚLTIPLES ubicaciones posibles
+        // ═══════════════════════════════════════════════════════════════════
+        // v12.7+ TECHNOLOGIES: CHECK ROOT LEVEL FIRST (payload.technologies)
+        // ═══════════════════════════════════════════════════════════════════
         let rawTechnologies: any[] = [];
         
-        // 1. Primero buscar directamente en data (prioridad máxima)
-        if (Array.isArray((data as any).technologies)) {
+        // 0. PRIORITY: Check ROOT level (v12.7+)
+        if (Array.isArray(rootTechnologies) && rootTechnologies.length > 0) {
+          rawTechnologies = rootTechnologies;
+          console.log('[WEBHOOK] ✅ Found technologies in ROOT payload:', rawTechnologies.length);
+        }
+        // 1. Fallback: buscar directamente en data
+        else if (Array.isArray((data as any).technologies)) {
           rawTechnologies = (data as any).technologies;
           console.log('[WEBHOOK] ✅ Found technologies in data (flat array):', rawTechnologies.length);
         }
@@ -582,22 +626,6 @@ serve(async (req) => {
           rawTechnologies = (nestedResultData as any).technologies;
           console.log('[WEBHOOK] ✅ Found technologies in nestedResultData:', rawTechnologies.length);
         }
-        // 5. También buscar en data.technologies si es objeto
-        else if ((data as any).technologies && typeof (data as any).technologies === 'object') {
-          const techObj = (data as any).technologies;
-          console.log('[WEBHOOK] data.technologies is object, keys:', Object.keys(techObj));
-          
-          if (Array.isArray(techObj.technologies_found)) {
-            rawTechnologies = [...rawTechnologies, ...techObj.technologies_found];
-          }
-          if (Array.isArray(techObj.technologies_new)) {
-            rawTechnologies = [...rawTechnologies, ...techObj.technologies_new];
-          }
-          if (Array.isArray(techObj.items)) {
-            rawTechnologies = [...rawTechnologies, ...techObj.items];
-          }
-          console.log('[WEBHOOK] Extracted from data.technologies object:', rawTechnologies.length);
-        }
         
         console.log('[WEBHOOK] FINAL rawTechnologies count:', rawTechnologies.length);
         if (rawTechnologies.length > 0) {
@@ -626,16 +654,28 @@ serve(async (req) => {
           web: tech.web,
         }));
         
-        // ✅ FIX: Buscar similar_cases en múltiples ubicaciones
+        // ═══════════════════════════════════════════════════════════════════
+        // v12.7+ SIMILAR_CASES: CHECK ROOT LEVEL FIRST (payload.similar_cases)
+        // ═══════════════════════════════════════════════════════════════════
         let rawSimilarCases: any[] = [];
         
-        if (Array.isArray((data as any).similar_cases)) {
+        // 0. PRIORITY: Check ROOT level (v12.7+)
+        if (Array.isArray(rootSimilarCases) && rootSimilarCases.length > 0) {
+          rawSimilarCases = rootSimilarCases;
+          console.log('[WEBHOOK] ✅ Found similar_cases in ROOT payload:', rawSimilarCases.length);
+        }
+        // 1. Fallback: buscar en data
+        else if (Array.isArray((data as any).similar_cases)) {
           rawSimilarCases = (data as any).similar_cases;
           console.log('[WEBHOOK] ✅ Found similar_cases in data:', rawSimilarCases.length);
-        } else if (Array.isArray(rawData.similar_cases)) {
+        } 
+        // 2. Buscar en rawData
+        else if (Array.isArray(rawData.similar_cases)) {
           rawSimilarCases = rawData.similar_cases as any[];
           console.log('[WEBHOOK] ✅ Found similar_cases in rawData:', rawSimilarCases.length);
-        } else if (nestedResultData && Array.isArray((nestedResultData as any).similar_cases)) {
+        } 
+        // 3. Buscar en nestedResultData
+        else if (nestedResultData && Array.isArray((nestedResultData as any).similar_cases)) {
           rawSimilarCases = (nestedResultData as any).similar_cases;
           console.log('[WEBHOOK] ✅ Found similar_cases in nestedResultData:', rawSimilarCases.length);
         }
@@ -677,45 +717,58 @@ serve(async (req) => {
       console.log('[CASE-STUDY-WEBHOOK] case_study_id:', caseStudyId);
       
       // ═══════════════════════════════════════════════════════════════════
-      // v13: DETECTAR ESTRUCTURA PLANA (campos caso_* directos en data)
+      // v12.7+ DETECTAR ESTRUCTURA - Campos en ROOT o en data
       // ═══════════════════════════════════════════════════════════════════
-      const isV13Flat = !!(data?.caso_titulo || data?.caso_descripcion_problema || data?.technologies);
-      console.log('[CASE-STUDY-WEBHOOK] Estructura detectada:', isV13Flat ? 'v13 PLANA' : 'Legacy anidada');
+      const hasRootFields = !!(rootCasoTitulo || rootCasoDescripcion || rootTechnologies);
+      const hasDataFields = !!(data?.caso_titulo || data?.caso_descripcion_problema || data?.technologies);
+      const isV12Plus = hasRootFields || hasDataFields;
       
-      if (isV13Flat && data) {
+      console.log('[CASE-STUDY-WEBHOOK] Estructura detectada:', 
+        hasRootFields ? 'v12.7+ ROOT LEVEL' : 
+        hasDataFields ? 'v13 en data.*' : 'Legacy anidada');
+      
+      if (isV12Plus) {
         // ════════════════════════════════════════════════════════════════
-        // PROCESO 1: Campos del caso (v13 plana)
+        // PROCESO 1: Campos del caso - USE ROOT LEVEL FIRST
         // ════════════════════════════════════════════════════════════════
-        console.log('[CASE-STUDY-WEBHOOK] Procesando campos caso_* (v13)...');
+        console.log('[CASE-STUDY-WEBHOOK] Procesando campos caso_* (v12.7+)...');
         
         if (caseStudyId) {
           const caseUpdateData: Record<string, unknown> = {
             updated_at: new Date().toISOString(),
           };
           
-          if (data.caso_titulo) {
-            caseUpdateData.name = data.caso_titulo;
-            console.log('[CASE-STUDY-WEBHOOK] → name:', data.caso_titulo.slice(0, 80) + '...');
+          // Use ROOT-level fields with fallback to data.*
+          const titleToSave = rootCasoTitulo || data?.caso_titulo;
+          const clienteToSave = rootCasoCliente || data?.caso_cliente;
+          const paisToSave = rootCasoPais || data?.caso_pais;
+          const descripcionToSave = rootCasoDescripcion || data?.caso_descripcion_problema;
+          const solucionToSave = rootCasoSolucion || data?.caso_solucion_aplicada;
+          const resultadosToSave = rootCasoResultados || data?.caso_resultados;
+          
+          if (titleToSave) {
+            caseUpdateData.name = titleToSave;
+            console.log('[CASE-STUDY-WEBHOOK] → name:', titleToSave.slice(0, 80) + '...');
           }
-          if (data.caso_cliente) {
-            caseUpdateData.entity_type = data.caso_cliente;
-            console.log('[CASE-STUDY-WEBHOOK] → entity_type:', data.caso_cliente);
+          if (clienteToSave) {
+            caseUpdateData.entity_type = clienteToSave;
+            console.log('[CASE-STUDY-WEBHOOK] → entity_type:', clienteToSave);
           }
-          if (data.caso_pais) {
-            caseUpdateData.country = data.caso_pais;
-            console.log('[CASE-STUDY-WEBHOOK] → country:', data.caso_pais);
+          if (paisToSave) {
+            caseUpdateData.country = paisToSave;
+            console.log('[CASE-STUDY-WEBHOOK] → country:', paisToSave);
           }
-          if (data.caso_descripcion_problema) {
-            caseUpdateData.description = data.caso_descripcion_problema;
-            console.log('[CASE-STUDY-WEBHOOK] → description:', data.caso_descripcion_problema.slice(0, 80) + '...');
+          if (descripcionToSave) {
+            caseUpdateData.description = descripcionToSave;
+            console.log('[CASE-STUDY-WEBHOOK] → description:', descripcionToSave.slice(0, 80) + '...');
           }
-          if (data.caso_solucion_aplicada) {
-            caseUpdateData.solution_applied = data.caso_solucion_aplicada;
-            console.log('[CASE-STUDY-WEBHOOK] → solution_applied:', data.caso_solucion_aplicada.slice(0, 80) + '...');
+          if (solucionToSave) {
+            caseUpdateData.solution_applied = solucionToSave;
+            console.log('[CASE-STUDY-WEBHOOK] → solution_applied:', solucionToSave.slice(0, 80) + '...');
           }
-          if (data.caso_resultados) {
-            caseUpdateData.results_achieved = data.caso_resultados;
-            console.log('[CASE-STUDY-WEBHOOK] → results_achieved:', data.caso_resultados.slice(0, 80) + '...');
+          if (resultadosToSave) {
+            caseUpdateData.results_achieved = resultadosToSave;
+            console.log('[CASE-STUDY-WEBHOOK] → results_achieved:', resultadosToSave.slice(0, 80) + '...');
           }
           
           const fieldsToUpdate = Object.keys(caseUpdateData).length - 1;
@@ -734,22 +787,22 @@ serve(async (req) => {
         }
         
         // ════════════════════════════════════════════════════════════════
-        // PROCESO 2: Tecnologías (v13 array plano)
+        // PROCESO 2: Tecnologías - USE ROOT LEVEL FIRST
         // ════════════════════════════════════════════════════════════════
-        const flatTechs = data.technologies as RailwayTechnologyFlat[] | undefined;
-        console.log('[CASE-STUDY-WEBHOOK] technologies array:', flatTechs?.length || 0, 'items');
+        const techsToQueue = rootTechnologies || data?.technologies as RailwayTechnologyFlat[] | undefined;
+        console.log('[CASE-STUDY-WEBHOOK] technologies array:', techsToQueue?.length || 0, 'items');
         
-        if (Array.isArray(flatTechs) && flatTechs.length > 0) {
-          console.log('[CASE-STUDY-WEBHOOK] Primera tecnología:', JSON.stringify(flatTechs[0]).slice(0, 400));
+        if (Array.isArray(techsToQueue) && techsToQueue.length > 0) {
+          console.log('[CASE-STUDY-WEBHOOK] Primera tecnología:', JSON.stringify(techsToQueue[0]).slice(0, 400));
           
           const result = await queueFlatTechnologiesForScouting(
             supabase,
             caseStudyId,
-            flatTechs
+            techsToQueue
           );
           console.log(`[CASE-STUDY-WEBHOOK] ✅ Tecnologías: ${result.inserted} nuevas, ${result.skipped} existentes, ${result.failed} fallidas`);
         } else {
-          console.log('[CASE-STUDY-WEBHOOK] ⚠️ No hay technologies en data');
+          console.log('[CASE-STUDY-WEBHOOK] ⚠️ No hay technologies en ROOT ni data');
         }
         
       } else if (data?.result_data) {
