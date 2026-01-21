@@ -594,17 +594,27 @@ export default function KnowledgeBase() {
       }
       console.log("[KB-UPLOAD] Document registered in DB:", doc.id);
 
-      console.log("[KB-UPLOAD] Invoking process-knowledge-document function...");
-      const { error: processError } = await supabase.functions.invoke(
-        "process-knowledge-document",
-        { body: { documentId: doc.id } }
-      );
+      console.log("[KB-UPLOAD] Calling Railway API to process document...");
+      try {
+        const processResponse = await fetch(`${API_URL}/api/kb/process`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+          },
+          body: JSON.stringify({ document_id: doc.id }),
+        });
 
-      if (processError) {
+        if (!processResponse.ok) {
+          const errorData = await processResponse.json().catch(() => ({}));
+          console.error("[KB-UPLOAD] Processing error:", errorData);
+          toast.error("Documento subido pero hubo un error al procesarlo");
+        } else {
+          console.log("[KB-UPLOAD] Processing initiated successfully");
+        }
+      } catch (processError) {
         console.error("[KB-UPLOAD] Processing error:", processError);
         toast.error("Documento subido pero hubo un error al procesarlo");
-      } else {
-        console.log("[KB-UPLOAD] Processing initiated successfully");
       }
 
       return doc;
@@ -1331,10 +1341,16 @@ export default function KnowledgeBase() {
     toast.info(`Enviando "${docName}" a procesar...`, { duration: 2000 });
     
     try {
-      const { error } = await supabase.functions.invoke('process-knowledge-document', {
-        body: { documentId: docId, forceReprocess: true }
+      const response = await fetch(`${API_URL}/api/kb/reprocess/${docId}`, {
+        method: 'POST',
+        headers: {
+          'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+        },
       });
-      if (error) throw error;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+        throw new Error(errorData.error || `Error ${response.status}`);
+      }
       
       // Mark as recently sent for visual feedback
       setRecentlySentParts(prev => new Set(prev).add(docId));
@@ -1363,10 +1379,16 @@ export default function KnowledgeBase() {
   // Legacy mutation for compatibility (uses granular state now)
   const reprocessMutation = useMutation({
     mutationFn: async (docId: string) => {
-      const { error } = await supabase.functions.invoke('process-knowledge-document', {
-        body: { documentId: docId, forceReprocess: true }
+      const response = await fetch(`${API_URL}/api/kb/reprocess/${docId}`, {
+        method: 'POST',
+        headers: {
+          'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+        },
       });
-      if (error) throw error;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+        throw new Error(errorData.error || `Error ${response.status}`);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
@@ -1496,22 +1518,26 @@ export default function KnowledgeBase() {
     }
   };
 
-  // Generate AI description for an existing document via Edge Function → Railway
+  // Generate AI description for an existing document via Railway API
   const handleGenerateDescriptionForDoc = async (doc: KnowledgeDocument) => {
     setGeneratingDescId(doc.id);
     try {
-      // Call Edge Function which securely adds the X-Sync-Secret header
-      const { data, error } = await supabase.functions.invoke('generate-kb-description', {
-        body: { documentId: doc.id },
+      const response = await fetch(`${API_URL}/api/kb/document/${doc.id}/generate-description`, {
+        method: 'POST',
+        headers: {
+          'X-Sync-Secret': import.meta.env.VITE_SYNC_SECRET || '',
+        },
       });
 
-      if (error) throw error;
-      
-      if (data.error) {
-        throw new Error(data.error);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+        throw new Error(errorData.error || `Error ${response.status}`);
       }
 
-      setEditingDescription(data.description || '');
+      const data = await response.json();
+      const description = data.ai_analysis?.description || data.description || '';
+      
+      setEditingDescription(description);
       toast.success("Descripción generada");
     } catch (error) {
       console.error('Generate description error:', error);
