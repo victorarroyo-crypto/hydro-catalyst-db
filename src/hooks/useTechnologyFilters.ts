@@ -68,9 +68,10 @@ export function useTechnologyFilters() {
   useEffect(() => {
     const fetchFilterOptions = async () => {
       // Fetch a capped set (avoid implicit pagination / large responses)
+      // Using snake_case field names for external DB
       const { data: allTech } = await externalSupabase
         .from('technologies')
-        .select('"Tipo de tecnología", "Subcategoría", "País de origen", "Sector y subsector", status')
+        .select('tipo, sector, pais, status')
         .range(0, 999);
 
       if (!allTech) {
@@ -93,10 +94,10 @@ export function useTechnologyFilters() {
       };
 
       setFilterOptions({
-        tiposTecnologia: countByField('Tipo de tecnología'),
-        subcategorias: countByField('Subcategoría'),
-        paises: countByField('País de origen'),
-        sectores: countByField('Sector y subsector'),
+        tiposTecnologia: countByField('tipo'),
+        subcategorias: [], // Not in snake_case schema as single field
+        paises: countByField('pais'),
+        sectores: countByField('sector'),
         estados: countByField('status'),
       });
       setLoading(false);
