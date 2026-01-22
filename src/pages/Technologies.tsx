@@ -13,8 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { TechnologyFiltersPanel } from '@/components/TechnologyFiltersPanel';
 import { TechnologyCard } from '@/components/TechnologyCard';
 import { TechnologyTable } from '@/components/TechnologyTable';
-import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
-import { TechnologyFormModal } from '@/components/TechnologyFormModal';
+import { TechnologyUnifiedModal } from '@/components/TechnologyUnifiedModal';
 import { AISearchBar, AISearchFilters } from '@/components/AISearchBar';
 import { AIClassificationPanel } from '@/components/AIClassificationPanel';
 import { useTechnologyFilters, TaxonomyFilters } from '@/hooks/useTechnologyFilters';
@@ -66,9 +65,8 @@ const Technologies: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [page, setPage] = useState(1);
   const [selectedTechnology, setSelectedTechnology] = useState<Technology | null>(null);
-  const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [formModalOpen, setFormModalOpen] = useState(false);
-  const [editingTechnology, setEditingTechnology] = useState<Technology | null>(null);
+  const [unifiedModalOpen, setUnifiedModalOpen] = useState(false);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
   
   // AI Search state
   const [aiSearchIds, setAiSearchIds] = useState<string[] | null>(null);
@@ -219,24 +217,21 @@ const Technologies: React.FC = () => {
 
   const handleTechnologyClick = (tech: Technology) => {
     setSelectedTechnology(tech);
-    setDetailModalOpen(true);
-  };
-
-  const handleEditTechnology = (tech: Technology) => {
-    setEditingTechnology(tech);
-    setDetailModalOpen(false);
-    setFormModalOpen(true);
+    setIsCreatingNew(false);
+    setUnifiedModalOpen(true);
   };
 
   const handleCreateTechnology = () => {
-    setEditingTechnology(null);
-    setFormModalOpen(true);
+    setSelectedTechnology(null);
+    setIsCreatingNew(true);
+    setUnifiedModalOpen(true);
   };
 
-  const handleFormSuccess = () => {
+  const handleModalSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['technologies'] });
-    setFormModalOpen(false);
-    setEditingTechnology(null);
+    setUnifiedModalOpen(false);
+    setSelectedTechnology(null);
+    setIsCreatingNew(false);
   };
 
   // Mutation to create project with technologies using external API
@@ -583,20 +578,13 @@ const Technologies: React.FC = () => {
         </div>
       </div>
 
-      {/* Technology Detail Modal */}
-      <TechnologyDetailModal
+      {/* Technology Unified Modal */}
+      <TechnologyUnifiedModal
         technology={selectedTechnology}
-        open={detailModalOpen}
-        onOpenChange={setDetailModalOpen}
-        onEdit={canEdit ? () => handleEditTechnology(selectedTechnology!) : undefined}
-      />
-
-      {/* Technology Form Modal */}
-      <TechnologyFormModal
-        technology={editingTechnology}
-        open={formModalOpen}
-        onOpenChange={setFormModalOpen}
-        onSuccess={handleFormSuccess}
+        open={unifiedModalOpen}
+        onOpenChange={setUnifiedModalOpen}
+        onSuccess={handleModalSuccess}
+        startInEditMode={isCreatingNew}
       />
 
       {/* Save Search as Project Modal */}

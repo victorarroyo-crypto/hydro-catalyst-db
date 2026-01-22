@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { TRLBadge } from '@/components/TRLBadge';
-import { ScoutingTechFormModal } from '@/components/ScoutingTechFormModal';
+import { TechnologyUnifiedModal } from '@/components/TechnologyUnifiedModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import {
@@ -537,20 +537,20 @@ const Scouting = () => {
         )}
       </div>
 
-      {/* Technology Form Modal */}
-      {selectedTech && (
-        <ScoutingTechFormModal
-          technology={selectedTech}
-          open={showFormModal}
-          onOpenChange={(open) => {
-            setShowFormModal(open);
-            if (!open) setSelectedTech(null);
-          }}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
-          }}
-        />
-      )}
+      {/* Technology Unified Modal */}
+      <TechnologyUnifiedModal
+        scoutingItem={selectedTech}
+        open={showFormModal}
+        onOpenChange={(open) => {
+          setShowFormModal(open);
+          if (!open) setSelectedTech(null);
+        }}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
+          queryClient.invalidateQueries({ queryKey: ['active-scouting-queue'] });
+          queryClient.invalidateQueries({ queryKey: ['scouting-counts'] });
+        }}
+      />
 
       {/* Approval Dialog with editable email */}
       <AlertDialog open={!!approvalDialog} onOpenChange={() => setApprovalDialog(null)}>
