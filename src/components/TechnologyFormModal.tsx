@@ -557,29 +557,29 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
                   proveedor: formData.proveedor,
                   web: formData.web,
                   pais: formData.pais,
-                  tipo_sugerido: formData.tipo,
+                  tipo: formData.tipo,
                   subcategoria: taxonomySelections.subcategorias[0] || '',
                   sector: formData.sector,
                   descripcion: formData.descripcion,
-                  aplicacion_principal: formData.aplicacion,
-                  ventaja_competitiva: formData.ventaja,
+                  aplicacion: formData.aplicacion,
+                  ventaja: formData.ventaja,
                   innovacion: formData.innovacion,
-                  trl_estimado: formData.trl,
+                  trl: formData.trl ?? null,
                   casos_referencia: formData.casos_referencia,
                   paises_actua: formData.paises_actua,
-                  comentarios_analista: formData.comentarios,
+                  comentarios: formData.comentarios,
                 }}
                 onEnrichmentComplete={(enriched) => {
                   setFormData(prev => ({
                     ...prev,
                     descripcion: typeof enriched.descripcion === 'string' ? enriched.descripcion : prev.descripcion,
-                    aplicacion: typeof enriched.aplicacion_principal === 'string' ? enriched.aplicacion_principal : prev.aplicacion,
-                    ventaja: typeof enriched.ventaja_competitiva === 'string' ? enriched.ventaja_competitiva : prev.ventaja,
+                    aplicacion: typeof enriched.aplicacion === 'string' ? enriched.aplicacion : prev.aplicacion,
+                    ventaja: typeof enriched.ventaja === 'string' ? enriched.ventaja : prev.ventaja,
                     innovacion: typeof enriched.innovacion === 'string' ? enriched.innovacion : prev.innovacion,
                     casos_referencia: typeof enriched.casos_referencia === 'string' ? enriched.casos_referencia : prev.casos_referencia,
                     paises_actua: typeof enriched.paises_actua === 'string' ? enriched.paises_actua : prev.paises_actua,
-                    comentarios: typeof enriched.comentarios_analista === 'string' ? enriched.comentarios_analista : prev.comentarios,
-                    trl: typeof enriched.trl_estimado === 'number' ? enriched.trl_estimado : prev.trl,
+                    comentarios: typeof enriched.comentarios === 'string' ? enriched.comentarios : prev.comentarios,
+                    trl: typeof enriched.trl === 'number' ? enriched.trl : prev.trl,
                   }));
                 }}
               />
