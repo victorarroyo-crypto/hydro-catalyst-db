@@ -348,13 +348,19 @@ export const CaseStudiesSection: React.FC = () => {
     
     setIsDeleting(true);
     try {
-      // First delete associated technologies
+      // 1. First delete associated technologies
       await externalSupabase
         .from('case_study_technologies')
         .delete()
         .eq('case_study_id', caseToDelete.id);
       
-      // Then delete the case study
+      // 2. Delete associated jobs (FK constraint)
+      await externalSupabase
+        .from('case_study_jobs')
+        .delete()
+        .eq('case_study_id', caseToDelete.id);
+      
+      // 3. Finally delete the case study
       const { error } = await externalSupabase
         .from('casos_de_estudio')
         .delete()
@@ -365,6 +371,7 @@ export const CaseStudiesSection: React.FC = () => {
       toast.success('Caso de estudio eliminado correctamente');
       queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
       queryClient.invalidateQueries({ queryKey: ['case-study-tech-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['case-study-jobs-map'] });
     } catch (error) {
       console.error('Error deleting case study:', error);
       toast.error('Error al eliminar el caso de estudio');
