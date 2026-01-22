@@ -103,170 +103,97 @@ const Technologies: React.FC = () => {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['technologies', filters, taxonomyFilters, page, aiSearchIds, reviewFilter],
     queryFn: async () => {
-      const from = (page - 1) * ITEMS_PER_PAGE;
-      const to = from + ITEMS_PER_PAGE - 1;
-
-      // IMPORTANT: Don't batch-fetch >1000 rows from the external DB in the browser.
-      // It can trigger upstream 500 responses (which then surface as CORS errors).
-      // Instead, fetch only the current page and do filtering server-side.
-
-      // Base query (paged) - using snake_case column names
-      let query = externalSupabase
+      // 1. TRAER TODAS LAS TECNOLOGÍAS - Simple query sin filtros complejos
+      const { data: allTechs, error } = await externalSupabase
         .from('technologies')
         .select('*')
-        .order('created_at', { ascending: false, nullsFirst: false })
-        .range(from, to);
-
-      // Count query (same filters, head)
-      let countQuery = externalSupabase
-        .from('technologies')
-        .select('id', { count: 'exact', head: true });
-
-      // Helper to build review status condition
-      const getReviewCondition = (): string | null => {
-        if (reviewFilter === 'in_review') {
-          return 'review_status.eq.in_review';
-        } else if (reviewFilter === 'pending_approval') {
-          return 'review_status.eq.pending_approval';
-        } else if (!reviewFilter) {
-          // Default view: show completed, none, or null
-          return 'review_status.in.(completed,none),review_status.is.null';
-        }
-        return null;
-      };
-
-      // Helper to build search condition
-      const getSearchCondition = (search: string): string => {
-        return `nombre.ilike.%${search}%,proveedor.ilike.%${search}%,descripcion.ilike.%${search}%`;
-      };
-
-      const reviewCondition = getReviewCondition();
-
-      // If AI search is active, filter by AI results first
-      if (aiSearchIds && aiSearchIds.length > 0) {
-        query = query.in('id', aiSearchIds);
-        countQuery = countQuery.in('id', aiSearchIds);
-        if (reviewCondition) {
-          query = query.or(reviewCondition);
-          countQuery = countQuery.or(reviewCondition);
-        }
-      } else if (aiSearchIds && aiSearchIds.length === 0) {
-        return { technologies: [], count: 0 };
-      } else {
-        // Normal filtering when no AI search is active
-        const searchText = filters.search?.trim();
-        
-        // When we have BOTH a search term AND we're in default view (which uses .or() for review_status),
-        // we need to handle the search client-side due to PostgREST limitation with multiple .or() calls
-        const needsClientSideSearch = !reviewFilter && searchText;
-        
-        if (needsClientSideSearch) {
-          // Only apply review filter server-side, search will be done client-side
-          // Fetch more results to allow for client-side filtering
-          query = query.or('review_status.in.(completed,none),review_status.is.null');
-          countQuery = countQuery.or('review_status.in.(completed,none),review_status.is.null');
-          // Remove the range limit temporarily to get more results for client-side filtering
-          query = externalSupabase
-            .from('technologies')
-            .select('*')
-            .or('review_status.in.(completed,none),review_status.is.null')
-            .order('created_at', { ascending: false, nullsFirst: false })
-            .limit(500); // Get more results for client-side filtering
-        } else if (reviewCondition) {
-          // Specific review filter (in_review or pending_approval) uses .eq(), so we can also use .or() for search
-          query = query.or(reviewCondition);
-          countQuery = countQuery.or(reviewCondition);
-          
-          if (searchText) {
-            query = query.or(getSearchCondition(searchText));
-            countQuery = countQuery.or(getSearchCondition(searchText));
-          }
-        } else if (!reviewCondition && searchText) {
-          // No review filter and has search - this shouldn't happen based on logic, but handle it
-          query = query.or(getSearchCondition(searchText));
-          countQuery = countQuery.or(getSearchCondition(searchText));
-        }
-
-        if (filters.tipoTecnologia) {
-          // Filter by tipo text field
-          query = query.eq('tipo', filters.tipoTecnologia);
-          countQuery = countQuery.eq('tipo', filters.tipoTecnologia);
-        }
-
-        if (filters.subcategoria) {
-          // Filter using the subcategorias array
-          query = query.contains('subcategorias', [filters.subcategoria]);
-          countQuery = countQuery.contains('subcategorias', [filters.subcategoria]);
-        }
-
-        if (filters.pais) {
-          query = query.eq('pais', filters.pais);
-          countQuery = countQuery.eq('pais', filters.pais);
-        }
-
-        if (filters.sector) {
-          query = query.eq('sector', filters.sector);
-          countQuery = countQuery.eq('sector', filters.sector);
-        }
-
-        if (filters.status) {
-          query = query.eq('status', filters.status);
-          countQuery = countQuery.eq('status', filters.status);
-        }
-
-        if (filters.trlMin > 1) {
-          query = query.gte('trl', filters.trlMin);
-          countQuery = countQuery.gte('trl', filters.trlMin);
-        }
-
-        if (filters.trlMax < 9) {
-          query = query.lte('trl', filters.trlMax);
-          countQuery = countQuery.lte('trl', filters.trlMax);
-        }
-      }
-
-      const [{ data: technologies, error }, { count, error: countError }] = await Promise.all([
-        query,
-        countQuery,
-      ]);
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (countError) throw countError;
+      if (!allTechs) return { technologies: [], count: 0 };
 
-      let rows = (technologies as Technology[]) || [];
-      
-      // Client-side search filtering when we have both search and default review filter
-      // (due to PostgREST limitation with multiple .or() calls)
-      const searchText = filters.search?.trim()?.toLowerCase();
-      const needsClientSideSearch = !reviewFilter && searchText;
-      
-      if (needsClientSideSearch) {
-        rows = rows.filter(tech => {
-          const nombre = (tech.nombre || '').toLowerCase();
-          const proveedor = (tech.proveedor || '').toLowerCase();
-          const descripcion = (tech.descripcion || '').toLowerCase();
-          return nombre.includes(searchText) || 
-                 proveedor.includes(searchText) || 
-                 descripcion.includes(searchText);
-        });
+      // 2. FILTRAR EN CLIENTE - Simple y directo
+      let filtered = allTechs as Technology[];
+
+      // Filtro de review_status
+      if (reviewFilter === 'in_review') {
+        filtered = filtered.filter(t => t.review_status === 'in_review');
+      } else if (reviewFilter === 'pending_approval') {
+        filtered = filtered.filter(t => t.review_status === 'pending_approval');
+      } else {
+        // Default: completed, none, o null
+        filtered = filtered.filter(t => 
+          t.review_status === 'completed' || 
+          t.review_status === 'none' || 
+          t.review_status === null
+        );
       }
 
-      // When not AI-searching, order by name client-side for nicer UX
+      // AI search IDs
+      if (aiSearchIds && aiSearchIds.length > 0) {
+        filtered = filtered.filter(t => aiSearchIds.includes(t.id));
+      } else if (aiSearchIds && aiSearchIds.length === 0) {
+        return { technologies: [], count: 0 };
+      }
+
+      // Búsqueda por texto - SIMPLE
+      if (filters.search?.trim()) {
+        const search = filters.search.toLowerCase().trim();
+        filtered = filtered.filter(t =>
+          t.nombre?.toLowerCase().includes(search) ||
+          t.proveedor?.toLowerCase().includes(search) ||
+          t.descripcion?.toLowerCase().includes(search)
+        );
+      }
+
+      // Filtro por tipo
+      if (filters.tipoTecnologia) {
+        filtered = filtered.filter(t => t.tipo === filters.tipoTecnologia);
+      }
+
+      // Filtro por subcategoría
+      if (filters.subcategoria) {
+        filtered = filtered.filter(t => 
+          t.subcategorias?.includes(filters.subcategoria)
+        );
+      }
+
+      // Filtro por país
+      if (filters.pais) {
+        filtered = filtered.filter(t => t.pais === filters.pais);
+      }
+
+      // Filtro por sector
+      if (filters.sector) {
+        filtered = filtered.filter(t => t.sector === filters.sector);
+      }
+
+      // Filtro por status
+      if (filters.status) {
+        filtered = filtered.filter(t => t.status === filters.status);
+      }
+
+      // Filtro por TRL
+      if (filters.trlMin > 1) {
+        filtered = filtered.filter(t => (t.trl ?? 0) >= filters.trlMin);
+      }
+      if (filters.trlMax < 9) {
+        filtered = filtered.filter(t => (t.trl ?? 9) <= filters.trlMax);
+      }
+
+      // Ordenar por nombre para mejor UX
       if (!aiSearchIds) {
-        rows.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+        filtered.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
       }
 
-      // Apply client-side pagination if we fetched all results for search
-      const totalCount = needsClientSideSearch ? rows.length : (count ?? rows.length);
-      
-      if (needsClientSideSearch) {
-        const from = (page - 1) * ITEMS_PER_PAGE;
-        const to = from + ITEMS_PER_PAGE;
-        rows = rows.slice(from, to);
-      }
+      // 3. PAGINAR EN CLIENTE
+      const total = filtered.length;
+      const from = (page - 1) * ITEMS_PER_PAGE;
+      const paged = filtered.slice(from, from + ITEMS_PER_PAGE);
 
-      return { technologies: rows, count: totalCount };
+      return { technologies: paged, count: total };
     },
+    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
   });
 
   const totalPages = useMemo(() => {
