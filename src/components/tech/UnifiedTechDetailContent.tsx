@@ -39,11 +39,12 @@ import {
   TRLSelector,
   StatusSelector,
   TaxonomySectorSelector,
-  TaxonomyTypeSelector,
-  TaxonomySubcategorySelector,
+  TaxonomyTypeDropdown,
+  TaxonomySubcategoryDropdown,
   type SelectedTipo,
   type SelectedSubcategoria,
 } from '@/components/taxonomy';
+import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
 import type { 
   UnifiedTechData, 
   TechMetadata, 
@@ -278,15 +279,50 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
                   onChange={(value) => onEditChange('trl', value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Estado del seguimiento</Label>
-                <StatusSelector
-                  type="estado_seguimiento"
-                  value={editData.estado_seguimiento}
-                  onChange={(value) => onEditChange('estado_seguimiento', value)}
-                />
-              </div>
+              {/* Estado del seguimiento - solo mostrar para scouting, no para BD */}
+              {metadata.source !== 'database' && (
+                <div className="space-y-2">
+                  <Label>Estado del seguimiento</Label>
+                  <StatusSelector
+                    type="estado_seguimiento"
+                    value={editData.estado_seguimiento}
+                    onChange={(value) => onEditChange('estado_seguimiento', value)}
+                  />
+                </div>
+              )}
             </div>
+            
+            {/* AI Enrichment in edit mode */}
+            {actions.canEnrich && onEnrichmentComplete && (
+              <div className="border-t pt-4 mt-4">
+                <div className="flex items-center gap-2">
+                  <AIEnrichmentButton
+                    technology={{
+                      id: data.id,
+                      nombre: editData.nombre,
+                      proveedor: editData.proveedor || '',
+                      pais: editData.pais || '',
+                      trl_estimado: editData.trl,
+                      descripcion: editData.descripcion || '',
+                      tipo_sugerido: editData.tipo || 'Por clasificar',
+                      subcategoria: editData.subcategoria || '',
+                      web: editData.web || '',
+                      aplicacion_principal: editData.aplicacion || '',
+                      sector: editData.sector || '',
+                      ventaja_competitiva: editData.ventaja || '',
+                      innovacion: editData.innovacion || '',
+                      casos_referencia: editData.casos_referencia || '',
+                      paises_actua: editData.paises_actua || '',
+                      comentarios_analista: editData.comentarios || '',
+                    } as any}
+                    onEnrichmentComplete={onEnrichmentComplete}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Usa IA para completar campos vacíos. Revisa los cambios antes de guardar.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Clasificación */}
@@ -296,11 +332,11 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               CLASIFICACIÓN
             </h3>
             
-            {/* Tipo de tecnología - Checkboxes */}
+            {/* Tipo de tecnología - Dropdown compacto */}
             <div className="space-y-2">
               <Label>Tipo de tecnología</Label>
               {onTiposChange ? (
-                <TaxonomyTypeSelector
+                <TaxonomyTypeDropdown
                   selectedTipos={selectedTipos}
                   onChange={onTiposChange}
                 />
@@ -313,11 +349,11 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               )}
             </div>
             
-            {/* Subcategoría - Checkboxes filtered by tipos */}
+            {/* Subcategoría - Dropdown compacto filtrado por tipos */}
             <div className="space-y-2">
               <Label>Subcategoría</Label>
               {onSubcategoriasChange ? (
-                <TaxonomySubcategorySelector
+                <TaxonomySubcategoryDropdown
                   selectedSubcategorias={selectedSubcategorias}
                   onChange={onSubcategoriasChange}
                   filterByTipoIds={selectedTipoIds}
@@ -330,6 +366,7 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
                 />
               )}
             </div>
+            
             
             {/* Sector */}
             <div className="space-y-2">

@@ -27,6 +27,9 @@ export const UnifiedTechHeader: React.FC<UnifiedTechHeaderProps> = ({
   data,
   metadata,
 }) => {
+  // Don't show source badge for database items (it's obvious)
+  const showSourceBadge = metadata.source !== 'database';
+  
   const getSourceIcon = () => {
     if (metadata.isLinkedToDB) return Database;
     switch (metadata.source) {
@@ -34,17 +37,19 @@ export const UnifiedTechHeader: React.FC<UnifiedTechHeaderProps> = ({
       case 'longlist': return FileText;
       case 'scouting': return Search;
       case 'extracted': return Sparkles;
+      case 'case_study': return FileText;
       default: return FileText;
     }
   };
   
   const getSourceLabel = (): string => {
-    if (metadata.isLinkedToDB) return 'Vinculada a BD';
+    if (metadata.isLinkedToDB && metadata.source !== 'database') return 'Vinculada a BD';
     switch (metadata.source) {
       case 'database': return 'Base de Datos';
       case 'longlist': return 'Lista Larga';
       case 'scouting': return 'Scouting';
       case 'extracted': return 'Extracción IA';
+      case 'case_study': return 'Caso de Estudio';
       default: return metadata.source;
     }
   };
@@ -60,22 +65,24 @@ export const UnifiedTechHeader: React.FC<UnifiedTechHeaderProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <TRLBadge trl={data.trl} />
           
-          {/* Source Badge */}
-          <Badge 
-            variant="outline" 
-            className={`gap-1 ${
-              metadata.isLinkedToDB 
-                ? 'text-green-600 border-green-600' 
-                : 'text-muted-foreground'
-            }`}
-          >
-            {metadata.isLinkedToDB ? (
-              <CheckCircle2 className="w-3 h-3" />
-            ) : (
-              <SourceIcon className="w-3 h-3" />
-            )}
-            {getSourceLabel()}
-          </Badge>
+          {/* Source Badge - hidden for database items */}
+          {showSourceBadge && (
+            <Badge 
+              variant="outline" 
+              className={`gap-1 ${
+                metadata.isLinkedToDB 
+                  ? 'text-green-600 border-green-600' 
+                  : 'text-muted-foreground'
+              }`}
+            >
+              {metadata.isLinkedToDB ? (
+                <CheckCircle2 className="w-3 h-3" />
+              ) : (
+                <SourceIcon className="w-3 h-3" />
+              )}
+              {getSourceLabel()}
+            </Badge>
+          )}
           
           {/* Phase Badge (if applicable) */}
           {metadata.phase && !metadata.isLinkedToDB && (

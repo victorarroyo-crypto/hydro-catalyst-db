@@ -198,8 +198,9 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
           </>
         )}
 
-        {/* === AI ENRICHMENT === */}
-        {actions.canEnrich && onEnrichmentComplete && !isEditing && (
+        {/* === AI ENRICHMENT - Solo en modo lectura para source != database === */}
+        {/* Para database, AI está en el formulario de edición */}
+        {actions.canEnrich && onEnrichmentComplete && !isEditing && false && (
           <AIEnrichmentButton
             technology={technologyLikeObject as any}
             onEnrichmentComplete={onEnrichmentComplete}
