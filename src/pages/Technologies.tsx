@@ -106,12 +106,11 @@ const Technologies: React.FC = () => {
       // It can trigger upstream 500 responses (which then surface as CORS errors).
       // Instead, fetch only the current page and do filtering server-side.
 
-      // Base query (paged)
+      // Base query (paged) - using snake_case column names
       let query = externalSupabase
         .from('technologies')
         .select('*')
-        // NOTE: external DB doesn't have created_at
-        .order('id', { ascending: false })
+        .order('created_at', { ascending: false, nullsFirst: false })
         .range(from, to);
 
       // Count query (same filters, head)
@@ -126,14 +125,14 @@ const Technologies: React.FC = () => {
       } else if (aiSearchIds && aiSearchIds.length === 0) {
         return { technologies: [], count: 0 };
       } else {
-        // Normal filtering when no AI search is active
+        // Normal filtering when no AI search is active - using snake_case columns
         if (filters.search) {
           const search = filters.search.trim();
-          // Use OR across name/provider/description
+          // Use OR across name/provider/description - snake_case fields
           const orExpr = [
-            `"Nombre de la tecnología".ilike.%${search}%`,
-            `"Proveedor / Empresa".ilike.%${search}%`,
-            `"Descripción técnica breve".ilike.%${search}%`,
+            `nombre.ilike.%${search}%`,
+            `proveedor.ilike.%${search}%`,
+            `descripcion.ilike.%${search}%`,
           ].join(',');
 
           query = query.or(orExpr);
@@ -141,23 +140,25 @@ const Technologies: React.FC = () => {
         }
 
         if (filters.tipoTecnologia) {
-          query = query.eq('"Tipo de tecnología"', filters.tipoTecnologia);
-          countQuery = countQuery.eq('"Tipo de tecnología"', filters.tipoTecnologia);
+          // Filter by tipo text field
+          query = query.eq('tipo', filters.tipoTecnologia);
+          countQuery = countQuery.eq('tipo', filters.tipoTecnologia);
         }
 
         if (filters.subcategoria) {
-          query = query.eq('"Subcategoría"', filters.subcategoria);
-          countQuery = countQuery.eq('"Subcategoría"', filters.subcategoria);
+          // Filter using the subcategorias array
+          query = query.contains('subcategorias', [filters.subcategoria]);
+          countQuery = countQuery.contains('subcategorias', [filters.subcategoria]);
         }
 
         if (filters.pais) {
-          query = query.eq('"País de origen"', filters.pais);
-          countQuery = countQuery.eq('"País de origen"', filters.pais);
+          query = query.eq('pais', filters.pais);
+          countQuery = countQuery.eq('pais', filters.pais);
         }
 
         if (filters.sector) {
-          query = query.eq('"Sector y subsector"', filters.sector);
-          countQuery = countQuery.eq('"Sector y subsector"', filters.sector);
+          query = query.eq('sector', filters.sector);
+          countQuery = countQuery.eq('sector', filters.sector);
         }
 
         if (filters.status) {
@@ -166,13 +167,13 @@ const Technologies: React.FC = () => {
         }
 
         if (filters.trlMin > 1) {
-          query = query.gte('"Grado de madurez (TRL)"', filters.trlMin);
-          countQuery = countQuery.gte('"Grado de madurez (TRL)"', filters.trlMin);
+          query = query.gte('trl', filters.trlMin);
+          countQuery = countQuery.gte('trl', filters.trlMin);
         }
 
         if (filters.trlMax < 9) {
-          query = query.lte('"Grado de madurez (TRL)"', filters.trlMax);
-          countQuery = countQuery.lte('"Grado de madurez (TRL)"', filters.trlMax);
+          query = query.lte('trl', filters.trlMax);
+          countQuery = countQuery.lte('trl', filters.trlMax);
         }
       }
 
@@ -187,7 +188,7 @@ const Technologies: React.FC = () => {
       // When not AI-searching, order by name client-side for nicer UX (safe on a single page)
       const rows = (technologies as Technology[]) || [];
       if (!aiSearchIds) {
-        rows.sort((a, b) => (a["Nombre de la tecnología"] || '').localeCompare(b["Nombre de la tecnología"] || ''));
+        rows.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
       }
 
       return { technologies: rows, count: count ?? rows.length };

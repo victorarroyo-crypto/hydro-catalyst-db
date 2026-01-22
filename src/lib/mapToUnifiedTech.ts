@@ -2,6 +2,7 @@
  * Mapping Functions for Unified Technology Data
  * 
  * Converts data from different sources to the unified format.
+ * Updated to use snake_case fields from external DB.
  */
 
 import type { UnifiedTechData, TechMetadata, TechActions, UnifiedTechEditData } from '@/types/unifiedTech';
@@ -13,28 +14,29 @@ type ScoutingQueueItem = Tables<'scouting_queue'>;
 
 /**
  * Maps a technology from the main database to unified format
+ * Now uses snake_case field names from external DB
  */
 export function mapFromTechnologies(tech: Technology): UnifiedTechData {
   return {
     id: tech.id,
-    technology_name: tech['Nombre de la tecnología'],
-    provider: tech['Proveedor / Empresa'],
-    country: tech['País de origen'],
-    paises_actua: tech['Paises donde actua'],
-    web: tech['Web de la empresa'],
-    email: tech['Email de contacto'],
-    trl: tech['Grado de madurez (TRL)'],
-    estado_seguimiento: tech['Estado del seguimiento'],
-    fecha_scouting: tech['Fecha de scouting'],
-    type: tech['Tipo de tecnología'],
-    subcategory: tech['Subcategoría'],
-    sector: tech['Sector y subsector'],
-    applications: tech['Aplicación principal'],
-    description: tech['Descripción técnica breve'],
-    ventaja_competitiva: tech['Ventaja competitiva clave'],
-    innovacion: tech['Porque es innovadora'],
-    casos_referencia: tech['Casos de referencia'],
-    comentarios_analista: tech['Comentarios del analista'],
+    technology_name: tech.nombre,
+    provider: tech.proveedor,
+    country: tech.pais,
+    paises_actua: tech.paises_actua,
+    web: tech.web,
+    email: tech.email,
+    trl: tech.trl,
+    estado_seguimiento: tech.estado_seguimiento,
+    fecha_scouting: tech.fecha_scouting,
+    type: tech.tipo || tech.tipos?.[0] || null,
+    subcategory: tech.subcategorias?.[0] || null,
+    sector: tech.sector,
+    applications: tech.aplicacion,
+    description: tech.descripcion,
+    ventaja_competitiva: tech.ventaja,
+    innovacion: tech.innovacion,
+    casos_referencia: tech.casos_referencia,
+    comentarios_analista: tech.comentarios,
     status: tech.status,
     quality_score: tech.quality_score,
     review_status: tech.review_status,
@@ -87,6 +89,7 @@ export function mapFromLonglist(
 
 /**
  * Maps a scouting queue item to unified format
+ * Scouting queue still uses Spanish column names (external DB constraint)
  */
 export function mapFromScouting(item: ScoutingQueueItem): UnifiedTechData {
   return {

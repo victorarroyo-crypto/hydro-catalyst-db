@@ -37,24 +37,23 @@ interface TaxonomySector {
 }
 
 interface FormData {
-  "Nombre de la tecnología": string;
-  "Proveedor / Empresa": string;
-  "País de origen": string;
-  "Web de la empresa": string;
-  "Email de contacto": string;
-  "Tipo de tecnología": string;
-  "Subcategoría": string;
-  "Sector y subsector": string;
-  "Aplicación principal": string;
-  "Descripción técnica breve": string;
-  "Ventaja competitiva clave": string;
-  "Porque es innovadora": string;
-  "Casos de referencia": string;
-  "Paises donde actua": string;
-  "Comentarios del analista": string;
-  "Fecha de scouting": string;
-  "Estado del seguimiento": string;
-  "Grado de madurez (TRL)": number | null;
+  nombre: string;
+  proveedor: string;
+  pais: string;
+  web: string;
+  email: string;
+  tipo: string;
+  sector: string;
+  aplicacion: string;
+  descripcion: string;
+  ventaja: string;
+  innovacion: string;
+  casos_referencia: string;
+  paises_actua: string;
+  comentarios: string;
+  fecha_scouting: string;
+  estado_seguimiento: string;
+  trl: number | null;
   status: string;
   quality_score: number;
   sector_id: string | null;
@@ -213,9 +212,9 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
   // Fetch editor profile name (updated_by)
   const { data: editorProfile } = useQuery({
-    queryKey: ['editor-profile', (technology as any)?.updated_by],
+    queryKey: ['editor-profile', technology?.updated_by],
     queryFn: async () => {
-      const updatedBy = (technology as any)?.updated_by;
+      const updatedBy = technology?.updated_by;
       if (!updatedBy) return null;
       const { data, error } = await externalSupabase
         .from('profiles')
@@ -225,14 +224,14 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       if (error) throw error;
       return data;
     },
-    enabled: !!(technology as any)?.updated_by,
+    enabled: !!technology?.updated_by,
   });
 
   // Fetch reviewer profile name (reviewer_id)
   const { data: reviewerProfile } = useQuery({
-    queryKey: ['reviewer-profile', (technology as any)?.reviewer_id],
+    queryKey: ['reviewer-profile', technology?.reviewer_id],
     queryFn: async () => {
-      const reviewerId = (technology as any)?.reviewer_id;
+      const reviewerId = technology?.reviewer_id;
       if (!reviewerId) return null;
       const { data, error } = await externalSupabase
         .from('profiles')
@@ -242,28 +241,27 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
       if (error) throw error;
       return data;
     },
-    enabled: !!(technology as any)?.reviewer_id,
+    enabled: !!technology?.reviewer_id,
   });
   
   const [formData, setFormData] = useState<FormData>({
-    "Nombre de la tecnología": '',
-    "Proveedor / Empresa": '',
-    "País de origen": '',
-    "Web de la empresa": '',
-    "Email de contacto": '',
-    "Tipo de tecnología": '',
-    "Subcategoría": '',
-    "Sector y subsector": '',
-    "Aplicación principal": '',
-    "Descripción técnica breve": '',
-    "Ventaja competitiva clave": '',
-    "Porque es innovadora": '',
-    "Casos de referencia": '',
-    "Paises donde actua": '',
-    "Comentarios del analista": '',
-    "Fecha de scouting": '',
-    "Estado del seguimiento": '',
-    "Grado de madurez (TRL)": null,
+    nombre: '',
+    proveedor: '',
+    pais: '',
+    web: '',
+    email: '',
+    tipo: '',
+    sector: '',
+    aplicacion: '',
+    descripcion: '',
+    ventaja: '',
+    innovacion: '',
+    casos_referencia: '',
+    paises_actua: '',
+    comentarios: '',
+    fecha_scouting: '',
+    estado_seguimiento: '',
+    trl: null,
     status: 'active',
     quality_score: 0,
     sector_id: null,
@@ -274,59 +272,56 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   useEffect(() => {
     if (technology) {
       setFormData({
-        "Nombre de la tecnología": technology["Nombre de la tecnología"] || '',
-        "Proveedor / Empresa": technology["Proveedor / Empresa"] || '',
-        "País de origen": technology["País de origen"] || '',
-        "Web de la empresa": technology["Web de la empresa"] || '',
-        "Email de contacto": technology["Email de contacto"] || '',
-        "Tipo de tecnología": technology["Tipo de tecnología"] || '',
-        "Subcategoría": technology["Subcategoría"] || '',
-        "Sector y subsector": technology["Sector y subsector"] || '',
-        "Aplicación principal": technology["Aplicación principal"] || '',
-        "Descripción técnica breve": technology["Descripción técnica breve"] || '',
-        "Ventaja competitiva clave": technology["Ventaja competitiva clave"] || '',
-        "Porque es innovadora": technology["Porque es innovadora"] || '',
-        "Casos de referencia": technology["Casos de referencia"] || '',
-        "Paises donde actua": technology["Paises donde actua"] || '',
-        "Comentarios del analista": technology["Comentarios del analista"] || '',
-        "Fecha de scouting": technology["Fecha de scouting"] || '',
-        "Estado del seguimiento": technology["Estado del seguimiento"] || '',
-        "Grado de madurez (TRL)": technology["Grado de madurez (TRL)"],
+        nombre: technology.nombre || '',
+        proveedor: technology.proveedor || '',
+        pais: technology.pais || '',
+        web: technology.web || '',
+        email: technology.email || '',
+        tipo: technology.tipo || '',
+        sector: technology.sector || '',
+        aplicacion: technology.aplicacion || '',
+        descripcion: technology.descripcion || '',
+        ventaja: technology.ventaja || '',
+        innovacion: technology.innovacion || '',
+        casos_referencia: technology.casos_referencia || '',
+        paises_actua: technology.paises_actua || '',
+        comentarios: technology.comentarios || '',
+        fecha_scouting: technology.fecha_scouting || '',
+        estado_seguimiento: technology.estado_seguimiento || '',
+        trl: technology.trl,
         status: technology.status || 'active',
         quality_score: technology.quality_score || 0,
-        sector_id: (technology as any).sector_id || null,
-        subsector_industrial: (technology as any).subsector_industrial || '',
+        sector_id: technology.sector_id || null,
+        subsector_industrial: technology.subsector_industrial || '',
       });
       
       // Load taxonomy arrays if they exist
-      const tech = technology as any;
       setTaxonomySelections({
-        categorias: tech.categorias || [],
-        tipos: tech.tipos || [],
-        subcategorias: tech.subcategorias || [],
+        categorias: technology.categorias || [],
+        tipos: technology.tipos || [],
+        subcategorias: technology.subcategorias || [],
       });
       
       setEditComment('');
     } else {
       setFormData({
-        "Nombre de la tecnología": '',
-        "Proveedor / Empresa": '',
-        "País de origen": '',
-        "Web de la empresa": '',
-        "Email de contacto": '',
-        "Tipo de tecnología": '',
-        "Subcategoría": '',
-        "Sector y subsector": '',
-        "Aplicación principal": '',
-        "Descripción técnica breve": '',
-        "Ventaja competitiva clave": '',
-        "Porque es innovadora": '',
-        "Casos de referencia": '',
-        "Paises donde actua": '',
-        "Comentarios del analista": '',
-        "Fecha de scouting": '',
-        "Estado del seguimiento": '',
-        "Grado de madurez (TRL)": null,
+        nombre: '',
+        proveedor: '',
+        pais: '',
+        web: '',
+        email: '',
+        tipo: '',
+        sector: '',
+        aplicacion: '',
+        descripcion: '',
+        ventaja: '',
+        innovacion: '',
+        casos_referencia: '',
+        paises_actua: '',
+        comentarios: '',
+        fecha_scouting: '',
+        estado_seguimiento: '',
+        trl: null,
         status: 'active',
         quality_score: 0,
         sector_id: null,
@@ -345,11 +340,11 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
       
-      // If sector_id changes, update "Sector y subsector" text and clear subsector if not industrial
+      // If sector_id changes, update "sector" text and clear subsector if not industrial
       if (field === 'sector_id') {
         const selectedSector = sectores?.find(s => s.id === value);
         if (selectedSector) {
-          newData["Sector y subsector"] = selectedSector.nombre;
+          newData.sector = selectedSector.nombre;
         }
         if (value !== 'IND') {
           newData.subsector_industrial = '';
@@ -362,18 +357,11 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
   // Update legacy text fields when taxonomy selections change
   useEffect(() => {
-    // Update "Tipo de tecnología" with first tipo
+    // Update "tipo" with first tipo
     if (taxonomySelections.tipos.length > 0) {
       setFormData(prev => ({
         ...prev,
-        "Tipo de tecnología": taxonomySelections.tipos[0],
-      }));
-    }
-    // Update "Subcategoría" with first subcategoria
-    if (taxonomySelections.subcategorias.length > 0) {
-      setFormData(prev => ({
-        ...prev,
-        "Subcategoría": taxonomySelections.subcategorias[0],
+        tipo: taxonomySelections.tipos[0],
       }));
     }
   }, [taxonomySelections]);
@@ -381,7 +369,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData["Nombre de la tecnología"].trim()) {
+    if (!formData.nombre.trim()) {
       toast({
         title: 'Campo requerido',
         description: 'El nombre de la tecnología es obligatorio',
@@ -401,26 +389,25 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
     setIsLoading(true);
 
-    // Data to save includes new taxonomy arrays
+    // Data to save includes new taxonomy arrays - using snake_case
     const dataToSave = {
-      "Nombre de la tecnología": formData["Nombre de la tecnología"],
-      "Proveedor / Empresa": formData["Proveedor / Empresa"] || null,
-      "País de origen": formData["País de origen"] || null,
-      "Web de la empresa": formData["Web de la empresa"] || null,
-      "Email de contacto": formData["Email de contacto"] || null,
-      "Tipo de tecnología": formData["Tipo de tecnología"],
-      "Subcategoría": formData["Subcategoría"] || null,
-      "Sector y subsector": formData["Sector y subsector"] || null,
-      "Aplicación principal": formData["Aplicación principal"] || null,
-      "Descripción técnica breve": formData["Descripción técnica breve"] || null,
-      "Ventaja competitiva clave": formData["Ventaja competitiva clave"] || null,
-      "Porque es innovadora": formData["Porque es innovadora"] || null,
-      "Casos de referencia": formData["Casos de referencia"] || null,
-      "Paises donde actua": formData["Paises donde actua"] || null,
-      "Comentarios del analista": formData["Comentarios del analista"] || null,
-      "Fecha de scouting": formData["Fecha de scouting"] || null,
-      "Estado del seguimiento": formData["Estado del seguimiento"] || null,
-      "Grado de madurez (TRL)": formData["Grado de madurez (TRL)"] || null,
+      nombre: formData.nombre,
+      proveedor: formData.proveedor || null,
+      pais: formData.pais || null,
+      web: formData.web || null,
+      email: formData.email || null,
+      tipo: formData.tipo || null,
+      sector: formData.sector || null,
+      aplicacion: formData.aplicacion || null,
+      descripcion: formData.descripcion || null,
+      ventaja: formData.ventaja || null,
+      innovacion: formData.innovacion || null,
+      casos_referencia: formData.casos_referencia || null,
+      paises_actua: formData.paises_actua || null,
+      comentarios: formData.comentarios || null,
+      fecha_scouting: formData.fecha_scouting || null,
+      estado_seguimiento: formData.estado_seguimiento || null,
+      trl: formData.trl || null,
       status: formData.status,
       // New taxonomy arrays
       categorias: taxonomySelections.categorias,
@@ -481,8 +468,7 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
               proposed_changes: JSON.parse(JSON.stringify(dataToSave)),
               original_data: null,
               status: 'pending' as const,
-              edit_type: 'create',
-              comments: editComment || 'Sugerencia de nueva tecnología',
+              comments: editComment || 'Nueva tecnología propuesta',
               created_by: user?.id!,
             }]);
 
@@ -490,21 +476,25 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           toast({
             title: 'Propuesta enviada',
-            description: 'Tu sugerencia de nueva tecnología ha sido enviada para revisión',
+            description: 'Tu nueva tecnología ha sido enviada para revisión.',
           });
         } else {
-          // Admin/Supervisor: Create directly
-          const { data: insertedData, error } = await externalSupabase
+          // Supervisors/Admins can create directly
+          const { data: newTech, error } = await externalSupabase
             .from('technologies')
-            .upsert(dataToSave, { onConflict: 'id' })
-            .select();
+            .insert([{
+              ...dataToSave,
+              created_by: user?.id,
+            }])
+            .select()
+            .single();
 
           if (error) throw error;
 
-          const insertedItem = insertedData?.[0];
-          if (insertedItem) {
+          // Sync to external Supabase
+          if (newTech) {
             try {
-              await syncTechnologyInsert({ ...dataToSave, id: insertedItem.id });
+              await syncTechnologyInsert(newTech);
             } catch (syncError) {
               console.error('External sync failed:', syncError);
             }
@@ -512,18 +502,18 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
 
           toast({
             title: 'Tecnología creada',
-            description: 'La nueva tecnología se ha añadido correctamente',
+            description: 'La nueva tecnología se ha guardado correctamente',
           });
         }
       }
 
       onSuccess();
       onOpenChange(false);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    } catch (error: any) {
+      console.error('Error saving technology:', error);
       toast({
         title: 'Error',
-        description: errorMessage,
+        description: error.message || 'No se pudo guardar la tecnología',
         variant: 'destructive',
       });
     } finally {
@@ -535,238 +525,185 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-display">
+          <DialogTitle>
             {isEditing ? 'Editar Tecnología' : 'Nueva Tecnología'}
           </DialogTitle>
-          {isAnalyst && (
-            <DialogDescription>
-              {isEditing 
-                ? 'Tu edición será enviada para revisión antes de publicarse.'
-                : 'Tu sugerencia de nueva tecnología será revisada antes de crearse.'
-              }
-            </DialogDescription>
-          )}
+          <DialogDescription>
+            {isEditing 
+              ? 'Modifica los campos que desees actualizar' 
+              : 'Completa los datos de la nueva tecnología'
+            }
+          </DialogDescription>
         </DialogHeader>
 
-        {isAnalyst && (
-          <Alert className="border-warning/50 bg-warning/10">
-            <AlertTriangle className="w-4 h-4 text-warning" />
-            <AlertDescription className="text-sm">
-              {isEditing 
-                ? 'Como analista, tus cambios serán revisados por un supervisor o administrador antes de aplicarse.'
-                : 'Como analista, tu propuesta de nueva tecnología será revisada por un supervisor o administrador antes de crearse.'
-              }
-            </AlertDescription>
-          </Alert>
-        )}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Analyst warning */}
+          {isAnalyst && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                Como analista, tus cambios serán enviados para aprobación antes de publicarse.
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {/* AI Enrichment Button */}
-        {isEditing && technology && (
-          <div className="flex justify-end">
-            <AIEnrichmentButton
-              technology={{
-                id: technology.id,
-                nombre: formData["Nombre de la tecnología"],
-                proveedor: formData["Proveedor / Empresa"],
-                web: formData["Web de la empresa"],
-                pais: formData["País de origen"],
-                tipo_sugerido: formData["Tipo de tecnología"],
-                subcategoria: formData["Subcategoría"],
-                sector: formData["Sector y subsector"],
-                descripcion: formData["Descripción técnica breve"],
-                aplicacion_principal: formData["Aplicación principal"],
-                ventaja_competitiva: formData["Ventaja competitiva clave"],
-                innovacion: formData["Porque es innovadora"],
-                trl_estimado: formData["Grado de madurez (TRL)"],
-                casos_referencia: formData["Casos de referencia"],
-                paises_actua: formData["Paises donde actua"],
-                comentarios_analista: formData["Comentarios del analista"],
-              }}
-              onEnrichmentComplete={(enrichedData) => {
-                const fieldMapping: Record<string, keyof FormData> = {
-                  descripcion: "Descripción técnica breve",
-                  aplicacion_principal: "Aplicación principal",
-                  ventaja_competitiva: "Ventaja competitiva clave",
-                  innovacion: "Porque es innovadora",
-                  casos_referencia: "Casos de referencia",
-                  paises_actua: "Paises donde actua",
-                  comentarios_analista: "Comentarios del analista",
-                };
-                
-                Object.entries(enrichedData).forEach(([key, value]) => {
-                  const formField = fieldMapping[key];
-                  if (formField && value) {
-                    handleChange(formField, value as string);
-                  }
-                });
-              }}
-            />
-          </div>
-        )}
+          {/* AI Enrichment */}
+          {isEditing && technology && (
+            <div className="flex justify-end">
+              <AIEnrichmentButton
+                technology={{
+                  id: technology.id,
+                  nombre: formData.nombre,
+                  proveedor: formData.proveedor,
+                  web: formData.web,
+                  pais: formData.pais,
+                  tipo_sugerido: formData.tipo,
+                  subcategoria: taxonomySelections.subcategorias[0] || '',
+                  sector: formData.sector,
+                  descripcion: formData.descripcion,
+                  aplicacion_principal: formData.aplicacion,
+                  ventaja_competitiva: formData.ventaja,
+                  innovacion: formData.innovacion,
+                  trl_estimado: formData.trl,
+                  casos_referencia: formData.casos_referencia,
+                  paises_actua: formData.paises_actua,
+                  comentarios_analista: formData.comentarios,
+                }}
+                onEnrichmentComplete={(enriched) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    descripcion: typeof enriched.descripcion === 'string' ? enriched.descripcion : prev.descripcion,
+                    aplicacion: typeof enriched.aplicacion_principal === 'string' ? enriched.aplicacion_principal : prev.aplicacion,
+                    ventaja: typeof enriched.ventaja_competitiva === 'string' ? enriched.ventaja_competitiva : prev.ventaja,
+                    innovacion: typeof enriched.innovacion === 'string' ? enriched.innovacion : prev.innovacion,
+                    casos_referencia: typeof enriched.casos_referencia === 'string' ? enriched.casos_referencia : prev.casos_referencia,
+                    paises_actua: typeof enriched.paises_actua === 'string' ? enriched.paises_actua : prev.paises_actua,
+                    comentarios: typeof enriched.comentarios_analista === 'string' ? enriched.comentarios_analista : prev.comentarios,
+                    trl: typeof enriched.trl_estimado === 'number' ? enriched.trl_estimado : prev.trl,
+                  }));
+                }}
+              />
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-6 pt-4">
           {/* General Info */}
           <FormSection title="Información General">
-            <FormField 
-              label="Nombre de la tecnología" 
-              field="Nombre de la tecnología" 
-              value={formData["Nombre de la tecnología"]}
+            <FormField
+              label="Nombre de la tecnología"
+              field="nombre"
+              value={formData.nombre}
               onChange={handleChange}
-              required 
-              fullWidth 
+              required
+              fullWidth
             />
-            <FormField 
-              label="Proveedor / Empresa" 
-              field="Proveedor / Empresa" 
-              value={formData["Proveedor / Empresa"]}
+            <FormField
+              label="Proveedor / Empresa"
+              field="proveedor"
+              value={formData.proveedor}
               onChange={handleChange}
             />
             <div>
-              <Label htmlFor="pais-origen" className="text-sm">País de origen</Label>
+              <Label className="text-sm">País de origen</Label>
               <Select
-                value={formData["País de origen"] || ''}
-                onValueChange={(value) => handleChange("País de origen", value)}
+                value={formData.pais}
+                onValueChange={(v) => handleChange('pais', v)}
               >
-                <SelectTrigger id="pais-origen" className="mt-1">
-                  <SelectValue placeholder="Seleccionar país" />
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Selecciona un país" />
                 </SelectTrigger>
                 <SelectContent>
-                  {PAISES.map((pais) => (
-                    <SelectItem key={pais} value={pais}>
-                      {pais}
-                    </SelectItem>
+                  {PAISES.map(p => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <FormField 
-              label="Web de la empresa" 
-              field="Web de la empresa" 
-              value={formData["Web de la empresa"]}
+            <FormField
+              label="Web de la empresa"
+              field="web"
+              value={formData.web}
               onChange={handleChange}
-              type="url" 
+              type="url"
             />
-            <FormField 
-              label="Email de contacto" 
-              field="Email de contacto" 
-              value={formData["Email de contacto"]}
+            <FormField
+              label="Email de contacto"
+              field="email"
+              value={formData.email}
               onChange={handleChange}
-              type="text" 
+              type="email"
             />
           </FormSection>
 
-          {/* New 3-Level Taxonomy Classification */}
-          <FormSection title="Clasificación Tecnológica">
+          {/* Classification */}
+          <FormSection title="Clasificación">
             <div className="md:col-span-2">
-              <Label className="text-sm mb-2 block">
-                Taxonomía de 3 niveles <span className="text-destructive">*</span>
-              </Label>
-              <p className="text-xs text-muted-foreground mb-3">
-                Selecciona categorías, tipos y subcategorías. La selección es en cascada: primero categorías, luego tipos, y finalmente subcategorías.
-              </p>
               <TaxonomyCascadeSelector
                 value={taxonomySelections}
                 onChange={setTaxonomySelections}
               />
             </div>
-          </FormSection>
-
-          {/* Sector Classification */}
-          <FormSection title="Sector de Aplicación">
             <div>
               <Label className="text-sm">Sector</Label>
               <Select
                 value={formData.sector_id || ''}
-                onValueChange={(value) => handleChange('sector_id', value || null)}
+                onValueChange={(v) => handleChange('sector_id', v)}
               >
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Seleccionar sector..." />
+                  <SelectValue placeholder="Selecciona un sector" />
                 </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  {sectores?.map((sector) => (
-                    <SelectItem key={sector.id} value={sector.id}>
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{sector.id}</span>
-                        {sector.nombre}
-                      </span>
-                    </SelectItem>
+                <SelectContent>
+                  {sectores?.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {formData.sector_id && sectores && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {sectores.find(s => s.id === formData.sector_id)?.descripcion}
-                </p>
-              )}
             </div>
-
             {formData.sector_id === 'IND' && (
               <div>
                 <Label className="text-sm">Subsector Industrial</Label>
                 <Select
-                  value={formData.subsector_industrial || ''}
-                  onValueChange={(value) => handleChange('subsector_industrial', value)}
+                  value={formData.subsector_industrial}
+                  onValueChange={(v) => handleChange('subsector_industrial', v)}
                 >
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Seleccionar subsector..." />
+                    <SelectValue placeholder="Selecciona subsector" />
                   </SelectTrigger>
-                  <SelectContent className="bg-popover z-50">
-                    {SUBSECTORES_INDUSTRIALES.map((subsector) => (
-                      <SelectItem key={subsector} value={subsector}>
-                        {subsector}
-                      </SelectItem>
+                  <SelectContent>
+                    {SUBSECTORES_INDUSTRIALES.map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             )}
-
-            <FormField 
-              label="Aplicación principal" 
-              field="Aplicación principal" 
-              value={formData["Aplicación principal"]}
-              onChange={handleChange}
-            />
-            
             <div>
-              <Label className="text-sm">Grado de madurez (TRL)</Label>
+              <Label className="text-sm">TRL (Nivel de Madurez)</Label>
               <Select
-                value={formData["Grado de madurez (TRL)"]?.toString() || ''}
-                onValueChange={(value) => handleChange("Grado de madurez (TRL)", value ? parseInt(value) : null)}
+                value={formData.trl?.toString() || ''}
+                onValueChange={(v) => handleChange('trl', v ? parseInt(v) : null)}
               >
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Seleccionar TRL" />
+                  <SelectValue placeholder="Selecciona TRL" />
                 </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  {TRL_OPTIONS.map((trl) => (
-                    <SelectItem key={trl} value={trl.toString()}>
-                      TRL {trl}
-                    </SelectItem>
+                <SelectContent>
+                  {TRL_OPTIONS.map(t => (
+                    <SelectItem key={t} value={t.toString()}>TRL {t}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div>
               <Label className="text-sm">Estado</Label>
               <Select
                 value={formData.status}
-                onValueChange={(value) => handleChange('status', value)}
+                onValueChange={(v) => handleChange('status', v)}
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  {STATUS_OPTIONS.map((status) => (
-                    <SelectItem key={status.value} value={status.value}>
-                      <span className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${
-                          status.value === 'active' ? 'bg-green-500' : 
-                          status.value === 'inactive' ? 'bg-gray-400' : 'bg-yellow-500'
-                        }`} />
-                        {status.label}
-                      </span>
-                    </SelectItem>
+                <SelectContent>
+                  {STATUS_OPTIONS.map(s => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -774,160 +711,118 @@ export const TechnologyFormModal: React.FC<TechnologyFormModalProps> = ({
           </FormSection>
 
           {/* Description */}
-          <FormSection title="Descripción">
-            <FormTextarea 
-              label="Descripción técnica breve" 
-              field="Descripción técnica breve" 
-              value={formData["Descripción técnica breve"]}
+          <FormSection title="Descripción Técnica">
+            <FormTextarea
+              label="Descripción técnica breve"
+              field="descripcion"
+              value={formData.descripcion}
               onChange={handleChange}
-              rows={4} 
+              rows={4}
+            />
+            <FormTextarea
+              label="Aplicación principal"
+              field="aplicacion"
+              value={formData.aplicacion}
+              onChange={handleChange}
             />
           </FormSection>
 
           {/* Differentiation */}
-          <FormSection title="Diferenciación">
-            <FormTextarea 
-              label="Ventaja competitiva clave" 
-              field="Ventaja competitiva clave" 
-              value={formData["Ventaja competitiva clave"]}
+          <FormSection title="Diferenciación e Innovación">
+            <FormTextarea
+              label="Ventaja competitiva clave"
+              field="ventaja"
+              value={formData.ventaja}
               onChange={handleChange}
             />
-            <FormTextarea 
-              label="Por qué es innovadora" 
-              field="Porque es innovadora" 
-              value={formData["Porque es innovadora"]}
+            <FormTextarea
+              label="Por qué es innovadora"
+              field="innovacion"
+              value={formData.innovacion}
               onChange={handleChange}
             />
           </FormSection>
 
           {/* References */}
           <FormSection title="Referencias">
-            <FormTextarea 
-              label="Casos de referencia" 
-              field="Casos de referencia" 
-              value={formData["Casos de referencia"]}
+            <FormTextarea
+              label="Casos de referencia"
+              field="casos_referencia"
+              value={formData.casos_referencia}
               onChange={handleChange}
             />
-            <FormTextarea 
-              label="Países donde actúa" 
-              field="Paises donde actua" 
-              value={formData["Paises donde actua"]}
+            <FormField
+              label="Países donde actúa"
+              field="paises_actua"
+              value={formData.paises_actua}
+              onChange={handleChange}
+              fullWidth
+            />
+          </FormSection>
+
+          {/* Internal Notes */}
+          <FormSection title="Notas del Analista">
+            <FormTextarea
+              label="Comentarios del analista"
+              field="comentarios"
+              value={formData.comentarios}
+              onChange={handleChange}
+            />
+            <FormField
+              label="Fecha de scouting"
+              field="fecha_scouting"
+              value={formData.fecha_scouting}
+              onChange={handleChange}
+              type="date"
+            />
+            <FormField
+              label="Estado del seguimiento"
+              field="estado_seguimiento"
+              value={formData.estado_seguimiento}
               onChange={handleChange}
             />
           </FormSection>
 
-          {/* Internal */}
-          <FormSection title="Información Interna">
-            <FormTextarea 
-              label="Comentarios del analista" 
-              field="Comentarios del analista" 
-              value={formData["Comentarios del analista"]}
-              onChange={handleChange}
-            />
-            <FormField 
-              label="Fecha de scouting" 
-              field="Fecha de scouting" 
-              value={formData["Fecha de scouting"]}
-              onChange={handleChange}
-              type="date" 
-            />
-            <FormField 
-              label="Estado del seguimiento" 
-              field="Estado del seguimiento" 
-              value={formData["Estado del seguimiento"]}
-              onChange={handleChange}
-            />
-            <FormField 
-              label="Quality Score" 
-              field="quality_score" 
-              value={formData.quality_score}
-              onChange={handleChange}
-              type="number" 
-            />
-          </FormSection>
-
-          {/* Audit Info - only show when editing */}
-          {isEditing && technology && (
-            <FormSection title="Información de Auditoría">
-              <div>
-                <Label className="text-sm text-muted-foreground">Última edición por</Label>
-                <div className="mt-1 p-2 bg-muted rounded-md text-sm">
-                  {editorProfile?.full_name || 'No disponible'}
-                </div>
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Fecha de última edición</Label>
-                <div className="mt-1 p-2 bg-muted rounded-md text-sm">
-                  {(technology as any)?.updated_at 
-                    ? new Date((technology as any).updated_at).toLocaleString('es-ES', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
-                    : 'No disponible'}
-                </div>
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Revisado/Aprobado por</Label>
-                <div className="mt-1 p-2 bg-muted rounded-md text-sm">
-                  {reviewerProfile?.full_name || 'No disponible'}
-                </div>
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Fecha de revisión/aprobación</Label>
-                <div className="mt-1 p-2 bg-muted rounded-md text-sm">
-                  {(technology as any)?.reviewed_at 
-                    ? new Date((technology as any).reviewed_at).toLocaleString('es-ES', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
-                    : 'No disponible'}
-                </div>
-              </div>
-            </FormSection>
-          )}
-
-          {/* Edit comment for analysts */}
-          {isEditing && isAnalyst && (
-            <div className="space-y-2">
-              <Label htmlFor="edit-comment" className="text-sm font-semibold">
-                Comentario de la edición (opcional)
-              </Label>
+          {/* Analyst comment for proposals */}
+          {isAnalyst && (
+            <div>
+              <Label className="text-sm">Comentario para el revisor</Label>
               <Textarea
-                id="edit-comment"
                 value={editComment}
                 onChange={(e) => setEditComment(e.target.value)}
-                placeholder="Explica brevemente los cambios realizados..."
+                placeholder="Explica los cambios realizados..."
                 rows={2}
+                className="mt-1"
               />
             </div>
           )}
 
+          {/* Audit info (only for editing) */}
+          {isEditing && technology && (
+            <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
+              <p>Creado: {technology.created_at ? new Date(technology.created_at).toLocaleString('es-ES') : '—'}</p>
+              <p>Última modificación: {technology.updated_at ? new Date(technology.updated_at).toLocaleString('es-ES') : '—'}</p>
+              {editorProfile?.full_name && (
+                <p>Modificado por: {editorProfile.full_name}</p>
+              )}
+              {technology.review_status && technology.review_status !== 'none' && (
+                <p>
+                  Estado de revisión: {technology.review_status}
+                  {reviewerProfile?.full_name && ` (${reviewerProfile.full_name})`}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Submit */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex justify-end gap-2 pt-4 border-t">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isAnalyst && isEditing ? 'Enviando...' : 'Guardando...'}
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  {isEditing 
-                    ? (isAnalyst ? 'Enviar para revisión' : 'Guardar cambios')
-                    : 'Crear tecnología'
-                  }
-                </>
-              )}
+              {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <Save className="w-4 h-4 mr-2" />
+              {isAnalyst ? 'Enviar para aprobación' : (isEditing ? 'Guardar cambios' : 'Crear tecnología')}
             </Button>
           </div>
         </form>

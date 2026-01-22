@@ -9,35 +9,59 @@ export interface Profile {
   updated_at: string;
 }
 
+/**
+ * Technology interface - matches external Supabase DB schema (snake_case)
+ * 
+ * The external database uses snake_case column names for all technology fields.
+ * This interface is used for reading/writing to the external technologies table.
+ */
 export interface Technology {
   id: string;
-  "Nombre de la tecnología": string;
-  "Proveedor / Empresa": string | null;
-  "País de origen": string | null;
-  "Web de la empresa": string | null;
-  "Email de contacto": string | null;
-  "Tipo de tecnología": string;
-  "Subcategoría": string | null;
-  "Sector y subsector": string | null;
-  "Aplicación principal": string | null;
-  "Descripción técnica breve": string | null;
-  "Ventaja competitiva clave": string | null;
-  "Porque es innovadora": string | null;
-  "Casos de referencia": string | null;
-  "Paises donde actua": string | null;
-  "Comentarios del analista": string | null;
-  "Fecha de scouting": string | null;
-  "Estado del seguimiento": string | null;
-  "Grado de madurez (TRL)": number | null;
+  // Core business fields
+  nombre: string;
+  descripcion: string | null;
+  proveedor: string | null;
+  pais: string | null;
+  web: string | null;
+  email: string | null;
+  tipo: string | null;
+  sector: string | null;
+  aplicacion: string | null;
+  ventaja: string | null;
+  innovacion: string | null;
+  casos_referencia: string | null;
+  paises_actua: string | null;
+  comentarios: string | null;
+  fecha_scouting: string | null;
+  estado_seguimiento: string | null;
+  trl: number | null;
+  
+  // Taxonomy arrays (new 3-level system)
+  categorias: string[] | null;
+  tipos: string[] | null;
+  subcategorias: string[] | null;
+  
+  // Legacy taxonomy IDs
+  tipo_id: number | null;
+  subcategoria_id: number | null;
+  sector_id: string | null;
+  subsector_industrial: string | null;
+  
+  // System fields
   status: string | null;
   quality_score: number | null;
   review_status: 'none' | 'pending' | 'in_review' | 'completed' | null;
   reviewer_id: string | null;
   review_requested_at: string | null;
   review_requested_by: string | null;
+  reviewed_at: string | null;
+  updated_by: string | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
-  updated_by: string | null;
+  
+  // Embedding for semantic search
+  embedding: number[] | null;
 }
 
 export interface Project {
