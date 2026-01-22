@@ -74,11 +74,33 @@ interface UnifiedTechDetailContentProps {
   onCancelEdit?: () => void;
   onSave?: () => void;
   
-  // Action handlers
+  // AI & Export handlers
   onEnrichmentComplete?: (data: Record<string, any>) => void;
   onDownloadWord?: () => void;
+  
+  // Linking handlers
   onSendToDB?: () => void;
   onViewInDB?: () => void;
+  
+  // Scouting workflow handlers
+  onSendToApproval?: () => void;
+  onApproveToDatabase?: () => void;
+  onReject?: () => void;
+  onBackToReview?: () => void;
+  
+  // DB Review workflow handlers
+  onSendToReview?: () => void;
+  onClaimReview?: () => void;
+  onCompleteReview?: () => void;
+  onReleaseReview?: () => void;
+  
+  // Linking handlers
+  onSendToScouting?: () => void;
+  
+  // User action handlers
+  onAddFavorite?: () => void;
+  onAddToProject?: (projectId: string) => void;
+  projects?: Array<{ id: string; name: string }>;
 }
 
 export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> = ({
@@ -102,6 +124,22 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
   onDownloadWord,
   onSendToDB,
   onViewInDB,
+  // Scouting workflow
+  onSendToApproval,
+  onApproveToDatabase,
+  onReject,
+  onBackToReview,
+  // DB Review workflow
+  onSendToReview,
+  onClaimReview,
+  onCompleteReview,
+  onReleaseReview,
+  // Linking
+  onSendToScouting,
+  // User actions
+  onAddFavorite,
+  onAddToProject,
+  projects = [],
 }) => {
   if (isLoading) {
     return (
@@ -142,6 +180,22 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
         onDownloadWord={onDownloadWord}
         onSendToDB={onSendToDB}
         onViewInDB={onViewInDB}
+        // Scouting workflow
+        onSendToApproval={onSendToApproval}
+        onApproveToDatabase={onApproveToDatabase}
+        onReject={onReject ? () => onReject() : undefined}
+        onBackToReview={onBackToReview}
+        // DB Review workflow
+        onSendToReview={onSendToReview}
+        onClaimReview={onClaimReview}
+        onCompleteReview={onCompleteReview}
+        onReleaseReview={onReleaseReview}
+        // Linking
+        onSendToScouting={onSendToScouting}
+        // User actions
+        onAddFavorite={onAddFavorite}
+        onAddToProject={onAddToProject}
+        projects={projects}
       />
       
       {/* Read-only notice when linked to DB */}
