@@ -39,11 +39,9 @@ import {
   TRLSelector,
   StatusSelector,
   TaxonomySectorSelector,
-  TaxonomyTypeDropdown,
-  TaxonomySubcategoryDropdown,
-  type SelectedTipo,
-  type SelectedSubcategoria,
+  Taxonomy3LevelDropdowns,
 } from '@/components/taxonomy';
+import { TaxonomySelections } from '@/hooks/useTaxonomy3Levels';
 import { AIEnrichmentButton } from '@/components/AIEnrichmentButton';
 import type { 
   UnifiedTechData, 
@@ -62,11 +60,9 @@ interface UnifiedTechDetailContentProps {
   isSaving?: boolean;
   isSendingToDB?: boolean;
   
-  // Taxonomy state for checkboxes
-  selectedTipos?: SelectedTipo[];
-  selectedSubcategorias?: SelectedSubcategoria[];
-  onTiposChange?: (tipos: SelectedTipo[]) => void;
-  onSubcategoriasChange?: (subcategorias: SelectedSubcategoria[]) => void;
+  // Taxonomy state for 3-level hierarchy
+  taxonomySelections?: TaxonomySelections;
+  onTaxonomyChange?: (value: TaxonomySelections) => void;
   
   // Edit handlers
   onEditChange?: (field: keyof UnifiedTechEditData, value: string | number | null) => void;
@@ -112,10 +108,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
   isLoading = false,
   isSaving = false,
   isSendingToDB = false,
-  selectedTipos = [],
-  selectedSubcategorias = [],
-  onTiposChange,
-  onSubcategoriasChange,
+  taxonomySelections = { categorias: [], tipos: [], subcategorias: [] },
+  onTaxonomyChange,
   onEditChange,
   onStartEdit,
   onCancelEdit,
@@ -158,8 +152,6 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
     });
   };
 
-  // Get tipo IDs for filtering subcategories
-  const selectedTipoIds = selectedTipos.map(t => t.tipo_id);
 
   return (
     <div className="space-y-6">
@@ -325,48 +317,40 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
             )}
           </div>
 
-          {/* Clasificación */}
+          {/* Clasificación - Taxonomía de 3 niveles */}
           <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Tag className="w-4 h-4" />
               CLASIFICACIÓN
             </h3>
             
-            {/* Tipo de tecnología - Dropdown compacto */}
-            <div className="space-y-2">
-              <Label>Tipo de tecnología</Label>
-              {onTiposChange ? (
-                <TaxonomyTypeDropdown
-                  selectedTipos={selectedTipos}
-                  onChange={onTiposChange}
-                />
-              ) : (
-                <Input
-                  value={editData.tipo}
-                  onChange={(e) => onEditChange('tipo', e.target.value)}
-                  placeholder="Tipo de tecnología"
-                />
-              )}
-            </div>
-            
-            {/* Subcategoría - Dropdown compacto filtrado por tipos */}
-            <div className="space-y-2">
-              <Label>Subcategoría</Label>
-              {onSubcategoriasChange ? (
-                <TaxonomySubcategoryDropdown
-                  selectedSubcategorias={selectedSubcategorias}
-                  onChange={onSubcategoriasChange}
-                  filterByTipoIds={selectedTipoIds}
-                />
-              ) : (
-                <Input
-                  value={editData.subcategoria}
-                  onChange={(e) => onEditChange('subcategoria', e.target.value)}
-                  placeholder="Subcategoría"
-                />
-              )}
-            </div>
-            
+            {/* Taxonomía 3 niveles: Categorías → Tipos → Subcategorías */}
+            {onTaxonomyChange ? (
+              <Taxonomy3LevelDropdowns
+                value={taxonomySelections}
+                onChange={onTaxonomyChange}
+                compact={false}
+              />
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Tipo de tecnología</Label>
+                  <Input
+                    value={editData.tipo}
+                    onChange={(e) => onEditChange('tipo', e.target.value)}
+                    placeholder="Tipo de tecnología"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Subcategoría</Label>
+                  <Input
+                    value={editData.subcategoria}
+                    onChange={(e) => onEditChange('subcategoria', e.target.value)}
+                    placeholder="Subcategoría"
+                  />
+                </div>
+              </div>
+            )}
             
             {/* Sector */}
             <div className="space-y-2">
