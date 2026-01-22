@@ -633,10 +633,18 @@ export default function KnowledgeBase() {
       }
       console.log("[KB-UPLOAD] Document registered in DB:", doc.id);
 
-      console.log("[KB-UPLOAD] Calling Railway API directly to process document...");
+      console.log("[KB-UPLOAD] Triggering document processing via Edge Function...");
       try {
-        await callKBRailway('/api/kb/process', 'POST', { document_id: doc.id });
-        console.log("[KB-UPLOAD] Processing initiated successfully");
+        // Use the process-knowledge-document edge function which has correct Railway endpoint
+        const { error: fnError } = await supabase.functions.invoke('process-knowledge-document', {
+          body: { documentId: doc.id },
+        });
+        if (fnError) {
+          console.error("[KB-UPLOAD] Edge function error:", fnError);
+          toast.error("Documento subido pero hubo un error al procesarlo");
+        } else {
+          console.log("[KB-UPLOAD] Processing initiated successfully");
+        }
       } catch (processError) {
         console.error("[KB-UPLOAD] Processing error:", processError);
         toast.error("Documento subido pero hubo un error al procesarlo");
