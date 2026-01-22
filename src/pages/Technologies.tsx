@@ -103,31 +103,55 @@ const Technologies: React.FC = () => {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['technologies', filters, taxonomyFilters, page, aiSearchIds, reviewFilter],
     queryFn: async () => {
-      // 1. TRAER TODAS LAS TECNOLOGÍAS - Simple query sin filtros complejos
-      const { data: allTechs, error } = await externalSupabase
-        .from('technologies')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // 1. TRAER TODAS LAS TECNOLOGÍAS con paginación del servidor
+      // Supabase limita a 1000 por defecto, así que iteramos
+      const PAGE_SIZE = 1000;
+      let allTechs: Technology[] = [];
+      let offset = 0;
+      let hasMore = true;
 
-      if (error) throw error;
-      if (!allTechs) return { technologies: [], count: 0 };
+      while (hasMore) {
+        const { data: batch, error } = await externalSupabase
+          .from('technologies')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(offset, offset + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        if (!batch || batch.length === 0) {
+          hasMore = false;
+        } else {
+          allTechs = [...allTechs, ...(batch as Technology[])];
+          offset += PAGE_SIZE;
+          hasMore = batch.length === PAGE_SIZE;
+        }
+      }
+
+      if (allTechs.length === 0) return { technologies: [], count: 0 };
 
       // 2. FILTRAR EN CLIENTE - Simple y directo
-      let filtered = allTechs as Technology[];
+      let filtered = allTechs;
 
-      // Filtro de review_status
-      if (reviewFilter === 'in_review') {
-        filtered = filtered.filter(t => t.review_status === 'in_review');
-      } else if (reviewFilter === 'pending_approval') {
-        filtered = filtered.filter(t => t.review_status === 'pending_approval');
-      } else {
-        // Default: completed, none, o null
-        filtered = filtered.filter(t => 
-          t.review_status === 'completed' || 
-          t.review_status === 'none' || 
-          t.review_status === null
-        );
+      // Determinar si hay búsqueda de texto activa
+      const hasTextSearch = !!filters.search?.trim();
+
+      // Filtro de review_status - SOLO aplicar si NO hay búsqueda de texto
+      // Cuando el usuario busca, quiere encontrar en TODAS las tecnologías
+      if (!hasTextSearch) {
+        if (reviewFilter === 'in_review') {
+          filtered = filtered.filter(t => t.review_status === 'in_review');
+        } else if (reviewFilter === 'pending_approval') {
+          filtered = filtered.filter(t => t.review_status === 'pending_approval');
+        } else {
+          // Default: completed, none, o null
+          filtered = filtered.filter(t => 
+            t.review_status === 'completed' || 
+            t.review_status === 'none' || 
+            t.review_status === null
+          );
+        }
       }
+      // Si hay búsqueda de texto, NO filtramos por review_status (busca en todas)
 
       // AI search IDs
       if (aiSearchIds && aiSearchIds.length > 0) {
