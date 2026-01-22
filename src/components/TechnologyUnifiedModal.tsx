@@ -52,6 +52,36 @@ import { Label } from '@/components/ui/label';
 type LonglistItem = Tables<'study_longlist'>;
 type ScoutingQueueItem = Tables<'scouting_queue'>;
 
+// Normalized scouting item from UI (from useScoutingData hooks)
+interface ScoutingItemUI {
+  id: string;
+  name: string;
+  provider: string;
+  country: string;
+  score: number;
+  trl: number;
+  status: string;
+  queue_status?: string;
+  created_at?: string;
+  description?: string;
+  web?: string;
+  email?: string;
+  suggestedType?: string;
+  suggestedSubcategory?: string;
+  sector?: string;
+  subsector?: string;
+  aplicacionPrincipal?: string;
+  competitiveAdvantage?: string;
+  innovacion?: string;
+  casosReferencia?: string;
+  paisesActua?: string;
+  comentariosAnalista?: string;
+  relevanceReason?: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  scouting_job_id?: string;
+}
+
 // For case study technologies from external DB
 interface CaseStudyTechnology {
   id: string;
@@ -70,7 +100,7 @@ interface CaseStudyTechnology {
 export interface TechnologyUnifiedModalProps {
   // Flexible input - only one should be provided
   technology?: Technology | null;
-  scoutingItem?: ScoutingQueueItem | null;
+  scoutingItem?: ScoutingQueueItem | ScoutingItemUI | null;
   longlistItem?: LonglistItem | null;
   caseStudyTech?: CaseStudyTechnology | null;
   
@@ -86,6 +116,9 @@ export interface TechnologyUnifiedModalProps {
   studyName?: string;
   caseStudyId?: string;
   caseStudyName?: string;
+  
+  // Behavior options
+  startInEditMode?: boolean;
   
   // Callbacks
   onSuccess?: () => void;
@@ -104,6 +137,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
   studyName,
   caseStudyId,
   caseStudyName,
+  startInEditMode = false,
   onSuccess,
   onStatusChange,
 }) => {
@@ -136,11 +170,55 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     }
     
     if (scoutingItem) {
-      const scoutData = mapFromScouting(scoutingItem);
+      // Check if it's a UI item (normalized) or DB item (Supabase type)
+      const isUIItem = 'name' in scoutingItem && !('Nombre de la tecnología' in scoutingItem);
+      
+      let scoutData: UnifiedTechData;
+      let queueStatus: string | undefined;
+      
+      if (isUIItem) {
+        // Map from ScoutingItemUI
+        const uiItem = scoutingItem as ScoutingItemUI;
+        scoutData = {
+          id: uiItem.id,
+          technology_name: uiItem.name,
+          provider: uiItem.provider || null,
+          country: uiItem.country || null,
+          paises_actua: uiItem.paisesActua || null,
+          web: uiItem.web || null,
+          email: uiItem.email || null,
+          trl: uiItem.trl || null,
+          estado_seguimiento: null,
+          fecha_scouting: uiItem.created_at || null,
+          type: uiItem.suggestedType || null,
+          subcategory: uiItem.suggestedSubcategory || null,
+          sector: uiItem.sector || null,
+          applications: uiItem.aplicacionPrincipal || null,
+          description: uiItem.description || null,
+          ventaja_competitiva: uiItem.competitiveAdvantage || null,
+          innovacion: uiItem.innovacion || null,
+          casos_referencia: uiItem.casosReferencia || null,
+          comentarios_analista: uiItem.comentariosAnalista || null,
+          status: uiItem.status || null,
+          quality_score: uiItem.score || null,
+          review_status: null,
+          created_at: uiItem.created_at || null,
+          updated_at: null,
+        };
+        queueStatus = uiItem.queue_status || uiItem.status;
+      } else {
+        // Map from ScoutingQueueItem (Supabase type)
+        scoutData = mapFromScouting(scoutingItem as ScoutingQueueItem);
+        queueStatus = (scoutingItem as ScoutingQueueItem).queue_status || undefined;
+      }
+      
       const scoutMeta: TechMetadata = {
-        ...createScoutingMetadata(scoutingItem),
-        queueStatus: scoutingItem.queue_status as TechMetadata['queueStatus'],
+        source: 'scouting',
+        phase: queueStatus === 'pending_approval' ? 'Pendiente Aprobación' : 'En Revisión',
+        queueStatus: queueStatus as TechMetadata['queueStatus'],
+        scoutingQueueId: scoutingItem.id,
       };
+      
       return {
         unifiedData: scoutData,
         metadata: scoutMeta,
@@ -264,8 +342,35 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
       setSelectedTipos([]);
       setSelectedSubcategorias([]);
       setRejectionReason('');
+    } else if (startInEditMode && !technology && !scoutingItem && !longlistItem && !caseStudyTech) {
+      // Start in edit mode for new technology creation
+      setIsEditing(true);
+      setEditData({
+        technology_name: '',
+        provider: '',
+        country: '',
+        paises_actua: '',
+        web: '',
+        email: '',
+        trl: null,
+        estado_seguimiento: '',
+        type: '',
+        subcategory: '',
+        sector: '',
+        applications: '',
+        description: '',
+        ventaja_competitiva: '',
+        innovacion: '',
+        casos_referencia: '',
+        comentarios_analista: '',
+        status: 'active',
+        tipo_id: null,
+        subcategoria_id: null,
+        sector_id: null,
+        subsector_industrial: '',
+      });
     }
-  }, [open]);
+  }, [open, startInEditMode, technology, scoutingItem, longlistItem, caseStudyTech]);
 
   useEffect(() => {
     if (unifiedData && isEditing) {
