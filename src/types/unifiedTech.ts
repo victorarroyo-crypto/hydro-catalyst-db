@@ -2,21 +2,20 @@
  * Unified Technology Types
  * 
  * Single source of truth for technology data across all views.
- * Ensures consistent field display whether data comes from:
- * - technologies table (main DB)
- * - study_longlist table (studies)
- * - scouting_queue table (scouting process)
- * - case_study_technologies table (knowledge base)
+ * Field names match exactly with the `technologies` table columns.
+ * 
+ * Sources that use different column names (e.g., scouting_queue, study_longlist)
+ * are mapped to these canonical names in mapToUnifiedTech.ts
  */
 
 export interface UnifiedTechData {
   // Identificación
   id: string;
-  technology_name: string;
+  nombre: string;
   
   // Información General
-  provider: string | null;
-  country: string | null;
+  proveedor: string | null;
+  pais: string | null;
   paises_actua: string | null;
   web: string | null;
   email: string | null;
@@ -25,19 +24,19 @@ export interface UnifiedTechData {
   fecha_scouting: string | null;
   
   // Clasificación
-  type: string | null;
-  subcategory: string | null;
+  tipo: string | null;
+  subcategoria: string | null;
   sector: string | null;
-  applications: string | null;
+  aplicacion: string | null;
   
   // Descripción e Innovación
-  description: string | null;
-  ventaja_competitiva: string | null;
+  descripcion: string | null;
+  ventaja: string | null;
   innovacion: string | null;
   casos_referencia: string | null;
   
   // Notas
-  comentarios_analista: string | null;
+  comentarios: string | null;
   
   // Technical Specifications (from case studies)
   capacity?: string | null;
@@ -177,25 +176,26 @@ export interface TechActions {
 }
 
 /** 
- * Campos editables en el formulario unificado 
+ * Campos editables en el formulario unificado
+ * Names match the technologies table schema
  */
 export interface UnifiedTechEditData {
-  technology_name: string;
-  provider: string;
-  country: string;
+  nombre: string;
+  proveedor: string;
+  pais: string;
   paises_actua: string;
   web: string;
   email: string;
   trl: number | null;
-  type: string;
-  subcategory: string;
+  tipo: string;
+  subcategoria: string;
   sector: string;
-  applications: string;
-  description: string;
-  ventaja_competitiva: string;
+  aplicacion: string;
+  descripcion: string;
+  ventaja: string;
   innovacion: string;
   casos_referencia: string;
-  comentarios_analista: string;
+  comentarios: string;
   
   // Taxonomy IDs for standardized dropdowns
   status: string;
