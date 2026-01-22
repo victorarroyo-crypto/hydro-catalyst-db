@@ -13,17 +13,17 @@ interface EnrichmentRequest {
     proveedor: string;
     web: string;
     pais: string;
-    tipo_sugerido: string;
+    tipo: string;
     subcategoria: string;
     sector: string;
     descripcion: string;
-    aplicacion_principal: string;
-    ventaja_competitiva: string;
+    aplicacion: string;
+    ventaja: string;
     innovacion: string;
-    trl_estimado: number | null;
+    trl: number | null;
     casos_referencia: string;
     paises_actua: string;
-    comentarios_analista: string;
+    comentarios: string;
   };
   model?: string;
   fieldsToEnrich?: string[];
@@ -31,23 +31,23 @@ interface EnrichmentRequest {
 
 interface EnrichmentResult {
   descripcion?: string;
-  aplicacion_principal?: string;
-  ventaja_competitiva?: string;
+  aplicacion?: string;
+  ventaja?: string;
   innovacion?: string;
   casos_referencia?: string;
-  comentarios_analista?: string;
-  trl_estimado?: number;
+  comentarios?: string;
+  trl?: number;
   paises_actua?: string;
 }
 
 const DEFAULT_FIELDS = [
   'descripcion',
-  'aplicacion_principal', 
-  'ventaja_competitiva',
+  'aplicacion',
+  'ventaja',
   'innovacion',
   'casos_referencia',
   'paises_actua',
-  'comentarios_analista'
+  'comentarios'
 ];
 
 serve(async (req) => {
@@ -135,12 +135,12 @@ Responde ÚNICAMENTE con un objeto JSON válido con los campos solicitados. No i
 
 CAMPOS A GENERAR:
 ${fieldsToEnrich.includes('descripcion') ? `- descripcion: Descripción técnica breve (150-300 palabras). Incluye tecnología principal, componentes clave, principio de funcionamiento y especificaciones técnicas relevantes.` : ''}
-${fieldsToEnrich.includes('aplicacion_principal') ? `- aplicacion_principal: Aplicación principal (100-200 palabras). Describe los usos principales, sectores de aplicación y casos típicos de uso.` : ''}
-${fieldsToEnrich.includes('ventaja_competitiva') ? `- ventaja_competitiva: Ventaja competitiva clave (100-200 palabras). Destaca qué diferencia esta tecnología de las alternativas del mercado.` : ''}
+${fieldsToEnrich.includes('aplicacion') ? `- aplicacion: Aplicación principal (100-200 palabras). Describe los usos principales, sectores de aplicación y casos típicos de uso.` : ''}
+${fieldsToEnrich.includes('ventaja') ? `- ventaja: Ventaja competitiva clave (100-200 palabras). Destaca qué diferencia esta tecnología de las alternativas del mercado.` : ''}
 ${fieldsToEnrich.includes('innovacion') ? `- innovacion: Por qué es innovadora (100-200 palabras). Explica los aspectos innovadores y cómo avanza el estado del arte.` : ''}
 ${fieldsToEnrich.includes('casos_referencia') ? `- casos_referencia: Casos de referencia (100-200 palabras). Menciona implementaciones conocidas, clientes destacados o proyectos relevantes.` : ''}
-${fieldsToEnrich.includes('comentarios_analista') ? `- comentarios_analista: Comentarios del analista (150-250 palabras). Análisis experto sobre madurez tecnológica, potencial de mercado, barreras de adopción y recomendaciones.` : ''}
-${fieldsToEnrich.includes('trl_estimado') ? `- trl_estimado: Nivel TRL estimado (número del 1 al 9). Basado en la información disponible.` : ''}
+${fieldsToEnrich.includes('comentarios') ? `- comentarios: Comentarios del analista (150-250 palabras). Análisis experto sobre madurez tecnológica, potencial de mercado, barreras de adopción y recomendaciones.` : ''}
+${fieldsToEnrich.includes('trl') ? `- trl: Nivel TRL estimado (número del 1 al 9). Basado en la información disponible.` : ''}
 ${fieldsToEnrich.includes('paises_actua') ? `- paises_actua: Países donde actúa. Lista de países o regiones donde opera la empresa.` : ''}`;
 
     const userPrompt = `INFORMACIÓN DE LA TECNOLOGÍA:
@@ -149,17 +149,17 @@ Nombre: ${technology.nombre}
 Proveedor/Empresa: ${technology.proveedor || 'No especificado'}
 Web: ${technology.web || 'No disponible'}
 País de origen: ${technology.pais || 'No especificado'}
-Tipo de tecnología sugerido: ${technology.tipo_sugerido || 'No clasificado'}
+Tipo de tecnología: ${technology.tipo || 'No clasificado'}
 Subcategoría: ${technology.subcategoria || 'No especificada'}
 Sector: ${technology.sector || 'No especificado'}
 
 INFORMACIÓN EXISTENTE (para contexto, mejorar si está incompleta):
 ${technology.descripcion ? `- Descripción actual: ${technology.descripcion}` : ''}
-${technology.aplicacion_principal ? `- Aplicación principal actual: ${technology.aplicacion_principal}` : ''}
-${technology.ventaja_competitiva ? `- Ventaja competitiva actual: ${technology.ventaja_competitiva}` : ''}
+${technology.aplicacion ? `- Aplicación principal actual: ${technology.aplicacion}` : ''}
+${technology.ventaja ? `- Ventaja competitiva actual: ${technology.ventaja}` : ''}
 ${technology.innovacion ? `- Innovación actual: ${technology.innovacion}` : ''}
 ${technology.casos_referencia ? `- Casos de referencia actuales: ${technology.casos_referencia}` : ''}
-${technology.trl_estimado ? `- TRL actual: ${technology.trl_estimado}` : ''}
+${technology.trl ? `- TRL actual: ${technology.trl}` : ''}
 ${technology.paises_actua ? `- Países donde actúa: ${technology.paises_actua}` : ''}
 
 Por favor, genera el contenido enriquecido para los campos solicitados. Si ya existe información, mejórala y amplíala. Si falta información, créala basándote en el contexto disponible.
@@ -280,19 +280,19 @@ Responde SOLO con el JSON, sin markdown ni explicaciones.`;
           enrichedData = {};
           const fieldPatterns = [
             { key: 'descripcion', regex: /"descripcion"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
-            { key: 'aplicacion_principal', regex: /"aplicacion_principal"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
-            { key: 'ventaja_competitiva', regex: /"ventaja_competitiva"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'aplicacion', regex: /"aplicacion"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'ventaja', regex: /"ventaja"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
             { key: 'innovacion', regex: /"innovacion"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
             { key: 'casos_referencia', regex: /"casos_referencia"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
             { key: 'paises_actua', regex: /"paises_actua"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
-            { key: 'comentarios_analista', regex: /"comentarios_analista"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
-            { key: 'trl_estimado', regex: /"trl_estimado"\s*:\s*(\d+)/s },
+            { key: 'comentarios', regex: /"comentarios"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/s },
+            { key: 'trl', regex: /"trl"\s*:\s*(\d+)/s },
           ];
           
           for (const { key, regex } of fieldPatterns) {
             const match = cleanedResponse.match(regex);
             if (match) {
-              enrichedData[key as keyof EnrichmentResult] = key === 'trl_estimado' 
+              enrichedData[key as keyof EnrichmentResult] = key === 'trl' 
                 ? parseInt(match[1]) 
                 : match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
             }

@@ -545,17 +545,17 @@ export const ScoutingTechFormModal: React.FC<ScoutingTechFormModalProps> = ({
                     proveedor: formData.proveedor,
                     web: formData.web,
                     pais: formData.pais,
-                    tipo_sugerido: formData.tipo_sugerido,
+                    tipo: formData.tipo_sugerido,
                     subcategoria: formData.subcategoria,
                     sector: formData.sector,
                     descripcion: formData.descripcion,
-                    aplicacion_principal: formData.aplicacion_principal,
-                    ventaja_competitiva: formData.ventaja_competitiva,
+                    aplicacion: formData.aplicacion_principal,
+                    ventaja: formData.ventaja_competitiva,
                     innovacion: formData.innovacion,
-                    trl_estimado: formData.trl_estimado,
+                    trl: formData.trl_estimado ?? null,
                     casos_referencia: formData.casos_referencia,
                     paises_actua: formData.paises_actua,
-                    comentarios_analista: formData.comentarios_analista,
+                    comentarios: formData.comentarios_analista,
                   }}
                   onEnrichmentComplete={handleEnrichmentComplete}
                   disabled={isLoading}

@@ -364,28 +364,28 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                   proveedor: t.proveedor || '',
                   web: t.web || '',
                   pais: t.pais || '',
-                  tipo_sugerido: t.tipo || '',
+                  tipo: t.tipo || '',
                   subcategoria: t.subcategorias?.[0] || '',
                   sector: t.sector || '',
                   descripcion: t.descripcion || '',
-                  aplicacion_principal: t.aplicacion || '',
-                  ventaja_competitiva: t.ventaja || '',
+                  aplicacion: t.aplicacion || '',
+                  ventaja: t.ventaja || '',
                   innovacion: t.innovacion || '',
-                  trl_estimado: t.trl,
+                  trl: t.trl ?? null,
                   casos_referencia: t.casos_referencia || '',
                   paises_actua: t.paises_actua || '',
-                  comentarios_analista: t.comentarios || '',
+                  comentarios: t.comentarios || '',
                 }}
                 onEnrichmentComplete={async (enrichedData) => {
                   const updates: Record<string, any> = {};
                   if (typeof enrichedData.descripcion === 'string') updates.descripcion = enrichedData.descripcion;
-                  if (typeof enrichedData.aplicacion_principal === 'string') updates.aplicacion = enrichedData.aplicacion_principal;
-                  if (typeof enrichedData.ventaja_competitiva === 'string') updates.ventaja = enrichedData.ventaja_competitiva;
+                  if (typeof enrichedData.aplicacion === 'string') updates.aplicacion = enrichedData.aplicacion;
+                  if (typeof enrichedData.ventaja === 'string') updates.ventaja = enrichedData.ventaja;
                   if (typeof enrichedData.innovacion === 'string') updates.innovacion = enrichedData.innovacion;
                   if (typeof enrichedData.casos_referencia === 'string') updates.casos_referencia = enrichedData.casos_referencia;
                   if (typeof enrichedData.paises_actua === 'string') updates.paises_actua = enrichedData.paises_actua;
-                  if (typeof enrichedData.comentarios_analista === 'string') updates.comentarios = enrichedData.comentarios_analista;
-                  if (typeof enrichedData.trl_estimado === 'number') updates.trl = enrichedData.trl_estimado;
+                  if (typeof enrichedData.comentarios === 'string') updates.comentarios = enrichedData.comentarios;
+                  if (typeof enrichedData.trl === 'number') updates.trl = enrichedData.trl;
 
                   if (Object.keys(updates).length === 0) {
                     toast({

@@ -30,17 +30,17 @@ interface AIEnrichmentButtonProps {
     proveedor: string;
     web: string;
     pais: string;
-    tipo_sugerido: string;
+    tipo: string;
     subcategoria: string;
     sector: string;
     descripcion: string;
-    aplicacion_principal: string;
-    ventaja_competitiva: string;
+    aplicacion: string;
+    ventaja: string;
     innovacion: string;
-    trl_estimado: number | null;
+    trl: number | null;
     casos_referencia: string;
     paises_actua: string;
-    comentarios_analista: string;
+    comentarios: string;
   };
   onEnrichmentComplete: (enrichedData: Record<string, string | number>) => void;
   disabled?: boolean;
@@ -48,12 +48,12 @@ interface AIEnrichmentButtonProps {
 
 const ENRICHABLE_FIELDS = [
   { id: 'descripcion', label: 'Descripción técnica breve' },
-  { id: 'aplicacion_principal', label: 'Aplicación principal' },
-  { id: 'ventaja_competitiva', label: 'Ventaja competitiva clave' },
+  { id: 'aplicacion', label: 'Aplicación principal' },
+  { id: 'ventaja', label: 'Ventaja competitiva clave' },
   { id: 'innovacion', label: 'Por qué es innovadora' },
   { id: 'casos_referencia', label: 'Casos de referencia' },
   { id: 'paises_actua', label: 'Países donde actúa' },
-  { id: 'comentarios_analista', label: 'Comentarios del analista' },
+  { id: 'comentarios', label: 'Comentarios del analista' },
 ];
 
 export const AIEnrichmentButton: React.FC<AIEnrichmentButtonProps> = ({
@@ -113,17 +113,17 @@ export const AIEnrichmentButton: React.FC<AIEnrichmentButtonProps> = ({
             proveedor: technology.proveedor,
             web: technology.web,
             pais: technology.pais,
-            tipo_sugerido: technology.tipo_sugerido,
+            tipo: technology.tipo,
             subcategoria: technology.subcategoria,
             sector: technology.sector,
             descripcion: technology.descripcion,
-            aplicacion_principal: technology.aplicacion_principal,
-            ventaja_competitiva: technology.ventaja_competitiva,
+            aplicacion: technology.aplicacion,
+            ventaja: technology.ventaja,
             innovacion: technology.innovacion,
-            trl_estimado: technology.trl_estimado,
+            trl: technology.trl,
             casos_referencia: technology.casos_referencia,
             paises_actua: technology.paises_actua,
-            comentarios_analista: technology.comentarios_analista,
+            comentarios: technology.comentarios,
           },
           model: selectedModel,
           fieldsToEnrich: selectedFields,

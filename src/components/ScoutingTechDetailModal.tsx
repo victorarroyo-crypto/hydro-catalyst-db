@@ -480,17 +480,17 @@ export const ScoutingTechDetailModal = ({
                     proveedor: technology.provider || '',
                     web: technology.web || '',
                     pais: technology.country || '',
-                    tipo_sugerido: technology.suggestedType || '',
+                    tipo: technology.suggestedType || '',
                     subcategoria: technology.suggestedSubcategory || '',
                     sector: technology.sector || '',
                     descripcion: technology.description || '',
-                    aplicacion_principal: '',
-                    ventaja_competitiva: technology.competitiveAdvantage || '',
+                    aplicacion: '',
+                    ventaja: technology.competitiveAdvantage || '',
                     innovacion: '',
-                    trl_estimado: technology.trl,
+                    trl: technology.trl ?? null,
                     casos_referencia: '',
                     paises_actua: '',
-                    comentarios_analista: technology.relevanceReason || '',
+                    comentarios: technology.relevanceReason || '',
                   }}
                   onEnrichmentComplete={(enrichedData) => {
                     queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
