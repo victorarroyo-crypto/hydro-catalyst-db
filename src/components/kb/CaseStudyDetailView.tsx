@@ -367,17 +367,50 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     }
   };
 
-  // Local generation (simplified - no backend dependency)
+  // Backend download via Edge Function proxy with fallback to local generation
   const handleDownloadWord = async () => {
     if (!caseStudy) return;
     
     setIsDownloading(true);
     try {
-      await generateCaseStudyWordDocument(caseStudy, technologies || []);
-      toast.success('Documento generado correctamente');
+      // Try to download from backend via Edge Function proxy
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/case-study-document-proxy?id=${caseStudyId}`,
+        {
+          method: 'GET',
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Caso_Estudio_${caseStudy.name?.replace(/\s+/g, '_') || caseStudyId}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        toast.success('Documento descargado desde el servidor');
+        return;
+      }
+      
+      // If backend fails, throw to trigger fallback
+      throw new Error(`Backend error: ${response.status}`);
     } catch (error) {
-      console.error('Error generating Word document:', error);
-      toast.error('Error al generar el documento');
+      console.warn('Fallback to local generation:', error);
+      // Fallback to local generation
+      try {
+        await generateCaseStudyWordDocument(caseStudy, technologies || []);
+        toast.success('Documento generado localmente');
+      } catch (localError) {
+        console.error('Error generating locally:', localError);
+        toast.error('Error al generar el documento');
+      }
     } finally {
       setIsDownloading(false);
     }
