@@ -663,16 +663,18 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
 
   // Get problem parameters - v13.0 uses technical_parameters
   const problemParams = caseStudy.technical_parameters || caseStudy.problem_parameters || {};
-  const problemParamsList = Object.entries(problemParams).map(([name, data]) => ({
-    name,
-    value: data.value,
-    unit: data.unit,
-  }));
+  const problemParamsList = Object.entries(problemParams)
+    .filter(([, data]) => data != null && typeof data === 'object')
+    .map(([name, data]: [string, any]) => ({
+      name,
+      value: data?.value ?? null,
+      unit: data?.unit ?? '',
+    }));
 
-  // Get results parameters
+  // Get results parameters - with null safety
   const resultsParams = caseStudy.results_parameters || {};
-  const dqoFinal = resultsParams['DQO_final'];
-  const reduction = resultsParams['Reduccion'];
+  const dqoFinal = resultsParams['DQO_final'] ?? null;
+  const reduction = resultsParams['Reduccion'] ?? null;
 
   // v13.0: Get lessons as structured arrays
   const lessonsWhatWorked = caseStudy.lessons_what_worked || [];
@@ -926,19 +928,19 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
               {displayResults || 'Sin descripción'}
             </p>
             
-            {(dqoFinal || reduction) && (
+            {(dqoFinal?.value || reduction?.value) && (
               <>
                 <Separator />
                 <div className="flex gap-6">
-                  {dqoFinal && (
+                  {dqoFinal?.value && (
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">DQO final</p>
                       <p className="text-lg font-semibold">
-                        {dqoFinal.value} <span className="text-sm font-normal text-muted-foreground">{dqoFinal.unit}</span>
+                        {dqoFinal.value} <span className="text-sm font-normal text-muted-foreground">{dqoFinal.unit || ''}</span>
                       </p>
                     </div>
                   )}
-                  {reduction && (
+                  {reduction?.value && (
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Reducción</p>
                       <p className="text-lg font-semibold text-accent">
