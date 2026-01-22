@@ -135,21 +135,21 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
   // Convert UnifiedTechData to format expected by AIEnrichmentButton
   const technologyLikeObject = {
     id: data.id,
-    nombre: data.technology_name,
-    proveedor: data.provider || '',
-    pais: data.country || '',
+    nombre: data.nombre,
+    proveedor: data.proveedor || '',
+    pais: data.pais || '',
     trl_estimado: data.trl,
-    descripcion: data.description || '',
-    tipo_sugerido: data.type || 'Por clasificar',
-    subcategoria: data.subcategory || '',
+    descripcion: data.descripcion || '',
+    tipo_sugerido: data.tipo || 'Por clasificar',
+    subcategoria: data.subcategoria || '',
     web: data.web || '',
-    aplicacion_principal: data.applications || '',
+    aplicacion_principal: data.aplicacion || '',
     sector: data.sector || '',
-    ventaja_competitiva: data.ventaja_competitiva || '',
+    ventaja_competitiva: data.ventaja || '',
     innovacion: data.innovacion || '',
     casos_referencia: data.casos_referencia || '',
     paises_actua: data.paises_actua || '',
-    comentarios_analista: data.comentarios_analista || '',
+    comentarios_analista: data.comentarios || '',
   };
 
   const handleRejectConfirm = () => {

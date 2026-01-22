@@ -30,8 +30,7 @@ import {
   Eye,
 } from 'lucide-react';
 import AISessionPanel from './AISessionPanel';
-import { LonglistTechDetailModal } from './LonglistTechDetailModal';
-import type { FullLonglistItem } from '@/hooks/useScoutingStudies';
+import TechnologyUnifiedModal from '@/components/TechnologyUnifiedModal';
 
 interface Props {
   studyId: string;
@@ -252,14 +251,15 @@ export default function StudyPhase4Shortlist({ studyId, study }: Props) {
         </div>
       </div>
 
-      {/* Tech Detail Modal */}
-      <LonglistTechDetailModal
-        item={viewingTech}
-        open={!!viewingTech}
-        onOpenChange={(open) => !open && setViewingLonglistId(null)}
-        studyId={studyId}
-        studyName={study.name}
-      />
+      {viewingTech && (
+        <TechnologyUnifiedModal
+          open={!!viewingTech}
+          onOpenChange={(open) => !open && setViewingLonglistId(null)}
+          longlistItem={viewingTech as any}
+          studyId={studyId}
+          studyName={study.name}
+        />
+      )}
 
       {/* Add to Shortlist Dialog */}
       <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>

@@ -51,7 +51,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { exportLonglistToExcel } from '@/lib/exportLonglistExcel';
-import { LonglistTechDetailModal } from './LonglistTechDetailModal';
+import TechnologyUnifiedModal from '@/components/TechnologyUnifiedModal';
 import { toast } from 'sonner';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -679,13 +679,15 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
       )}
 
       {/* Detail Modal */}
-      <LonglistTechDetailModal
-        item={selectedItem as any}
-        open={isDetailOpen}
-        onOpenChange={setIsDetailOpen}
-        studyId={studyId}
-        studyName={study.name}
-      />
+      {selectedItem && (
+        <TechnologyUnifiedModal
+          open={isDetailOpen}
+          onOpenChange={setIsDetailOpen}
+          longlistItem={selectedItem as any}
+          studyId={studyId}
+          studyName={study.name}
+        />
+      )}
     </div>
   );
 }
