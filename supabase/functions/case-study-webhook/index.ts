@@ -112,28 +112,23 @@ serve(async (req) => {
       status = 'processing'
     }
 
-    // Map technologies if present (extract from ficha if needed)
+    // Map technologies - Railway ahora envía columnas en español directamente
     let mappedTechnologies: any[] = []
     const rawTechnologies = technologies || data?.technologies || []
     
     if (Array.isArray(rawTechnologies) && rawTechnologies.length > 0) {
-      mappedTechnologies = rawTechnologies.map((tech: any) => {
-        const ficha = tech.ficha || {}
-        return {
-          name: tech.nombre || ficha.nombre || tech.technology_name || tech.name || '',
-          provider: tech.proveedor || ficha.proveedor || tech.provider || '',
-          website: tech.web || ficha.web || tech.website || '',
-          description: tech.descripcion || ficha.descripcion || tech.description || '',
-          role: tech.rol || ficha.rol || tech.role || 'identified',
-          trl: tech.trl || ficha.trl || null,
-          application: tech.aplicacion || ficha.aplicacion || tech.application || '',
-          advantage: tech.ventaja || ficha.ventaja || tech.advantage || '',
-          innovation: tech.innovacion || ficha.innovacion || tech.innovation || '',
-          references: tech.referencias || ficha.referencias || tech.references || '',
-          found_in_db: tech.found_in_db || false,
-          technology_id: tech.technology_id || null,
-        }
-      })
+      mappedTechnologies = rawTechnologies.map((tech: any) => ({
+        nombre: tech.nombre || '',
+        proveedor: tech.proveedor || '',
+        web: tech.web || '',
+        descripcion: tech.descripcion || '',
+        aplicacion: tech.aplicacion || '',
+        ventaja: tech.ventaja || '',
+        trl: tech.trl || null,
+        role: tech.role || 'evaluated',
+        found_in_db: tech.found_in_db || false,
+        technology_id: tech.technology_id || null,
+      }))
       console.log(`[CASE-STUDY-WEBHOOK] Mapped ${mappedTechnologies.length} technologies`)
     }
 

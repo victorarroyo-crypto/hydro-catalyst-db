@@ -46,9 +46,12 @@ interface CaseStudyData {
 }
 
 interface CaseStudyTechnology {
-  technology_name: string;
-  provider: string | null;
+  nombre: string;
+  proveedor: string | null;
   role: string;
+  web?: string | null;
+  descripcion?: string | null;
+  trl?: number | null;
 }
 
 // Sector labels map
@@ -233,8 +236,8 @@ export async function generateCaseStudyWordDocument(
     sections.push(createVandarumHeading1('Tecnologías Aplicadas'));
     
     const techRows = technologies.map(tech => ({
-      label: tech.technology_name,
-      value: [tech.provider, tech.role].filter(Boolean).join(' - ') || 'Sin detalles',
+      label: tech.nombre,
+      value: [tech.proveedor, tech.role].filter(Boolean).join(' - ') || 'Sin detalles',
     }));
 
     sections.push(createVandarumInfoTable(techRows));

@@ -78,18 +78,21 @@ interface ScoutingItemUI {
   scouting_job_id?: string;
 }
 
-// For case study technologies from external DB
+// For case study technologies from external DB - nuevo schema español
 interface CaseStudyTechnology {
   id: string;
   case_study_id: string;
-  technology_name: string;
   technology_id?: string | null;
   scouting_queue_id?: string | null;
-  provider?: string | null;
   role: string;
-  selection_rationale?: string | null;
-  application_data?: Record<string, any> | null;
-  economic_analysis?: Record<string, any> | null;
+  // Columnas directas en español
+  nombre: string;
+  proveedor?: string | null;
+  web?: string | null;
+  descripcion?: string | null;
+  aplicacion?: string | null;
+  ventaja?: string | null;
+  trl?: number | null;
   created_at?: string;
 }
 
@@ -244,35 +247,34 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     }
     
     if (caseStudyTech) {
-      const appData = caseStudyTech.application_data || {};
+      // Leer directamente de columnas en español (sin application_data)
       const csData: UnifiedTechData = {
         id: caseStudyTech.id,
-        nombre: caseStudyTech.technology_name,
-        proveedor: caseStudyTech.provider || appData.proveedor || null,
-        pais: appData.pais || null,
-        paises_actua: appData.paises_actua || null,
-        web: appData.web || null,
-        email: appData.email || null,
-        trl: appData.trl || null,
+        nombre: caseStudyTech.nombre,
+        proveedor: caseStudyTech.proveedor || null,
+        pais: null,
+        paises_actua: null,
+        web: caseStudyTech.web || null,
+        email: null,
+        trl: caseStudyTech.trl || null,
         estado_seguimiento: null,
         fecha_scouting: null,
-        tipo: appData.tipo || null,
-        subcategoria: appData.subcategoria || null,
-        sector: appData.sector || null,
-        aplicacion: appData.aplicacion || null,
-        descripcion: appData.descripcion || appData.description || null,
-        ventaja: appData.ventaja || appData.ventaja_competitiva || null,
-        innovacion: appData.innovacion || null,
-        casos_referencia: appData.casos_referencia || null,
+        tipo: null,
+        subcategoria: null,
+        sector: null,
+        aplicacion: caseStudyTech.aplicacion || null,
+        descripcion: caseStudyTech.descripcion || null,
+        ventaja: caseStudyTech.ventaja || null,
+        innovacion: null,
+        casos_referencia: null,
         comentarios: null,
-        // Technical specs from case studies
-        capacity: appData.capacity || null,
-        removal_efficiency: appData.removal_efficiency || null,
-        footprint: appData.footprint || null,
-        power_consumption: appData.power_consumption || null,
-        price_range: appData.price_range || null,
-        business_model: appData.business_model || null,
-        lead_time: appData.lead_time || null,
+        capacity: null,
+        removal_efficiency: null,
+        footprint: null,
+        power_consumption: null,
+        price_range: null,
+        business_model: null,
+        lead_time: null,
         status: null,
         quality_score: null,
         review_status: null,
@@ -289,7 +291,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
         isInScoutingQueue: !!caseStudyTech.scouting_queue_id,
         scoutingQueueId: caseStudyTech.scouting_queue_id || undefined,
         role: caseStudyTech.role as TechMetadata['role'],
-        selectionRationale: caseStudyTech.selection_rationale || undefined,
+        selectionRationale: caseStudyTech.ventaja || undefined,
       };
       
       return {

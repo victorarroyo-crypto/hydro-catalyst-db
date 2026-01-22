@@ -708,20 +708,33 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         
         let loadedTechnologies: Technology[] = [];
         
-        // OPCIÓN A: Cargar desde case_study_technologies (fuente principal)
+        // OPCIÓN A: Cargar desde case_study_technologies (fuente principal) - nuevo schema español
         if (caseStudyId) {
           const { data: dbTechs, error: techError } = await externalSupabase
             .from('case_study_technologies')
-            .select('*')
+            .select('id, case_study_id, technology_id, scouting_queue_id, role, nombre, proveedor, web, descripcion, aplicacion, ventaja, trl, created_at')
             .eq('case_study_id', caseStudyId);
             
           if (techError) {
             console.error('[CaseStudyForm] Error loading technologies from DB:', techError);
           } else if (dbTechs && dbTechs.length > 0) {
-            console.log('[CaseStudyForm] ✓ Loaded', dbTechs.length, 'technologies from case_study_technologies');
+            console.log('[CaseStudyForm] ✓ Loaded', dbTechs.length, 'technologies from case_study_technologies (schema español)');
             console.log('[CaseStudyForm] Sample tech:', JSON.stringify(dbTechs[0], null, 2).slice(0, 500));
             
-            loadedTechnologies = dbTechs.map((t, i) => normalizeTechnology(t, i) as Technology);
+            // Mapeo directo desde columnas españolas
+            loadedTechnologies = dbTechs.map((t, i) => ({
+              id: t.id || String(i + 1),
+              name: t.nombre || '',
+              provider: t.proveedor || '',
+              role: t.role === 'recommended' ? 'Recomendada' as const : 'Evaluada' as const,
+              status: t.technology_id ? 'linked' as const : t.scouting_queue_id ? 'sent_to_scouting' as const : 'new' as const,
+              linkedTechId: t.technology_id || undefined,
+              description: t.descripcion || '',
+              trl: t.trl || null,
+              web: t.web || '',
+              mainApplication: t.aplicacion || '',
+              innovationAdvantages: t.ventaja || '',
+            })) as Technology[];
           }
         }
         
@@ -1105,22 +1118,24 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
         console.log('[CaseStudyForm] Created new case:', caseStudyId);
       }
 
-      // Insert technologies with hybrid logic + application_data
+      // Insert technologies - ahora usando columnas españolas directamente
       if (technologies.length > 0 && caseStudyId) {
         for (const tech of technologies) {
-          const applicationData = buildApplicationData(tech);
-          
           if (tech.linkedTechId || tech.status === 'linked') {
             // CASO A: Tecnología ya existe en DB → vincular directamente
             const { error: techError } = await externalSupabase
               .from('case_study_technologies')
               .insert({
                 case_study_id: caseStudyId,
-                technology_name: tech.name,
-                provider: tech.provider || null,
+                nombre: tech.name,
+                proveedor: tech.provider || null,
                 role: mapRoleToDb(tech.role),
                 technology_id: tech.linkedTechId || null,
-                application_data: applicationData,
+                web: tech.web || null,
+                descripcion: tech.description || null,
+                aplicacion: tech.mainApplication || null,
+                ventaja: tech.innovationAdvantages || null,
+                trl: tech.trl || null,
               });
 
             if (techError) {
@@ -1139,11 +1154,15 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
               .from('case_study_technologies')
               .insert({
                 case_study_id: caseStudyId,
-                technology_name: tech.name,
-                provider: tech.provider || null,
+                nombre: tech.name,
+                proveedor: tech.provider || null,
                 role: mapRoleToDb(tech.role),
                 scouting_queue_id: existingScouting?.id || null,
-                application_data: applicationData,
+                web: tech.web || null,
+                descripcion: tech.description || null,
+                aplicacion: tech.mainApplication || null,
+                ventaja: tech.innovationAdvantages || null,
+                trl: tech.trl || null,
               });
 
             if (techError) {
@@ -1155,41 +1174,47 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
             // Para borradores, solo guardar en case_study_technologies sin crear entrada en scouting
             
             if (status === 'approved') {
-              // Publicando → insertar en BD Externa directamente (campos snake_case)
+              // Publicando → insertar en scouting_queue con columnas legacy (con espacios)
               const { data: insertedRecord, error: scoutingError } = await externalSupabase
                 .from('scouting_queue')
                 .insert({
-                  nombre: tech.name,
-                  proveedor: tech.provider || null,
-                  pais: tech.country || null,
-                  web: tech.web || null,
-                  email: tech.email || null,
-                  descripcion: tech.description || null,
-                  tipo_sugerido: tech.type || 'Por clasificar',
-                  subcategoria: tech.subcategory || null,
-                  trl_estimado: tech.trl || null,
-                  ventaja_competitiva: tech.innovationAdvantages || null,
-                  aplicacion_principal: tech.mainApplication || null,
-                  sector: tech.sector || sector,
+                  "Nombre de la tecnología": tech.name,
+                  "Tipo de tecnología": tech.type || 'Por clasificar',
+                  "Proveedor / Empresa": tech.provider || null,
+                  "País de origen": tech.country || null,
+                  "Web de la empresa": tech.web || null,
+                  "Email de contacto": tech.email || null,
+                  "Descripción técnica breve": tech.description || null,
+                  "Subcategoría": tech.subcategory || null,
+                  "Grado de madurez (TRL)": tech.trl || null,
+                  "Ventaja competitiva clave": tech.innovationAdvantages || null,
+                  "Aplicación principal": tech.mainApplication || null,
+                  "Sector y subsector": tech.sector || sector,
                   source: 'case_study',
-                  status: 'pending'
+                  queue_status: 'review',
+                  "Fecha de scouting": new Date().toISOString().split('T')[0],
                 })
-                .select()
-                .single();
+                .select('id')
+                .maybeSingle();
 
               if (scoutingError) {
                 console.error('Error inserting to external scouting_queue:', scoutingError);
               }
 
-              // Insertar en case_study_technologies local (tracking interno)
+              // Insertar en case_study_technologies con columnas españolas
               const { error: techError } = await externalSupabase
                 .from('case_study_technologies')
                 .insert({
                   case_study_id: caseStudyId,
-                  technology_name: tech.name,
-                  provider: tech.provider || null,
+                  nombre: tech.name,
+                  proveedor: tech.provider || null,
                   role: mapRoleToDb(tech.role),
-                  application_data: applicationData,
+                  scouting_queue_id: insertedRecord?.id || null,
+                  web: tech.web || null,
+                  descripcion: tech.description || null,
+                  aplicacion: tech.mainApplication || null,
+                  ventaja: tech.innovationAdvantages || null,
+                  trl: tech.trl || null,
                 });
 
               if (techError) {
@@ -1197,16 +1222,18 @@ export const CaseStudyFormView: React.FC<CaseStudyFormViewProps> = ({
               }
             } else {
               // Borrador → solo guardar en case_study_technologies sin enviar a scouting
-              // Esto evita crear tecnologías huérfanas si el borrador se elimina
               const { error: techError } = await externalSupabase
                 .from('case_study_technologies')
                 .insert({
                   case_study_id: caseStudyId,
-                  technology_name: tech.name,
-                  provider: tech.provider || null,
+                  nombre: tech.name,
+                  proveedor: tech.provider || null,
                   role: mapRoleToDb(tech.role),
-                  application_data: applicationData,
-                  // No scouting_queue_id - se creará cuando se publique
+                  web: tech.web || null,
+                  descripcion: tech.description || null,
+                  aplicacion: tech.mainApplication || null,
+                  ventaja: tech.innovationAdvantages || null,
+                  trl: tech.trl || null,
                 });
 
               if (techError) {

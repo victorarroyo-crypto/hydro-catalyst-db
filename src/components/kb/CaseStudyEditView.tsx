@@ -166,9 +166,10 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
         console.log('[CaseStudyEditView] Publishing case study, checking for technologies to send to scouting');
         
         // Fetch associated technologies that don't have a scouting_queue_id yet
+        // Nuevo schema: leer columnas en español directamente
         const { data: techs, error: techError } = await externalSupabase
           .from('case_study_technologies')
-          .select('*')
+          .select('id, case_study_id, technology_id, scouting_queue_id, role, nombre, proveedor, web, descripcion, aplicacion, ventaja, trl')
           .eq('case_study_id', caseStudyId)
           .is('scouting_queue_id', null);
 
@@ -178,34 +179,31 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
           console.log(`[CaseStudyEditView] Sending ${techs.length} technologies to external scouting`);
           
           for (const tech of techs) {
-            const appData = (tech.application_data as Record<string, unknown>) || {};
-            
             try {
-              // Insertar en BD Externa directamente (campos snake_case)
+              // Insertar en scouting_queue con columnas legacy (con espacios)
               const { data: insertedRecord, error: scoutingError } = await externalSupabase
                 .from('scouting_queue')
                 .insert({
-                  nombre: tech.technology_name,
-                  proveedor: tech.provider || null,
-                  pais: (appData.country as string) || country || null,
-                  web: (appData.web as string) || null,
-                  email: (appData.email as string) || null,
-                  descripcion: (appData.description as string) || null,
-                  tipo_sugerido: (appData.type as string) || 'Por clasificar',
-                  subcategoria: (appData.subcategory as string) || null,
-                  trl_estimado: (appData.trl as number) || null,
-                  ventaja_competitiva: (appData.innovationAdvantages as string) || null,
-                  aplicacion_principal: (appData.mainApplication as string) || null,
-                  sector: sector || null,
+                  "Nombre de la tecnología": tech.nombre,
+                  "Tipo de tecnología": 'Por clasificar',
+                  "Proveedor / Empresa": tech.proveedor || null,
+                  "País de origen": country || null,
+                  "Web de la empresa": tech.web || null,
+                  "Descripción técnica breve": tech.descripcion || null,
+                  "Aplicación principal": tech.aplicacion || null,
+                  "Ventaja competitiva clave": tech.ventaja || null,
+                  "Grado de madurez (TRL)": tech.trl || null,
+                  "Sector y subsector": sector || null,
                   source: 'case_study',
                   case_study_id: caseStudyId,
-                  status: 'review'
+                  queue_status: 'review',
+                  "Fecha de scouting": new Date().toISOString().split('T')[0],
                 })
-                .select()
-                .single();
+                .select('id')
+                .maybeSingle();
 
               if (scoutingError) {
-                console.error('[CaseStudyEditView] Error sending tech to scouting:', tech.technology_name, scoutingError);
+                console.error('[CaseStudyEditView] Error sending tech to scouting:', tech.nombre, scoutingError);
               } else if (insertedRecord?.id) {
                 // Successfully inserted - update scouting_queue_id to mark as sent
                 await externalSupabase
@@ -213,10 +211,10 @@ export const CaseStudyEditView: React.FC<CaseStudyEditViewProps> = ({
                   .update({ scouting_queue_id: insertedRecord.id })
                   .eq('id', tech.id);
                 
-                console.log('[CaseStudyEditView] Successfully sent and linked:', tech.technology_name, insertedRecord.id);
+                console.log('[CaseStudyEditView] Successfully sent and linked:', tech.nombre, insertedRecord.id);
               }
             } catch (err) {
-              console.error('[CaseStudyEditView] Exception sending tech to scouting:', tech.technology_name, err);
+              console.error('[CaseStudyEditView] Exception sending tech to scouting:', tech.nombre, err);
             }
           }
         } else {
