@@ -121,6 +121,29 @@ interface CaseStudyFull {
   lessons_learned: string | null;
   created_at: string;
   entity_type?: string | null;
+  
+  // NEW v13.0: Direct columns for document generation
+  client_type?: string | null;
+  situation?: string | null;
+  constraints?: string[] | null;
+  decision_drivers?: string[] | null;
+  problem_title?: string | null;
+  problem_description?: string | null;
+  technical_parameters?: Record<string, { value: number; unit: string }> | null;
+  methodology_approach?: string | null;
+  scenarios?: any[] | null;
+  evaluation_criteria?: any[] | null;
+  alternatives?: any[] | null;
+  final_recommendation?: string | null;
+  implementation_status?: string | null;
+  capex_total?: string | null;
+  opex_annual?: string | null;
+  lessons_what_worked?: string[] | null;
+  lessons_challenges?: string[] | null;
+  lessons_recommendations?: string[] | null;
+  crew_version?: string | null;
+  processing_time_seconds?: number | null;
+  
   // original_data - supports both new nested structure (v12.7+) and legacy flat fields
   original_data?: {
     // NEW STRUCTURE (CaseStudyCrew v12.7+)
@@ -520,14 +543,16 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   console.log('[CaseStudyDetailView] technologies count:', technologies?.length);
   console.log('[CaseStudyDetailView] ════════════════════════════════════════════');
   
-  // Title: direct column -> NEW structure -> LEGACY structure
-  const displayTitle = caseStudy.name || 
+  // Title: v13.0 direct column -> NEW structure -> LEGACY structure
+  const displayTitle = caseStudy.problem_title ||
+                       caseStudy.name || 
                        od.problem?.title || 
                        od.caso_titulo || 
                        'Sin título';
   
-  // Client/Entity: NEW context.company -> LEGACY caso_cliente -> entity_type as last resort
-  const displayClient = od.context?.company || 
+  // Client/Entity: v13.0 client_type -> NEW context.company -> LEGACY
+  const displayClient = caseStudy.client_type ||
+                        od.context?.company || 
                         od.caso_cliente || 
                         caseStudy.entity_type || 
                         null;
@@ -544,36 +569,43 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                         od.caso_sector || 
                         null;
   
-  // Description (Problem): direct column -> NEW problem.description -> problem.initial_situation -> LEGACY
-  const displayDescriptionRaw = caseStudy.description || 
+  // Description (Problem): v13.0 problem_description -> situation -> direct column -> NEW -> LEGACY
+  const displayDescriptionRaw = caseStudy.problem_description ||
+                                caseStudy.situation ||
+                                caseStudy.description || 
                                 od.problem?.description || 
                                 od.problem?.initial_situation ||
                                 od.caso_descripcion_problema || 
                                 '';
   
-  // Solution: direct column -> NEW methodology.treatment_approach -> LEGACY caso_solucion_aplicada
-  const displaySolution = caseStudy.solution_applied || 
+  // Solution: v13.0 methodology_approach -> direct column -> NEW -> LEGACY
+  const displaySolution = caseStudy.methodology_approach ||
+                          caseStudy.solution_applied || 
                           od.methodology?.treatment_approach || 
                           od.caso_solucion_aplicada || 
                           null;
   
-  // Results: direct column -> NEW results.summary -> results.improvements -> LEGACY
-  const displayResults = caseStudy.results_achieved || 
+  // Results: v13.0 final_recommendation -> direct column -> NEW -> LEGACY
+  const displayResults = caseStudy.final_recommendation ||
+                         caseStudy.results_achieved || 
                          od.results?.summary || 
                          od.results?.improvements ||
                          od.caso_resultados || 
                          null;
 
-  // Economics: direct columns -> NEW economics.* structure
+  // Economics: v13.0 direct columns -> legacy columns -> NEW economics.* structure
   const econ = od.economics || {};
-  const displayCapex = caseStudy.capex ?? econ.investment ?? null;
-  const displayOpex = caseStudy.opex_year ?? econ.savings ?? null;
+  // Handle string or number for CAPEX/OPEX (v13.0 uses string like "50.000 €")
+  const rawCapex = caseStudy.capex_total || caseStudy.capex ?? econ.investment ?? null;
+  const rawOpex = caseStudy.opex_annual || caseStudy.opex_year ?? econ.savings ?? null;
+  const displayCapex = typeof rawCapex === 'string' ? rawCapex : rawCapex;
+  const displayOpex = typeof rawOpex === 'string' ? rawOpex : rawOpex;
   const displayPayback = caseStudy.payback_months ?? econ.payback ?? null;
   const displayRoi = caseStudy.roi_percent ?? econ.roi ?? null;
   const displayQuality = caseStudy.quality_score ?? od.quality_score ?? null;
 
-  // Get problem parameters
-  const problemParams = caseStudy.problem_parameters || {};
+  // Get problem parameters - v13.0 uses technical_parameters
+  const problemParams = caseStudy.technical_parameters || caseStudy.problem_parameters || {};
   const problemParamsList = Object.entries(problemParams).map(([name, data]) => ({
     name,
     value: data.value,
@@ -584,6 +616,16 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   const resultsParams = caseStudy.results_parameters || {};
   const dqoFinal = resultsParams['DQO_final'];
   const reduction = resultsParams['Reduccion'];
+
+  // v13.0: Get lessons as structured arrays
+  const lessonsWhatWorked = caseStudy.lessons_what_worked || [];
+  const lessonsChallenges = caseStudy.lessons_challenges || [];
+  const lessonsRecommendations = caseStudy.lessons_recommendations || [];
+  const hasStructuredLessons = lessonsWhatWorked.length > 0 || lessonsChallenges.length > 0 || lessonsRecommendations.length > 0;
+
+  // v13.0: Get constraints and decision drivers
+  const constraints = caseStudy.constraints || [];
+  const decisionDrivers = caseStudy.decision_drivers || [];
 
   // Truncate description
   const shouldTruncate = displayDescriptionRaw.length > 200;
@@ -700,14 +742,18 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                 <DollarSign className="h-3 w-3" />
                 CAPEX
               </p>
-              <p className="font-semibold text-lg">{formatCurrency(displayCapex)}</p>
+              <p className="font-semibold text-lg">
+                {typeof displayCapex === 'string' ? displayCapex : formatCurrency(displayCapex)}
+              </p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <DollarSign className="h-3 w-3" />
                 OPEX Anual
               </p>
-              <p className="font-semibold text-lg">{formatCurrency(displayOpex)}</p>
+              <p className="font-semibold text-lg">
+                {typeof displayOpex === 'string' ? displayOpex : formatCurrency(displayOpex)}
+              </p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -1029,8 +1075,8 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
         </Card>
       </div>
 
-      {/* Additional Info Cards */}
-      {(caseStudy.roi_rationale || caseStudy.lessons_learned) && (
+      {/* Additional Info Cards - v13.0: Support structured lessons */}
+      {(caseStudy.roi_rationale || caseStudy.lessons_learned || hasStructuredLessons) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* ROI Rationale */}
           {caseStudy.roi_rationale && (
@@ -1049,8 +1095,8 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
             </Card>
           )}
           
-          {/* Lessons Learned */}
-          {caseStudy.lessons_learned && (
+          {/* Lessons Learned - v13.0: Support structured arrays */}
+          {(caseStudy.lessons_learned || hasStructuredLessons) && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -1058,10 +1104,44 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                   Lecciones Aprendidas
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {caseStudy.lessons_learned}
-                </p>
+              <CardContent className="space-y-4">
+                {/* v13.0: Structured lessons */}
+                {lessonsWhatWorked.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-green-600 mb-2">✓ Lo que funcionó</p>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                      {lessonsWhatWorked.map((lesson, i) => (
+                        <li key={i}>{lesson}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {lessonsChallenges.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-orange-600 mb-2">⚠️ Desafíos</p>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                      {lessonsChallenges.map((lesson, i) => (
+                        <li key={i}>{lesson}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {lessonsRecommendations.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-blue-600 mb-2">💡 Recomendaciones</p>
+                    <ol className="list-decimal list-inside text-sm text-muted-foreground space-y-1">
+                      {lessonsRecommendations.map((lesson, i) => (
+                        <li key={i}>{lesson}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                {/* Legacy: Plain text lessons */}
+                {!hasStructuredLessons && caseStudy.lessons_learned && (
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {caseStudy.lessons_learned}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
