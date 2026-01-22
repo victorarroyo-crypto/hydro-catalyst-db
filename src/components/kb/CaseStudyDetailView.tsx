@@ -44,7 +44,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { generateCaseStudyWordDocument } from '@/lib/generateCaseStudyWordDocument';
+// Local generation removed - now using backend proxy only
 import { toast } from 'sonner';
 import { CaseStudyFormView } from './CaseStudyFormView';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
@@ -351,29 +351,12 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
 
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // Local Word generation (fallback)
-  const handleDownloadWordLocal = async () => {
-    if (!caseStudy) return;
-    
-    setIsDownloading(true);
-    try {
-      await generateCaseStudyWordDocument(caseStudy, technologies || []);
-      toast.success('Documento generado localmente');
-    } catch (error) {
-      console.error('Error generating Word document:', error);
-      toast.error('Error al generar el documento');
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  // Backend download via Edge Function proxy with fallback to local generation
+  // Download document from backend via Edge Function proxy
   const handleDownloadWord = async () => {
     if (!caseStudy) return;
     
     setIsDownloading(true);
     try {
-      // Try to download from backend via Edge Function proxy
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const response = await fetch(
         `${supabaseUrl}/functions/v1/case-study-document-proxy?id=${caseStudyId}`,
@@ -385,32 +368,22 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
         }
       );
 
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Caso_Estudio_${caseStudy.name?.replace(/\s+/g, '_') || caseStudyId}.docx`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        toast.success('Documento descargado desde el servidor');
-        return;
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
       }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `caso_estudio_${caseStudyId}.docx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
       
-      // If backend fails, throw to trigger fallback
-      throw new Error(`Backend error: ${response.status}`);
+      toast.success('Documento descargado');
     } catch (error) {
-      console.warn('Fallback to local generation:', error);
-      // Fallback to local generation
-      try {
-        await generateCaseStudyWordDocument(caseStudy, technologies || []);
-        toast.success('Documento generado localmente');
-      } catch (localError) {
-        console.error('Error generating locally:', localError);
-        toast.error('Error al generar el documento');
-      }
+      console.error('Error downloading document:', error);
+      toast.error('Error al descargar el documento');
     } finally {
       setIsDownloading(false);
     }
