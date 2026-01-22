@@ -180,16 +180,24 @@ function getScoutingPhase(status: string): string {
 export function createDatabaseActions(isInternalUser: boolean): TechActions {
   return {
     canEdit: isInternalUser,
+    canSave: isInternalUser,
     canEnrich: isInternalUser,
     canDownload: true,
+    canSendToApproval: false,
+    canApproveToDatabase: false,
+    canReject: false,
+    canBackToReview: false,
+    canSendToReview: isInternalUser,
+    canClaimReview: false,
+    canCompleteReview: false,
+    canReleaseReview: false,
     canSendToDB: false,
+    canViewInDB: false,
+    canSendToScouting: false,
     canAddToProject: true,
     canFavorite: true,
-    canSendToReview: isInternalUser,
-    canMoveToTrends: isInternalUser,
-    canMoveToCaseStudy: isInternalUser,
-    canViewInDB: false,
-    canChangeStatus: false,
+    canSeeInternalInfo: isInternalUser,
+    canSeeSpecifications: false,
   };
 }
 
@@ -199,17 +207,25 @@ export function createDatabaseActions(isInternalUser: boolean): TechActions {
  */
 export function createLonglistActions(isLinkedToDB: boolean): TechActions {
   return {
-    canEdit: true,              // Always allow editing
-    canEnrich: true,            // Always allow AI enrichment
+    canEdit: true,
+    canSave: true,
+    canEnrich: true,
     canDownload: true,
-    canSendToDB: !isLinkedToDB, // Only if not already linked
+    canSendToApproval: false,
+    canApproveToDatabase: false,
+    canReject: false,
+    canBackToReview: false,
+    canSendToReview: false,
+    canClaimReview: false,
+    canCompleteReview: false,
+    canReleaseReview: false,
+    canSendToDB: !isLinkedToDB,
+    canViewInDB: isLinkedToDB,
+    canSendToScouting: false,
     canAddToProject: false,
     canFavorite: false,
-    canSendToReview: false,
-    canMoveToTrends: false,
-    canMoveToCaseStudy: false,
-    canViewInDB: isLinkedToDB,
-    canChangeStatus: false,
+    canSeeInternalInfo: false,
+    canSeeSpecifications: false,
   };
 }
 
@@ -219,16 +235,24 @@ export function createLonglistActions(isLinkedToDB: boolean): TechActions {
 export function createScoutingActions(status: string): TechActions {
   return {
     canEdit: status !== 'approved',
+    canSave: status !== 'approved',
     canEnrich: status !== 'approved',
-    canDownload: false,
-    canSendToDB: status === 'approved',
+    canDownload: true,
+    canSendToApproval: status === 'review',
+    canApproveToDatabase: status === 'pending_approval',
+    canReject: true,
+    canBackToReview: status === 'pending_approval',
+    canSendToReview: false,
+    canClaimReview: false,
+    canCompleteReview: false,
+    canReleaseReview: false,
+    canSendToDB: false,
+    canViewInDB: false,
+    canSendToScouting: false,
     canAddToProject: false,
     canFavorite: false,
-    canSendToReview: false,
-    canMoveToTrends: false,
-    canMoveToCaseStudy: false,
-    canViewInDB: false,
-    canChangeStatus: true,
+    canSeeInternalInfo: true,
+    canSeeSpecifications: false,
   };
 }
 

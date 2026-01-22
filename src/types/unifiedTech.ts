@@ -6,6 +6,7 @@
  * - technologies table (main DB)
  * - study_longlist table (studies)
  * - scouting_queue table (scouting process)
+ * - case_study_technologies table (knowledge base)
  */
 
 export interface UnifiedTechData {
@@ -38,6 +39,15 @@ export interface UnifiedTechData {
   // Notas
   comentarios_analista: string | null;
   
+  // Technical Specifications (from case studies)
+  capacity?: string | null;
+  removal_efficiency?: string | null;
+  footprint?: string | null;
+  power_consumption?: string | null;
+  price_range?: string | null;
+  business_model?: string | null;
+  lead_time?: string | null;
+  
   // Metadatos (solo lectura)
   status: string | null;
   quality_score: number | null;
@@ -48,9 +58,9 @@ export interface UnifiedTechData {
 
 export interface TechMetadata {
   /** Origen de los datos */
-  source: 'database' | 'longlist' | 'scouting' | 'extracted';
+  source: 'database' | 'longlist' | 'scouting' | 'case_study' | 'extracted';
   
-  /** Fase actual del proceso (e.g., "Fase 3: Lista Larga") */
+  /** Fase actual del proceso */
   phase?: string;
   
   /** Nombre del estudio (si aplica) */
@@ -58,6 +68,12 @@ export interface TechMetadata {
   
   /** ID del estudio (si aplica) */
   studyId?: string;
+  
+  /** Nombre del caso de estudio (si aplica) */
+  caseStudyName?: string;
+  
+  /** ID del caso de estudio (si aplica) */
+  caseStudyId?: string;
   
   /** Si está vinculada a la BD principal */
   isLinkedToDB?: boolean;
@@ -76,41 +92,88 @@ export interface TechMetadata {
   
   /** Fecha de adición al contexto actual */
   addedAt?: string;
+  
+  // === Workflow Status ===
+  
+  /** Estado en la cola de scouting */
+  queueStatus?: 'review' | 'pending_approval' | 'approved' | 'rejected' | string;
+  
+  /** Estado de revisión en BD */
+  reviewStatus?: 'none' | 'pending' | 'in_review' | 'completed' | string;
+  
+  /** ID del revisor asignado */
+  reviewerId?: string;
+  
+  /** Si el usuario actual es el revisor asignado */
+  isCurrentReviewer?: boolean;
+  
+  /** Si ya está en la cola de scouting */
+  isInScoutingQueue?: boolean;
+  
+  /** ID en la cola de scouting */
+  scoutingQueueId?: string;
+  
+  /** Rol de la tecnología (para casos de estudio) */
+  role?: 'recommended' | 'evaluated' | 'mentioned';
+  
+  /** Justificación de selección IA */
+  selectionRationale?: string;
 }
 
 export interface TechActions {
+  // === EDITING ===
   /** Puede editar los campos */
   canEdit: boolean;
+  /** Puede guardar cambios */
+  canSave: boolean;
   
+  // === IA ===
   /** Puede usar enriquecimiento IA */
   canEnrich: boolean;
   
+  // === EXPORTACIÓN ===
   /** Puede descargar ficha Word */
   canDownload: boolean;
   
+  // === WORKFLOW SCOUTING ===
+  /** Puede enviar a aprobación (analyst en 'review') */
+  canSendToApproval: boolean;
+  /** Puede aprobar a la BD (supervisor en 'pending_approval') */
+  canApproveToDatabase: boolean;
+  /** Puede rechazar */
+  canReject: boolean;
+  /** Puede devolver a revisión (supervisor en 'pending_approval') */
+  canBackToReview: boolean;
+  
+  // === WORKFLOW BD REVIEW ===
+  /** Puede enviar a revisión */
+  canSendToReview: boolean;
+  /** Puede reclamar revisión */
+  canClaimReview: boolean;
+  /** Puede completar revisión */
+  canCompleteReview: boolean;
+  /** Puede liberar revisión */
+  canReleaseReview: boolean;
+  
+  // === LINKING ===
   /** Puede enviar a la BD principal */
   canSendToDB: boolean;
+  /** Puede ver en BD (cuando está vinculada) */
+  canViewInDB: boolean;
+  /** Puede enviar a cola de scouting */
+  canSendToScouting: boolean;
   
+  // === USER ACTIONS ===
   /** Puede añadir a proyectos */
   canAddToProject: boolean;
-  
   /** Puede marcar como favorito */
   canFavorite: boolean;
   
-  /** Puede enviar a revisión */
-  canSendToReview: boolean;
-  
-  /** Puede mover a tendencias */
-  canMoveToTrends: boolean;
-  
-  /** Puede mover a casos de estudio */
-  canMoveToCaseStudy: boolean;
-  
-  /** Puede ver en BD (cuando está vinculada) */
-  canViewInDB: boolean;
-  
-  /** Puede cambiar estado (scouting workflow) */
-  canChangeStatus: boolean;
+  // === VISIBILITY ===
+  /** Puede ver información interna */
+  canSeeInternalInfo: boolean;
+  /** Puede ver especificaciones técnicas (caso de estudio) */
+  canSeeSpecifications: boolean;
 }
 
 /** 
@@ -169,7 +232,12 @@ export interface UnifiedTechDetailContentProps {
   onAddToProject?: (projectId: string) => void;
   onAddFavorite?: () => void;
   onSendToReview?: () => void;
-  onMoveToTrends?: () => void;
-  onMoveToCaseStudy?: () => void;
-  onChangeStatus?: (newStatus: string) => void;
+  onSendToApproval?: () => void;
+  onApproveToDatabase?: () => void;
+  onReject?: (reason: string) => void;
+  onBackToReview?: () => void;
+  onSendToScouting?: () => void;
+  onClaimReview?: () => void;
+  onCompleteReview?: () => void;
+  onReleaseReview?: () => void;
 }
