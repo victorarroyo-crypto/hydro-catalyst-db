@@ -116,3 +116,6 @@ verify_jwt = false
 
 [functions.kb-railway-proxy]
 verify_jwt = false
+
+[functions.case-study-document-proxy]
+verify_jwt = false
