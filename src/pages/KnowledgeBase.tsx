@@ -574,7 +574,7 @@ export default function KnowledgeBase() {
     mutationFn: async ({ file, description }: { file: File; description?: string }) => {
       console.log("[KB-UPLOAD] Starting upload for:", file.name, "Size:", (file.size / 1024 / 1024).toFixed(2), "MB");
       
-      const { data: authData, error: authError } = await externalSupabase.auth.getUser();
+      const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) {
         console.error("[KB-UPLOAD] Auth error:", authError);
         throw new Error(`Error de autenticación: ${authError.message}`);
