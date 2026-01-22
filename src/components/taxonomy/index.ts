@@ -13,3 +13,7 @@ export { TaxonomyTypeSelector, type SelectedTipo } from './TaxonomyTypeSelector'
 export { TaxonomySubcategorySelector, type SelectedSubcategoria } from './TaxonomySubcategorySelector';
 export { TaxonomyTypeDropdown } from './TaxonomyTypeDropdown';
 export { TaxonomySubcategoryDropdown } from './TaxonomySubcategoryDropdown';
+export { TaxonomyCategoryDropdown, type SelectedCategoria } from './TaxonomyCategoryDropdown';
+export { Taxonomy3LevelDropdowns } from './Taxonomy3LevelDropdowns';
+export { TaxonomyCascadeSelector } from './TaxonomyCascadeSelector';
+export { TaxonomyTreeView } from './TaxonomyTreeView';

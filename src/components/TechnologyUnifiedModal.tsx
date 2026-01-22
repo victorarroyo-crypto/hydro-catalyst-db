@@ -36,7 +36,7 @@ import type {
 } from '@/types/unifiedTech';
 import type { Technology } from '@/types/database';
 import type { Tables } from '@/integrations/supabase/types';
-import type { SelectedTipo, SelectedSubcategoria } from '@/components/taxonomy';
+import { TaxonomySelections } from '@/hooks/useTaxonomy3Levels';
 import { generateTechnologyWordDocument } from '@/lib/generateWordDocument';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -140,8 +140,11 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
   const { user, profile } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<UnifiedTechEditData | null>(null);
-  const [selectedTipos, setSelectedTipos] = useState<SelectedTipo[]>([]);
-  const [selectedSubcategorias, setSelectedSubcategorias] = useState<SelectedSubcategoria[]>([]);
+  const [taxonomySelections, setTaxonomySelections] = useState<TaxonomySelections>({
+    categorias: [],
+    tipos: [],
+    subcategorias: [],
+  });
   
   // Rejection dialog state
   const [showRejectDialog, setShowRejectDialog] = useState(false);
@@ -335,8 +338,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     if (!open) {
       setIsEditing(false);
       setEditData(null);
-      setSelectedTipos([]);
-      setSelectedSubcategorias([]);
+      setTaxonomySelections({ categorias: [], tipos: [], subcategorias: [] });
       setRejectionReason('');
     } else if (startInEditMode && !technology && !scoutingItem && !longlistItem && !caseStudyTech) {
       // Start in edit mode for new technology creation
@@ -387,8 +389,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
     setEditData(null);
-    setSelectedTipos([]);
-    setSelectedSubcategorias([]);
+    setTaxonomySelections({ categorias: [], tipos: [], subcategorias: [] });
   }, []);
 
   const handleEditChange = useCallback((field: keyof UnifiedTechEditData, value: string | number | null) => {
@@ -399,14 +400,12 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     if (!editData || !sourceId) return;
     
     try {
-      // Build taxonomy arrays from checkbox selections
-      const tipoIds = selectedTipos.map(t => t.tipo_id);
-      const subcatIds = selectedSubcategorias.map(s => s.subcategoria_id);
-      
+      // Build enriched data with taxonomy selections
       const enrichedEditData: UnifiedTechEditData = {
         ...editData,
-        tipo_id: tipoIds[0] || editData.tipo_id,
-        subcategoria_id: subcatIds[0] || editData.subcategoria_id,
+        // Store taxonomy arrays as strings for types/subcategorias
+        tipo: taxonomySelections.tipos.join(', ') || editData.tipo,
+        subcategoria: taxonomySelections.subcategorias.join(', ') || editData.subcategoria,
       };
 
       switch (sourceType) {
@@ -457,7 +456,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     } catch (error) {
       console.error('Error saving:', error);
     }
-  }, [editData, sourceId, sourceType, selectedTipos, selectedSubcategorias, workflowActions, onSuccess]);
+  }, [editData, sourceId, sourceType, taxonomySelections, workflowActions, onSuccess]);
 
   const handleEnrichmentComplete = useCallback((enrichedData: Record<string, any>) => {
     if (!editData) return;
@@ -645,10 +644,8 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
             editData={editData || undefined}
             isSaving={workflowActions.isAnyLoading}
             isSendingToDB={workflowActions.sendLonglistToDB.isPending}
-            selectedTipos={selectedTipos}
-            selectedSubcategorias={selectedSubcategorias}
-            onTiposChange={setSelectedTipos}
-            onSubcategoriasChange={setSelectedSubcategorias}
+            taxonomySelections={taxonomySelections}
+            onTaxonomyChange={setTaxonomySelections}
             onEditChange={handleEditChange}
             onStartEdit={handleStartEdit}
             onCancelEdit={handleCancelEdit}
