@@ -122,38 +122,69 @@ const Technologies: React.FC = () => {
         .from('technologies')
         .select('id', { count: 'exact', head: true });
 
-      // Apply review status filter from URL
-      if (reviewFilter === 'in_review') {
-        query = query.eq('review_status', 'in_review');
-        countQuery = countQuery.eq('review_status', 'in_review');
-      } else if (reviewFilter === 'pending_approval') {
-        query = query.eq('review_status', 'pending_approval');
-        countQuery = countQuery.eq('review_status', 'pending_approval');
-      } else if (!reviewFilter) {
-        // Default view: show completed, none, or null (not in review pipeline)
-        query = query.or('review_status.eq.completed,review_status.eq.none,review_status.is.null');
-        countQuery = countQuery.or('review_status.eq.completed,review_status.eq.none,review_status.is.null');
-      }
+      // Helper to build review status condition
+      const getReviewCondition = (): string | null => {
+        if (reviewFilter === 'in_review') {
+          return 'review_status.eq.in_review';
+        } else if (reviewFilter === 'pending_approval') {
+          return 'review_status.eq.pending_approval';
+        } else if (!reviewFilter) {
+          // Default view: show completed, none, or null
+          return 'review_status.in.(completed,none),review_status.is.null';
+        }
+        return null;
+      };
+
+      // Helper to build search condition
+      const getSearchCondition = (search: string): string => {
+        return `nombre.ilike.%${search}%,proveedor.ilike.%${search}%,descripcion.ilike.%${search}%`;
+      };
+
+      const reviewCondition = getReviewCondition();
 
       // If AI search is active, filter by AI results first
       if (aiSearchIds && aiSearchIds.length > 0) {
         query = query.in('id', aiSearchIds);
         countQuery = countQuery.in('id', aiSearchIds);
+        if (reviewCondition) {
+          query = query.or(reviewCondition);
+          countQuery = countQuery.or(reviewCondition);
+        }
       } else if (aiSearchIds && aiSearchIds.length === 0) {
         return { technologies: [], count: 0 };
       } else {
-        // Normal filtering when no AI search is active - using snake_case columns
-        if (filters.search) {
-          const search = filters.search.trim();
-          // Use OR across name/provider/description - snake_case fields
-          const orExpr = [
-            `nombre.ilike.%${search}%`,
-            `proveedor.ilike.%${search}%`,
-            `descripcion.ilike.%${search}%`,
-          ].join(',');
-
-          query = query.or(orExpr);
-          countQuery = countQuery.or(orExpr);
+        // Normal filtering when no AI search is active
+        const searchText = filters.search?.trim();
+        
+        // When we have BOTH a search term AND we're in default view (which uses .or() for review_status),
+        // we need to handle the search client-side due to PostgREST limitation with multiple .or() calls
+        const needsClientSideSearch = !reviewFilter && searchText;
+        
+        if (needsClientSideSearch) {
+          // Only apply review filter server-side, search will be done client-side
+          // Fetch more results to allow for client-side filtering
+          query = query.or('review_status.in.(completed,none),review_status.is.null');
+          countQuery = countQuery.or('review_status.in.(completed,none),review_status.is.null');
+          // Remove the range limit temporarily to get more results for client-side filtering
+          query = externalSupabase
+            .from('technologies')
+            .select('*')
+            .or('review_status.in.(completed,none),review_status.is.null')
+            .order('created_at', { ascending: false, nullsFirst: false })
+            .limit(500); // Get more results for client-side filtering
+        } else if (reviewCondition) {
+          // Specific review filter (in_review or pending_approval) uses .eq(), so we can also use .or() for search
+          query = query.or(reviewCondition);
+          countQuery = countQuery.or(reviewCondition);
+          
+          if (searchText) {
+            query = query.or(getSearchCondition(searchText));
+            countQuery = countQuery.or(getSearchCondition(searchText));
+          }
+        } else if (!reviewCondition && searchText) {
+          // No review filter and has search - this shouldn't happen based on logic, but handle it
+          query = query.or(getSearchCondition(searchText));
+          countQuery = countQuery.or(getSearchCondition(searchText));
         }
 
         if (filters.tipoTecnologia) {
@@ -202,13 +233,39 @@ const Technologies: React.FC = () => {
       if (error) throw error;
       if (countError) throw countError;
 
-      // When not AI-searching, order by name client-side for nicer UX (safe on a single page)
-      const rows = (technologies as Technology[]) || [];
+      let rows = (technologies as Technology[]) || [];
+      
+      // Client-side search filtering when we have both search and default review filter
+      // (due to PostgREST limitation with multiple .or() calls)
+      const searchText = filters.search?.trim()?.toLowerCase();
+      const needsClientSideSearch = !reviewFilter && searchText;
+      
+      if (needsClientSideSearch) {
+        rows = rows.filter(tech => {
+          const nombre = (tech.nombre || '').toLowerCase();
+          const proveedor = (tech.proveedor || '').toLowerCase();
+          const descripcion = (tech.descripcion || '').toLowerCase();
+          return nombre.includes(searchText) || 
+                 proveedor.includes(searchText) || 
+                 descripcion.includes(searchText);
+        });
+      }
+
+      // When not AI-searching, order by name client-side for nicer UX
       if (!aiSearchIds) {
         rows.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
       }
 
-      return { technologies: rows, count: count ?? rows.length };
+      // Apply client-side pagination if we fetched all results for search
+      const totalCount = needsClientSideSearch ? rows.length : (count ?? rows.length);
+      
+      if (needsClientSideSearch) {
+        const from = (page - 1) * ITEMS_PER_PAGE;
+        const to = from + ITEMS_PER_PAGE;
+        rows = rows.slice(from, to);
+      }
+
+      return { technologies: rows, count: totalCount };
     },
   });
 
