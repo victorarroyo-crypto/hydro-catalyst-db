@@ -98,7 +98,7 @@ export interface TechMetadata {
   queueStatus?: 'review' | 'pending_approval' | 'approved' | 'rejected' | string;
   
   /** Estado de revisión en BD */
-  reviewStatus?: 'none' | 'pending' | 'in_review' | 'completed' | string;
+  reviewStatus?: 'none' | 'pending' | 'in_review' | 'pending_approval' | 'completed' | string;
   
   /** ID del revisor asignado */
   reviewerId?: string;
@@ -141,6 +141,14 @@ export interface TechActions {
   canApproveToDatabase: boolean;
   /** Puede rechazar */
   canReject: boolean;
+  
+  // === WORKFLOW BD REVIEW CON APROBACIÓN ===
+  /** Puede enviar revisión a aprobación (analista en 'in_review') */
+  canSendReviewToApproval: boolean;
+  /** Puede aprobar revisión (admin/supervisor en 'pending_approval') */
+  canApproveReview: boolean;
+  /** Puede devolver a revisión (admin/supervisor en 'pending_approval') */
+  canBackToReviewDB: boolean;
   /** Puede devolver a revisión (supervisor en 'pending_approval') */
   canBackToReview: boolean;
   

@@ -338,6 +338,83 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
   });
 
   // ========================================
+  // NEW DB REVIEW APPROVAL WORKFLOW
+  // ========================================
+
+  const sendReviewToApproval = useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await externalSupabase
+        .from('technologies')
+        .update({
+          review_status: 'pending_approval',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      toast.success('Enviado a aprobación');
+    },
+    onError: (error: Error) => {
+      toast.error('Error al enviar a aprobación', { description: error.message });
+    },
+  });
+
+  const approveReview = useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await externalSupabase
+        .from('technologies')
+        .update({
+          review_status: 'completed',
+          reviewed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      toast.success('Revisión aprobada');
+    },
+    onError: (error: Error) => {
+      toast.error('Error al aprobar revisión', { description: error.message });
+    },
+  });
+
+  const backToReviewDB = useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await externalSupabase
+        .from('technologies')
+        .update({
+          review_status: 'in_review',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      toast.success('Devuelto a revisión');
+    },
+    onError: (error: Error) => {
+      toast.error('Error al devolver a revisión', { description: error.message });
+    },
+  });
+
+  // ========================================
   // USER ACTION MUTATIONS
   // ========================================
 
@@ -622,6 +699,11 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
     completeReview,
     releaseReview,
     
+    // DB Review approval workflow (NEW)
+    sendReviewToApproval,
+    approveReview,
+    backToReviewDB,
+    
     // User actions
     addFavorite,
     addToProject,
@@ -645,6 +727,9 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       claimReview.isPending ||
       completeReview.isPending ||
       releaseReview.isPending ||
+      sendReviewToApproval.isPending ||
+      approveReview.isPending ||
+      backToReviewDB.isPending ||
       addFavorite.isPending ||
       addToProject.isPending ||
       sendToScouting.isPending ||

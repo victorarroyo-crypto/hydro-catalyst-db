@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { comparisonProjectsService } from '@/services/comparisonProjectsService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { TechnologyFiltersPanel } from '@/components/TechnologyFiltersPanel';
 import { TechnologyCard } from '@/components/TechnologyCard';
 import { TechnologyTable } from '@/components/TechnologyTable';
@@ -41,6 +42,9 @@ import {
   Plus,
   Bot,
   FolderPlus,
+  Eye,
+  Clock,
+  X,
 } from 'lucide-react';
 import type { Technology, TechnologyFilters } from '@/types/database';
 
@@ -51,6 +55,8 @@ const Technologies: React.FC = () => {
   const { profile, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const reviewFilter = searchParams.get('review');
   const queryClient = useQueryClient();
   const { 
     filterOptions, 
@@ -95,7 +101,7 @@ const Technologies: React.FC = () => {
   });
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['technologies', filters, taxonomyFilters, page, aiSearchIds],
+    queryKey: ['technologies', filters, taxonomyFilters, page, aiSearchIds, reviewFilter],
     queryFn: async () => {
       const from = (page - 1) * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
@@ -115,6 +121,19 @@ const Technologies: React.FC = () => {
       let countQuery = externalSupabase
         .from('technologies')
         .select('id', { count: 'exact', head: true });
+
+      // Apply review status filter from URL
+      if (reviewFilter === 'in_review') {
+        query = query.eq('review_status', 'in_review');
+        countQuery = countQuery.eq('review_status', 'in_review');
+      } else if (reviewFilter === 'pending_approval') {
+        query = query.eq('review_status', 'pending_approval');
+        countQuery = countQuery.eq('review_status', 'pending_approval');
+      } else if (!reviewFilter) {
+        // Default view: show completed, none, or null (not in review pipeline)
+        query = query.or('review_status.eq.completed,review_status.eq.none,review_status.is.null');
+        countQuery = countQuery.or('review_status.eq.completed,review_status.eq.none,review_status.is.null');
+      }
 
       // If AI search is active, filter by AI results first
       if (aiSearchIds && aiSearchIds.length > 0) {
@@ -321,10 +340,14 @@ const Technologies: React.FC = () => {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground mb-2">
-            Consulta de Tecnologías
+            {reviewFilter === 'in_review' ? 'Tecnologías en Revisión' :
+             reviewFilter === 'pending_approval' ? 'Tecnologías en Aprobación' :
+             'Consulta de Tecnologías'}
           </h1>
           <p className="text-muted-foreground">
-            Explora y filtra tecnologías de tratamiento de agua industrial
+            {reviewFilter === 'in_review' ? 'Tecnologías siendo revisadas por analistas' :
+             reviewFilter === 'pending_approval' ? 'Tecnologías pendientes de aprobación por supervisores' :
+             'Explora y filtra tecnologías de tratamiento de agua industrial'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -345,6 +368,29 @@ const Technologies: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Review Filter Banner */}
+      {reviewFilter && (
+        <div className="mb-6 bg-muted border border-border rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {reviewFilter === 'in_review' ? (
+              <>
+                <Eye className="w-5 h-5 text-primary" />
+                <span className="font-medium">📝 Mostrando tecnologías en revisión</span>
+              </>
+            ) : (
+              <>
+                <Clock className="w-5 h-5 text-orange-500" />
+                <span className="font-medium">⏳ Mostrando tecnologías pendientes de aprobación</span>
+              </>
+            )}
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/technologies')}>
+            <X className="w-4 h-4 mr-2" />
+            Ver todas
+          </Button>
+        </div>
+      )}
 
       {/* AI Classification Panel - Admin only */}
       {showClassificationPanel && canUseAI && (
