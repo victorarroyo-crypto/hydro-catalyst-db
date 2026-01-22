@@ -147,31 +147,22 @@ interface CaseStudyFull {
   } | null;
 }
 
+// Nuevo schema con columnas en español (sin application_data ni selection_rationale)
 interface CaseStudyTechnology {
   id: string;
-  technology_name: string;
-  provider: string | null;
-  role: string;
+  case_study_id?: string;
   technology_id: string | null;
   scouting_queue_id: string | null;
-  // Datos completos para enviar a scouting
-  application_data?: {
-    descripcion?: string;
-    pais?: string;
-    web?: string;
-    email?: string;
-    trl?: number;
-    tipo?: string;
-    subcategoria?: string;
-    sector?: string;
-    aplicacion_principal?: string;
-    ventaja_competitiva?: string;
-    innovacion?: string;
-    casos_referencia?: string;
-    paises_actua?: string;
-    [key: string]: any;
-  } | null;
-  selection_rationale?: string | null;
+  role: string;
+  // Columnas directas en español
+  nombre: string;
+  proveedor: string | null;
+  web: string | null;
+  descripcion: string | null;
+  aplicacion: string | null;
+  ventaja: string | null;
+  trl: number | null;
+  created_at?: string;
 }
 
 export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
@@ -239,7 +230,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
       
       const { data, error } = await externalSupabase
         .from('case_study_technologies')
-        .select('*')
+        .select('id, case_study_id, technology_id, scouting_queue_id, role, nombre, proveedor, web, descripcion, aplicacion, ventaja, trl, created_at')
         .eq('case_study_id', caseStudyId);
 
       if (error) {
@@ -391,29 +382,19 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     setSendingTechId(tech.id);
     
     try {
-      const ad = tech.application_data || {};
-      
-      // Insert into scouting_queue with correct column names (spaces and accents)
+      // Insert into scouting_queue - leer columnas directas de case_study_technologies
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .insert({
-          "Nombre de la tecnología": tech.technology_name,
-          "Tipo de tecnología": ad.tipo || ad.type || 'Sin clasificar',
-          "Proveedor / Empresa": tech.provider || ad.proveedor || null,
-          "País de origen": ad.pais || ad.country || null,
-          "Paises donde actua": ad.paises_actua || null,
-          "Web de la empresa": ad.web || null,
-          "Email de contacto": ad.email || null,
-          "Descripción técnica breve": ad.descripcion || ad.description || null,
-          "Subcategoría": ad.subcategoria || null,
-          "Sector y subsector": ad.sector || null,
-          "Aplicación principal": ad.aplicacion_principal || null,
-          "Ventaja competitiva clave": ad.ventaja_competitiva || null,
-          "Porque es innovadora": ad.innovacion || null,
-          "Grado de madurez (TRL)": ad.trl || null,
-          "Casos de referencia": ad.casos_referencia || null,
-          "Comentarios del analista": tech.selection_rationale || ad.comentarios_analista || 
-            `Extraída del caso de estudio: ${caseStudy?.name}`,
+          "Nombre de la tecnología": tech.nombre,
+          "Tipo de tecnología": 'Sin clasificar',
+          "Proveedor / Empresa": tech.proveedor || null,
+          "Web de la empresa": tech.web || null,
+          "Descripción técnica breve": tech.descripcion || null,
+          "Aplicación principal": tech.aplicacion || null,
+          "Ventaja competitiva clave": tech.ventaja || null,
+          "Grado de madurez (TRL)": tech.trl || null,
+          "Comentarios del analista": `Extraída del caso de estudio: ${caseStudy?.name}`,
           source: 'case_study',
           case_study_id: caseStudyId,
           queue_status: 'review',
@@ -436,7 +417,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
       queryClient.invalidateQueries({ queryKey: ['scouting-counts'] });
       
       toast.success('Tecnología enviada a revisión', {
-        description: `${tech.technology_name} está ahora en la cola de scouting`
+        description: `${tech.nombre} está ahora en la cola de scouting`
       });
     } catch (error: any) {
       console.error('Error sending to scouting queue:', error);
@@ -889,9 +870,9 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                     >
                       <div className="flex items-center gap-2">
                         <div>
-                          <p className="text-sm font-medium">{tech.technology_name}</p>
-                          {tech.provider && (
-                            <p className="text-xs text-muted-foreground">{tech.provider}</p>
+                          <p className="text-sm font-medium">{tech.nombre}</p>
+                          {tech.proveedor && (
+                            <p className="text-xs text-muted-foreground">{tech.proveedor}</p>
                           )}
                         </div>
                         {getTechStatusBadge(tech)}
@@ -940,8 +921,8 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                     <div key={tech.id} className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="py-1">
-                          {tech.technology_name}
-                          {tech.provider && ` (${tech.provider})`}
+                          {tech.nombre}
+                          {tech.proveedor && ` (${tech.proveedor})`}
                         </Badge>
                         {getTechStatusBadge(tech)}
                       </div>
@@ -986,15 +967,15 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                   Todas las tecnologías ({technologies.length})
                 </p>
                 <div className="space-y-2">
-                  {technologies.map((tech) => (
-                    <div key={tech.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                      <div className="flex items-center gap-2 flex-1">
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{tech.technology_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {tech.provider && `${tech.provider} • `}Rol: {tech.role || 'Sin rol'}
-                          </p>
-                        </div>
+                    {technologies.map((tech) => (
+                      <div key={tech.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                        <div className="flex items-center gap-2 flex-1">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">{tech.nombre}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {tech.proveedor && `${tech.proveedor} • `}Rol: {tech.role || 'Sin rol'}
+                            </p>
+                          </div>
                         {getTechStatusBadge(tech)}
                       </div>
                       <Button 
@@ -1176,47 +1157,28 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
         onOpenChange={setTechModalOpen}
       />
 
-      {/* Modal for UNLINKED technology with application_data */}
+      {/* Modal for UNLINKED technology - leer columnas directas */}
       <Dialog open={caseTechModalOpen} onOpenChange={setCaseTechModalOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Cpu className="h-5 w-5 text-primary" />
-              {selectedCaseTech?.technology_name}
+              {selectedCaseTech?.nombre}
             </DialogTitle>
           </DialogHeader>
           
           {selectedCaseTech && (
             <div className="space-y-4">
-              {/* Provider and Country */}
+              {/* Provider and TRL */}
               <div className="flex flex-wrap gap-4 text-sm">
-                {selectedCaseTech.provider && (
+                {selectedCaseTech.proveedor && (
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedCaseTech.provider}</span>
+                    <span>{selectedCaseTech.proveedor}</span>
                   </div>
                 )}
-                {selectedCaseTech.application_data?.pais && (
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedCaseTech.application_data.pais}</span>
-                  </div>
-                )}
-                {selectedCaseTech.application_data?.trl && (
-                  <Badge variant="outline">TRL {selectedCaseTech.application_data.trl}</Badge>
-                )}
-              </div>
-
-              {/* Classification */}
-              <div className="flex flex-wrap gap-2">
-                {selectedCaseTech.application_data?.tipo && (
-                  <Badge>{selectedCaseTech.application_data.tipo}</Badge>
-                )}
-                {selectedCaseTech.application_data?.subcategoria && (
-                  <Badge variant="secondary">{selectedCaseTech.application_data.subcategoria}</Badge>
-                )}
-                {selectedCaseTech.application_data?.sector && (
-                  <Badge variant="outline">{selectedCaseTech.application_data.sector}</Badge>
+                {selectedCaseTech.trl && (
+                  <Badge variant="outline">TRL {selectedCaseTech.trl}</Badge>
                 )}
               </div>
 
@@ -1225,48 +1187,34 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
               {/* Description */}
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">Descripción</p>
-                <p className="text-sm">{selectedCaseTech.application_data?.descripcion || 'Sin información'}</p>
+                <p className="text-sm">{selectedCaseTech.descripcion || 'Sin información'}</p>
               </div>
 
               {/* Main Application */}
               <div className="bg-muted/50 rounded-lg p-3">
                 <p className="text-xs font-medium text-muted-foreground mb-1">Aplicación principal</p>
-                <p className="text-sm">{selectedCaseTech.application_data?.aplicacion_principal || 'Sin información'}</p>
+                <p className="text-sm">{selectedCaseTech.aplicacion || 'Sin información'}</p>
               </div>
 
               {/* Competitive Advantage */}
               <div className="bg-primary/5 rounded-lg p-3 border border-primary/10">
                 <p className="text-xs font-medium text-primary mb-1">Ventaja competitiva</p>
-                <p className="text-sm">{selectedCaseTech.application_data?.ventaja_competitiva || 'Sin información'}</p>
+                <p className="text-sm">{selectedCaseTech.ventaja || 'Sin información'}</p>
               </div>
-
-              {/* Innovation */}
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1">Por qué es innovadora</p>
-                <p className="text-sm">{selectedCaseTech.application_data?.innovacion || 'Sin información'}</p>
-              </div>
-
-              {/* Selection Rationale */}
-              {selectedCaseTech.selection_rationale && (
-                <div className="bg-accent/5 rounded-lg p-3 border border-accent/10">
-                  <p className="text-xs font-medium text-accent mb-1">Por qué se seleccionó</p>
-                  <p className="text-sm">{selectedCaseTech.selection_rationale}</p>
-                </div>
-              )}
 
               {/* Links */}
-              {selectedCaseTech.application_data?.web && (
+              {selectedCaseTech.web && (
                 <div className="flex items-center gap-2 pt-2">
                   <Globe className="h-4 w-4 text-muted-foreground" />
                   <a
-                    href={selectedCaseTech.application_data.web.startsWith('http') 
-                      ? selectedCaseTech.application_data.web 
-                      : `https://${selectedCaseTech.application_data.web}`}
+                    href={selectedCaseTech.web.startsWith('http') 
+                      ? selectedCaseTech.web 
+                      : `https://${selectedCaseTech.web}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-primary hover:underline flex items-center gap-1"
                   >
-                    {selectedCaseTech.application_data.web}
+                    {selectedCaseTech.web}
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>

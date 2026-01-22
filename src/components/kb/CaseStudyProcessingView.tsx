@@ -236,11 +236,14 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
         // Map broadcast payload to job state
         setJob(prev => {
           const status = data.status || prev?.status || 'processing';
+          const newProgress = data.progress ?? data.progress_percentage ?? 0;
+          
           const newJob: CaseStudyJob = {
             id: jobId,
             status: status as JobStatus,
             current_phase: data.event || data.current_phase || prev?.current_phase || null,
-            progress_percentage: data.progress ?? data.progress_percentage ?? prev?.progress_percentage ?? 0,
+            // IMPORTANTE: Usar Math.max para evitar que el progress retroceda
+            progress_percentage: Math.max(prev?.progress_percentage ?? 0, newProgress),
             error_message: data.error_message || prev?.error_message || null,
             quality_score: data.quality_score ?? prev?.quality_score,
             technologies_found: data.technologies_count ?? data.technologies_found ?? prev?.technologies_found,

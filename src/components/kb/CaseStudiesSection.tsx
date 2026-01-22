@@ -280,14 +280,14 @@ export const CaseStudiesSection: React.FC = () => {
     queryFn: async () => {
       const { data, error } = await externalSupabase
         .from('case_study_technologies')
-        .select('case_study_id, technology_name');
+        .select('case_study_id, nombre');
       
       if (error) return {};
       
       const counts: Record<string, string[]> = {};
       data?.forEach(t => {
         if (!counts[t.case_study_id]) counts[t.case_study_id] = [];
-        counts[t.case_study_id].push(t.technology_name);
+        counts[t.case_study_id].push(t.nombre);
       });
       return counts;
     },
