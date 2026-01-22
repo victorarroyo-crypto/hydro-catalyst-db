@@ -39,29 +39,39 @@ import { getModelPricing, formatCost, estimateCostFromTotal } from "@/lib/aiMode
 import { useLLMModels, getDefaultModel, formatModelCost } from "@/hooks/useLLMModels";
 import { API_URL } from "@/lib/api";
 
-// Railway API configuration for Knowledge Base operations
-const KB_API_BASE = import.meta.env.VITE_API_URL || 'https://watertech-scouting-production.up.railway.app';
-const KB_SYNC_SECRET = import.meta.env.VITE_SYNC_WEBHOOK_SECRET || 'wt-sync-2026-secure';
+// Railway API configuration - uses Edge Function proxy for secure access to secrets
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Direct Railway API call for KB operations
+// Proxy through Edge Function for KB operations (has access to RAILWAY_API_URL and RAILWAY_SYNC_SECRET)
 const callKBRailway = async (endpoint: string, method: 'GET' | 'POST' = 'POST', payload?: any): Promise<any> => {
-  const headers: Record<string, string> = {
-    'X-Sync-Secret': KB_SYNC_SECRET,
-  };
+  console.log(`[callKBRailway] Calling proxy for ${method} ${endpoint}`, payload ? JSON.stringify(payload).substring(0, 200) : '');
   
-  if (method === 'POST' && payload) {
-    headers['Content-Type'] = 'application/json';
+  // Get user session for auth
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    throw new Error('Usuario no autenticado');
   }
 
-  const response = await fetch(`${KB_API_BASE}${endpoint}`, {
-    method,
-    headers,
-    body: payload ? JSON.stringify(payload) : undefined,
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/kb-railway-proxy`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+      'apikey': SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({
+      endpoint,
+      method,
+      payload,
+    }),
   });
 
   const data = await response.json();
   
-  if (!response.ok) {
+  console.log(`[callKBRailway] Proxy response ${response.status}:`, data);
+  
+  if (!response.ok || !data.success) {
     throw new Error(data.message || data.error || `Error ${response.status}`);
   }
   
