@@ -350,35 +350,35 @@ export async function generateTechnologyWordDocument(
     const now = new Date();
     const dateStr = formatDate(now.toISOString());
     
-    const trl = technology["Grado de madurez (TRL)"];
+    const trl = technology.trl;
     const trlText = trl !== null && trl !== undefined ? `TRL ${trl}` : null;
 
     const tipoText = taxonomyData?.tipo
       ? `${taxonomyData.tipo.codigo} - ${taxonomyData.tipo.nombre}`
-      : technology["Tipo de tecnología"] || null;
+      : technology.tipo || null;
 
     const subcategoriaText = taxonomyData?.subcategoria
       ? `${taxonomyData.subcategoria.codigo} - ${taxonomyData.subcategoria.nombre}`
-      : technology["Subcategoría"] || null;
+      : (technology.subcategorias && technology.subcategorias.length > 0 ? technology.subcategorias.join(', ') : null);
 
     const sectorText = taxonomyData?.sector
       ? `${taxonomyData.sector.id} - ${taxonomyData.sector.nombre}`
-      : technology["Sector y subsector"] || null;
+      : technology.sector || null;
 
     // Build document sections
     const sections: (Paragraph | Table)[] = [];
     
     // 1. Portada profesional Vandarum
     sections.push(...createVandarumFichaCover(
-      technology["Nombre de la tecnología"],
+      technology.nombre,
       dateStr
     ));
     
     // 2. Encabezado de página interior con nombre + proveedor + país + TRL
     sections.push(...createTechPageHeader(
-      technology["Nombre de la tecnología"],
-      technology["Proveedor / Empresa"],
-      technology["País de origen"],
+      technology.nombre,
+      technology.proveedor,
+      technology.pais,
       trl
     ));
     
@@ -386,14 +386,14 @@ export async function generateTechnologyWordDocument(
     sections.push(createVandarumHeading1('Información general'));
     
     const generalInfoRows: { label: string; value: string }[] = [
-      { label: 'Proveedor / Empresa', value: technology["Proveedor / Empresa"] || '' },
-      { label: 'País de origen', value: technology["País de origen"] || '' },
-      { label: 'Países donde actúa', value: technology["Paises donde actua"] || '' },
-      { label: 'Web de la empresa', value: technology["Web de la empresa"] || '' },
-      { label: 'Email de contacto', value: technology["Email de contacto"] || '' },
+      { label: 'Proveedor / Empresa', value: technology.proveedor || '' },
+      { label: 'País de origen', value: technology.pais || '' },
+      { label: 'Países donde actúa', value: technology.paises_actua || '' },
+      { label: 'Web de la empresa', value: technology.web || '' },
+      { label: 'Email de contacto', value: technology.email || '' },
       { label: 'Grado de madurez (TRL)', value: trlText || '' },
       { label: 'Estado', value: technology.status === "inactive" ? "Inactiva" : "Activa" },
-      { label: 'Estado del seguimiento', value: technology["Estado del seguimiento"] || '' },
+      { label: 'Estado del seguimiento', value: technology.estado_seguimiento || '' },
     ].filter(row => row.value); // Solo incluir filas con valor
     
     sections.push(createVandarumInfoTable(generalInfoRows));
@@ -412,33 +412,33 @@ export async function generateTechnologyWordDocument(
     sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
     
     // 5. Aplicación principal
-    if (technology["Aplicación principal"]) {
-      sections.push(...createTextSection('Aplicación principal', technology["Aplicación principal"]));
+    if (technology.aplicacion) {
+      sections.push(...createTextSection('Aplicación principal', technology.aplicacion));
     }
     
     // 6. Descripción técnica
-    if (technology["Descripción técnica breve"]) {
-      sections.push(...createTextSection('Descripción técnica', technology["Descripción técnica breve"]));
+    if (technology.descripcion) {
+      sections.push(...createTextSection('Descripción técnica', technology.descripcion));
     }
     
     // 7. INNOVACIÓN Y VENTAJAS
     sections.push(...createInnovationSection(
-      technology["Ventaja competitiva clave"],
-      technology["Porque es innovadora"]
+      technology.ventaja,
+      technology.innovacion
     ));
     
     // 8. Referencias
-    if (technology["Casos de referencia"]) {
-      sections.push(...createTextSection('Referencias', technology["Casos de referencia"]));
+    if (technology.casos_referencia) {
+      sections.push(...createTextSection('Referencias', technology.casos_referencia));
     }
     
     // 9. Notas del analista
-    if (technology["Comentarios del analista"]) {
+    if (technology.comentarios) {
       sections.push(createVandarumHeading1('Notas del analista'));
       sections.push(new Paragraph({
         children: [
           new TextRun({
-            text: cleanMarkdownFromText(technology["Comentarios del analista"]),
+            text: cleanMarkdownFromText(technology.comentarios),
             size: VANDARUM_SIZES.texto,
             color: VANDARUM_COLORS.grisTexto,
             font: VANDARUM_FONTS.texto,
@@ -452,7 +452,7 @@ export async function generateTechnologyWordDocument(
     sections.push(createVandarumHeading1('Información de registro'));
     
     const registroRows: { label: string; value: string }[] = [
-      { label: 'Fecha de scouting', value: formatDate(technology["Fecha de scouting"]) },
+      { label: 'Fecha de scouting', value: formatDate(technology.fecha_scouting) },
       { label: 'Fecha de creación', value: formatDate(technology.created_at) },
       { label: 'Última actualización', value: formatDate(technology.updated_at) },
       { label: 'Puntuación de calidad', value: technology.quality_score?.toString() || '0' },
@@ -469,7 +469,7 @@ export async function generateTechnologyWordDocument(
         {
           properties: {},
           headers: {
-            default: createVandarumDocumentHeader(technology["Nombre de la tecnología"]),
+            default: createVandarumDocumentHeader(technology.nombre),
           },
           footers: {
             default: createVandarumDocumentFooter(),
@@ -483,7 +483,7 @@ export async function generateTechnologyWordDocument(
     const blob = await Packer.toBlob(doc);
 
     // Create filename from technology name
-    const safeName = technology["Nombre de la tecnología"]
+    const safeName = technology.nombre
       .replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s]/g, "")
       .replace(/\s+/g, "_")
       .substring(0, 50);

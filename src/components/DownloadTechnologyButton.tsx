@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { generateTechnologyWordDocument } from "@/lib/generateWordDocument";
-import { externalSupabase } from "@/integrations/supabase/externalClient";
 import type { Technology } from "@/types/database";
 
 interface DownloadTechnologyButtonProps {
@@ -24,42 +23,24 @@ export const DownloadTechnologyButton: React.FC<DownloadTechnologyButtonProps> =
     setIsGenerating(true);
 
     try {
-      // Fetch taxonomy data
-      const tipoId = (technology as any).tipo_id;
-      const subcategoriaId = (technology as any).subcategoria_id;
-      const sectorId = (technology as any).sector_id;
-
-      let taxonomyData: {
+      // Build taxonomy data from snake_case fields
+      const taxonomyData: {
         tipo?: { codigo: string; nombre: string } | null;
         subcategoria?: { codigo: string; nombre: string } | null;
         sector?: { id: string; nombre: string } | null;
       } = {};
 
-      if (tipoId) {
-        const { data } = await externalSupabase
-          .from("taxonomy_tipos")
-          .select("codigo, nombre")
-          .eq("id", tipoId)
-          .maybeSingle();
-        taxonomyData.tipo = data;
+      // Use direct fields from technology (snake_case schema)
+      if (technology.tipo) {
+        taxonomyData.tipo = { codigo: '', nombre: technology.tipo };
       }
 
-      if (subcategoriaId) {
-        const { data } = await externalSupabase
-          .from("taxonomy_subcategorias")
-          .select("codigo, nombre")
-          .eq("id", subcategoriaId)
-          .maybeSingle();
-        taxonomyData.subcategoria = data;
+      if (technology.subcategorias && technology.subcategorias.length > 0) {
+        taxonomyData.subcategoria = { codigo: '', nombre: technology.subcategorias.join(', ') };
       }
 
-      if (sectorId) {
-        const { data } = await externalSupabase
-          .from("taxonomy_sectores")
-          .select("id, nombre")
-          .eq("id", sectorId)
-          .maybeSingle();
-        taxonomyData.sector = data;
+      if (technology.sector) {
+        taxonomyData.sector = { id: '', nombre: technology.sector };
       }
 
       await generateTechnologyWordDocument(technology, taxonomyData);

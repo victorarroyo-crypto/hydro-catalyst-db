@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 export interface TechCountByType {
   tipo: string;
@@ -13,17 +13,17 @@ export interface TechCountByCategory {
 }
 
 /**
- * Fetches technology counts grouped by "Tipo de tecnología" from local Supabase DB.
+ * Fetches technology counts grouped by "tipo" from external Supabase DB (snake_case).
  * Then maps types to taxonomy categories for hierarchical display.
  */
 export function useTechnologyStatsByTaxonomy() {
   return useQuery({
     queryKey: ['technology-stats-by-taxonomy'],
     queryFn: async () => {
-      // Fetch all technologies with their type field
-      const { data, error } = await supabase
+      // Fetch all technologies with their type field (snake_case)
+      const { data, error } = await externalSupabase
         .from('technologies')
-        .select('"Tipo de tecnología"');
+        .select('tipo');
 
       if (error) {
         console.error('Error fetching technologies:', error);
@@ -35,7 +35,7 @@ export function useTechnologyStatsByTaxonomy() {
       let totalTechnologies = 0;
 
       (data || []).forEach((tech) => {
-        const tipo = tech['Tipo de tecnología'] || 'Sin clasificar';
+        const tipo = tech.tipo || 'Sin clasificar';
         countsByType[tipo] = (countsByType[tipo] || 0) + 1;
         totalTechnologies++;
       });
