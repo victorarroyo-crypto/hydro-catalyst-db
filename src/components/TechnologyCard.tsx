@@ -2,7 +2,7 @@ import React from 'react';
 import { TRLBadge } from '@/components/TRLBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Building2, MapPin, Tag, Layers, Grid3X3 } from 'lucide-react';
+import { Building2, MapPin, Tag, Layers, Grid3X3, Eye, Clock, CheckCircle } from 'lucide-react';
 import { QuickClassifyButton } from '@/components/QuickClassifyButton';
 import { DeleteTechnologyButton } from '@/components/DeleteTechnologyButton';
 import { DownloadTechnologyButton } from '@/components/DownloadTechnologyButton';
@@ -31,6 +31,35 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
   
   // Check if unclassified (no tipo in any form)
   const isUnclassified = !displayTipo && !technology.tipo_id;
+  
+  // Get review status badge
+  const getReviewStatusBadge = () => {
+    switch (technology.review_status) {
+      case 'in_review':
+        return (
+          <Badge variant="secondary" className="text-[10px] gap-1">
+            <Eye className="w-3 h-3" />
+            En revisión
+          </Badge>
+        );
+      case 'pending_approval':
+        return (
+          <Badge variant="outline" className="text-[10px] gap-1 border-orange-500 text-orange-600">
+            <Clock className="w-3 h-3" />
+            En aprobación
+          </Badge>
+        );
+      case 'completed':
+        return (
+          <Badge variant="default" className="text-[10px] gap-1 bg-green-600">
+            <CheckCircle className="w-3 h-3" />
+            Revisada
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <Card 
@@ -48,6 +77,7 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
                 Inactiva
               </Badge>
             )}
+            {getReviewStatusBadge()}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {showActions && (

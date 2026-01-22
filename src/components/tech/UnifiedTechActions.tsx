@@ -78,6 +78,11 @@ interface UnifiedTechActionsProps {
   onCompleteReview?: () => void;
   onReleaseReview?: () => void;
   
+  // DB Review approval workflow (NEW)
+  onSendReviewToApproval?: () => void;
+  onApproveReview?: () => void;
+  onBackToReviewDB?: () => void;
+  
   // Linking
   onSendToDB?: () => void;
   onViewInDB?: () => void;
@@ -95,6 +100,9 @@ interface UnifiedTechActionsProps {
   isSendingToScouting?: boolean;
   isFavoriting?: boolean;
   isAddingToProject?: boolean;
+  isSendingReviewToApproval?: boolean;
+  isApprovingReview?: boolean;
+  isBackToReviewDB?: boolean;
 }
 
 export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
@@ -116,6 +124,9 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
   onClaimReview,
   onCompleteReview,
   onReleaseReview,
+  onSendReviewToApproval,
+  onApproveReview,
+  onBackToReviewDB,
   onSendToDB,
   onViewInDB,
   onSendToScouting,
@@ -128,6 +139,9 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
   isSendingToScouting = false,
   isFavoriting = false,
   isAddingToProject = false,
+  isSendingReviewToApproval = false,
+  isApprovingReview = false,
+  isBackToReviewDB = false,
 }) => {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -165,6 +179,8 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
                              actions.canReject || actions.canBackToReview;
   const hasReviewActions = actions.canSendToReview || actions.canClaimReview || 
                            actions.canCompleteReview || actions.canReleaseReview;
+  const hasReviewApprovalActions = actions.canSendReviewToApproval || actions.canApproveReview || 
+                                    actions.canBackToReviewDB;
   const hasLinkingActions = actions.canSendToDB || actions.canViewInDB || actions.canSendToScouting;
   const hasUserActions = actions.canFavorite || actions.canAddToProject;
 
@@ -312,6 +328,59 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
               <Button variant="outline" size="sm" onClick={onReleaseReview}>
                 <Unlock className="w-4 h-4 mr-2" />
                 Liberar revisión
+              </Button>
+            )}
+        </>
+        )}
+
+        {/* === DB REVIEW APPROVAL WORKFLOW (NEW) === */}
+        {hasReviewApprovalActions && !isEditing && (
+          <>
+            {actions.canSendReviewToApproval && onSendReviewToApproval && (
+              <Button 
+                size="sm" 
+                onClick={onSendReviewToApproval}
+                disabled={isSendingReviewToApproval}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isSendingReviewToApproval ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <SendHorizonal className="w-4 h-4 mr-2" />
+                )}
+                Enviar a aprobación
+              </Button>
+            )}
+            
+            {actions.canApproveReview && onApproveReview && (
+              <Button 
+                size="sm" 
+                onClick={onApproveReview}
+                disabled={isApprovingReview}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {isApprovingReview ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                )}
+                Aprobar revisión
+              </Button>
+            )}
+            
+            {actions.canBackToReviewDB && onBackToReviewDB && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onBackToReviewDB}
+                disabled={isBackToReviewDB}
+              >
+                {isBackToReviewDB ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                )}
+                Devolver a revisión
               </Button>
             )}
           </>

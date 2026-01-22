@@ -39,6 +39,9 @@ export function calculateTechActions(context: PermissionContext): TechActions {
     canClaimReview: false,
     canCompleteReview: false,
     canReleaseReview: false,
+    canSendReviewToApproval: false,
+    canApproveReview: false,
+    canBackToReviewDB: false,
     canSendToDB: false,
     canViewInDB: false,
     canSendToScouting: false,
@@ -117,19 +120,36 @@ function applyDatabaseRules(
   
   return {
     ...base,
-    // Editing
-    canEdit: isInternal,
-    canSave: isInternal,
+    // Editing - allow when in_review by current reviewer, or no review/completed
+    canEdit: isInternal && (
+      !reviewStatus || 
+      reviewStatus === 'none' || 
+      reviewStatus === 'completed' ||
+      (reviewStatus === 'in_review' && !!isCurrentReviewer)
+    ),
+    canSave: isInternal && (
+      !reviewStatus || 
+      reviewStatus === 'none' || 
+      reviewStatus === 'completed' ||
+      (reviewStatus === 'in_review' && !!isCurrentReviewer)
+    ),
     
     // AI & Export
     canEnrich: isInternal,
     canDownload: true,
     
-    // DB Review workflow
-    canSendToReview: isInternal && (!reviewStatus || reviewStatus === 'none'),
+    // DB Review workflow - claim/release
+    canSendToReview: isInternal && (!reviewStatus || reviewStatus === 'none' || reviewStatus === 'completed'),
     canClaimReview: isInternal && reviewStatus === 'pending',
-    canCompleteReview: !!isCurrentReviewer && reviewStatus === 'in_review',
     canReleaseReview: !!isCurrentReviewer && reviewStatus === 'in_review',
+    
+    // NEW: Review approval workflow
+    // Analyst can send to approval when in_review and is the reviewer
+    canSendReviewToApproval: !!isCurrentReviewer && reviewStatus === 'in_review',
+    // Admin/Supervisor can approve when pending_approval
+    canApproveReview: isSupervisorOrAdmin && reviewStatus === 'pending_approval',
+    // Admin/Supervisor can send back to review
+    canBackToReviewDB: isSupervisorOrAdmin && reviewStatus === 'pending_approval',
     
     // User actions
     canAddToProject: isAuthenticated,
@@ -219,6 +239,9 @@ export function getDefaultActions(): TechActions {
     canClaimReview: false,
     canCompleteReview: false,
     canReleaseReview: false,
+    canSendReviewToApproval: false,
+    canApproveReview: false,
+    canBackToReviewDB: false,
     canSendToDB: false,
     canViewInDB: false,
     canSendToScouting: false,
