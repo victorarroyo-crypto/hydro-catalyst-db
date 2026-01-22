@@ -52,7 +52,7 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
     queryFn: async () => {
       const { data: technologies } = await externalSupabase
         .from('technologies')
-        .select('"Sector y subsector", "Tipo de tecnología"')
+        .select('sector, tipo')
         .or('status.eq.active,status.is.null');
 
       if (!technologies) return { sectors: [], types: [] };
@@ -61,9 +61,9 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({
       const sectorCounts: Record<string, number> = {};
       const typeCounts: Record<string, number> = {};
 
-      technologies.forEach((t) => {
-        const sector = t['Sector y subsector'];
-        const type = t['Tipo de tecnología'];
+      technologies.forEach((t: any) => {
+        const sector = t.sector;
+        const type = t.tipo;
         if (sector) sectorCounts[sector] = (sectorCounts[sector] || 0) + 1;
         if (type) typeCounts[type] = (typeCounts[type] || 0) + 1;
       });

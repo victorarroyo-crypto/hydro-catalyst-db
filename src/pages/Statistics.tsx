@@ -122,7 +122,7 @@ const Statistics: React.FC = () => {
       while (true) {
         let query = externalSupabase
           .from('technologies')
-          .select('id, tipo_id, subcategoria_id, sector_id, "País de origen", status');
+          .select('id, tipo_id, subcategoria_id, sector_id, pais, status');
         
         // Regular users only see active technologies
         if (!isInternalUser) {
@@ -220,7 +220,7 @@ const Statistics: React.FC = () => {
     if (!technologies) return [];
     const counts = new Map<string, number>();
     technologies.forEach(t => {
-      const country = t["País de origen"];
+      const country = t.pais;
       if (country) {
         counts.set(country, (counts.get(country) || 0) + 1);
       }

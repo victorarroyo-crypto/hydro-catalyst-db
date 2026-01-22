@@ -232,26 +232,26 @@ export const useApproveToTechnologies = () => {
       
       const record = scoutingRecord as ExternalScoutingQueueItem;
       
-      // 2. Insert into LOCAL technologies table (Lovable Cloud)
+      // 2. Insert into technologies table (external DB with snake_case schema)
       const { data: newTech, error: insertError } = await externalSupabase
         .from('technologies')
         .insert({
-          "Nombre de la tecnología": record.nombre,
-          "Tipo de tecnología": record.tipo_sugerido || 'Otro',
-          "Subcategoría": record.subcategoria,
-          "Sector y subsector": record.sector,
-          "Proveedor / Empresa": record.proveedor,
-          "País de origen": record.pais,
-          "Paises donde actua": record.paises_actua,
-          "Web de la empresa": record.web,
-          "Email de contacto": record.email,
-          "Descripción técnica breve": record.descripcion,
-          "Aplicación principal": record.aplicacion_principal,
-          "Ventaja competitiva clave": record.ventaja_competitiva,
-          "Porque es innovadora": record.innovacion,
-          "Grado de madurez (TRL)": record.trl_estimado,
-          "Casos de referencia": record.casos_referencia,
-          "Comentarios del analista": record.comentarios_analista,
+          nombre: record.nombre,
+          tipo: record.tipo_sugerido || 'Otro',
+          subcategorias: record.subcategoria ? [record.subcategoria] : null,
+          sector: record.sector,
+          proveedor: record.proveedor,
+          pais: record.pais,
+          paises_actua: record.paises_actua,
+          web: record.web,
+          email: record.email,
+          descripcion: record.descripcion,
+          aplicacion: record.aplicacion_principal,
+          ventaja: record.ventaja_competitiva,
+          innovacion: record.innovacion,
+          trl: record.trl_estimado,
+          casos_referencia: record.casos_referencia,
+          comentarios: record.comentarios_analista,
           subsector_industrial: record.subsector,
           status: 'active',
           review_status: 'none',

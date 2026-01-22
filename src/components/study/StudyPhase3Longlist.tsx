@@ -219,8 +219,8 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
       if (!searchTerm || searchTerm.length < 2) return [];
       const { data, error } = await externalSupabase
         .from('technologies')
-        .select('id, "Nombre de la tecnología", "Proveedor / Empresa", "País de origen", "Grado de madurez (TRL)", "Descripción técnica breve"')
-        .or(`"Nombre de la tecnología".ilike.%${searchTerm}%,"Proveedor / Empresa".ilike.%${searchTerm}%`)
+        .select('id, nombre, proveedor, pais, trl, descripcion')
+        .or(`nombre.ilike.%${searchTerm}%,proveedor.ilike.%${searchTerm}%`)
         .limit(20);
       if (error) throw error;
       return data;
@@ -236,11 +236,11 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
     await addToLonglist.mutateAsync({
       study_id: studyId,
       existing_technology_id: tech.id,
-      technology_name: tech['Nombre de la tecnología'],
-      provider: tech['Proveedor / Empresa'],
-      country: tech['País de origen'],
-      trl: tech['Grado de madurez (TRL)'],
-      brief_description: tech['Descripción técnica breve'],
+      technology_name: tech.nombre,
+      provider: tech.proveedor,
+      country: tech.pais,
+      trl: tech.trl,
+      brief_description: tech.descripcion,
       source: 'database',
       already_in_db: true,
     });
@@ -380,20 +380,20 @@ export default function StudyPhase3Longlist({ studyId, study }: Props) {
                           <CardContent className="p-3">
                             <div className="flex items-start justify-between">
                               <div>
-                                <p className="font-medium">{tech['Nombre de la tecnología']}</p>
+                                <p className="font-medium">{tech.nombre}</p>
                                 <p className="text-sm text-muted-foreground">
-                                  {tech['Proveedor / Empresa']}
+                                  {tech.proveedor}
                                 </p>
-                                {tech['País de origen'] && (
+                                {tech.pais && (
                                   <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                                     <MapPin className="w-3 h-3" />
-                                    {tech['País de origen']}
+                                    {tech.pais}
                                   </div>
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
-                                {tech['Grado de madurez (TRL)'] && (
-                                  <Badge variant="outline">TRL {tech['Grado de madurez (TRL)']}</Badge>
+                                {tech.trl && (
+                                  <Badge variant="outline">TRL {tech.trl}</Badge>
                                 )}
                                 {isAdded && (
                                   <Badge variant="secondary">Ya añadida</Badge>

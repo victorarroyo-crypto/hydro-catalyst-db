@@ -515,14 +515,14 @@ const Scouting = () => {
               Tecnologías Rechazadas ({rejectedTechs.length})
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {rejectedTechs.slice(0, 6).map((tech) => (
+              {rejectedTechs.slice(0, 6).map((tech: any) => (
                 <Card key={tech.id} className="border-red-200 bg-red-50/30">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium truncate">
-                      {tech["Nombre de la tecnología"]}
+                      {tech.nombre || tech["Nombre de la tecnología"]}
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      {tech["Proveedor / Empresa"] || 'Sin proveedor'}
+                      {tech.proveedor || tech["Proveedor / Empresa"] || 'Sin proveedor'}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0">

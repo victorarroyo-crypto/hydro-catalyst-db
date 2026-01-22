@@ -61,14 +61,14 @@ import { saveAs } from 'file-saver';
 
 interface Technology {
   id: string;
-  "Nombre de la tecnología": string;
-  "Tipo de tecnología": string;
-  "Proveedor / Empresa": string | null;
-  "País de origen": string | null;
-  "Grado de madurez (TRL)": number | null;
-  "Ventaja competitiva clave": string | null;
-  "Aplicación principal": string | null;
-  "Web de la empresa": string | null;
+  nombre: string;
+  tipo: string;
+  proveedor: string | null;
+  pais: string | null;
+  trl: number | null;
+  ventaja: string | null;
+  aplicacion: string | null;
+  web: string | null;
 }
 
 interface Project {
@@ -202,8 +202,8 @@ const ProjectDetail: React.FC = () => {
       
       const { data, error } = await externalSupabase
         .from('technologies')
-        .select('id, "Nombre de la tecnología", "Tipo de tecnología", "Proveedor / Empresa", "Grado de madurez (TRL)"')
-        .ilike('"Nombre de la tecnología"', `%${searchQuery}%`)
+        .select('id, nombre, tipo, proveedor, trl')
+        .ilike('nombre', `%${searchQuery}%`)
         .limit(10);
       
       if (error) throw error;
@@ -292,14 +292,14 @@ const ProjectDetail: React.FC = () => {
     if (!technologies.length || !project) return;
 
     const data = technologies.map(tech => ({
-      'Nombre': tech["Nombre de la tecnología"],
-      'Proveedor / Empresa': tech["Proveedor / Empresa"] || '',
-      'País de origen': tech["País de origen"] || '',
-      'TRL (Madurez)': tech["Grado de madurez (TRL)"] || '',
-      'Tipo de tecnología': tech["Tipo de tecnología"],
-      'Ventaja competitiva clave': tech["Ventaja competitiva clave"] || '',
-      'Aplicación principal': tech["Aplicación principal"] || '',
-      'Web de la empresa': tech["Web de la empresa"] || '',
+      'Nombre': tech.nombre,
+      'Proveedor / Empresa': tech.proveedor || '',
+      'País de origen': tech.pais || '',
+      'TRL (Madurez)': tech.trl || '',
+      'Tipo de tecnología': tech.tipo,
+      'Ventaja competitiva clave': tech.ventaja || '',
+      'Aplicación principal': tech.aplicacion || '',
+      'Web de la empresa': tech.web || '',
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);

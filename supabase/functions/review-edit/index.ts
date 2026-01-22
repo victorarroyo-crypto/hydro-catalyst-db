@@ -204,17 +204,17 @@ Deno.serve(async (req) => {
             .single()
 
           if (currentTech) {
-            // Sync to external DB including tracking fields
+            // Sync to external DB including tracking fields (snake_case schema)
             const externalUpdate = {
               ...proposedChanges,
-              'Fecha de scouting': approvalDate.split('T')[0],
-              'Estado del seguimiento': estadoSeguimiento,
+              fecha_scouting: approvalDate.split('T')[0],
+              estado_seguimiento: estadoSeguimiento,
             }
             
             const { error: externalError } = await externalSupabase
               .from('technologies')
               .update(externalUpdate)
-              .eq('"Nombre de la tecnología"', currentTech["Nombre de la tecnología"])
+              .eq('id', currentTech.id)
 
             if (externalError) {
               console.error('External sync error:', externalError)
