@@ -11,3 +11,5 @@ export { StatusSelector } from './StatusSelector';
 export { TaxonomySectorSelector } from './TaxonomySectorSelector';
 export { TaxonomyTypeSelector, type SelectedTipo } from './TaxonomyTypeSelector';
 export { TaxonomySubcategorySelector, type SelectedSubcategoria } from './TaxonomySubcategorySelector';
+export { TaxonomyTypeDropdown } from './TaxonomyTypeDropdown';
+export { TaxonomySubcategoryDropdown } from './TaxonomySubcategoryDropdown';
