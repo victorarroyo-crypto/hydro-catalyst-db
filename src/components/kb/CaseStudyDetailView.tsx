@@ -351,16 +351,73 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
 
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const handleDownloadWord = async () => {
+  // Local Word generation (fallback)
+  const handleDownloadWordLocal = async () => {
     if (!caseStudy) return;
     
     setIsDownloading(true);
     try {
       await generateCaseStudyWordDocument(caseStudy, technologies || []);
-      toast.success('Documento descargado correctamente');
+      toast.success('Documento generado localmente');
     } catch (error) {
       console.error('Error generating Word document:', error);
       toast.error('Error al generar el documento');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // Backend download with fallback to local generation
+  const handleDownloadWord = async () => {
+    if (!caseStudy) return;
+    
+    setIsDownloading(true);
+    try {
+      const RAILWAY_API_URL = import.meta.env.VITE_API_URL;
+      const SYNC_SECRET = import.meta.env.VITE_SYNC_WEBHOOK_SECRET;
+      
+      if (!RAILWAY_API_URL || !SYNC_SECRET) {
+        console.warn('Backend not configured, falling back to local generation');
+        await handleDownloadWordLocal();
+        return;
+      }
+      
+      const response = await fetch(
+        `${RAILWAY_API_URL}/api/case-study/${caseStudyId}/document`,
+        {
+          method: 'GET',
+          headers: {
+            'X-Sync-Secret': SYNC_SECRET,
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Caso_Estudio_${caseStudy.name?.replace(/\s+/g, '_') || caseStudyId}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Documento descargado desde el servidor');
+    } catch (error: any) {
+      console.error('Error downloading from backend:', error);
+      // Fallback to local generation if backend fails
+      toast.warning('Servidor no disponible, generando localmente...');
+      try {
+        await generateCaseStudyWordDocument(caseStudy, technologies || []);
+        toast.success('Documento generado localmente');
+      } catch (localError) {
+        console.error('Error generating locally:', localError);
+        toast.error('Error al generar el documento');
+      }
     } finally {
       setIsDownloading(false);
     }
