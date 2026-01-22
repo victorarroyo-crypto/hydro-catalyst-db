@@ -460,13 +460,6 @@ export type Database = {
             referencedRelation: "scouting_queue"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "case_study_technologies_technology_id_fkey"
-            columns: ["technology_id"]
-            isOneToOne: false
-            referencedRelation: "technologies"
-            referencedColumns: ["id"]
-          },
         ]
       }
       casos_de_estudio: {
@@ -697,13 +690,6 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "project_technologies_technology_id_fkey"
-            columns: ["technology_id"]
-            isOneToOne: false
-            referencedRelation: "technologies"
             referencedColumns: ["id"]
           },
         ]
@@ -1571,13 +1557,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "study_longlist_existing_technology_id_fkey"
-            columns: ["existing_technology_id"]
-            isOneToOne: false
-            referencedRelation: "technologies"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "study_longlist_sector_id_fkey"
             columns: ["sector_id"]
             isOneToOne: false
@@ -1617,13 +1596,6 @@ export type Database = {
             columns: ["subcategoria_id"]
             isOneToOne: false
             referencedRelation: "taxonomy_subcategorias"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "study_longlist_technology_id_fkey"
-            columns: ["technology_id"]
-            isOneToOne: false
-            referencedRelation: "technologies"
             referencedColumns: ["id"]
           },
           {
@@ -2168,133 +2140,132 @@ export type Database = {
       }
       technologies: {
         Row: {
-          "Aplicación principal": string | null
-          "Casos de referencia": string | null
-          "Comentarios del analista": string | null
-          created_at: string
-          "Descripción técnica breve": string | null
-          "Email de contacto": string | null
-          "Estado del seguimiento": string | null
-          "Fecha de scouting": string | null
-          "Grado de madurez (TRL)": number | null
+          aplicacion: string | null
+          approved_at: string | null
+          approved_by: string | null
+          casos_referencia: string | null
+          categorias: string[] | null
+          comentarios: string | null
+          created_at: string | null
+          created_by: string | null
+          descripcion: string | null
+          email: string | null
+          embedding: string | null
+          embedding_updated_at: string | null
+          estado_seguimiento: string | null
+          fecha_scouting: string | null
           id: string
-          "Nombre de la tecnología": string
-          "País de origen": string | null
-          "Paises donde actua": string | null
-          "Porque es innovadora": string | null
-          "Proveedor / Empresa": string | null
+          innovacion: string | null
+          nombre: string | null
+          pais: string | null
+          paises_actua: string | null
+          proveedor: string | null
           quality_score: number | null
           review_requested_at: string | null
           review_requested_by: string | null
           review_status: string | null
-          reviewed_at: string | null
           reviewer_id: string | null
-          "Sector y subsector": string | null
+          sector: string | null
           sector_id: string | null
           status: string | null
-          Subcategoría: string | null
           subcategoria_id: number | null
+          subcategorias: string[] | null
           subsector_industrial: string | null
-          "Tipo de tecnología": string
+          tipo: string | null
           tipo_id: number | null
-          updated_at: string
+          tipos: string[] | null
+          trl: number | null
+          updated_at: string | null
           updated_by: string | null
-          "Ventaja competitiva clave": string | null
-          "Web de la empresa": string | null
+          ventaja: string | null
+          version: number | null
+          web: string | null
         }
         Insert: {
-          "Aplicación principal"?: string | null
-          "Casos de referencia"?: string | null
-          "Comentarios del analista"?: string | null
-          created_at?: string
-          "Descripción técnica breve"?: string | null
-          "Email de contacto"?: string | null
-          "Estado del seguimiento"?: string | null
-          "Fecha de scouting"?: string | null
-          "Grado de madurez (TRL)"?: number | null
+          aplicacion?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          casos_referencia?: string | null
+          categorias?: string[] | null
+          comentarios?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          descripcion?: string | null
+          email?: string | null
+          embedding?: string | null
+          embedding_updated_at?: string | null
+          estado_seguimiento?: string | null
+          fecha_scouting?: string | null
           id?: string
-          "Nombre de la tecnología": string
-          "País de origen"?: string | null
-          "Paises donde actua"?: string | null
-          "Porque es innovadora"?: string | null
-          "Proveedor / Empresa"?: string | null
+          innovacion?: string | null
+          nombre?: string | null
+          pais?: string | null
+          paises_actua?: string | null
+          proveedor?: string | null
           quality_score?: number | null
           review_requested_at?: string | null
           review_requested_by?: string | null
           review_status?: string | null
-          reviewed_at?: string | null
           reviewer_id?: string | null
-          "Sector y subsector"?: string | null
+          sector?: string | null
           sector_id?: string | null
           status?: string | null
-          Subcategoría?: string | null
           subcategoria_id?: number | null
+          subcategorias?: string[] | null
           subsector_industrial?: string | null
-          "Tipo de tecnología": string
+          tipo?: string | null
           tipo_id?: number | null
-          updated_at?: string
+          tipos?: string[] | null
+          trl?: number | null
+          updated_at?: string | null
           updated_by?: string | null
-          "Ventaja competitiva clave"?: string | null
-          "Web de la empresa"?: string | null
+          ventaja?: string | null
+          version?: number | null
+          web?: string | null
         }
         Update: {
-          "Aplicación principal"?: string | null
-          "Casos de referencia"?: string | null
-          "Comentarios del analista"?: string | null
-          created_at?: string
-          "Descripción técnica breve"?: string | null
-          "Email de contacto"?: string | null
-          "Estado del seguimiento"?: string | null
-          "Fecha de scouting"?: string | null
-          "Grado de madurez (TRL)"?: number | null
+          aplicacion?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          casos_referencia?: string | null
+          categorias?: string[] | null
+          comentarios?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          descripcion?: string | null
+          email?: string | null
+          embedding?: string | null
+          embedding_updated_at?: string | null
+          estado_seguimiento?: string | null
+          fecha_scouting?: string | null
           id?: string
-          "Nombre de la tecnología"?: string
-          "País de origen"?: string | null
-          "Paises donde actua"?: string | null
-          "Porque es innovadora"?: string | null
-          "Proveedor / Empresa"?: string | null
+          innovacion?: string | null
+          nombre?: string | null
+          pais?: string | null
+          paises_actua?: string | null
+          proveedor?: string | null
           quality_score?: number | null
           review_requested_at?: string | null
           review_requested_by?: string | null
           review_status?: string | null
-          reviewed_at?: string | null
           reviewer_id?: string | null
-          "Sector y subsector"?: string | null
+          sector?: string | null
           sector_id?: string | null
           status?: string | null
-          Subcategoría?: string | null
           subcategoria_id?: number | null
+          subcategorias?: string[] | null
           subsector_industrial?: string | null
-          "Tipo de tecnología"?: string
+          tipo?: string | null
           tipo_id?: number | null
-          updated_at?: string
+          tipos?: string[] | null
+          trl?: number | null
+          updated_at?: string | null
           updated_by?: string | null
-          "Ventaja competitiva clave"?: string | null
-          "Web de la empresa"?: string | null
+          ventaja?: string | null
+          version?: number | null
+          web?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "technologies_sector_id_fkey"
-            columns: ["sector_id"]
-            isOneToOne: false
-            referencedRelation: "taxonomy_sectores"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "technologies_subcategoria_id_fkey"
-            columns: ["subcategoria_id"]
-            isOneToOne: false
-            referencedRelation: "taxonomy_subcategorias"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "technologies_tipo_id_fkey"
-            columns: ["tipo_id"]
-            isOneToOne: false
-            referencedRelation: "taxonomy_tipos"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       technology_edits: {
         Row: {
@@ -2339,15 +2310,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["edit_status"]
           technology_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "technology_edits_technology_id_fkey"
-            columns: ["technology_id"]
-            isOneToOne: false
-            referencedRelation: "technologies"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       technology_subcategorias: {
         Row: {
@@ -2379,13 +2342,6 @@ export type Database = {
             referencedRelation: "taxonomy_subcategorias"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "technology_subcategorias_technology_id_fkey"
-            columns: ["technology_id"]
-            isOneToOne: false
-            referencedRelation: "technologies"
-            referencedColumns: ["id"]
-          },
         ]
       }
       technology_tipos: {
@@ -2411,13 +2367,6 @@ export type Database = {
           tipo_id?: number
         }
         Relationships: [
-          {
-            foreignKeyName: "technology_tipos_technology_id_fkey"
-            columns: ["technology_id"]
-            isOneToOne: false
-            referencedRelation: "technologies"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "technology_tipos_tipo_id_fkey"
             columns: ["tipo_id"]
@@ -2446,15 +2395,7 @@ export type Database = {
           technology_id?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_favorites_technology_id_fkey"
-            columns: ["technology_id"]
-            isOneToOne: false
-            referencedRelation: "technologies"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_invitations: {
         Row: {
