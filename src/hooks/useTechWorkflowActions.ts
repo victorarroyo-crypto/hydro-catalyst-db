@@ -3,6 +3,7 @@
  * 
  * Centralized mutations for all technology workflow actions.
  * Handles scouting, DB review, linking, and user actions.
+ * Uses canonical field names from technologies table schema.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -114,7 +115,7 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       if (fetchError) throw new Error(`Error al obtener registro: ${fetchError.message}`);
       if (!record) throw new Error('Registro no encontrado');
       
-      // Insert into technologies
+      // Insert into technologies (using snake_case)
       const { data: newTech, error: insertError } = await externalSupabase
         .from('technologies')
         .insert({
@@ -407,26 +408,26 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       data: UnifiedTechData; 
       caseStudyTechId: string;
     }) => {
-      // Insert into external scouting_queue
+      // Insert into external scouting_queue (using snake_case)
       const { data: inserted, error: insertError } = await externalSupabase
         .from('scouting_queue')
         .insert({
-          nombre: data.technology_name,
-          proveedor: data.provider,
-          pais: data.country,
+          nombre: data.nombre,
+          proveedor: data.proveedor,
+          pais: data.pais,
           web: data.web,
           email: data.email,
-          descripcion: data.description,
-          tipo_sugerido: data.type,
-          subcategoria: data.subcategory,
+          descripcion: data.descripcion,
+          tipo_sugerido: data.tipo,
+          subcategoria: data.subcategoria,
           sector: data.sector,
-          aplicacion_principal: data.applications,
-          ventaja_competitiva: data.ventaja_competitiva,
+          aplicacion_principal: data.aplicacion,
+          ventaja_competitiva: data.ventaja,
           innovacion: data.innovacion,
           trl_estimado: data.trl,
           casos_referencia: data.casos_referencia,
           paises_actua: data.paises_actua,
-          comentarios_analista: data.comentarios_analista,
+          comentarios_analista: data.comentarios,
           status: 'review',
           source: 'case_study',
         })
@@ -465,26 +466,26 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       data: UnifiedTechData;
       longlistId: string;
     }) => {
-      // Insert into technologies
+      // Insert into technologies (using snake_case)
       const { data: newTech, error: insertError } = await externalSupabase
         .from('technologies')
         .insert({
-          nombre: data.technology_name,
-          proveedor: data.provider,
-          pais: data.country,
+          nombre: data.nombre,
+          proveedor: data.proveedor,
+          pais: data.pais,
           paises_actua: data.paises_actua,
           web: data.web,
           email: data.email,
-          descripcion: data.description,
-          tipo: data.type,
-          subcategorias: data.subcategory ? [data.subcategory] : null,
+          descripcion: data.descripcion,
+          tipo: data.tipo,
+          subcategorias: data.subcategoria ? [data.subcategoria] : null,
           sector: data.sector,
-          aplicacion: data.applications,
-          ventaja: data.ventaja_competitiva,
+          aplicacion: data.aplicacion,
+          ventaja: data.ventaja,
           innovacion: data.innovacion,
           trl: data.trl,
           casos_referencia: data.casos_referencia,
-          comentarios: data.comentarios_analista,
+          comentarios: data.comentarios,
           status: 'active',
           review_status: 'none',
         })
@@ -530,21 +531,21 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       const { data, error } = await externalSupabase
         .from('technologies')
         .update({
-          nombre: editData.technology_name,
-          proveedor: editData.provider,
-          pais: editData.country,
+          nombre: editData.nombre,
+          proveedor: editData.proveedor,
+          pais: editData.pais,
           paises_actua: editData.paises_actua,
           web: editData.web,
           email: editData.email,
-          descripcion: editData.description,
-          tipo: editData.type,
+          descripcion: editData.descripcion,
+          tipo: editData.tipo,
           sector: editData.sector,
-          aplicacion: editData.applications,
-          ventaja: editData.ventaja_competitiva,
+          aplicacion: editData.aplicacion,
+          ventaja: editData.ventaja,
           innovacion: editData.innovacion,
           trl: editData.trl,
           casos_referencia: editData.casos_referencia,
-          comentarios: editData.comentarios_analista,
+          comentarios: editData.comentarios,
           estado_seguimiento: editData.estado_seguimiento,
           tipo_id: editData.tipo_id,
           subcategoria_id: editData.subcategoria_id,
@@ -580,15 +581,15 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       const { data, error } = await supabase
         .from('study_longlist')
         .update({
-          technology_name: editData.technology_name,
-          provider: editData.provider,
-          country: editData.country,
+          technology_name: editData.nombre,
+          provider: editData.proveedor,
+          country: editData.pais,
           web: editData.web,
-          brief_description: editData.description,
-          type_suggested: editData.type,
-          subcategory_suggested: editData.subcategory,
+          brief_description: editData.descripcion,
+          type_suggested: editData.tipo,
+          subcategory_suggested: editData.subcategoria,
           trl: editData.trl,
-          inclusion_reason: editData.comentarios_analista,
+          inclusion_reason: editData.comentarios,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)

@@ -5,11 +5,7 @@
  * from any source: main database, scouting queue, study longlist,
  * case study technologies, or AI extracted technologies.
  * 
- * This component:
- * 1. Detects the input type and maps to unified format
- * 2. Calculates permissions based on user role and workflow status
- * 3. Manages editing state
- * 4. Handles all workflow actions via centralized hook
+ * Uses canonical field names from technologies table schema.
  */
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
@@ -177,28 +173,28 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
       let queueStatus: string | undefined;
       
       if (isUIItem) {
-        // Map from ScoutingItemUI
+        // Map from ScoutingItemUI to canonical names
         const uiItem = scoutingItem as ScoutingItemUI;
         scoutData = {
           id: uiItem.id,
-          technology_name: uiItem.name,
-          provider: uiItem.provider || null,
-          country: uiItem.country || null,
+          nombre: uiItem.name,
+          proveedor: uiItem.provider || null,
+          pais: uiItem.country || null,
           paises_actua: uiItem.paisesActua || null,
           web: uiItem.web || null,
           email: uiItem.email || null,
           trl: uiItem.trl || null,
           estado_seguimiento: null,
           fecha_scouting: uiItem.created_at || null,
-          type: uiItem.suggestedType || null,
-          subcategory: uiItem.suggestedSubcategory || null,
+          tipo: uiItem.suggestedType || null,
+          subcategoria: uiItem.suggestedSubcategory || null,
           sector: uiItem.sector || null,
-          applications: uiItem.aplicacionPrincipal || null,
-          description: uiItem.description || null,
-          ventaja_competitiva: uiItem.competitiveAdvantage || null,
+          aplicacion: uiItem.aplicacionPrincipal || null,
+          descripcion: uiItem.description || null,
+          ventaja: uiItem.competitiveAdvantage || null,
           innovacion: uiItem.innovacion || null,
           casos_referencia: uiItem.casosReferencia || null,
-          comentarios_analista: uiItem.comentariosAnalista || null,
+          comentarios: uiItem.comentariosAnalista || null,
           status: uiItem.status || null,
           quality_score: uiItem.score || null,
           review_status: null,
@@ -248,24 +244,24 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
       const appData = caseStudyTech.application_data || {};
       const csData: UnifiedTechData = {
         id: caseStudyTech.id,
-        technology_name: caseStudyTech.technology_name,
-        provider: caseStudyTech.provider || appData.proveedor || null,
-        country: appData.pais || null,
+        nombre: caseStudyTech.technology_name,
+        proveedor: caseStudyTech.provider || appData.proveedor || null,
+        pais: appData.pais || null,
         paises_actua: appData.paises_actua || null,
         web: appData.web || null,
         email: appData.email || null,
         trl: appData.trl || null,
         estado_seguimiento: null,
         fecha_scouting: null,
-        type: appData.tipo || null,
-        subcategory: appData.subcategoria || null,
+        tipo: appData.tipo || null,
+        subcategoria: appData.subcategoria || null,
         sector: appData.sector || null,
-        applications: appData.aplicacion || null,
-        description: appData.descripcion || appData.description || null,
-        ventaja_competitiva: appData.ventaja || appData.ventaja_competitiva || null,
+        aplicacion: appData.aplicacion || null,
+        descripcion: appData.descripcion || appData.description || null,
+        ventaja: appData.ventaja || appData.ventaja_competitiva || null,
         innovacion: appData.innovacion || null,
         casos_referencia: appData.casos_referencia || null,
-        comentarios_analista: null,
+        comentarios: null,
         // Technical specs from case studies
         capacity: appData.capacity || null,
         removal_efficiency: appData.removal_efficiency || null,
@@ -346,23 +342,23 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
       // Start in edit mode for new technology creation
       setIsEditing(true);
       setEditData({
-        technology_name: '',
-        provider: '',
-        country: '',
+        nombre: '',
+        proveedor: '',
+        pais: '',
         paises_actua: '',
         web: '',
         email: '',
         trl: null,
         estado_seguimiento: '',
-        type: '',
-        subcategory: '',
+        tipo: '',
+        subcategoria: '',
         sector: '',
-        applications: '',
-        description: '',
-        ventaja_competitiva: '',
+        aplicacion: '',
+        descripcion: '',
+        ventaja: '',
         innovacion: '',
         casos_referencia: '',
-        comentarios_analista: '',
+        comentarios: '',
         status: 'active',
         tipo_id: null,
         subcategoria_id: null,
@@ -404,7 +400,6 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     
     try {
       // Build taxonomy arrays from checkbox selections
-      // We need to map tipo_id to codigo from the taxonomy data
       const tipoIds = selectedTipos.map(t => t.tipo_id);
       const subcatIds = selectedSubcategorias.map(s => s.subcategoria_id);
       
@@ -428,25 +423,25 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
           });
           break;
         case 'scouting':
-          // Convert to scouting format
+          // Convert to scouting format (uses snake_case for external DB)
           await workflowActions.updateScoutingItem.mutateAsync({
             id: sourceId,
             updates: {
-              nombre: enrichedEditData.technology_name,
-              proveedor: enrichedEditData.provider,
-              pais: enrichedEditData.country,
+              nombre: enrichedEditData.nombre,
+              proveedor: enrichedEditData.proveedor,
+              pais: enrichedEditData.pais,
               web: enrichedEditData.web,
               email: enrichedEditData.email,
-              descripcion: enrichedEditData.description,
-              tipo_sugerido: enrichedEditData.type,
-              subcategoria: enrichedEditData.subcategory,
+              descripcion: enrichedEditData.descripcion,
+              tipo_sugerido: enrichedEditData.tipo,
+              subcategoria: enrichedEditData.subcategoria,
               sector: enrichedEditData.sector,
-              aplicacion_principal: enrichedEditData.applications,
-              ventaja_competitiva: enrichedEditData.ventaja_competitiva,
+              aplicacion_principal: enrichedEditData.aplicacion,
+              ventaja_competitiva: enrichedEditData.ventaja,
               innovacion: enrichedEditData.innovacion,
               trl_estimado: enrichedEditData.trl,
               casos_referencia: enrichedEditData.casos_referencia,
-              comentarios_analista: enrichedEditData.comentarios_analista,
+              comentarios_analista: enrichedEditData.comentarios,
               paises_actua: enrichedEditData.paises_actua,
             },
           });
@@ -469,10 +464,10 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     
     setEditData(prev => prev ? {
       ...prev,
-      description: enrichedData.descripcion || prev.description,
-      ventaja_competitiva: enrichedData.ventaja || prev.ventaja_competitiva,
+      descripcion: enrichedData.descripcion || prev.descripcion,
+      ventaja: enrichedData.ventaja || prev.ventaja,
       innovacion: enrichedData.innovacion || prev.innovacion,
-      applications: enrichedData.aplicacion || prev.applications,
+      aplicacion: enrichedData.aplicacion || prev.aplicacion,
     } : null);
     
     toast.success('Datos enriquecidos aplicados');
@@ -485,21 +480,21 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
       // Convert to Technology format for generateTechnologyWordDocument
       const techData: Partial<Technology> = {
         id: unifiedData.id,
-        nombre: unifiedData.technology_name,
-        proveedor: unifiedData.provider,
-        pais: unifiedData.country,
+        nombre: unifiedData.nombre,
+        proveedor: unifiedData.proveedor,
+        pais: unifiedData.pais,
         paises_actua: unifiedData.paises_actua,
         web: unifiedData.web,
         email: unifiedData.email,
-        descripcion: unifiedData.description,
-        tipo: unifiedData.type,
+        descripcion: unifiedData.descripcion,
+        tipo: unifiedData.tipo,
         sector: unifiedData.sector,
-        aplicacion: unifiedData.applications,
-        ventaja: unifiedData.ventaja_competitiva,
+        aplicacion: unifiedData.aplicacion,
+        ventaja: unifiedData.ventaja,
         innovacion: unifiedData.innovacion,
         trl: unifiedData.trl,
         casos_referencia: unifiedData.casos_referencia,
-        comentarios: unifiedData.comentarios_analista,
+        comentarios: unifiedData.comentarios,
       };
       
       await generateTechnologyWordDocument(techData as Technology);
@@ -638,7 +633,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="sr-only">
-              {unifiedData.technology_name || 'Detalle de Tecnología'}
+              {unifiedData.nombre || 'Detalle de Tecnología'}
             </DialogTitle>
           </DialogHeader>
           

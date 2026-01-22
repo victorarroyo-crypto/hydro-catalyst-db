@@ -2,7 +2,7 @@
  * Mapping Functions for Unified Technology Data
  * 
  * Converts data from different sources to the unified format.
- * Updated to use snake_case fields from external DB.
+ * All output field names match the technologies table schema exactly.
  */
 
 import type { UnifiedTechData, TechMetadata, TechActions, UnifiedTechEditData } from '@/types/unifiedTech';
@@ -14,29 +14,29 @@ type ScoutingQueueItem = Tables<'scouting_queue'>;
 
 /**
  * Maps a technology from the main database to unified format
- * Now uses snake_case field names from external DB
+ * Direct 1:1 mapping - field names already match
  */
 export function mapFromTechnologies(tech: Technology): UnifiedTechData {
   return {
     id: tech.id,
-    technology_name: tech.nombre,
-    provider: tech.proveedor,
-    country: tech.pais,
+    nombre: tech.nombre,
+    proveedor: tech.proveedor,
+    pais: tech.pais,
     paises_actua: tech.paises_actua,
     web: tech.web,
     email: tech.email,
     trl: tech.trl,
     estado_seguimiento: tech.estado_seguimiento,
     fecha_scouting: tech.fecha_scouting,
-    type: tech.tipo || tech.tipos?.[0] || null,
-    subcategory: tech.subcategorias?.[0] || null,
+    tipo: tech.tipo || tech.tipos?.[0] || null,
+    subcategoria: tech.subcategorias?.[0] || null,
     sector: tech.sector,
-    applications: tech.aplicacion,
-    description: tech.descripcion,
-    ventaja_competitiva: tech.ventaja,
+    aplicacion: tech.aplicacion,
+    descripcion: tech.descripcion,
+    ventaja: tech.ventaja,
     innovacion: tech.innovacion,
     casos_referencia: tech.casos_referencia,
-    comentarios_analista: tech.comentarios,
+    comentarios: tech.comentarios,
     status: tech.status,
     quality_score: tech.quality_score,
     review_status: tech.review_status,
@@ -47,7 +47,7 @@ export function mapFromTechnologies(tech: Technology): UnifiedTechData {
 
 /**
  * Maps a longlist item to unified format
- * If linkedTech is provided, uses data from the linked technology
+ * Translates English column names to canonical Spanish names
  */
 export function mapFromLonglist(
   item: LonglistItem, 
@@ -61,24 +61,24 @@ export function mapFromLonglist(
   
   return {
     id: item.id,
-    technology_name: item.technology_name,
-    provider: item.provider,
-    country: item.country,
+    nombre: item.technology_name,
+    proveedor: item.provider,
+    pais: item.country,
     paises_actua: extendedItem.paises_actua || null,
     web: item.web,
     email: extendedItem.email || null,
     trl: item.trl,
     estado_seguimiento: null,
     fecha_scouting: null,
-    type: item.type_suggested,
-    subcategory: item.subcategory_suggested,
+    tipo: item.type_suggested,
+    subcategoria: item.subcategory_suggested,
     sector: extendedItem.sector || null,
-    applications: item.applications?.join(', ') || null,
-    description: item.brief_description,
-    ventaja_competitiva: extendedItem.ventaja_competitiva || null,
+    aplicacion: item.applications?.join(', ') || null,
+    descripcion: item.brief_description,
+    ventaja: extendedItem.ventaja_competitiva || null,
     innovacion: extendedItem.innovacion || null,
     casos_referencia: extendedItem.casos_referencia || null,
-    comentarios_analista: item.inclusion_reason,
+    comentarios: item.inclusion_reason,
     status: null,
     quality_score: null,
     review_status: null,
@@ -89,29 +89,29 @@ export function mapFromLonglist(
 
 /**
  * Maps a scouting queue item to unified format
- * Scouting queue still uses Spanish column names (external DB constraint)
+ * Translates column names with spaces/accents to canonical names
  */
 export function mapFromScouting(item: ScoutingQueueItem): UnifiedTechData {
   return {
     id: item.id,
-    technology_name: item['Nombre de la tecnología'],
-    provider: item['Proveedor / Empresa'],
-    country: item['País de origen'],
+    nombre: item['Nombre de la tecnología'],
+    proveedor: item['Proveedor / Empresa'],
+    pais: item['País de origen'],
     paises_actua: item['Paises donde actua'],
     web: item['Web de la empresa'],
     email: item['Email de contacto'],
     trl: item['Grado de madurez (TRL)'],
     estado_seguimiento: item['Estado del seguimiento'],
     fecha_scouting: item['Fecha de scouting'],
-    type: item['Tipo de tecnología'],
-    subcategory: item['Subcategoría'],
+    tipo: item['Tipo de tecnología'],
+    subcategoria: item['Subcategoría'],
     sector: item['Sector y subsector'],
-    applications: item['Aplicación principal'],
-    description: item['Descripción técnica breve'],
-    ventaja_competitiva: item['Ventaja competitiva clave'],
+    aplicacion: item['Aplicación principal'],
+    descripcion: item['Descripción técnica breve'],
+    ventaja: item['Ventaja competitiva clave'],
     innovacion: item['Porque es innovadora'],
     casos_referencia: item['Casos de referencia'],
-    comentarios_analista: item['Comentarios del analista'],
+    comentarios: item['Comentarios del analista'],
     status: item.queue_status,
     quality_score: null,
     review_status: null,
@@ -258,28 +258,29 @@ export function createScoutingActions(status: string): TechActions {
 
 /**
  * Converts UnifiedTechData to edit data format
+ * Field names match the technologies table schema
  */
 export function toEditData(data: UnifiedTechData): UnifiedTechEditData {
   // Extended data for accessing taxonomy IDs
   const extData = data as any;
   
   return {
-    technology_name: data.technology_name || '',
-    provider: data.provider || '',
-    country: data.country || '',
+    nombre: data.nombre || '',
+    proveedor: data.proveedor || '',
+    pais: data.pais || '',
     paises_actua: data.paises_actua || '',
     web: data.web || '',
     email: data.email || '',
     trl: data.trl,
-    type: data.type || '',
-    subcategory: data.subcategory || '',
+    tipo: data.tipo || '',
+    subcategoria: data.subcategoria || '',
     sector: data.sector || '',
-    applications: data.applications || '',
-    description: data.description || '',
-    ventaja_competitiva: data.ventaja_competitiva || '',
+    aplicacion: data.aplicacion || '',
+    descripcion: data.descripcion || '',
+    ventaja: data.ventaja || '',
     innovacion: data.innovacion || '',
     casos_referencia: data.casos_referencia || '',
-    comentarios_analista: data.comentarios_analista || '',
+    comentarios: data.comentarios || '',
     // Taxonomy IDs
     status: data.status || 'active',
     tipo_id: extData.tipo_id || null,

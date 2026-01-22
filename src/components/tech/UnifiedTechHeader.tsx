@@ -2,6 +2,7 @@
  * Unified Tech Header Component
  * 
  * Consistent header with technology name, TRL badge, and contextual badges.
+ * Uses canonical field names from technologies table.
  */
 
 import React from 'react';
@@ -54,7 +55,7 @@ export const UnifiedTechHeader: React.FC<UnifiedTechHeaderProps> = ({
     <div className="flex items-start justify-between gap-4">
       <div className="flex-1">
         <h2 className="text-xl font-display font-semibold mb-2">
-          {data.technology_name}
+          {data.nombre}
         </h2>
         <div className="flex items-center gap-2 flex-wrap">
           <TRLBadge trl={data.trl} />

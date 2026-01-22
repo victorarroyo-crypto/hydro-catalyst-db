@@ -5,8 +5,7 @@
  * This component is used by ALL technology modals to ensure consistent
  * field display regardless of data source.
  * 
- * IMPORTANT: ALL fields are ALWAYS displayed, showing "Sin información"
- * when empty. This ensures identical visual format across all views.
+ * Uses canonical field names from technologies table schema.
  */
 
 import React from 'react';
@@ -232,22 +231,22 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               <div className="space-y-2">
                 <Label>Nombre de la tecnología</Label>
                 <Input
-                  value={editData.technology_name}
-                  onChange={(e) => onEditChange('technology_name', e.target.value)}
+                  value={editData.nombre}
+                  onChange={(e) => onEditChange('nombre', e.target.value)}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Proveedor / Empresa</Label>
                 <Input
-                  value={editData.provider}
-                  onChange={(e) => onEditChange('provider', e.target.value)}
+                  value={editData.proveedor}
+                  onChange={(e) => onEditChange('proveedor', e.target.value)}
                 />
               </div>
               <div className="space-y-2">
                 <Label>País de origen</Label>
                 <CountrySelector
-                  value={editData.country}
-                  onChange={(value) => onEditChange('country', value)}
+                  value={editData.pais}
+                  onChange={(value) => onEditChange('pais', value)}
                 />
               </div>
               <div className="space-y-2">
@@ -307,8 +306,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
                 />
               ) : (
                 <Input
-                  value={editData.type}
-                  onChange={(e) => onEditChange('type', e.target.value)}
+                  value={editData.tipo}
+                  onChange={(e) => onEditChange('tipo', e.target.value)}
                   placeholder="Tipo de tecnología"
                 />
               )}
@@ -325,8 +324,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
                 />
               ) : (
                 <Input
-                  value={editData.subcategory}
-                  onChange={(e) => onEditChange('subcategory', e.target.value)}
+                  value={editData.subcategoria}
+                  onChange={(e) => onEditChange('subcategoria', e.target.value)}
                   placeholder="Subcategoría"
                 />
               )}
@@ -346,8 +345,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
             <div className="space-y-2">
               <Label>Aplicación principal</Label>
               <Input
-                value={editData.applications}
-                onChange={(e) => onEditChange('applications', e.target.value)}
+                value={editData.aplicacion}
+                onChange={(e) => onEditChange('aplicacion', e.target.value)}
               />
             </div>
           </div>
@@ -359,8 +358,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               DESCRIPCIÓN TÉCNICA
             </h3>
             <Textarea
-              value={editData.description}
-              onChange={(e) => onEditChange('description', e.target.value)}
+              value={editData.descripcion}
+              onChange={(e) => onEditChange('descripcion', e.target.value)}
               rows={4}
               placeholder="Descripción técnica breve de la tecnología..."
             />
@@ -376,8 +375,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               <div className="space-y-2">
                 <Label>Ventaja competitiva clave</Label>
                 <Textarea
-                  value={editData.ventaja_competitiva}
-                  onChange={(e) => onEditChange('ventaja_competitiva', e.target.value)}
+                  value={editData.ventaja}
+                  onChange={(e) => onEditChange('ventaja', e.target.value)}
                   rows={2}
                 />
               </div>
@@ -413,8 +412,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               NOTAS DEL ANALISTA
             </h3>
             <Textarea
-              value={editData.comentarios_analista}
-              onChange={(e) => onEditChange('comentarios_analista', e.target.value)}
+              value={editData.comentarios}
+              onChange={(e) => onEditChange('comentarios', e.target.value)}
               rows={3}
               placeholder="Comentarios y observaciones del analista..."
             />
@@ -429,8 +428,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               <Building2 className="w-4 h-4 text-primary" />
               INFORMACIÓN GENERAL
             </h3>
-            <UnifiedInfoRow icon={Building2} label="Proveedor / Empresa" value={data.provider} />
-            <UnifiedInfoRow icon={MapPin} label="País de origen" value={data.country} />
+            <UnifiedInfoRow icon={Building2} label="Proveedor / Empresa" value={data.proveedor} />
+            <UnifiedInfoRow icon={MapPin} label="País de origen" value={data.pais} />
             <UnifiedInfoRow icon={Users} label="Países donde actúa" value={data.paises_actua} />
             <UnifiedInfoRow icon={Globe} label="Web de la empresa" value={data.web} isLink />
             <UnifiedInfoRow icon={Mail} label="Email de contacto" value={data.email} />
@@ -447,10 +446,10 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               <Tag className="w-4 h-4 text-primary" />
               CLASIFICACIÓN
             </h3>
-            <UnifiedInfoRow icon={Tag} label="Tipo de tecnología" value={data.type} />
-            <UnifiedInfoRow icon={Tag} label="Subcategoría" value={data.subcategory} />
+            <UnifiedInfoRow icon={Tag} label="Tipo de tecnología" value={data.tipo} />
+            <UnifiedInfoRow icon={Tag} label="Subcategoría" value={data.subcategoria} />
             <UnifiedInfoRow icon={Tag} label="Sector y subsector" value={data.sector} />
-            <UnifiedInfoRow icon={FileText} label="Aplicación principal" value={data.applications} />
+            <UnifiedInfoRow icon={FileText} label="Aplicación principal" value={data.aplicacion} />
           </div>
 
           <Separator />
@@ -461,8 +460,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               <FileText className="w-4 h-4 text-primary" />
               DESCRIPCIÓN TÉCNICA
             </h3>
-            <p className={`text-sm ${data.description ? 'text-foreground' : 'text-muted-foreground/50 italic'}`}>
-              {data.description || 'Sin información'}
+            <p className={`text-sm ${data.descripcion ? 'text-foreground' : 'text-muted-foreground/50 italic'}`}>
+              {data.descripcion || 'Sin información'}
             </p>
           </div>
 
@@ -474,7 +473,7 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               <Lightbulb className="w-4 h-4 text-primary" />
               INNOVACIÓN Y VENTAJAS
             </h3>
-            <UnifiedInfoRow icon={Trophy} label="Ventaja competitiva clave" value={data.ventaja_competitiva} />
+            <UnifiedInfoRow icon={Trophy} label="Ventaja competitiva clave" value={data.ventaja} />
             <UnifiedInfoRow icon={Lightbulb} label="Por qué es innovadora" value={data.innovacion} />
           </div>
 
@@ -499,8 +498,8 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
               <MessageSquare className="w-4 h-4 text-primary" />
               NOTAS DEL ANALISTA
             </h3>
-            <p className={`text-sm italic ${data.comentarios_analista ? 'text-foreground' : 'text-muted-foreground/50'}`}>
-              {data.comentarios_analista || 'Sin notas'}
+            <p className={`text-sm italic ${data.comentarios ? 'text-foreground' : 'text-muted-foreground/50'}`}>
+              {data.comentarios || 'Sin notas'}
             </p>
           </div>
 
