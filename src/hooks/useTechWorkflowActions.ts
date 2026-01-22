@@ -241,7 +241,8 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       const { data, error } = await externalSupabase
         .from('technologies')
         .update({
-          review_status: 'pending',
+          review_status: 'in_review',
+          reviewer_id: userId,
           review_requested_at: new Date().toISOString(),
           review_requested_by: userId,
           updated_at: new Date().toISOString(),
@@ -259,31 +260,6 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
     },
     onError: (error: Error) => {
       toast.error('Error al enviar a revisión', { description: error.message });
-    },
-  });
-
-  const claimReview = useMutation({
-    mutationFn: async ({ id }: { id: string }) => {
-      const { data, error } = await externalSupabase
-        .from('technologies')
-        .update({
-          review_status: 'in_review',
-          reviewer_id: userId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['technologies'] });
-      toast.success('Revisión reclamada');
-    },
-    onError: (error: Error) => {
-      toast.error('Error al reclamar revisión', { description: error.message });
     },
   });
 
@@ -317,7 +293,7 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       const { data, error } = await externalSupabase
         .from('technologies')
         .update({
-          review_status: 'pending',
+          review_status: 'none',
           reviewer_id: null,
           updated_at: new Date().toISOString(),
         })
@@ -695,7 +671,6 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
     
     // DB Review workflow
     sendToReview,
-    claimReview,
     completeReview,
     releaseReview,
     
@@ -724,7 +699,6 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       approveToDatabase.isPending ||
       reject.isPending ||
       sendToReview.isPending ||
-      claimReview.isPending ||
       completeReview.isPending ||
       releaseReview.isPending ||
       sendReviewToApproval.isPending ||

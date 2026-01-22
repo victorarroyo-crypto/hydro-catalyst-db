@@ -445,7 +445,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
             {isInternalUser && isInReviewProcess && (
               <Badge variant="outline" className="gap-1 py-1.5">
                 <ClipboardList className="w-3 h-3" />
-                {reviewStatus === 'pending' ? 'Pendiente de revisión' : 'En revisión'}
+                {reviewStatus === 'in_review' ? 'En revisión' : 'En proceso'}
               </Badge>
             )}
           </div>

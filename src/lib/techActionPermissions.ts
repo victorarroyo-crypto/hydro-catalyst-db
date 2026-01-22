@@ -36,7 +36,6 @@ export function calculateTechActions(context: PermissionContext): TechActions {
     canReject: false,
     canBackToReview: false,
     canSendToReview: false,
-    canClaimReview: false,
     canCompleteReview: false,
     canReleaseReview: false,
     canSendReviewToApproval: false,
@@ -138,9 +137,8 @@ function applyDatabaseRules(
     canEnrich: isInternal,
     canDownload: true,
     
-    // DB Review workflow - claim/release
+    // DB Review workflow - simplified (no claim step)
     canSendToReview: isInternal && (!reviewStatus || reviewStatus === 'none' || reviewStatus === 'completed'),
-    canClaimReview: isInternal && reviewStatus === 'pending',
     canReleaseReview: !!isCurrentReviewer && reviewStatus === 'in_review',
     
     // NEW: Review approval workflow
@@ -236,7 +234,6 @@ export function getDefaultActions(): TechActions {
     canReject: false,
     canBackToReview: false,
     canSendToReview: false,
-    canClaimReview: false,
     canCompleteReview: false,
     canReleaseReview: false,
     canSendReviewToApproval: false,

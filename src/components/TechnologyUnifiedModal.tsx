@@ -554,11 +554,6 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     onStatusChange?.();
   }, [sourceId, workflowActions.sendToReview, onStatusChange]);
 
-  const handleClaimReview = useCallback(async () => {
-    if (!sourceId) return;
-    await workflowActions.claimReview.mutateAsync({ id: sourceId });
-    onStatusChange?.();
-  }, [sourceId, workflowActions.claimReview, onStatusChange]);
 
   const handleCompleteReview = useCallback(async () => {
     if (!sourceId) return;
@@ -661,7 +656,6 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
             onBackToReview={handleBackToReview}
             onSendToScouting={handleSendToScouting}
             onSendToReview={handleSendToReview}
-            onClaimReview={handleClaimReview}
             onCompleteReview={handleCompleteReview}
             onReleaseReview={handleReleaseReview}
             onAddFavorite={handleAddFavorite}

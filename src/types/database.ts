@@ -50,7 +50,7 @@ export interface Technology {
   // System fields
   status: string | null;
   quality_score: number | null;
-  review_status: 'none' | 'pending' | 'in_review' | 'pending_approval' | 'completed' | null;
+  review_status: 'none' | 'in_review' | 'pending_approval' | 'completed' | null;
   reviewer_id: string | null;
   review_requested_at: string | null;
   review_requested_by: string | null;

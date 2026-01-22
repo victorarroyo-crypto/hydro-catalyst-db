@@ -155,8 +155,6 @@ export interface TechActions {
   // === WORKFLOW BD REVIEW ===
   /** Puede enviar a revisión */
   canSendToReview: boolean;
-  /** Puede reclamar revisión */
-  canClaimReview: boolean;
   /** Puede completar revisión */
   canCompleteReview: boolean;
   /** Puede liberar revisión */

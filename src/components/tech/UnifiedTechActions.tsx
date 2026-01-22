@@ -177,8 +177,7 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
   // Check if any workflow actions are available
   const hasScoutingActions = actions.canSendToApproval || actions.canApproveToDatabase || 
                              actions.canReject || actions.canBackToReview;
-  const hasReviewActions = actions.canSendToReview || actions.canClaimReview || 
-                           actions.canCompleteReview || actions.canReleaseReview;
+  const hasReviewActions = actions.canSendToReview || actions.canCompleteReview || actions.canReleaseReview;
   const hasReviewApprovalActions = actions.canSendReviewToApproval || actions.canApproveReview || 
                                     actions.canBackToReviewDB;
   const hasLinkingActions = actions.canSendToDB || actions.canViewInDB || actions.canSendToScouting;
@@ -196,6 +195,15 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
                   <X className="w-4 h-4 mr-2" />
                   Cancelar
                 </Button>
+                
+                {/* AI Enrichment - al lado de Guardar en modo edición */}
+                {actions.canEnrich && onEnrichmentComplete && (
+                  <AIEnrichmentButton
+                    technology={technologyLikeObject as any}
+                    onEnrichmentComplete={onEnrichmentComplete}
+                  />
+                )}
+                
                 <Button size="sm" onClick={onSave} disabled={isSaving}>
                   {isSaving ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -212,15 +220,6 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
               </Button>
             )}
           </>
-        )}
-
-        {/* === AI ENRICHMENT - Solo en modo lectura para source != database === */}
-        {/* Para database, AI está en el formulario de edición */}
-        {actions.canEnrich && onEnrichmentComplete && !isEditing && false && (
-          <AIEnrichmentButton
-            technology={technologyLikeObject as any}
-            onEnrichmentComplete={onEnrichmentComplete}
-          />
         )}
 
         {/* === DOWNLOAD WORD === */}
@@ -303,13 +302,6 @@ export const UnifiedTechActions: React.FC<UnifiedTechActionsProps> = ({
               <Button variant="outline" size="sm" onClick={onSendToReview}>
                 <ClipboardCheck className="w-4 h-4 mr-2" />
                 Enviar a revisión
-              </Button>
-            )}
-            
-            {actions.canClaimReview && onClaimReview && (
-              <Button size="sm" onClick={onClaimReview}>
-                <ClipboardCheck className="w-4 h-4 mr-2" />
-                Reclamar revisión
               </Button>
             )}
             
