@@ -73,7 +73,7 @@ export async function generateTaxonomyDocumentation(): Promise<void> {
   // Fetch statistics
   const { data: techStats } = await externalSupabase
     .from('technologies')
-    .select('id, tipo_id, subcategoria_id, sector_id, "Tipo de tecnología", "Subcategoría"');
+    .select('id, tipo_id, subcategoria_id, sector_id, tipo, subcategorias');
 
   const technologies = techStats || [];
   
@@ -82,7 +82,7 @@ export async function generateTaxonomyDocumentation(): Promise<void> {
     withTipoId: technologies.filter(t => t.tipo_id !== null).length,
     withSubcategoriaId: technologies.filter(t => t.subcategoria_id !== null).length,
     withSectorId: technologies.filter(t => t.sector_id !== null).length,
-    sinClasificar: technologies.filter(t => t["Tipo de tecnología"] === 'Sin clasificar').length,
+    sinClasificar: technologies.filter(t => t.tipo === 'Sin clasificar').length,
     orphanSubcategorias: [],
     unmatchedSubcategorias: [],
   };
@@ -92,11 +92,14 @@ export async function generateTaxonomyDocumentation(): Promise<void> {
   const unmatchedMap = new Map<string, number>();
   
   technologies.forEach(t => {
-    if (t["Subcategoría"] && t.subcategoria_id === null) {
-      const subcat = t["Subcategoría"];
-      if (!subcategoriaNombres.has(subcat.toLowerCase())) {
-        unmatchedMap.set(subcat, (unmatchedMap.get(subcat) || 0) + 1);
-      }
+    // subcategorias is an array in new schema
+    const subcats = t.subcategorias || [];
+    if (subcats.length > 0 && t.subcategoria_id === null) {
+      subcats.forEach((subcat: string) => {
+        if (!subcategoriaNombres.has(subcat.toLowerCase())) {
+          unmatchedMap.set(subcat, (unmatchedMap.get(subcat) || 0) + 1);
+        }
+      });
     }
   });
 

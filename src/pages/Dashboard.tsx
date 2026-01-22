@@ -57,7 +57,7 @@ const Dashboard: React.FC = () => {
       // For regular users, only count active/published technologies
       // For admin/supervisor, count all technologies with breakdown by status
       let techQuery = externalSupabase.from('technologies').select('id', { count: 'exact', head: true });
-      let highTrlQuery = externalSupabase.from('technologies').select('id', { count: 'exact', head: true }).gte('"Grado de madurez (TRL)"', 7);
+      let highTrlQuery = externalSupabase.from('technologies').select('id', { count: 'exact', head: true }).gte('trl', 7);
       
       if (!isInternalUser) {
         techQuery = techQuery.eq('status', 'active');

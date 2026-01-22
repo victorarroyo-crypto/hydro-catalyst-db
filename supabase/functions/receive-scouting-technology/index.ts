@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
     const { data: localTechCheck, error: localCheckError } = await localSupabase
       .from("technologies")
       .select("id")
-      .ilike('"Nombre de la tecnología"', `%${normalizedName}%`)
+      .ilike('nombre', `%${normalizedName}%`)
       .limit(1);
 
     if (localCheckError) {
