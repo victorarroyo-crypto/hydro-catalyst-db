@@ -596,8 +596,8 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   // Economics: v13.0 direct columns -> legacy columns -> NEW economics.* structure
   const econ = od.economics || {};
   // Handle string or number for CAPEX/OPEX (v13.0 uses string like "50.000 €")
-  const rawCapex = caseStudy.capex_total || caseStudy.capex ?? econ.investment ?? null;
-  const rawOpex = caseStudy.opex_annual || caseStudy.opex_year ?? econ.savings ?? null;
+    const rawCapex = (caseStudy.capex_total || caseStudy.capex) ?? econ.investment ?? null;
+    const rawOpex = (caseStudy.opex_annual || caseStudy.opex_year) ?? econ.savings ?? null;
   const displayCapex = typeof rawCapex === 'string' ? rawCapex : rawCapex;
   const displayOpex = typeof rawOpex === 'string' ? rawOpex : rawOpex;
   const displayPayback = caseStudy.payback_months ?? econ.payback ?? null;
