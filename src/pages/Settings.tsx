@@ -19,6 +19,7 @@ import { generateTaxonomyDocumentation } from '@/lib/generateTaxonomyDocumentati
 import { generateModulesDocumentation } from '@/lib/generateModulesDocumentation';
 import { generateStudyArchitectureDoc } from '@/lib/generateStudyArchitectureDoc';
 import { generateComprehensiveAuditDocument } from '@/lib/generateComprehensiveAuditDoc';
+import { downloadDatabaseSchemaMarkdown } from '@/lib/generateDatabaseSchemaDoc';
 import { 
   User, Mail, Shield, Calendar, Tag, ArrowRight, Settings as SettingsIcon, 
   CloudUpload, Loader2, Database, GitCompare, CheckCircle, AlertCircle, XCircle,
@@ -1232,6 +1233,42 @@ const Settings: React.FC = () => {
                 <p className="text-xs text-muted-foreground">
                   Incluye: 40 tablas, foreign keys, funciones DB, edge functions, estado de sincronización, roles y workflows
                 </p>
+                
+                <div className="border-t pt-4 mt-4">
+                  <p className="text-sm font-medium mb-2">📄 Formato Markdown</p>
+                  <Button 
+                    onClick={async () => {
+                      toast({
+                        title: 'Generando documento Markdown...',
+                        description: 'Compilando schema completo de base de datos',
+                      });
+                      try {
+                        await downloadDatabaseSchemaMarkdown();
+                        toast({
+                          title: 'Documento generado',
+                          description: 'El schema completo se ha descargado en formato .md',
+                        });
+                      } catch (error: any) {
+                        toast({
+                          title: 'Error al generar documento',
+                          description: error.message,
+                          variant: 'destructive',
+                        });
+                      }
+                    }}
+                    variant="outline" 
+                    className="w-full justify-between"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Download className="w-4 h-4" />
+                      Schema Completo (Markdown)
+                    </span>
+                    <FileText className="w-4 h-4" />
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    44 tablas documentadas, ~480 campos, funciones DB y enums - formato .md descargable
+                  </p>
+                </div>
               </CardContent>
             </Card>
             
