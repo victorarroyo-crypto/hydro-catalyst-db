@@ -45,16 +45,43 @@ const FIELD_MAPPING: Record<string, string> = {
 function mapRecord(externalRecord: Record<string, unknown>): Record<string, unknown> {
   const mapped: Record<string, unknown> = {}
   
-  // Map known fields
+  // Map known fields from Spanish names
   for (const [externalKey, localKey] of Object.entries(FIELD_MAPPING)) {
-    if (externalRecord[externalKey] !== undefined) {
+    if (externalRecord[externalKey] !== undefined && externalRecord[externalKey] !== null) {
       mapped[localKey] = externalRecord[externalKey]
+    }
+  }
+  
+  // Also check for snake_case variants that might exist in external DB
+  const snakeCaseFallbacks: Record<string, string> = {
+    'nombre': 'nombre',
+    'descripcion': 'descripcion',
+    'proveedor': 'proveedor',
+    'pais': 'pais',
+    'web': 'web',
+    'email': 'email',
+    'tipo': 'tipo',
+    'sector': 'sector',
+    'aplicacion': 'aplicacion',
+    'ventaja': 'ventaja',
+    'innovacion': 'innovacion',
+    'casos_referencia': 'casos_referencia',
+    'paises_actua': 'paises_actua',
+    'comentarios': 'comentarios',
+    'fecha_scouting': 'fecha_scouting',
+    'estado_seguimiento': 'estado_seguimiento',
+    'trl': 'trl',
+  }
+  
+  for (const [key, localKey] of Object.entries(snakeCaseFallbacks)) {
+    if (!mapped[localKey] && externalRecord[key] !== undefined && externalRecord[key] !== null) {
+      mapped[localKey] = externalRecord[key]
     }
   }
   
   // Ensure required defaults
   if (!mapped.nombre) {
-    mapped.nombre = externalRecord['nombre'] || externalRecord['name'] || 'Sin nombre'
+    mapped.nombre = externalRecord['name'] || 'Sin nombre'
   }
   if (!mapped.status) {
     mapped.status = 'active'
@@ -63,14 +90,18 @@ function mapRecord(externalRecord: Record<string, unknown>): Record<string, unkn
     mapped.review_status = 'pending'
   }
   
-  // Handle TRL field variations
-  if (!mapped.trl && externalRecord['trl']) {
-    mapped.trl = externalRecord['trl']
-  }
-  
   // Preserve original ID for data integrity
   if (externalRecord['id']) {
     mapped.id = externalRecord['id']
+  }
+  
+  // Copy taxonomy IDs directly
+  const directFields = ['tipo_id', 'subcategoria_id', 'sector_id', 'subsector_industrial', 
+                        'quality_score', 'created_at', 'updated_at', 'created_by', 'updated_by']
+  for (const field of directFields) {
+    if (externalRecord[field] !== undefined) {
+      mapped[field] = externalRecord[field]
+    }
   }
   
   return mapped
