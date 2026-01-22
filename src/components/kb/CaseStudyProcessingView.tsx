@@ -28,7 +28,7 @@ import { supabase } from '@/integrations/supabase/client'; // Lovable Supabase f
 import { cn } from '@/lib/utils';
 import { SimilarCasesModal, SimilarCase } from './SimilarCasesModal';
 
-// 10 fases visuales para v11
+// 9 fases visuales para v13.0 (optimizado)
 const PHASES = [
   { id: 'classifying', label: 'Clasificación', icon: FileSearch, range: [0, 10] },
   { id: 'extracting_context', label: 'Contexto', icon: Target, range: [10, 20] },
@@ -36,22 +36,23 @@ const PHASES = [
   { id: 'extracting_analysis', label: 'Análisis', icon: Scale, range: [28, 40] },
   { id: 'extracting_results', label: 'Resultados', icon: TrendingUp, range: [40, 50] },
   { id: 'extracting_lessons', label: 'Lecciones', icon: Lightbulb, range: [50, 58] },
-  { id: 'listing_technologies', label: 'Inventario', icon: List, range: [58, 65] },
-  { id: 'enriching_technologies', label: 'Fichas', icon: FileSpreadsheet, range: [65, 85] },
-  { id: 'matching_technologies', label: 'Matching', icon: Database, range: [85, 95] },
-  { id: 'saving', label: 'Guardando', icon: Save, range: [95, 100] },
+  // v13.0: Bloque unificado de Tech Matching (reemplaza listing+enriching+matching)
+  { id: 'matching_technologies', label: 'Matching', icon: Database, range: [58, 70] },
+  { id: 'creating_fichas', label: 'Fichas', icon: FileSpreadsheet, range: [70, 90] },
+  { id: 'saving', label: 'Guardando', icon: Save, range: [90, 100] },
 ] as const;
 
-// Mapeo de todas las fases webhook a steps visuales (incluye legacy v10 y v12)
+// Mapeo de todas las fases webhook a steps visuales (v13.0 + legacy)
 const PHASE_TO_STEP_MAP: Record<string, string> = {
   // v12: Multi-documento
   'accumulating': 'classifying',
   
-  // v11 phases
+  // Case extraction phases (common across versions)
   'classifying': 'classifying',
   'classification_complete': 'extracting_context',
   'extracting_context': 'extracting_context',
   'context_complete': 'extracting_methodology',
+  'similar_found': 'extracting_context', // INFO only in v13.0
   'extracting_methodology': 'extracting_methodology',
   'methodology_complete': 'extracting_analysis',
   'extracting_analysis': 'extracting_analysis',
@@ -59,17 +60,26 @@ const PHASE_TO_STEP_MAP: Record<string, string> = {
   'extracting_results': 'extracting_results',
   'results_complete': 'extracting_lessons',
   'extracting_lessons': 'extracting_lessons',
-  'lessons_complete': 'listing_technologies',
-  'listing_technologies': 'listing_technologies',
-  'technologies_listed': 'enriching_technologies',
-  'enriching_technologies': 'enriching_technologies',
-  'technologies_enriched': 'matching_technologies',
+  'lessons_complete': 'matching_technologies',
+  
+  // LEGACY v12 phases (map to v13.0 equivalents)
+  'listing_technologies': 'matching_technologies',
+  'technologies_listed': 'matching_technologies',
+  'enriching_technologies': 'creating_fichas',
+  'technologies_enriched': 'creating_fichas',
+  
+  // NEW v13.0: Tech Matching por embeddings
   'matching_technologies': 'matching_technologies',
+  'generating_embeddings': 'matching_technologies',
+  'searching_database': 'matching_technologies',
+  'creating_fichas': 'creating_fichas',
   'matching_complete': 'saving',
-  'similar_found': 'matching_technologies', // Show in matching phase
+  
+  // Final phases
   'saving': 'saving',
   'completed': 'saving',
   'complete': 'saving',
+  'processing_complete': 'saving',
   
   // Legacy v10 mapping
   'pending': 'classifying',
@@ -78,8 +88,8 @@ const PHASE_TO_STEP_MAP: Record<string, string> = {
   'extraction_complete': 'extracting_analysis',
   'reviewing': 'extracting_analysis',
   'review_complete': 'extracting_results',
-  'checking_technologies': 'listing_technologies',
-  'tech_check_complete': 'enriching_technologies',
+  'checking_technologies': 'matching_technologies',
+  'tech_check_complete': 'creating_fichas',
   'matching': 'matching_technologies',
   'processing': 'extracting_context',
 };
@@ -571,10 +581,10 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
             </div>
           )}
 
-          {/* Estimated time */}
+          {/* Estimated time - v13.0: ~5 minutes */}
           {!isFailed && !isCompleted && !isAwaitingDecision && (
             <p className="text-center text-sm text-muted-foreground">
-              Tiempo estimado: ~2-3 minutos
+              Tiempo estimado: ~5 minutos
             </p>
           )}
 

@@ -43,6 +43,28 @@ interface CaseStudyData {
   results_parameters: Record<string, { value: number; unit: string }> | null;
   lessons_learned: string | null;
   created_at: string;
+  
+  // NEW v13.0: Direct columns for document generation
+  client_type?: string | null;
+  situation?: string | null;
+  constraints?: string[] | null;
+  decision_drivers?: string[] | null;
+  problem_title?: string | null;
+  problem_description?: string | null;
+  technical_parameters?: Record<string, { value: number; unit: string }> | null;
+  methodology_approach?: string | null;
+  scenarios?: any[] | null;
+  evaluation_criteria?: any[] | null;
+  alternatives?: any[] | null;
+  final_recommendation?: string | null;
+  implementation_status?: string | null;
+  capex_total?: string | null;
+  opex_annual?: string | null;
+  lessons_what_worked?: string[] | null;
+  lessons_challenges?: string[] | null;
+  lessons_recommendations?: string[] | null;
+  crew_version?: string | null;
+  processing_time_seconds?: number | null;
 }
 
 interface CaseStudyTechnology {
@@ -51,6 +73,8 @@ interface CaseStudyTechnology {
   role: string;
   web?: string | null;
   descripcion?: string | null;
+  aplicacion?: string | null;
+  ventaja?: string | null;
   trl?: number | null;
 }
 
@@ -133,19 +157,27 @@ export async function generateCaseStudyWordDocument(
   const now = new Date();
   const dateStr = formatDate(now.toISOString());
   const sectorLabel = caseStudy.sector ? SECTOR_LABELS[caseStudy.sector] || caseStudy.sector : 'Sin sector';
+  
+  // v13.0: Use direct columns with fallbacks
+  const displayTitle = caseStudy.problem_title || caseStudy.name;
+  const displayDescription = caseStudy.problem_description || caseStudy.situation || caseStudy.description || '';
+  const displaySolution = caseStudy.methodology_approach || caseStudy.solution_applied || '';
+  const displayResults = caseStudy.final_recommendation || caseStudy.results_achieved || '';
+  const displayCapex = caseStudy.capex_total || (caseStudy.capex ? formatCurrency(caseStudy.capex) : null);
+  const displayOpex = caseStudy.opex_annual || (caseStudy.opex_year ? formatCurrency(caseStudy.opex_year) : null);
 
   // Build document sections
   const sections: (Paragraph | Table)[] = [];
 
   // 1. Cover page
-  sections.push(...createVandarumCover(caseStudy.name, 'Caso de Estudio', dateStr));
+  sections.push(...createVandarumCover(displayTitle, 'Caso de Estudio', dateStr));
 
   // 2. General info header
   sections.push(
     new Paragraph({
       children: [
         new TextRun({
-          text: caseStudy.name,
+          text: displayTitle,
           bold: true,
           size: VANDARUM_SIZES.heading1,
           color: VANDARUM_COLORS.verdeOscuro,
@@ -160,11 +192,12 @@ export async function generateCaseStudyWordDocument(
   sections.push(createVandarumHeading1('Resumen del Caso'));
 
   const summaryRows: { label: string; value: string }[] = [
+    { label: 'Cliente', value: caseStudy.client_type || '' },
     { label: 'País', value: caseStudy.country || '' },
     { label: 'Sector', value: sectorLabel },
     { label: 'ROI', value: caseStudy.roi_percent !== null ? `${caseStudy.roi_percent}%` : '' },
-    { label: 'CAPEX', value: formatCurrency(caseStudy.capex) },
-    { label: 'OPEX Anual', value: formatCurrency(caseStudy.opex_year) },
+    { label: 'CAPEX', value: displayCapex || '' },
+    { label: 'OPEX Anual', value: displayOpex || '' },
     { label: 'Payback', value: caseStudy.payback_months !== null ? `${caseStudy.payback_months} meses` : '' },
     { label: 'Puntuación de Calidad', value: caseStudy.quality_score !== null ? `${caseStudy.quality_score}/100` : '' },
   ].filter(row => row.value && row.value !== '—');
@@ -172,17 +205,39 @@ export async function generateCaseStudyWordDocument(
   sections.push(createVandarumInfoTable(summaryRows));
   sections.push(new Paragraph({ children: [], spacing: { after: 300 } }));
 
-  // 4. Problem description
-  if (caseStudy.description) {
-    sections.push(...createTextSection('Problema', caseStudy.description));
+  // 4. Problem description (v13.0: use problem_description or situation)
+  if (displayDescription) {
+    sections.push(...createTextSection('Problema', displayDescription));
   }
 
-  // 5. Problem parameters
-  sections.push(...createParametersSection('Parámetros del Problema', caseStudy.problem_parameters));
+  // 4b. v13.0: Constraints
+  if (caseStudy.constraints && caseStudy.constraints.length > 0) {
+    sections.push(createVandarumHeading1('Restricciones'));
+    caseStudy.constraints.forEach((constraint, i) => {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `• ${constraint}`,
+              size: VANDARUM_SIZES.texto,
+              color: VANDARUM_COLORS.grisTexto,
+              font: VANDARUM_FONTS.texto,
+            }),
+          ],
+          spacing: { after: 100 },
+        })
+      );
+    });
+    sections.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+  }
 
-  // 6. Solution
-  if (caseStudy.solution_applied) {
-    sections.push(...createTextSection('Solución Aplicada', caseStudy.solution_applied));
+  // 5. Problem parameters (v13.0: use technical_parameters with fallback)
+  const techParams = caseStudy.technical_parameters || caseStudy.problem_parameters;
+  sections.push(...createParametersSection('Parámetros Técnicos', techParams));
+
+  // 6. Solution (v13.0: use methodology_approach)
+  if (displaySolution) {
+    sections.push(...createTextSection('Solución Aplicada', displaySolution));
   }
 
   // 7. Treatment train
@@ -203,9 +258,9 @@ export async function generateCaseStudyWordDocument(
     );
   }
 
-  // 8. Results
-  if (caseStudy.results_achieved) {
-    sections.push(...createTextSection('Resultados Alcanzados', caseStudy.results_achieved));
+  // 8. Results (v13.0: use final_recommendation)
+  if (displayResults) {
+    sections.push(...createTextSection('Resultados y Recomendación', displayResults));
   }
 
   // 9. Results parameters
@@ -217,12 +272,12 @@ export async function generateCaseStudyWordDocument(
   }
 
   // 11. Economic analysis
-  const hasEconomicData = caseStudy.capex || caseStudy.opex_year || caseStudy.payback_months || caseStudy.roi_percent;
+  const hasEconomicData = displayCapex || displayOpex || caseStudy.payback_months || caseStudy.roi_percent;
   if (hasEconomicData) {
     sections.push(createVandarumHeading1('Análisis Económico'));
     const economicRows: { label: string; value: string }[] = [
-      { label: 'CAPEX (Inversión Inicial)', value: formatCurrency(caseStudy.capex) },
-      { label: 'OPEX Anual', value: formatCurrency(caseStudy.opex_year) },
+      { label: 'CAPEX (Inversión Inicial)', value: displayCapex || '' },
+      { label: 'OPEX Anual', value: displayOpex || '' },
       { label: 'Periodo de Retorno', value: caseStudy.payback_months !== null ? `${caseStudy.payback_months} meses` : '' },
       { label: 'ROI', value: caseStudy.roi_percent !== null ? `${caseStudy.roi_percent}%` : '' },
     ].filter(row => row.value && row.value !== '—');
@@ -237,15 +292,121 @@ export async function generateCaseStudyWordDocument(
     
     const techRows = technologies.map(tech => ({
       label: tech.nombre,
-      value: [tech.proveedor, tech.role].filter(Boolean).join(' - ') || 'Sin detalles',
+      value: [tech.proveedor, tech.trl ? `TRL ${tech.trl}` : null, tech.role].filter(Boolean).join(' - ') || 'Sin detalles',
     }));
 
     sections.push(createVandarumInfoTable(techRows));
     sections.push(new Paragraph({ children: [], spacing: { after: 300 } }));
   }
 
-  // 13. Lessons learned
-  if (caseStudy.lessons_learned) {
+  // 13. Lessons learned (v13.0: structured arrays)
+  const hasStructuredLessons = 
+    (caseStudy.lessons_what_worked && caseStudy.lessons_what_worked.length > 0) ||
+    (caseStudy.lessons_challenges && caseStudy.lessons_challenges.length > 0) ||
+    (caseStudy.lessons_recommendations && caseStudy.lessons_recommendations.length > 0);
+  
+  if (hasStructuredLessons) {
+    sections.push(createVandarumHeading1('Lecciones Aprendidas'));
+    
+    if (caseStudy.lessons_what_worked && caseStudy.lessons_what_worked.length > 0) {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Lo que funcionó:',
+              bold: true,
+              size: VANDARUM_SIZES.texto,
+              color: VANDARUM_COLORS.verdeOscuro,
+              font: VANDARUM_FONTS.texto,
+            }),
+          ],
+          spacing: { before: 200, after: 100 },
+        })
+      );
+      caseStudy.lessons_what_worked.forEach(lesson => {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `• ${lesson}`,
+                size: VANDARUM_SIZES.texto,
+                color: VANDARUM_COLORS.grisTexto,
+                font: VANDARUM_FONTS.texto,
+              }),
+            ],
+            spacing: { after: 50 },
+          })
+        );
+      });
+    }
+    
+    if (caseStudy.lessons_challenges && caseStudy.lessons_challenges.length > 0) {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Desafíos:',
+              bold: true,
+              size: VANDARUM_SIZES.texto,
+              color: VANDARUM_COLORS.verdeOscuro,
+              font: VANDARUM_FONTS.texto,
+            }),
+          ],
+          spacing: { before: 200, after: 100 },
+        })
+      );
+      caseStudy.lessons_challenges.forEach(lesson => {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `• ${lesson}`,
+                size: VANDARUM_SIZES.texto,
+                color: VANDARUM_COLORS.grisTexto,
+                font: VANDARUM_FONTS.texto,
+              }),
+            ],
+            spacing: { after: 50 },
+          })
+        );
+      });
+    }
+    
+    if (caseStudy.lessons_recommendations && caseStudy.lessons_recommendations.length > 0) {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Recomendaciones:',
+              bold: true,
+              size: VANDARUM_SIZES.texto,
+              color: VANDARUM_COLORS.verdeOscuro,
+              font: VANDARUM_FONTS.texto,
+            }),
+          ],
+          spacing: { before: 200, after: 100 },
+        })
+      );
+      caseStudy.lessons_recommendations.forEach((lesson, i) => {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `${i + 1}. ${lesson}`,
+                size: VANDARUM_SIZES.texto,
+                color: VANDARUM_COLORS.grisTexto,
+                font: VANDARUM_FONTS.texto,
+              }),
+            ],
+            spacing: { after: 50 },
+          })
+        );
+      });
+    }
+    
+    sections.push(new Paragraph({ children: [], spacing: { after: 300 } }));
+  } else if (caseStudy.lessons_learned) {
+    // Legacy: plain text lessons
     sections.push(...createTextSection('Lecciones Aprendidas', caseStudy.lessons_learned));
   }
 
