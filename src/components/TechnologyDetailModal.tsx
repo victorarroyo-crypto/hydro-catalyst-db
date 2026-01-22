@@ -42,7 +42,6 @@ import {
   SendHorizonal,
   Loader2,
   ClipboardList,
-  Download,
   Sparkles
 } from 'lucide-react';
 import { DownloadTechnologyButton } from '@/components/DownloadTechnologyButton';
@@ -243,9 +242,8 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     }
   };
 
-
   // Check if technology is already in review process
-  const reviewStatus = (technology as any).review_status;
+  const reviewStatus = technology.review_status;
   const isInReviewProcess = reviewStatus && reviewStatus !== 'none' && reviewStatus !== 'completed';
 
   const InfoRow = ({
@@ -293,6 +291,7 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
     );
   };
 
+  // Use fresh technology data if available, otherwise fall back to prop
   const t = freshTechnology ?? technology;
 
   return (
@@ -302,13 +301,13 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <DialogTitle className="text-xl font-display mb-2">
-                {t["Nombre de la tecnología"]}
+                {t.nombre}
               </DialogTitle>
               <DialogDescription id="tech-detail-description" className="sr-only">
-                Detalles de la tecnología {t["Nombre de la tecnología"]}
+                Detalles de la tecnología {t.nombre}
               </DialogDescription>
               <div className="flex items-center gap-2 flex-wrap">
-                <TRLBadge trl={t["Grado de madurez (TRL)"]} />
+                <TRLBadge trl={t.trl} />
                 {t.status && (
                   <Badge variant="outline">{t.status}</Badge>
                 )}
@@ -361,32 +360,32 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               <AIEnrichmentButton
                 technology={{
                   id: t.id,
-                  nombre: t["Nombre de la tecnología"],
-                  proveedor: t["Proveedor / Empresa"] || '',
-                  web: t["Web de la empresa"] || '',
-                  pais: t["País de origen"] || '',
-                  tipo_sugerido: t["Tipo de tecnología"] || '',
-                  subcategoria: t["Subcategoría"] || '',
-                  sector: t["Sector y subsector"] || '',
-                  descripcion: t["Descripción técnica breve"] || '',
-                  aplicacion_principal: t["Aplicación principal"] || '',
-                  ventaja_competitiva: t["Ventaja competitiva clave"] || '',
-                  innovacion: t["Porque es innovadora"] || '',
-                  trl_estimado: t["Grado de madurez (TRL)"],
-                  casos_referencia: t["Casos de referencia"] || '',
-                  paises_actua: t["Paises donde actua"] || '',
-                  comentarios_analista: t["Comentarios del analista"] || '',
+                  nombre: t.nombre,
+                  proveedor: t.proveedor || '',
+                  web: t.web || '',
+                  pais: t.pais || '',
+                  tipo_sugerido: t.tipo || '',
+                  subcategoria: t.subcategorias?.[0] || '',
+                  sector: t.sector || '',
+                  descripcion: t.descripcion || '',
+                  aplicacion_principal: t.aplicacion || '',
+                  ventaja_competitiva: t.ventaja || '',
+                  innovacion: t.innovacion || '',
+                  trl_estimado: t.trl,
+                  casos_referencia: t.casos_referencia || '',
+                  paises_actua: t.paises_actua || '',
+                  comentarios_analista: t.comentarios || '',
                 }}
                 onEnrichmentComplete={async (enrichedData) => {
                   const updates: Record<string, any> = {};
-                  if (typeof enrichedData.descripcion === 'string') updates['Descripción técnica breve'] = enrichedData.descripcion;
-                  if (typeof enrichedData.aplicacion_principal === 'string') updates['Aplicación principal'] = enrichedData.aplicacion_principal;
-                  if (typeof enrichedData.ventaja_competitiva === 'string') updates['Ventaja competitiva clave'] = enrichedData.ventaja_competitiva;
-                  if (typeof enrichedData.innovacion === 'string') updates['Porque es innovadora'] = enrichedData.innovacion;
-                  if (typeof enrichedData.casos_referencia === 'string') updates['Casos de referencia'] = enrichedData.casos_referencia;
-                  if (typeof enrichedData.paises_actua === 'string') updates['Paises donde actua'] = enrichedData.paises_actua;
-                  if (typeof enrichedData.comentarios_analista === 'string') updates['Comentarios del analista'] = enrichedData.comentarios_analista;
-                  if (typeof enrichedData.trl_estimado === 'number') updates['Grado de madurez (TRL)'] = enrichedData.trl_estimado;
+                  if (typeof enrichedData.descripcion === 'string') updates.descripcion = enrichedData.descripcion;
+                  if (typeof enrichedData.aplicacion_principal === 'string') updates.aplicacion = enrichedData.aplicacion_principal;
+                  if (typeof enrichedData.ventaja_competitiva === 'string') updates.ventaja = enrichedData.ventaja_competitiva;
+                  if (typeof enrichedData.innovacion === 'string') updates.innovacion = enrichedData.innovacion;
+                  if (typeof enrichedData.casos_referencia === 'string') updates.casos_referencia = enrichedData.casos_referencia;
+                  if (typeof enrichedData.paises_actua === 'string') updates.paises_actua = enrichedData.paises_actua;
+                  if (typeof enrichedData.comentarios_analista === 'string') updates.comentarios = enrichedData.comentarios_analista;
+                  if (typeof enrichedData.trl_estimado === 'number') updates.trl = enrichedData.trl_estimado;
 
                   if (Object.keys(updates).length === 0) {
                     toast({
@@ -458,32 +457,36 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               Información General
             </h3>
             <div className="bg-muted/30 rounded-lg p-4 space-y-1">
-              <InfoRow icon={Building2} label="Proveedor / Empresa" value={t["Proveedor / Empresa"]} showEmpty />
-              <InfoRow icon={MapPin} label="País de origen" value={t["País de origen"]} showEmpty />
-              <InfoRow icon={Globe} label="Web de la empresa" value={t["Web de la empresa"]} isLink showEmpty />
-              <InfoRow icon={Mail} label="Email de contacto" value={t["Email de contacto"]} showEmpty />
+              <InfoRow icon={Building2} label="Proveedor / Empresa" value={t.proveedor} showEmpty />
+              <InfoRow icon={MapPin} label="País de origen" value={t.pais} showEmpty />
+              <InfoRow icon={Globe} label="Web de la empresa" value={t.web} isLink showEmpty />
+              <InfoRow icon={Mail} label="Email de contacto" value={t.email} showEmpty />
             </div>
           </div>
 
           <Separator />
 
-          {/* Classification - New 3-level taxonomy */}
+          {/* Classification */}
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
               <Tag className="w-4 h-4" />
               Clasificación
             </h3>
             <div className="bg-muted/30 rounded-lg p-4 space-y-3">
-              {/* Tipo de tecnología */}
+              {/* Tipos from array or legacy text */}
               <div className="flex items-start gap-3 py-2">
                 <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground mb-1">Tipo de tecnología</p>
-                  <div className="flex flex-wrap gap-2">
-                    {t["Tipo de tecnología"] ? (
-                      <Badge variant="default" className="text-xs">
-                        {t["Tipo de tecnología"]}
-                      </Badge>
+                  <p className="text-xs text-muted-foreground mb-1">Tipos de tecnología</p>
+                  <div className="flex flex-wrap gap-1">
+                    {t.tipos && t.tipos.length > 0 ? (
+                      t.tipos.map((tipo, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {tipo}
+                        </Badge>
+                      ))
+                    ) : t.tipo ? (
+                      <Badge variant="secondary" className="text-xs">{t.tipo}</Badge>
                     ) : (
                       <span className="text-sm text-muted-foreground">—</span>
                     )}
@@ -491,39 +494,39 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Subcategoría */}
-              <div className="flex items-start gap-3 py-2">
-                <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground mb-1">Subcategoría</p>
-                  <div className="flex flex-wrap gap-2">
-                    {t["Subcategoría"] ? (
-                      <Badge variant="secondary" className="text-xs">
-                        {t["Subcategoría"]}
-                      </Badge>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
+              {/* Subcategorias from array */}
+              {(t.subcategorias && t.subcategorias.length > 0) && (
+                <div className="flex items-start gap-3 py-2">
+                  <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground mb-1">Subcategorías</p>
+                    <div className="flex flex-wrap gap-1">
+                      {t.subcategorias.map((sub, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs">
+                          {sub}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              <InfoRow icon={Tag} label="Sector y subsector" value={t["Sector y subsector"]} showEmpty />
-              <InfoRow icon={Tag} label="Aplicación principal" value={t["Aplicación principal"]} showEmpty />
+              <InfoRow icon={Tag} label="Sector" value={t.sector} showEmpty />
             </div>
           </div>
 
           <Separator />
 
-          {/* Description */}
+          {/* Technical Description */}
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
               <FileText className="w-4 h-4" />
               Descripción Técnica
             </h3>
-            <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4">
-              {t["Descripción técnica breve"] || '—'}
-            </p>
+            <div className="bg-muted/30 rounded-lg p-4 space-y-1">
+              <InfoRow icon={FileText} label="Descripción técnica breve" value={t.descripcion} showEmpty />
+              <InfoRow icon={Lightbulb} label="Aplicación principal" value={t.aplicacion} showEmpty />
+            </div>
           </div>
 
           <Separator />
@@ -535,8 +538,8 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               Diferenciación
             </h3>
             <div className="bg-muted/30 rounded-lg p-4 space-y-1">
-              <InfoRow icon={Trophy} label="Ventaja competitiva clave" value={t["Ventaja competitiva clave"]} showEmpty />
-              <InfoRow icon={Lightbulb} label="Por qué es innovadora" value={t["Porque es innovadora"]} showEmpty />
+              <InfoRow icon={Trophy} label="Ventaja competitiva" value={t.ventaja} showEmpty />
+              <InfoRow icon={Sparkles} label="Por qué es innovadora" value={t.innovacion} showEmpty />
             </div>
           </div>
 
@@ -549,12 +552,12 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
               Referencias
             </h3>
             <div className="bg-muted/30 rounded-lg p-4 space-y-1">
-              <InfoRow icon={Trophy} label="Casos de referencia" value={t["Casos de referencia"]} showEmpty />
-              <InfoRow icon={MapPin} label="Países donde actúa" value={t["Paises donde actua"]} showEmpty />
+              <InfoRow icon={Users} label="Casos de referencia" value={t.casos_referencia} showEmpty />
+              <InfoRow icon={MapPin} label="Países donde actúa" value={t.paises_actua} showEmpty />
             </div>
           </div>
 
-          {/* Internal - Only visible to internal users */}
+          {/* Internal info (only for internal users) */}
           {isInternalUser && (
             <>
               <Separator />
@@ -564,24 +567,31 @@ export const TechnologyDetailModal: React.FC<TechnologyDetailModalProps> = ({
                   Información Interna
                 </h3>
                 <div className="bg-muted/30 rounded-lg p-4 space-y-1">
-                  <InfoRow icon={MessageSquare} label="Comentarios del analista" value={t["Comentarios del analista"]} showEmpty />
-                  <InfoRow icon={Calendar} label="Fecha de scouting" value={t["Fecha de scouting"]} showEmpty />
-                  <InfoRow icon={Tag} label="Estado del seguimiento" value={t["Estado del seguimiento"]} showEmpty />
+                  <InfoRow icon={MessageSquare} label="Comentarios del analista" value={t.comentarios} showEmpty />
+                  <InfoRow icon={Calendar} label="Fecha de scouting" value={t.fecha_scouting} showEmpty />
+                  <InfoRow icon={Tag} label="Estado del seguimiento" value={t.estado_seguimiento} showEmpty />
+                  {t.quality_score !== null && t.quality_score !== undefined && (
+                    <div className="flex items-start gap-3 py-2">
+                      <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground mb-0.5">Quality Score</p>
+                        <Badge variant={t.quality_score >= 70 ? 'default' : 'secondary'}>
+                          {t.quality_score}%
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
           )}
 
-          {/* Metadata - Only visible to internal users */}
-          {isInternalUser && (
-            <div className="text-xs text-muted-foreground pt-4 border-t flex justify-between">
-              <span>Quality Score: {t.quality_score ?? '—'}</span>
-              <span>Actualizado: {new Date(t.updated_at).toLocaleDateString('es-ES')}</span>
-            </div>
-          )}
+          {/* Metadata */}
+          <div className="text-xs text-muted-foreground pt-4 border-t">
+            <p>Última actualización: {t.updated_at ? new Date(t.updated_at).toLocaleDateString('es-ES') : '—'}</p>
+          </div>
         </div>
       </DialogContent>
-
     </Dialog>
   );
 };

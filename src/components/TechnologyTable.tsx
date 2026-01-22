@@ -18,31 +18,31 @@ interface TechnologyTableProps {
 }
 
 /**
- * TechnologyTable - Simplified version
+ * TechnologyTable - Displays technologies in a table format
  * 
- * This component no longer queries taxonomy tables (taxonomy_tipos, taxonomy_subcategorias,
- * taxonomy_sectores, technology_tipos) from the external DB as they don't exist.
- * Instead, it displays the text fields directly from the technologies table.
+ * Uses snake_case fields from external DB schema.
  */
 export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, onRowClick }) => {
-  // Display tipo from text field
+  // Display tipo from tipos array or legacy text field
   const getTipoDisplay = (tech: Technology) => {
-    if (tech["Tipo de tecnología"]) {
+    const tipo = tech.tipos?.[0] || tech.tipo;
+    if (tipo) {
       return (
         <Badge variant="outline" className="text-xs text-muted-foreground">
-          {tech["Tipo de tecnología"]}
+          {tipo}
         </Badge>
       );
     }
     return <span className="text-muted-foreground">—</span>;
   };
 
-  // Display subcategoria from text field
+  // Display subcategoria from subcategorias array
   const getSubcategoriaDisplay = (tech: Technology) => {
-    if (tech["Subcategoría"]) {
+    const subcat = tech.subcategorias?.[0];
+    if (subcat) {
       return (
         <span className="text-xs text-muted-foreground truncate max-w-[150px] block">
-          {tech["Subcategoría"]}
+          {subcat}
         </span>
       );
     }
@@ -51,10 +51,10 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
 
   // Display sector from text field
   const getSectorDisplay = (tech: Technology) => {
-    if (tech["Sector y subsector"]) {
+    if (tech.sector) {
       return (
         <span className="text-xs text-muted-foreground truncate max-w-[150px] block">
-          {tech["Sector y subsector"]}
+          {tech.sector}
         </span>
       );
     }
@@ -87,7 +87,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
             >
               <TableCell className="font-medium max-w-xs">
                 <div className="flex items-center gap-2">
-                  <span className={`line-clamp-2 ${isInactive ? 'text-muted-foreground' : ''}`}>{tech["Nombre de la tecnología"]}</span>
+                  <span className={`line-clamp-2 ${isInactive ? 'text-muted-foreground' : ''}`}>{tech.nombre}</span>
                   {isInactive && (
                     <Badge variant="destructive" className="text-[10px] shrink-0">
                       Inactiva
@@ -96,7 +96,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
                 </div>
               </TableCell>
               <TableCell className="text-muted-foreground max-w-[150px]">
-                <span className="line-clamp-1">{tech["Proveedor / Empresa"] || '—'}</span>
+                <span className="line-clamp-1">{tech.proveedor || '—'}</span>
               </TableCell>
               <TableCell>
                 {getTipoDisplay(tech)}
@@ -108,10 +108,10 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
                 {getSectorDisplay(tech)}
               </TableCell>
               <TableCell className="text-center">
-                <TRLBadge trl={tech["Grado de madurez (TRL)"]} size="sm" />
+                <TRLBadge trl={tech.trl} size="sm" />
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {tech["País de origen"] || '—'}
+                {tech.pais || '—'}
               </TableCell>
               <TableCell>
                 <DownloadTechnologyButton technology={tech} />

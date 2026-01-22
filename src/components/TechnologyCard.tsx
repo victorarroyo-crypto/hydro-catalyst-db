@@ -23,14 +23,14 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
 }) => {
   const isInactive = technology.status === 'inactive';
   
-  // Legacy text fields (primary source - always available)
-  const legacyTipo = technology["Tipo de tecnología"];
-  const legacySubcat = technology["Subcategoría"];
-  const legacySector = technology["Sector y subsector"];
-  const hasLegacyTaxonomy = !!(legacyTipo || legacySubcat || legacySector);
+  // Get taxonomy from arrays or legacy text field
+  const displayTipo = technology.tipos?.[0] || technology.tipo;
+  const displaySubcat = technology.subcategorias?.[0] || null;
+  const displaySector = technology.sector;
+  const hasTaxonomy = !!(displayTipo || displaySubcat || displaySector);
   
   // Check if unclassified (no tipo in any form)
-  const isUnclassified = !legacyTipo && !(technology as any).tipo_id;
+  const isUnclassified = !displayTipo && !technology.tipo_id;
 
   return (
     <Card 
@@ -41,7 +41,7 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex-1">
             <h3 className={`font-semibold line-clamp-2 group-hover:text-primary transition-colors ${isInactive ? 'text-muted-foreground' : 'text-foreground'}`}>
-              {technology["Nombre de la tecnología"]}
+              {technology.nombre}
             </h3>
             {isInactive && (
               <Badge variant="destructive" className="text-[10px] mt-1">
@@ -55,49 +55,49 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
                 <DownloadTechnologyButton technology={technology} />
                 <DeleteTechnologyButton 
                   technologyId={technology.id} 
-                  technologyName={technology["Nombre de la tecnología"]} 
+                  technologyName={technology.nombre} 
                 />
               </>
             )}
-            <TRLBadge trl={technology["Grado de madurez (TRL)"]} size="sm" />
+            <TRLBadge trl={technology.trl} size="sm" />
           </div>
         </div>
         
         <div className="space-y-2 text-sm text-muted-foreground">
-          {technology["Proveedor / Empresa"] && (
+          {technology.proveedor && (
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 shrink-0" />
-              <span className="truncate">{technology["Proveedor / Empresa"]}</span>
+              <span className="truncate">{technology.proveedor}</span>
             </div>
           )}
-          {technology["País de origen"] && (
+          {technology.pais && (
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 shrink-0" />
-              <span className="truncate">{technology["País de origen"]}</span>
+              <span className="truncate">{technology.pais}</span>
             </div>
           )}
         </div>
 
         <div className="mt-3 pt-3 border-t border-border space-y-2">
-          {/* Taxonomy badges from legacy text fields */}
-          {hasLegacyTaxonomy && (
+          {/* Taxonomy badges */}
+          {hasTaxonomy && (
             <div className="flex flex-wrap gap-1.5">
-              {legacyTipo && (
+              {displayTipo && (
                 <Badge variant="default" className="text-xs gap-1">
                   <Tag className="w-3 h-3" />
-                  {legacyTipo}
+                  {displayTipo}
                 </Badge>
               )}
-              {legacySubcat && (
+              {displaySubcat && (
                 <Badge variant="secondary" className="text-xs gap-1">
                   <Layers className="w-3 h-3" />
-                  {legacySubcat}
+                  {displaySubcat}
                 </Badge>
               )}
-              {legacySector && (
+              {displaySector && (
                 <Badge variant="outline" className="text-xs gap-1">
                   <Grid3X3 className="w-3 h-3" />
-                  {legacySector}
+                  {displaySector}
                 </Badge>
               )}
             </div>
