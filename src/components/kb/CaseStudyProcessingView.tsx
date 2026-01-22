@@ -206,7 +206,18 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
       } else if (data) {
         console.log('[ProcessingView] Initial job state:', data);
         const jobData = data as CaseStudyJob;
-        setJob(jobData);
+        
+        // Usar Math.max para evitar retroceso si ya hay estado previo
+        setJob(prev => {
+          if (!prev) return jobData;
+          return {
+            ...jobData,
+            progress_percentage: Math.max(prev.progress_percentage, jobData.progress_percentage),
+            current_phase: jobData.progress_percentage >= prev.progress_percentage 
+              ? jobData.current_phase 
+              : prev.current_phase,
+          };
+        });
         
         if (data.status === 'completed') {
           onCompleted(data.id);
@@ -289,7 +300,18 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
       if (!error && data) {
         console.log('[ProcessingView] Poll result:', data);
         const jobData = data as CaseStudyJob;
-        setJob(jobData);
+        
+        // Usar Math.max para evitar que datos de BD desactualizados retrocedan el progreso
+        setJob(prev => {
+          if (!prev) return jobData;
+          return {
+            ...jobData,
+            progress_percentage: Math.max(prev.progress_percentage, jobData.progress_percentage),
+            current_phase: jobData.progress_percentage >= prev.progress_percentage 
+              ? jobData.current_phase 
+              : prev.current_phase,
+          };
+        });
 
         if (jobData.status === 'completed') {
           onCompleted(jobData.id);
@@ -309,7 +331,18 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
       .single()
       .then(({ data }) => {
         if (data) {
-          setJob(data as CaseStudyJob);
+          const jobData = data as CaseStudyJob;
+          // Usar Math.max para evitar retroceso
+          setJob(prev => {
+            if (!prev) return jobData;
+            return {
+              ...jobData,
+              progress_percentage: Math.max(prev.progress_percentage, jobData.progress_percentage),
+              current_phase: jobData.progress_percentage >= prev.progress_percentage 
+                ? jobData.current_phase 
+                : prev.current_phase,
+            };
+          });
         }
       });
   };
