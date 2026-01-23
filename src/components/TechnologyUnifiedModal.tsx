@@ -93,6 +93,11 @@ interface CaseStudyTechnology {
   aplicacion?: string | null;
   ventaja?: string | null;
   trl?: number | null;
+  // Nuevas columnas para AI enrichment
+  innovacion?: string | null;
+  casos_referencia?: string | null;
+  paises_actua?: string | null;
+  comentarios?: string | null;
   created_at?: string;
 }
 
@@ -247,13 +252,13 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     }
     
     if (caseStudyTech) {
-      // Leer directamente de columnas en español (sin application_data)
+      // Leer directamente de columnas en español (incluyendo campos de AI enrichment)
       const csData: UnifiedTechData = {
         id: caseStudyTech.id,
         nombre: caseStudyTech.nombre,
         proveedor: caseStudyTech.proveedor || null,
         pais: null,
-        paises_actua: null,
+        paises_actua: caseStudyTech.paises_actua || null,
         web: caseStudyTech.web || null,
         email: null,
         trl: caseStudyTech.trl || null,
@@ -265,9 +270,9 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
         aplicacion: caseStudyTech.aplicacion || null,
         descripcion: caseStudyTech.descripcion || null,
         ventaja: caseStudyTech.ventaja || null,
-        innovacion: null,
-        casos_referencia: null,
-        comentarios: null,
+        innovacion: caseStudyTech.innovacion || null,
+        casos_referencia: caseStudyTech.casos_referencia || null,
+        comentarios: caseStudyTech.comentarios || null,
         capacity: null,
         removal_efficiency: null,
         footprint: null,

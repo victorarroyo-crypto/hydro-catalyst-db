@@ -670,7 +670,8 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       id: string; 
       editData: UnifiedTechEditData;
     }) => {
-      // Update case_study_technologies en BD externa
+      // Update case_study_technologies en BD externa (incluye campos de AI enrichment)
+      console.log('[saveCaseStudyTech] Saving tech:', id, editData);
       const { data, error } = await externalSupabase
         .from('case_study_technologies')
         .update({
@@ -681,10 +682,16 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
           aplicacion: editData.aplicacion,
           ventaja: editData.ventaja,
           trl: editData.trl,
+          // Nuevos campos de AI enrichment
+          innovacion: editData.innovacion || null,
+          casos_referencia: editData.casos_referencia || null,
+          paises_actua: editData.paises_actua || null,
+          comentarios: editData.comentarios || null,
         })
         .eq('id', id)
         .select()
         .single();
+      console.log('[saveCaseStudyTech] Result:', { data, error });
       
       if (error) throw error;
       return data;
