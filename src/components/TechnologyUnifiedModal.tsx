@@ -81,10 +81,10 @@ interface ScoutingItemUI {
 // For case study technologies from external DB - nuevo schema español
 interface CaseStudyTechnology {
   id: string;
-  case_study_id: string;
+  case_study_id?: string; // Optional - may not be set when passed from detail view
   technology_id?: string | null;
   scouting_queue_id?: string | null;
-  role: string;
+  role?: string;
   // Columnas directas en español
   nombre: string;
   proveedor?: string | null;
