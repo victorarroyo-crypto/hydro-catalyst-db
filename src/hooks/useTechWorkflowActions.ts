@@ -661,6 +661,44 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
     },
   });
 
+  // Save case study technology (external DB)
+  const saveCaseStudyTech = useMutation({
+    mutationFn: async ({ 
+      id, 
+      editData 
+    }: { 
+      id: string; 
+      editData: UnifiedTechEditData;
+    }) => {
+      // Update case_study_technologies en BD externa
+      const { data, error } = await externalSupabase
+        .from('case_study_technologies')
+        .update({
+          nombre: editData.nombre,
+          proveedor: editData.proveedor,
+          web: editData.web,
+          descripcion: editData.descripcion,
+          aplicacion: editData.aplicacion,
+          ventaja: editData.ventaja,
+          trl: editData.trl,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['case-study-technologies'] });
+      queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
+      toast.success('Cambios guardados');
+    },
+    onError: (error: Error) => {
+      toast.error('Error al guardar', { description: error.message });
+    },
+  });
+
   return {
     // Scouting workflow
     updateScoutingItem,
@@ -690,6 +728,7 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
     // Save
     saveTechnology,
     saveLonglistItem,
+    saveCaseStudyTech,
     
     // Loading states
     isAnyLoading: 
@@ -709,6 +748,7 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       sendToScouting.isPending ||
       sendLonglistToDB.isPending ||
       saveTechnology.isPending ||
-      saveLonglistItem.isPending,
+      saveLonglistItem.isPending ||
+      saveCaseStudyTech.isPending,
   };
 }
