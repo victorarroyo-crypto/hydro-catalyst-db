@@ -154,6 +154,9 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     subcategorias: [],
   });
   
+  // Estado local para mantener datos actualizados tras guardar (evita "desaparición")
+  const [overrideUnifiedData, setOverrideUnifiedData] = useState<UnifiedTechData | null>(null);
+  
   // Rejection dialog state
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -347,6 +350,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
       setEditData(null);
       setTaxonomySelections({ categorias: [], tipos: [], subcategorias: [] });
       setRejectionReason('');
+      setOverrideUnifiedData(null); // Limpiar override al cerrar
     } else if (startInEditMode && !technology && !scoutingItem && !longlistItem && !caseStudyTech) {
       // Start in edit mode for new technology creation
       setIsEditing(true);
@@ -415,22 +419,24 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
         subcategoria: taxonomySelections.subcategorias.join(', ') || editData.subcategoria,
       };
 
+      let savedData: any = null;
+
       switch (sourceType) {
         case 'database':
-          await workflowActions.saveTechnology.mutateAsync({
+          savedData = await workflowActions.saveTechnology.mutateAsync({
             id: sourceId,
             editData: enrichedEditData,
           });
           break;
         case 'longlist':
-          await workflowActions.saveLonglistItem.mutateAsync({
+          savedData = await workflowActions.saveLonglistItem.mutateAsync({
             id: sourceId,
             editData: enrichedEditData,
           });
           break;
         case 'scouting':
           // Convert to scouting format (uses snake_case for external DB)
-          await workflowActions.updateScoutingItem.mutateAsync({
+          savedData = await workflowActions.updateScoutingItem.mutateAsync({
             id: sourceId,
             updates: {
               nombre: enrichedEditData.nombre,
@@ -453,8 +459,8 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
           });
           break;
         case 'case_study':
-          // Save to case_study_technologies (external DB)
-          await workflowActions.saveCaseStudyTech.mutateAsync({
+          // Save to case_study_technologies (external DB) y capturar respuesta
+          savedData = await workflowActions.saveCaseStudyTech.mutateAsync({
             id: sourceId,
             editData: enrichedEditData,
           });
@@ -464,11 +470,52 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
           return;
       }
       
+      // Para case_study, crear override inmediato con datos guardados
+      if (sourceType === 'case_study' && savedData) {
+        const updatedUnified: UnifiedTechData = {
+          id: savedData.id,
+          nombre: savedData.nombre || enrichedEditData.nombre,
+          proveedor: savedData.proveedor || enrichedEditData.proveedor || null,
+          pais: null,
+          paises_actua: savedData.paises_actua || enrichedEditData.paises_actua || null,
+          web: savedData.web || enrichedEditData.web || null,
+          email: null,
+          trl: savedData.trl ?? enrichedEditData.trl ?? null,
+          estado_seguimiento: null,
+          fecha_scouting: null,
+          tipo: null,
+          subcategoria: null,
+          sector: null,
+          aplicacion: savedData.aplicacion || enrichedEditData.aplicacion || null,
+          descripcion: savedData.descripcion || enrichedEditData.descripcion || null,
+          ventaja: savedData.ventaja || enrichedEditData.ventaja || null,
+          innovacion: savedData.innovacion || enrichedEditData.innovacion || null,
+          casos_referencia: savedData.casos_referencia || enrichedEditData.casos_referencia || null,
+          comentarios: savedData.comentarios || enrichedEditData.comentarios || null,
+          capacity: null,
+          removal_efficiency: null,
+          footprint: null,
+          power_consumption: null,
+          price_range: null,
+          business_model: null,
+          lead_time: null,
+          status: null,
+          quality_score: null,
+          review_status: null,
+          created_at: savedData.created_at || null,
+          updated_at: null,
+        };
+        setOverrideUnifiedData(updatedUnified);
+        console.log('[handleSave] Override set with:', updatedUnified);
+      }
+      
       setIsEditing(false);
       setEditData(null);
+      toast.success('Cambios guardados correctamente');
       onSuccess?.();
     } catch (error) {
       console.error('Error saving:', error);
+      toast.error('Error al guardar los cambios');
     }
   }, [editData, sourceId, sourceType, taxonomySelections, workflowActions, onSuccess]);
 
@@ -652,7 +699,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
           </DialogHeader>
           
           <UnifiedTechDetailContent
-            data={unifiedData}
+            data={overrideUnifiedData || unifiedData}
             metadata={metadata}
             actions={actions}
             isEditing={isEditing}
