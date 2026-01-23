@@ -302,23 +302,69 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     enabled: !technologies?.length, // Only fetch if no technologies
   });
 
+  // Fetch technologies already in scouting queue (by name match or case_study_id)
+  const { data: techsInQueue } = useQuery({
+    queryKey: ['case-study-techs-in-queue', caseStudyId, technologies],
+    queryFn: async () => {
+      if (!technologies || technologies.length === 0) return new Set<string>();
+      
+      // Get tech names that don't have scouting_queue_id
+      const techNames = technologies
+        .filter(t => !t.scouting_queue_id && !t.technology_id)
+        .map(t => t.nombre?.toLowerCase().trim())
+        .filter(Boolean);
+      
+      if (techNames.length === 0) return new Set<string>();
+      
+      // Check scouting_queue for matches by case_study_id or by name
+      const { data, error } = await externalSupabase
+        .from('scouting_queue')
+        .select('nombre, case_study_id')
+        .or(`case_study_id.eq.${caseStudyId},nombre.ilike.${techNames.map(n => `%${n}%`).join(',nombre.ilike.')}`);
+      
+      if (error) {
+        console.error('[CaseStudyDetail] Error checking scouting queue:', error);
+        return new Set<string>();
+      }
+      
+      // Return set of normalized names that are already in queue
+      const inQueueNames = new Set<string>();
+      data?.forEach(item => {
+        if (item.nombre) {
+          inQueueNames.add(item.nombre.toLowerCase().trim());
+        }
+      });
+      
+      return inQueueNames;
+    },
+    enabled: !!technologies?.length,
+    staleTime: 30000, // Cache for 30 seconds
+  });
+
+  // Helper to check if a tech is already in the scouting queue
+  const isTechAlreadyInQueue = (tech: CaseStudyTechnology): boolean => {
+    if (tech.scouting_queue_id || tech.technology_id) return false;
+    if (!techsInQueue) return false;
+    return techsInQueue.has(tech.nombre?.toLowerCase().trim() || '');
+  };
+
   const getTechStatusBadge = (tech: CaseStudyTechnology) => {
     if (tech.technology_id) {
       return (
-        <Badge className="bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700">
+        <Badge className="bg-accent/20 text-accent border-accent/30">
           🟢 Vinculada
         </Badge>
       );
     }
-    if (tech.scouting_queue_id) {
+    if (tech.scouting_queue_id || isTechAlreadyInQueue(tech)) {
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700">
+        <Badge className="bg-warning/20 text-warning border-warning/30">
           🟡 En revisión
         </Badge>
       );
     }
     return (
-      <Badge className="bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600">
+      <Badge className="bg-muted text-muted-foreground border-border">
         ⚪ Sin vincular
       </Badge>
     );
@@ -963,7 +1009,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                           <ExternalLink className="h-3 w-3" />
                         </Button>
                         {/* Send to review button for unlinked technologies */}
-                        {!tech.technology_id && !tech.scouting_queue_id && (
+                        {!tech.technology_id && !tech.scouting_queue_id && !isTechAlreadyInQueue(tech) && (
                           <Button 
                             variant="outline" 
                             size="sm" 
@@ -1011,7 +1057,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                           Ver ficha
                         </Button>
                         {/* Send to review button for unlinked technologies */}
-                        {!tech.technology_id && !tech.scouting_queue_id && (
+                        {!tech.technology_id && !tech.scouting_queue_id && !isTechAlreadyInQueue(tech) && (
                           <Button 
                             variant="ghost" 
                             size="sm" 
@@ -1063,7 +1109,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                         <ExternalLink className="h-3 w-3" />
                       </Button>
                       {/* Send to review button for unlinked technologies */}
-                      {!tech.technology_id && !tech.scouting_queue_id && (
+                      {!tech.technology_id && !tech.scouting_queue_id && !isTechAlreadyInQueue(tech) && (
                         <Button 
                           variant="outline" 
                           size="sm" 
