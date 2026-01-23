@@ -447,6 +447,13 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
             },
           });
           break;
+        case 'case_study':
+          // Save to case_study_technologies (external DB)
+          await workflowActions.saveCaseStudyTech.mutateAsync({
+            id: sourceId,
+            editData: enrichedEditData,
+          });
+          break;
         default:
           toast.error('Tipo de fuente no soportado para guardar');
           return;
@@ -465,10 +472,16 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     
     setEditData(prev => prev ? {
       ...prev,
+      // Aplicar todos los campos que devuelve la Edge Function de enriquecimiento
       descripcion: enrichedData.descripcion || prev.descripcion,
+      aplicacion: enrichedData.aplicacion || prev.aplicacion,
       ventaja: enrichedData.ventaja || prev.ventaja,
       innovacion: enrichedData.innovacion || prev.innovacion,
-      aplicacion: enrichedData.aplicacion || prev.aplicacion,
+      casos_referencia: enrichedData.casos_referencia || prev.casos_referencia,
+      paises_actua: enrichedData.paises_actua || prev.paises_actua,
+      comentarios: enrichedData.comentarios || prev.comentarios,
+      trl: enrichedData.trl ?? prev.trl, // TRL es número, usar ?? para permitir 0
+      web: enrichedData.web || prev.web,
     } : null);
     
     toast.success('Datos enriquecidos aplicados');
