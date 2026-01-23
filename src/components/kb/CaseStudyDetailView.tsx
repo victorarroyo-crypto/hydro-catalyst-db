@@ -428,25 +428,26 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     setSendingTechId(tech.id);
     
     try {
-      // Insert into scouting_queue (BD externa usa snake_case)
+      // Insert into scouting_queue (BD externa usa snake_case según estructura proporcionada)
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .insert({
           nombre: tech.nombre,
-          proveedor: tech.proveedor || null,
+          proveedor: tech.proveedor || 'Desconocido',
           pais: null,
           web: tech.web || null,
           descripcion: tech.descripcion || null,
           tipo_sugerido: null,
-          subcategoria: null,
+          subcategoria_sugerida: null,
           trl_estimado: tech.trl || null,
           ventaja_competitiva: tech.ventaja || null,
-          aplicacion_principal: tech.aplicacion || null,
-          comentarios_analista: `Extraída del caso de estudio: ${caseStudy?.name}`,
+          relevance_score: 70,
+          relevance_reason: `Tecnología extraída del caso de estudio: ${caseStudy?.name}`,
+          source_url: null,
+          status: 'review',
+          scouting_job_id: null,
           source: 'case_study',
           case_study_id: caseStudyId,
-          status: 'review',
-          priority: 'normal',
         })
         .select('id')
         .single();
