@@ -428,23 +428,25 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     setSendingTechId(tech.id);
     
     try {
-      // Insert into scouting_queue - leer columnas directas de case_study_technologies
+      // Insert into scouting_queue (BD externa usa snake_case)
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .insert({
-          "Nombre de la tecnología": tech.nombre,
-          "Tipo de tecnología": 'Sin clasificar',
-          "Proveedor / Empresa": tech.proveedor || null,
-          "Web de la empresa": tech.web || null,
-          "Descripción técnica breve": tech.descripcion || null,
-          "Aplicación principal": tech.aplicacion || null,
-          "Ventaja competitiva clave": tech.ventaja || null,
-          "Grado de madurez (TRL)": tech.trl || null,
-          "Comentarios del analista": `Extraída del caso de estudio: ${caseStudy?.name}`,
+          nombre: tech.nombre,
+          proveedor: tech.proveedor || null,
+          pais: null,
+          web: tech.web || null,
+          descripcion: tech.descripcion || null,
+          tipo_sugerido: null,
+          subcategoria: null,
+          trl_estimado: tech.trl || null,
+          ventaja_competitiva: tech.ventaja || null,
+          aplicacion_principal: tech.aplicacion || null,
+          comentarios_analista: `Extraída del caso de estudio: ${caseStudy?.name}`,
           source: 'case_study',
           case_study_id: caseStudyId,
-          queue_status: 'review',
-          "Fecha de scouting": new Date().toISOString().split('T')[0],
+          status: 'review',
+          priority: 'normal',
         })
         .select('id')
         .single();
