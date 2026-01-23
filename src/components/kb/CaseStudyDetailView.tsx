@@ -48,6 +48,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { CaseStudyFormView } from './CaseStudyFormView';
 import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
+import { TechnologyUnifiedModal } from '@/components/TechnologyUnifiedModal';
 import type { Technology } from '@/types/database';
 
 // Sector options (same as in CaseStudiesSection)
@@ -1311,94 +1312,17 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
         onOpenChange={setTechModalOpen}
       />
 
-      {/* Modal for UNLINKED technology - leer columnas directas */}
-      <Dialog open={caseTechModalOpen} onOpenChange={setCaseTechModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Cpu className="h-5 w-5 text-primary" />
-              {selectedCaseTech?.nombre}
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedCaseTech && (
-            <div className="space-y-4">
-              {/* Provider and TRL */}
-              <div className="flex flex-wrap gap-4 text-sm">
-                {selectedCaseTech.proveedor && (
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedCaseTech.proveedor}</span>
-                  </div>
-                )}
-                {selectedCaseTech.trl && (
-                  <Badge variant="outline">TRL {selectedCaseTech.trl}</Badge>
-                )}
-              </div>
-
-              <Separator />
-
-              {/* Description */}
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1">Descripción</p>
-                <p className="text-sm">{selectedCaseTech.descripcion || 'Sin información'}</p>
-              </div>
-
-              {/* Main Application */}
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Aplicación principal</p>
-                <p className="text-sm">{selectedCaseTech.aplicacion || 'Sin información'}</p>
-              </div>
-
-              {/* Competitive Advantage */}
-              <div className="bg-primary/5 rounded-lg p-3 border border-primary/10">
-                <p className="text-xs font-medium text-primary mb-1">Ventaja competitiva</p>
-                <p className="text-sm">{selectedCaseTech.ventaja || 'Sin información'}</p>
-              </div>
-
-              {/* Links */}
-              {selectedCaseTech.web && (
-                <div className="flex items-center gap-2 pt-2">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
-                  <a
-                    href={selectedCaseTech.web.startsWith('http') 
-                      ? selectedCaseTech.web 
-                      : `https://${selectedCaseTech.web}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline flex items-center gap-1"
-                  >
-                    {selectedCaseTech.web}
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              )}
-
-              {/* Footer with status and send to review button */}
-              <div className="pt-4 border-t flex justify-between items-center">
-                {getTechStatusBadge(selectedCaseTech)}
-                {!selectedCaseTech.technology_id && !selectedCaseTech.scouting_queue_id && (
-                  <Button 
-                    onClick={() => {
-                      handleSendToScoutingQueue(selectedCaseTech);
-                      setCaseTechModalOpen(false);
-                    }}
-                    disabled={sendingTechId === selectedCaseTech.id}
-                    className="gap-2"
-                  >
-                    {sendingTechId === selectedCaseTech.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <SendHorizonal className="h-4 w-4" />
-                    )}
-                    Enviar a revisión
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Modal for UNLINKED technology - usar TechnologyUnifiedModal con enriquecimiento */}
+      <TechnologyUnifiedModal
+        caseStudyTech={selectedCaseTech}
+        open={caseTechModalOpen}
+        onOpenChange={setCaseTechModalOpen}
+        caseStudyId={caseStudyId}
+        caseStudyName={caseStudy?.name}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['case-study-technologies', caseStudyId] });
+        }}
+      />
     </div>
   );
 };
