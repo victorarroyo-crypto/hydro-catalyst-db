@@ -254,7 +254,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
       
       const { data, error } = await externalSupabase
         .from('case_study_technologies')
-        .select('id, case_study_id, technology_id, role, nombre, proveedor, web, descripcion, aplicacion, ventaja, trl, created_at')
+        .select('id, case_study_id, technology_id, role, nombre, proveedor, web, descripcion, aplicacion, ventaja, trl, innovacion, casos_referencia, paises_actua, comentarios, created_at')
         .eq('case_study_id', caseStudyId);
 
       if (error) {
