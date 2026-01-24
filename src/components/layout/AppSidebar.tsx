@@ -93,8 +93,9 @@ const advisorSubItems = [
   { title: 'Historial', url: '/advisor/history', icon: History },
 ];
 
-const internalNavItems = [
-  { title: 'Centro de Supervisión', url: '/quality-control', icon: ShieldCheck },
+const supervisionSubItems = [
+  { title: 'Control de Revisiones', url: '/quality-control', icon: ClipboardCheck },
+  { title: 'Control de Calidad BD', url: '/data-quality', icon: Database },
 ];
 
 const taxonomySubItems = [
@@ -505,25 +506,46 @@ export function AppSidebar() {
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {internalNavItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
+                {/* Centro de Supervisión Submenu */}
+                <Collapsible
+                  open={true}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
                     <SidebarMenuButton
-                      asChild
-                      isActive={isActive(item.url)}
                       className={cn(
-                        'transition-all duration-200',
-                        isActive(item.url)
+                        'transition-all duration-200 w-full',
+                        (isActive('/quality-control') || isActive('/data-quality'))
                           ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                           : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
                       )}
                     >
-                      <Link to={item.url} className="flex items-center gap-3">
-                        <item.icon className="w-5 h-5" />
-                        {!collapsed && <span>{item.title}</span>}
-                      </Link>
+                      <ShieldCheck className="w-5 h-5" />
+                      {!collapsed && <span className="flex-1 text-left">Centro de Supervisión</span>}
                     </SidebarMenuButton>
+                    <SidebarMenuSub>
+                      {supervisionSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isActive(item.url)}
+                            className={cn(
+                              'transition-all duration-200',
+                              isActive(item.url)
+                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                            )}
+                          >
+                            <Link to={item.url} className="flex items-center gap-2">
+                              <item.icon className="w-4 h-4" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
                   </SidebarMenuItem>
-                ))}
+                </Collapsible>
 
                 {/* Taxonomy Submenu */}
                 <Collapsible
