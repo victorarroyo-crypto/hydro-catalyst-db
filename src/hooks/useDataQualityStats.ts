@@ -11,23 +11,23 @@
 import { useQuery } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 
-// Column names in external DB (Spanish with spaces)
+// Column names in external DB (snake_case - technologies table)
 const COLUMNS = {
   id: 'id',
-  nombre: 'Nombre de la tecnología',
-  proveedor: 'Proveedor / Empresa',
-  web: 'Web de la empresa',
-  pais: 'País de origen',
-  descripcion: 'Descripción técnica breve',
-  aplicacion: 'Aplicación principal',
-  ventaja: 'Ventaja competitiva clave',
-  innovacion: 'Porque es innovadora',
-  trl: 'Grado de madurez (TRL)',
-  tipo: 'Tipo de tecnología',
-  subcategoria: 'Subcategoría',
-  sector: 'Sector y subsector',
-  email: 'Email de contacto',
-  comentarios: 'Comentarios del analista',
+  nombre: 'nombre',
+  proveedor: 'proveedor',
+  web: 'web',
+  pais: 'pais',
+  descripcion: 'descripcion',
+  aplicacion: 'aplicacion',
+  ventaja: 'ventaja',
+  innovacion: 'innovacion',
+  trl: 'trl',
+  tipo: 'tipo',
+  subcategoria: 'subcategoria',
+  sector: 'sector',
+  email: 'email',
+  comentarios: 'comentarios',
   tipo_id: 'tipo_id',
   subcategoria_id: 'subcategoria_id',
   sector_id: 'sector_id',
@@ -175,28 +175,7 @@ export function useDataQualityStats() {
   const { data: technologies, isLoading, refetch } = useQuery({
     queryKey: ['data-quality-technologies'],
     queryFn: async () => {
-      const selectFields = [
-        COLUMNS.id,
-        COLUMNS.nombre,
-        COLUMNS.proveedor,
-        COLUMNS.web,
-        COLUMNS.pais,
-        COLUMNS.descripcion,
-        COLUMNS.aplicacion,
-        COLUMNS.ventaja,
-        COLUMNS.innovacion,
-        COLUMNS.trl,
-        COLUMNS.tipo,
-        COLUMNS.subcategoria,
-        COLUMNS.sector,
-        COLUMNS.email,
-        COLUMNS.tipo_id,
-        COLUMNS.subcategoria_id,
-        COLUMNS.sector_id,
-        COLUMNS.status,
-        COLUMNS.created_at,
-        COLUMNS.updated_at,
-      ].map(col => `"${col}"`).join(',');
+      const selectFields = Object.values(COLUMNS).join(',');
 
       const { data, error } = await externalSupabase
         .from('technologies')
