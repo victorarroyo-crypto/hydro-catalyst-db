@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TRLBadge } from '@/components/TRLBadge';
 import { Textarea } from '@/components/ui/textarea';
-import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
+import { TechnologyUnifiedModal } from '@/components/TechnologyUnifiedModal';
 import { ScenariosSection } from '@/components/scenarios/ScenariosSection';
 import { DiagramsSection } from '@/components/diagrams/DiagramsSection';
 import {
@@ -826,7 +826,7 @@ const ProjectDetail: React.FC = () => {
       </Dialog>
 
       {/* Technology Detail Modal */}
-      <TechnologyDetailModal
+      <TechnologyUnifiedModal
         technology={selectedTechnology}
         open={detailModalOpen}
         onOpenChange={(open) => {

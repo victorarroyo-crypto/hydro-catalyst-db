@@ -53,7 +53,7 @@ const MODULES: ModuleInfo[] = [
       'Clasificación IA',
       'Enriquecimiento IA'
     ],
-    components: ['Technologies.tsx', 'TechnologyTable.tsx', 'TechnologyCard.tsx', 'TechnologyDetailModal.tsx', 'TechnologyFormModal.tsx', 'TechnologyFiltersPanel.tsx', 'TRLBadge.tsx', 'DownloadTechnologyButton.tsx', 'DeleteTechnologyButton.tsx', 'AIEnrichmentButton.tsx', 'QuickClassifyButton.tsx'],
+    components: ['Technologies.tsx', 'TechnologyTable.tsx', 'TechnologyCard.tsx', 'TechnologyUnifiedModal.tsx', 'TechnologyFiltersPanel.tsx', 'TRLBadge.tsx', 'DownloadTechnologyButton.tsx', 'DeleteTechnologyButton.tsx', 'AIEnrichmentButton.tsx', 'QuickClassifyButton.tsx'],
     roles: ['admin', 'supervisor', 'analyst', 'client_enterprise', 'client_professional', 'client_basic']
   },
   {
@@ -67,7 +67,7 @@ const MODULES: ModuleInfo[] = [
       'Filtros por estado, prioridad, fuente',
       'Integración con Railway backend para scraping'
     ],
-    components: ['Scouting.tsx', 'ScoutingTechFormModal.tsx', 'ScoutingTechDetailModal.tsx'],
+    components: ['Scouting.tsx', 'TechnologyUnifiedModal.tsx'],
     roles: ['admin', 'supervisor', 'analyst']
   },
   {

@@ -47,7 +47,6 @@ import { useAuth } from '@/contexts/AuthContext';
 // Local generation removed - now using backend proxy only
 import { toast } from 'sonner';
 import { CaseStudyFormView } from './CaseStudyFormView';
-import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
 import { TechnologyUnifiedModal } from '@/components/TechnologyUnifiedModal';
 import type { Technology } from '@/types/database';
 
@@ -1350,7 +1349,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
       </Dialog>
 
       {/* Modal for LINKED technology from catalog */}
-      <TechnologyDetailModal
+      <TechnologyUnifiedModal
         technology={selectedTechFromDB}
         open={techModalOpen}
         onOpenChange={setTechModalOpen}
