@@ -263,6 +263,104 @@ export function createScoutingActions(status: string): TechActions {
 }
 
 /**
+ * Maps a case study technology to unified format
+ * Reads from table columns + application_data JSONB for extended fields
+ */
+export function mapFromCaseStudyTech(record: any): UnifiedTechData {
+  // Extended fields stored in application_data JSONB
+  const appData = record.application_data || {};
+  
+  return {
+    id: record.id,
+    nombre: record.technology_name || '',
+    proveedor: record.provider || null,
+    pais: appData.pais || null,
+    paises_actua: appData.paises_actua || null,
+    web: appData.web || null,
+    email: appData.email || null,
+    trl: appData.trl ?? null,
+    estado_seguimiento: appData.estado_seguimiento || null,
+    fecha_scouting: null,
+    tipo: appData.tipo || null,
+    subcategoria: appData.subcategoria || null,
+    sector: appData.sector || null,
+    aplicacion: appData.aplicacion || null,
+    descripcion: appData.descripcion || record.selection_rationale || null,
+    ventaja: appData.ventaja || null,
+    innovacion: appData.innovacion || null,
+    casos_referencia: appData.casos_referencia || null,
+    comentarios: record.selection_rationale || null,
+    // Technical specifications from case studies
+    capacity: appData.capacity || null,
+    removal_efficiency: appData.removal_efficiency || null,
+    footprint: appData.footprint || null,
+    power_consumption: appData.power_consumption || null,
+    price_range: appData.price_range || null,
+    business_model: appData.business_model || null,
+    lead_time: appData.lead_time || null,
+    // Metadata
+    status: null,
+    quality_score: null,
+    review_status: null,
+    created_at: record.created_at || null,
+    updated_at: null,
+  };
+}
+
+/**
+ * Creates metadata for a case study technology
+ */
+export function createCaseStudyMetadata(
+  caseStudyId?: string,
+  caseStudyName?: string,
+  record?: any
+): TechMetadata {
+  return {
+    source: 'case_study',
+    caseStudyId,
+    caseStudyName,
+    role: record?.role || 'mentioned',
+    selectionRationale: record?.selection_rationale || undefined,
+    isLinkedToDB: !!record?.technology_id,
+    linkedTechId: record?.technology_id || undefined,
+    isInScoutingQueue: !!record?.scouting_queue_id,
+    scoutingQueueId: record?.scouting_queue_id || undefined,
+  };
+}
+
+/**
+ * Creates actions for a case study technology
+ */
+export function createCaseStudyActions(record?: any): TechActions {
+  const isLinkedToDB = !!record?.technology_id;
+  const isInScouting = !!record?.scouting_queue_id;
+  
+  return {
+    canEdit: true,
+    canSave: true,
+    canEnrich: true,
+    canDownload: true,
+    canSendToApproval: false,
+    canApproveToDatabase: false,
+    canReject: false,
+    canBackToReview: false,
+    canSendToReview: false,
+    canCompleteReview: false,
+    canReleaseReview: false,
+    canSendReviewToApproval: false,
+    canApproveReview: false,
+    canBackToReviewDB: false,
+    canSendToDB: false,
+    canViewInDB: isLinkedToDB,
+    canSendToScouting: !isInScouting && !isLinkedToDB,
+    canAddToProject: false,
+    canFavorite: false,
+    canSeeInternalInfo: true,
+    canSeeSpecifications: true,
+  };
+}
+
+/**
  * Converts UnifiedTechData to edit data format
  * Field names match the technologies table schema
  */
@@ -314,6 +412,7 @@ export function getSourceLabel(metadata: TechMetadata): string {
         case 'database': return 'Base de Datos';
         case 'longlist': return 'Lista Larga';
         case 'scouting': return 'Scouting';
+        case 'case_study': return 'Caso de Estudio';
         case 'extracted': return 'Extracción IA';
         default: return 'No especificada';
       }

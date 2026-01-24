@@ -23,9 +23,12 @@ import {
   mapFromTechnologies,
   mapFromLonglist,
   mapFromScouting,
+  mapFromCaseStudyTech,
   createDatabaseMetadata,
   createLonglistMetadata,
   createScoutingMetadata,
+  createCaseStudyMetadata,
+  createCaseStudyActions,
   toEditData,
 } from '@/lib/mapToUnifiedTech';
 import type {
@@ -78,26 +81,19 @@ interface ScoutingItemUI {
   scouting_job_id?: string;
 }
 
-// For case study technologies from external DB - nuevo schema español
+// For case study technologies from external DB
+// Schema uses: technology_name, provider, role, selection_rationale, application_data (JSONB)
 interface CaseStudyTechnology {
   id: string;
-  case_study_id?: string; // Optional - may not be set when passed from detail view
+  case_study_id?: string;
   technology_id?: string | null;
   scouting_queue_id?: string | null;
   role?: string;
-  // Columnas directas en español
-  nombre: string;
-  proveedor?: string | null;
-  web?: string | null;
-  descripcion?: string | null;
-  aplicacion?: string | null;
-  ventaja?: string | null;
-  trl?: number | null;
-  // Nuevas columnas para AI enrichment
-  innovacion?: string | null;
-  casos_referencia?: string | null;
-  paises_actua?: string | null;
-  comentarios?: string | null;
+  // Real table columns
+  technology_name: string;
+  provider?: string | null;
+  selection_rationale?: string | null;
+  application_data?: Record<string, any> | null;
   created_at?: string;
 }
 
@@ -255,52 +251,13 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     }
     
     if (caseStudyTech) {
-      // Leer directamente de columnas en español (incluyendo campos de AI enrichment)
-      const csData: UnifiedTechData = {
-        id: caseStudyTech.id,
-        nombre: caseStudyTech.nombre,
-        proveedor: caseStudyTech.proveedor || null,
-        pais: null,
-        paises_actua: caseStudyTech.paises_actua || null,
-        web: caseStudyTech.web || null,
-        email: null,
-        trl: caseStudyTech.trl || null,
-        estado_seguimiento: null,
-        fecha_scouting: null,
-        tipo: null,
-        subcategoria: null,
-        sector: null,
-        aplicacion: caseStudyTech.aplicacion || null,
-        descripcion: caseStudyTech.descripcion || null,
-        ventaja: caseStudyTech.ventaja || null,
-        innovacion: caseStudyTech.innovacion || null,
-        casos_referencia: caseStudyTech.casos_referencia || null,
-        comentarios: caseStudyTech.comentarios || null,
-        capacity: null,
-        removal_efficiency: null,
-        footprint: null,
-        power_consumption: null,
-        price_range: null,
-        business_model: null,
-        lead_time: null,
-        status: null,
-        quality_score: null,
-        review_status: null,
-        created_at: caseStudyTech.created_at || null,
-        updated_at: null,
-      };
-      
-      const csMeta: TechMetadata = {
-        source: 'case_study',
-        caseStudyId: caseStudyTech.case_study_id,
+      // Use mapper that reads from application_data JSONB
+      const csData = mapFromCaseStudyTech(caseStudyTech);
+      const csMeta = createCaseStudyMetadata(
+        caseStudyTech.case_study_id || caseStudyId,
         caseStudyName,
-        isLinkedToDB: !!caseStudyTech.technology_id,
-        linkedTechId: caseStudyTech.technology_id || undefined,
-        isInScoutingQueue: !!caseStudyTech.scouting_queue_id,
-        scoutingQueueId: caseStudyTech.scouting_queue_id || undefined,
-        role: caseStudyTech.role as TechMetadata['role'],
-        selectionRationale: caseStudyTech.ventaja || undefined,
-      };
+        caseStudyTech
+      );
       
       return {
         unifiedData: csData,
