@@ -16,6 +16,7 @@ import Scouting from "./pages/Scouting";
 import ScoutingNew from "./pages/ScoutingNew";
 import Settings from "./pages/Settings";
 import QualityControl from "./pages/QualityControl";
+import DataQualityControl from "./pages/DataQualityControl";
 import Trends from "./pages/Trends";
 import CaseStudies from "./pages/CaseStudies";
 import Statistics from "./pages/Statistics";
@@ -99,6 +100,7 @@ const App = () => (
               <Route path="/consultoria/:id/documentos" element={<ConsultoriaDocumentos />} />
               <Route path="/consultoria/:id/scenarios/designer" element={<ScenarioDesignerPage />} />
               <Route path="/quality-control" element={<QualityControl />} />
+              <Route path="/data-quality" element={<DataQualityControl />} />
               <Route path="/reviews" element={<QualityControl />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/case-studies" element={<CaseStudies />} />
