@@ -358,6 +358,7 @@ export default function DataQualityControl() {
             <GenericNamesTab
               technologies={technologies || []}
               onOpenTechnology={handleOpenTechnology}
+              onDeleteTechnology={handleDeleteTechnology}
             />
           </TabsContent>
 
