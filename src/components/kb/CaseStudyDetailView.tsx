@@ -172,21 +172,56 @@ interface CaseStudyFull {
 }
 
 // Nuevo schema con columnas en español (sin application_data ni selection_rationale)
+// Interface matching real table schema: technology_name, provider, application_data JSONB
 interface CaseStudyTechnology {
   id: string;
   case_study_id?: string;
   technology_id: string | null;
-  scouting_queue_id?: string | null; // Opcional - puede no existir en todas las DBs
+  scouting_queue_id?: string | null;
   role: string;
-  // Columnas directas en español
-  nombre: string;
-  proveedor: string | null;
-  web: string | null;
-  descripcion: string | null;
-  aplicacion: string | null;
-  ventaja: string | null;
-  trl: number | null;
+  // Real table columns
+  technology_name: string;
+  provider: string | null;
+  selection_rationale: string | null;
+  application_data: Record<string, any> | null;
   created_at?: string;
+}
+
+// Helper to extract Spanish field names from case study technology
+// Uses direct columns + fallback to application_data JSONB
+function getTechField(tech: CaseStudyTechnology, field: string): any {
+  const appData = tech.application_data || {};
+  
+  switch (field) {
+    case 'nombre':
+      return tech.technology_name || '';
+    case 'proveedor':
+      return tech.provider || appData.proveedor || null;
+    case 'web':
+      return appData.web || null;
+    case 'descripcion':
+      return appData.descripcion || tech.selection_rationale || null;
+    case 'aplicacion':
+      return appData.aplicacion || null;
+    case 'ventaja':
+      return appData.ventaja || null;
+    case 'trl':
+      return appData.trl ?? null;
+    case 'innovacion':
+      return appData.innovacion || null;
+    case 'casos_referencia':
+      return appData.casos_referencia || null;
+    case 'paises_actua':
+      return appData.paises_actua || null;
+    case 'comentarios':
+      return tech.selection_rationale || appData.comentarios || null;
+    case 'sector':
+      return appData.sector || null;
+    case 'tipo':
+      return appData.tipo || null;
+    default:
+      return appData[field] || null;
+  }
 }
 
 export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
@@ -252,9 +287,10 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     queryFn: async () => {
       console.log('[CaseStudyDetail] Fetching technologies for case:', caseStudyId);
       
+      // Query real table columns: technology_name, provider, application_data JSONB
       const { data, error } = await externalSupabase
         .from('case_study_technologies')
-        .select('id, case_study_id, technology_id, role, nombre, proveedor, web, descripcion, aplicacion, ventaja, trl, innovacion, casos_referencia, paises_actua, comentarios, created_at')
+        .select('id, case_study_id, technology_id, scouting_queue_id, role, technology_name, provider, selection_rationale, application_data, created_at')
         .eq('case_study_id', caseStudyId);
 
       if (error) {
@@ -312,7 +348,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
       // Get tech names that don't have scouting_queue_id
       const techNames = technologies
         .filter(t => !t.scouting_queue_id && !t.technology_id)
-        .map(t => t.nombre?.toLowerCase().trim())
+        .map(t => getTechField(t, 'nombre')?.toLowerCase().trim())
         .filter(Boolean);
       
       if (techNames.length === 0) return new Set<string>();
@@ -346,7 +382,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   const isTechAlreadyInQueue = (tech: CaseStudyTechnology): boolean => {
     if (tech.scouting_queue_id || tech.technology_id) return false;
     if (!techsInQueue) return false;
-    return techsInQueue.has(tech.nombre?.toLowerCase().trim() || '');
+    return techsInQueue.has(getTechField(tech, 'nombre')?.toLowerCase().trim() || '');
   };
 
   const getTechStatusBadge = (tech: CaseStudyTechnology) => {
@@ -475,19 +511,27 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     setSendingTechId(tech.id);
     
     try {
+      // Extract fields using helper
+      const nombre = getTechField(tech, 'nombre');
+      const proveedor = getTechField(tech, 'proveedor');
+      const web = getTechField(tech, 'web');
+      const descripcion = getTechField(tech, 'descripcion');
+      const trl = getTechField(tech, 'trl');
+      const ventaja = getTechField(tech, 'ventaja');
+      
       // Insert into scouting_queue (BD externa usa snake_case según estructura proporcionada)
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .insert({
-          nombre: tech.nombre,
-          proveedor: tech.proveedor || 'Desconocido',
+          nombre: nombre,
+          proveedor: proveedor || 'Desconocido',
           pais: null,
-          web: tech.web || null,
-          descripcion: tech.descripcion || null,
+          web: web || null,
+          descripcion: descripcion || null,
           tipo_sugerido: null,
           subcategoria_sugerida: null,
-          trl_estimado: tech.trl || null,
-          ventaja_competitiva: tech.ventaja || null,
+          trl_estimado: trl || null,
+          ventaja_competitiva: ventaja || null,
           relevance_score: 70,
           relevance_reason: `Tecnología extraída del caso de estudio: ${caseStudy?.name}`,
           source_url: null,
@@ -513,7 +557,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
       queryClient.invalidateQueries({ queryKey: ['scouting-counts'] });
       
       toast.success('Tecnología enviada a revisión', {
-        description: `${tech.nombre} está ahora en la cola de scouting`
+        description: `${nombre} está ahora en la cola de scouting`
       });
     } catch (error: any) {
       console.error('Error sending to scouting queue:', error);
@@ -991,9 +1035,9 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                     >
                       <div className="flex items-center gap-2">
                         <div>
-                          <p className="text-sm font-medium">{tech.nombre}</p>
-                          {tech.proveedor && (
-                            <p className="text-xs text-muted-foreground">{tech.proveedor}</p>
+                          <p className="text-sm font-medium">{getTechField(tech, 'nombre')}</p>
+                          {getTechField(tech, 'proveedor') && (
+                            <p className="text-xs text-muted-foreground">{getTechField(tech, 'proveedor')}</p>
                           )}
                         </div>
                         {getTechStatusBadge(tech)}
@@ -1042,8 +1086,8 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                     <div key={tech.id} className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="py-1">
-                          {tech.nombre}
-                          {tech.proveedor && ` (${tech.proveedor})`}
+                          {getTechField(tech, 'nombre')}
+                          {getTechField(tech, 'proveedor') && ` (${getTechField(tech, 'proveedor')})`}
                         </Badge>
                         {getTechStatusBadge(tech)}
                       </div>
@@ -1092,9 +1136,9 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                       <div key={tech.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
                         <div className="flex items-center gap-2 flex-1">
                           <div className="flex-1">
-                            <p className="text-sm font-medium">{tech.nombre}</p>
+                            <p className="text-sm font-medium">{getTechField(tech, 'nombre')}</p>
                             <p className="text-xs text-muted-foreground">
-                              {tech.proveedor && `${tech.proveedor} • `}Rol: {tech.role || 'Sin rol'}
+                              {getTechField(tech, 'proveedor') && `${getTechField(tech, 'proveedor')} • `}Rol: {tech.role || 'Sin rol'}
                             </p>
                           </div>
                         {getTechStatusBadge(tech)}

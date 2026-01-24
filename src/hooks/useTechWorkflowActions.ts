@@ -662,6 +662,8 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
   });
 
   // Save case study technology (external DB)
+  // Uses application_data JSONB for extended fields since table schema 
+  // only has: technology_name, provider, role, selection_rationale, application_data
   const saveCaseStudyTech = useMutation({
     mutationFn: async ({ 
       id, 
@@ -670,38 +672,60 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       id: string; 
       editData: UnifiedTechEditData;
     }) => {
-      // Update case_study_technologies en BD externa (incluye campos de AI enrichment)
       console.log('[saveCaseStudyTech] Saving tech:', id, editData);
+      
+      // Build application_data with extended fields that don't have dedicated columns
+      const applicationData = {
+        web: editData.web || null,
+        descripcion: editData.descripcion || null,
+        aplicacion: editData.aplicacion || null,
+        ventaja: editData.ventaja || null,
+        trl: editData.trl ?? null,
+        tipo: editData.tipo || null,
+        subcategoria: editData.subcategoria || null,
+        sector: editData.sector || null,
+        innovacion: editData.innovacion || null,
+        casos_referencia: editData.casos_referencia || null,
+        paises_actua: editData.paises_actua || null,
+        pais: editData.pais || null,
+        email: editData.email || null,
+        estado_seguimiento: editData.estado_seguimiento || null,
+      };
+      
+      // Update using only columns that exist in the table schema
       const { data, error } = await externalSupabase
         .from('case_study_technologies')
         .update({
-          nombre: editData.nombre,
-          proveedor: editData.proveedor,
-          web: editData.web,
-          descripcion: editData.descripcion,
-          aplicacion: editData.aplicacion,
-          ventaja: editData.ventaja,
-          trl: editData.trl,
-          // Nuevos campos de AI enrichment
-          innovacion: editData.innovacion || null,
-          casos_referencia: editData.casos_referencia || null,
-          paises_actua: editData.paises_actua || null,
-          comentarios: editData.comentarios || null,
+          technology_name: editData.nombre,
+          provider: editData.proveedor || null,
+          selection_rationale: editData.comentarios || null,
+          application_data: applicationData,
         })
         .eq('id', id)
         .select()
         .single();
+      
       console.log('[saveCaseStudyTech] Result:', { data, error });
       
       if (error) throw error;
-      return data;
+      
+      // Return normalized data for immediate UI update
+      return {
+        ...data,
+        // Map back to Spanish names for UnifiedTechData compatibility
+        nombre: data.technology_name,
+        proveedor: data.provider,
+        comentarios: data.selection_rationale,
+        // Spread application_data fields
+        ...(data.application_data || {}),
+      };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['case-study-technologies'] });
       queryClient.invalidateQueries({ queryKey: ['case-studies-enhanced'] });
-      toast.success('Cambios guardados');
     },
     onError: (error: Error) => {
+      console.error('[saveCaseStudyTech] Error:', error);
       toast.error('Error al guardar', { description: error.message });
     },
   });
