@@ -9,12 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Search, ExternalLink, Edit, Filter, X } from 'lucide-react';
+import { DeleteTechnologyButton } from '@/components/DeleteTechnologyButton';
 import type { QualityIssue } from '@/hooks/useDataQualityStats';
 
 interface IncompleteDataTabProps {
   technologies: QualityIssue[];
   initialFilter?: string;
   onOpenTechnology: (id: string) => void;
+  onRefresh?: () => void;
 }
 
 const ISSUE_LABELS: Record<string, string> = {
@@ -31,7 +33,7 @@ const ISSUE_LABELS: Record<string, string> = {
   nombre_generico: 'Nombre Genérico',
 };
 
-export function IncompleteDataTab({ technologies, initialFilter, onOpenTechnology }: IncompleteDataTabProps) {
+export function IncompleteDataTab({ technologies, initialFilter, onOpenTechnology, onRefresh }: IncompleteDataTabProps) {
   const [search, setSearch] = useState('');
   const [issueFilter, setIssueFilter] = useState<string>(initialFilter || 'all');
   const [sortBy, setSortBy] = useState<'issues' | 'name' | 'date'>('issues');
@@ -219,14 +221,21 @@ export function IncompleteDataTab({ technologies, initialFilter, onOpenTechnolog
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onOpenTechnology(tech.id)}
-                      >
-                        <Edit className="h-4 w-4 mr-1" />
-                        Editar
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onOpenTechnology(tech.id)}
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Editar
+                        </Button>
+                        <DeleteTechnologyButton
+                          technologyId={tech.id}
+                          technologyName={tech.nombre}
+                          onDeleted={onRefresh}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
