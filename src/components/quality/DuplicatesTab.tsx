@@ -8,24 +8,45 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Copy, ChevronDown, ChevronRight, Search, ExternalLink, Merge, Trash2, Check } from 'lucide-react';
+import { 
+  Copy, 
+  ChevronDown, 
+  ChevronRight, 
+  Search, 
+  ExternalLink, 
+  Merge, 
+  Trash2, 
+  Check,
+  Eye,
+} from 'lucide-react';
 import type { DuplicateGroup, QualityIssue } from '@/hooks/useDataQualityStats';
 
 interface DuplicatesTabProps {
   duplicateGroups: DuplicateGroup[];
   onOpenTechnology: (id: string) => void;
   onMarkAsNotDuplicate?: (groupKey: string) => void;
+  onCompare?: (group: DuplicateGroup) => void;
+  onQuickMerge?: (group: DuplicateGroup) => void;
+  onDeleteTechnology?: (id: string, name: string) => void;
+}
+
+interface DuplicateGroupCardProps {
+  group: DuplicateGroup;
+  onOpenTechnology: (id: string) => void;
+  onMarkAsNotDuplicate?: (groupKey: string) => void;
+  onCompare?: (group: DuplicateGroup) => void;
+  onQuickMerge?: (group: DuplicateGroup) => void;
+  onDeleteTechnology?: (id: string, name: string) => void;
 }
 
 function DuplicateGroupCard({ 
   group, 
   onOpenTechnology,
   onMarkAsNotDuplicate,
-}: { 
-  group: DuplicateGroup; 
-  onOpenTechnology: (id: string) => void;
-  onMarkAsNotDuplicate?: (groupKey: string) => void;
-}) {
+  onCompare,
+  onQuickMerge,
+  onDeleteTechnology,
+}: DuplicateGroupCardProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const typeLabel = {
@@ -36,8 +57,8 @@ function DuplicateGroupCard({
 
   const typeColor = {
     exact: 'bg-destructive/10 text-destructive border-destructive/20',
-    normalized: 'bg-amber-100 text-amber-800 border-amber-300',
-    provider: 'bg-blue-100 text-blue-800 border-blue-300',
+    normalized: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
+    provider: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700',
   }[group.similarityType];
 
   // Get unique providers in group
@@ -83,7 +104,7 @@ function DuplicateGroupCard({
                   <TableHead>País</TableHead>
                   <TableHead>TRL</TableHead>
                   <TableHead>Estado</TableHead>
-                  <TableHead className="w-[80px]"></TableHead>
+                  <TableHead className="w-[120px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -102,7 +123,7 @@ function DuplicateGroupCard({
                         <span className="text-sm">{tech.proveedor || '—'}</span>
                         {tech.web && (
                           <a 
-                            href={tech.web}
+                            href={tech.web.startsWith('http') ? tech.web : `https://${tech.web}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-primary"
@@ -120,13 +141,27 @@ function DuplicateGroupCard({
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onOpenTechnology(tech.id)}
-                      >
-                        Ver
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onOpenTechnology(tech.id)}
+                          title="Ver ficha"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        {onDeleteTechnology && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => onDeleteTechnology(tech.id, tech.nombre)}
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -135,10 +170,26 @@ function DuplicateGroupCard({
 
             {/* Actions */}
             <div className="flex items-center gap-2 mt-4 pt-4 border-t">
-              <Button variant="outline" size="sm" disabled>
-                <Merge className="h-4 w-4 mr-1" />
-                Fusionar (próximamente)
-              </Button>
+              {onCompare && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => onCompare(group)}
+                >
+                  <Eye className="h-4 w-4 mr-1" />
+                  Comparar
+                </Button>
+              )}
+              {onQuickMerge && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => onQuickMerge(group)}
+                >
+                  <Merge className="h-4 w-4 mr-1" />
+                  Fusionar
+                </Button>
+              )}
               <Button 
                 variant="ghost" 
                 size="sm"
@@ -155,7 +206,14 @@ function DuplicateGroupCard({
   );
 }
 
-export function DuplicatesTab({ duplicateGroups, onOpenTechnology, onMarkAsNotDuplicate }: DuplicatesTabProps) {
+export function DuplicatesTab({ 
+  duplicateGroups, 
+  onOpenTechnology, 
+  onMarkAsNotDuplicate,
+  onCompare,
+  onQuickMerge,
+  onDeleteTechnology,
+}: DuplicatesTabProps) {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'normalized' | 'provider'>('all');
 
@@ -190,9 +248,9 @@ export function DuplicatesTab({ duplicateGroups, onOpenTechnology, onMarkAsNotDu
   return (
     <div className="space-y-4">
       {/* Summary Card */}
-      <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
+      <Card className="border-primary/30 bg-primary/5">
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+          <CardTitle className="flex items-center gap-2 text-primary">
             <Copy className="h-5 w-5" />
             Detección de Duplicados
           </CardTitle>
@@ -204,21 +262,21 @@ export function DuplicatesTab({ duplicateGroups, onOpenTechnology, onMarkAsNotDu
           <div className="flex flex-wrap gap-3">
             <Badge 
               variant="outline" 
-              className={`cursor-pointer ${filterType === 'all' ? 'bg-blue-100 border-blue-300' : ''}`}
+              className={`cursor-pointer transition-colors ${filterType === 'all' ? 'bg-primary/10 border-primary' : ''}`}
               onClick={() => setFilterType('all')}
             >
               {duplicateGroups.length} grupos ({totalDuplicates} tecnologías)
             </Badge>
             <Badge 
               variant="outline"
-              className={`cursor-pointer ${filterType === 'normalized' ? 'bg-amber-100 border-amber-300' : ''}`}
+              className={`cursor-pointer transition-colors ${filterType === 'normalized' ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-500' : ''}`}
               onClick={() => setFilterType('normalized')}
             >
               {nameGroups.length} por nombre similar
             </Badge>
             <Badge 
               variant="outline"
-              className={`cursor-pointer ${filterType === 'provider' ? 'bg-blue-100 border-blue-300' : ''}`}
+              className={`cursor-pointer transition-colors ${filterType === 'provider' ? 'bg-primary/10 border-primary' : ''}`}
               onClick={() => setFilterType('provider')}
             >
               {providerGroups.length} por mismo proveedor
@@ -256,6 +314,9 @@ export function DuplicatesTab({ duplicateGroups, onOpenTechnology, onMarkAsNotDu
               group={group}
               onOpenTechnology={onOpenTechnology}
               onMarkAsNotDuplicate={onMarkAsNotDuplicate}
+              onCompare={onCompare}
+              onQuickMerge={onQuickMerge}
+              onDeleteTechnology={onDeleteTechnology}
             />
           ))}
           {filteredGroups.length > 20 && (
