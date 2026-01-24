@@ -47,8 +47,9 @@ function generateSuggestedName(tech: QualityIssue): string {
   const parts: string[] = [];
   
   // Try to build a better name from available data
-  if (tech.subcategoria) {
-    parts.push(tech.subcategoria);
+  const subcategoria = tech.subcategorias && tech.subcategorias.length > 0 ? tech.subcategorias[0] : null;
+  if (subcategoria) {
+    parts.push(subcategoria);
   } else if (tech.tipo) {
     parts.push(tech.tipo);
   }

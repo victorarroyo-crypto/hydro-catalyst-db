@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 // Column names in external DB (snake_case - technologies table)
+// Esquema oficial: ver docs/DATABASE_SCHEMA.md para referencia completa
 const COLUMNS = {
   id: 'id',
   nombre: 'nombre',
@@ -24,7 +25,7 @@ const COLUMNS = {
   innovacion: 'innovacion',
   trl: 'trl',
   tipo: 'tipo',
-  subcategoria: 'subcategoria',
+  subcategorias: 'subcategorias', // ARRAY text[] - sistema 3 niveles
   sector: 'sector',
   email: 'email',
   comentarios: 'comentarios',
@@ -66,7 +67,7 @@ export interface QualityIssue {
   descripcion: string | null;
   trl: number | null;
   tipo: string | null;
-  subcategoria: string | null;
+  subcategorias: string[] | null; // ARRAY - sistema taxonomia 3 niveles
   sector: string | null;
   tipo_id: number | null;
   subcategoria_id: number | null;
@@ -127,7 +128,7 @@ function mapTechnology(record: Record<string, unknown>): QualityIssue {
   const descripcion = record[COLUMNS.descripcion] as string | null;
   const trl = record[COLUMNS.trl] as number | null;
   const tipo = record[COLUMNS.tipo] as string | null;
-  const subcategoria = record[COLUMNS.subcategoria] as string | null;
+  const subcategorias = record[COLUMNS.subcategorias] as string[] | null; // ARRAY
   const sector = record[COLUMNS.sector] as string | null;
   const tipo_id = record[COLUMNS.tipo_id] as number | null;
   const subcategoria_id = record[COLUMNS.subcategoria_id] as number | null;
@@ -147,7 +148,10 @@ function mapTechnology(record: Record<string, unknown>): QualityIssue {
   if (!ventaja?.trim()) issues.push('sin_ventaja');
   if (!innovacion?.trim()) issues.push('sin_innovacion');
   if (!aplicacion?.trim()) issues.push('sin_aplicacion');
-  if (!tipo_id && !subcategoria_id && !sector_id) issues.push('sin_clasificar');
+  // Sin clasificar: sin IDs legacy Y sin subcategorias array
+  if (!tipo_id && !subcategoria_id && !sector_id && (!subcategorias || subcategorias.length === 0)) {
+    issues.push('sin_clasificar');
+  }
   if (isGenericName(nombre)) issues.push('nombre_generico');
 
   return {
@@ -159,7 +163,7 @@ function mapTechnology(record: Record<string, unknown>): QualityIssue {
     descripcion,
     trl,
     tipo,
-    subcategoria,
+    subcategorias,
     sector,
     tipo_id,
     subcategoria_id,

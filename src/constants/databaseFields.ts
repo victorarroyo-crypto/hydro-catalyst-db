@@ -1,38 +1,126 @@
 /**
- * Diccionario de campos de base de datos
+ * Database field constants for the external Supabase database
  * 
- * Este archivo proporciona constantes TypeScript para acceder a los nombres
- * de columnas de la base de datos, evitando typos y proporcionando autocompletado.
+ * IMPORTANT: The technologies table in the external DB uses snake_case column names.
+ * The scouting_queue and rejected_technologies tables use Spanish names with spaces.
  * 
- * Los mapeos se sincronizan con public/field_mappings.json para que
- * Railway/Python y otros sistemas puedan usar el mismo diccionario.
- * 
- * @example
- * import { TECH_FIELDS, getField } from '@/constants/databaseFields';
- * 
- * // Usando constantes directamente
- * const query = supabase.from('technologies').select(TECH_FIELDS.nombre_tecnologia);
- * 
- * // Usando función helper
- * const columnName = getField('technologies', 'nombre_tecnologia');
- * // Retorna: "Nombre de la tecnología"
+ * This file serves as the source of truth for field mappings.
+ * Last updated: 2026-01-24
  */
 
-// ============================================
-// CAMPOS DE TECNOLOGÍAS (technologies)
-// ============================================
-export const TECH_FIELDS = {
-  // Identificador
+// ============================================================================
+// TECHNOLOGIES TABLE - snake_case columns (BD externa)
+// ============================================================================
+export const EXTERNAL_TECH_FIELDS = {
+  // Identifier
   id: 'id',
   
-  // Campos de negocio (español con espacios)
+  // Core business fields (snake_case)
+  nombre: 'nombre',
+  proveedor: 'proveedor',
+  pais: 'pais',
+  paises_actua: 'paises_actua',
+  web: 'web',
+  email: 'email',
+  descripcion: 'descripcion',
+  aplicacion: 'aplicacion',
+  ventaja: 'ventaja',
+  innovacion: 'innovacion',
+  trl: 'trl',
+  tipo: 'tipo',
+  sector: 'sector',
+  casos_referencia: 'casos_referencia',
+  comentarios: 'comentarios',
+  fecha_scouting: 'fecha_scouting',
+  estado_seguimiento: 'estado_seguimiento',
+  
+  // 3-level taxonomy arrays (new system)
+  categorias: 'categorias',       // text[]
+  tipos: 'tipos',                 // text[]
+  subcategorias: 'subcategorias', // text[]
+  
+  // Legacy taxonomy IDs (for backward compatibility)
+  tipo_id: 'tipo_id',
+  subcategoria_id: 'subcategoria_id',
+  sector_id: 'sector_id',
+  subsector_industrial: 'subsector_industrial',
+  
+  // System/workflow fields
+  status: 'status',
+  quality_score: 'quality_score',
+  review_status: 'review_status',
+  review_requested_at: 'review_requested_at',
+  review_requested_by: 'review_requested_by',
+  reviewer_id: 'reviewer_id',
+  reviewed_at: 'reviewed_at',
+  approved_at: 'approved_at',
+  approved_by: 'approved_by',
+  created_by: 'created_by',
+  updated_by: 'updated_by',
+  created_at: 'created_at',
+  updated_at: 'updated_at',
+  version: 'version',
+  
+  // Embeddings (semantic search)
+  embedding: 'embedding',
+  embedding_updated_at: 'embedding_updated_at',
+} as const;
+
+// ============================================================================
+// SCOUTING_QUEUE TABLE - Spanish column names with spaces (legacy)
+// ============================================================================
+export const SCOUTING_QUEUE_FIELDS = {
+  id: 'id',
   nombre_tecnologia: 'Nombre de la tecnología',
   tipo_tecnologia: 'Tipo de tecnología',
   subcategoria: 'Subcategoría',
   sector_subsector: 'Sector y subsector',
   proveedor_empresa: 'Proveedor / Empresa',
   pais_origen: 'País de origen',
-  /** @note Typo histórico: debería ser "Países donde actúa" */
+  paises_operacion: 'Paises donde actua', // Note: typo is historical
+  web_empresa: 'Web de la empresa',
+  email_contacto: 'Email de contacto',
+  descripcion_tecnica: 'Descripción técnica breve',
+  aplicacion_principal: 'Aplicación principal',
+  ventaja_competitiva: 'Ventaja competitiva clave',
+  innovacion: 'Porque es innovadora',
+  grado_madurez_trl: 'Grado de madurez (TRL)',
+  casos_referencia: 'Casos de referencia',
+  comentarios_analista: 'Comentarios del analista',
+  fecha_scouting: 'Fecha de scouting',
+  estado_seguimiento: 'Estado del seguimiento',
+  // System fields (snake_case)
+  tipo_id: 'tipo_id',
+  subcategoria_id: 'subcategoria_id',
+  sector_id: 'sector_id',
+  subsector_industrial: 'subsector_industrial',
+  source: 'source',
+  source_url: 'source_url',
+  priority: 'priority',
+  notes: 'notes',
+  queue_status: 'queue_status',
+  rejection_reason: 'rejection_reason',
+  scouting_job_id: 'scouting_job_id',
+  case_study_id: 'case_study_id',
+  created_by: 'created_by',
+  reviewed_by: 'reviewed_by',
+  reviewed_at: 'reviewed_at',
+  created_at: 'created_at',
+  updated_at: 'updated_at',
+} as const;
+
+// ============================================================================
+// REJECTED_TECHNOLOGIES TABLE - Spanish column names with spaces (legacy)
+// ============================================================================
+export const REJECTED_TECH_FIELDS = {
+  id: 'id',
+  original_scouting_id: 'original_scouting_id',
+  nombre_tecnologia: 'Nombre de la tecnología',
+  tipo_tecnologia: 'Tipo de tecnología',
+  subcategoria: 'Subcategoría',
+  sector_subsector: 'Sector y subsector',
+  proveedor_empresa: 'Proveedor / Empresa',
+  pais_origen: 'País de origen',
   paises_operacion: 'Paises donde actua',
   web_empresa: 'Web de la empresa',
   email_contacto: 'Email de contacto',
@@ -45,168 +133,158 @@ export const TECH_FIELDS = {
   comentarios_analista: 'Comentarios del analista',
   fecha_scouting: 'Fecha de scouting',
   estado_seguimiento: 'Estado del seguimiento',
-  
-  // Campos de taxonomía (IDs numéricos)
   tipo_id: 'tipo_id',
   subcategoria_id: 'subcategoria_id',
   sector_id: 'sector_id',
   subsector_industrial: 'subsector_industrial',
-  
-  // Campos de sistema
-  status: 'status',
-  quality_score: 'quality_score',
-  review_status: 'review_status',
-  review_requested_at: 'review_requested_at',
-  review_requested_by: 'review_requested_by',
-  reviewer_id: 'reviewer_id',
-  reviewed_at: 'reviewed_at',
-  updated_by: 'updated_by',
-  created_at: 'created_at',
-  updated_at: 'updated_at',
-} as const;
-
-// ============================================
-// CAMPOS DE COLA DE SCOUTING (scouting_queue)
-// ============================================
-export const SCOUTING_FIELDS = {
-  ...TECH_FIELDS,
-  
-  // Campos específicos de scouting
-  source: 'source',
-  source_url: 'source_url',
-  priority: 'priority',
-  notes: 'notes',
-  queue_status: 'queue_status',
-  rejection_reason: 'rejection_reason',
-  created_by: 'created_by',
-  reviewed_by: 'reviewed_by',
-} as const;
-
-// ============================================
-// CAMPOS DE TECNOLOGÍAS RECHAZADAS
-// ============================================
-export const REJECTED_FIELDS = {
-  ...TECH_FIELDS,
-  
-  // Campos específicos de rechazo
-  original_scouting_id: 'original_scouting_id',
   rejection_reason: 'rejection_reason',
   rejection_category: 'rejection_category',
   original_data: 'original_data',
   rejected_at: 'rejected_at',
   rejected_by: 'rejected_by',
+  created_at: 'created_at',
 } as const;
 
-// ============================================
-// CAMPOS DE TAXONOMÍA
-// ============================================
+// ============================================================================
+// TAXONOMY TABLES
+// ============================================================================
 export const TAXONOMY_FIELDS = {
-  // taxonomy_tipos
-  tipo: {
+  tipos: {
     id: 'id',
     codigo: 'codigo',
     nombre: 'nombre',
     descripcion: 'descripcion',
   },
-  // taxonomy_subcategorias
-  subcategoria: {
+  subcategorias: {
     id: 'id',
     tipo_id: 'tipo_id',
     codigo: 'codigo',
     nombre: 'nombre',
   },
-  // taxonomy_sectores
-  sector: {
+  sectores: {
     id: 'id',
     nombre: 'nombre',
     descripcion: 'descripcion',
   },
 } as const;
 
-// ============================================
-// TIPOS DERIVADOS
-// ============================================
-export type TechFieldKey = keyof typeof TECH_FIELDS;
-export type TechFieldValue = typeof TECH_FIELDS[TechFieldKey];
-export type ScoutingFieldKey = keyof typeof SCOUTING_FIELDS;
-export type RejectedFieldKey = keyof typeof REJECTED_FIELDS;
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+export type ExternalTechFieldKey = keyof typeof EXTERNAL_TECH_FIELDS;
+export type ExternalTechFieldValue = (typeof EXTERNAL_TECH_FIELDS)[ExternalTechFieldKey];
 
-// ============================================
-// FUNCIONES HELPER
-// ============================================
+export type ScoutingQueueFieldKey = keyof typeof SCOUTING_QUEUE_FIELDS;
+export type ScoutingQueueFieldValue = (typeof SCOUTING_QUEUE_FIELDS)[ScoutingQueueFieldKey];
+
+export type RejectedTechFieldKey = keyof typeof REJECTED_TECH_FIELDS;
+export type RejectedTechFieldValue = (typeof REJECTED_TECH_FIELDS)[RejectedTechFieldKey];
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
 
 /**
- * Obtiene el nombre real de una columna a partir de su alias snake_case
- * @param table - Nombre de la tabla
- * @param alias - Alias snake_case del campo
- * @returns Nombre real de la columna en la base de datos
+ * Get the actual column name for a given table and field alias
  */
-export function getField(
+export function getFieldName(
   table: 'technologies' | 'scouting_queue' | 'rejected_technologies',
-  alias: TechFieldKey | ScoutingFieldKey | RejectedFieldKey
+  alias: string
 ): string {
   switch (table) {
     case 'technologies':
-      return TECH_FIELDS[alias as TechFieldKey] ?? alias;
+      return EXTERNAL_TECH_FIELDS[alias as ExternalTechFieldKey] || alias;
     case 'scouting_queue':
-      return SCOUTING_FIELDS[alias as ScoutingFieldKey] ?? alias;
+      return SCOUTING_QUEUE_FIELDS[alias as ScoutingQueueFieldKey] || alias;
     case 'rejected_technologies':
-      return REJECTED_FIELDS[alias as RejectedFieldKey] ?? alias;
+      return REJECTED_TECH_FIELDS[alias as RejectedTechFieldKey] || alias;
     default:
       return alias;
   }
 }
 
 /**
- * Obtiene el alias snake_case a partir del nombre real de columna
- * @param columnName - Nombre real de la columna
- * @returns Alias snake_case o el nombre original si no se encuentra
+ * Get all business fields for technologies (for quality checks)
  */
-export function getAlias(columnName: string): string {
-  for (const [alias, realName] of Object.entries(TECH_FIELDS)) {
-    if (realName === columnName) {
-      return alias;
-    }
-  }
-  return columnName;
+export const TECH_BUSINESS_FIELDS = [
+  'nombre',
+  'proveedor',
+  'pais',
+  'paises_actua',
+  'web',
+  'email',
+  'descripcion',
+  'aplicacion',
+  'ventaja',
+  'innovacion',
+  'trl',
+  'tipo',
+  'sector',
+  'casos_referencia',
+  'comentarios',
+  'fecha_scouting',
+  'estado_seguimiento',
+] as const;
+
+/**
+ * Get all system fields for technologies
+ */
+export const TECH_SYSTEM_FIELDS = [
+  'id',
+  'status',
+  'quality_score',
+  'review_status',
+  'review_requested_at',
+  'review_requested_by',
+  'reviewer_id',
+  'reviewed_at',
+  'approved_at',
+  'approved_by',
+  'created_by',
+  'updated_by',
+  'created_at',
+  'updated_at',
+  'version',
+  'embedding',
+  'embedding_updated_at',
+] as const;
+
+// ============================================================================
+// LEGACY EXPORTS (for backward compatibility)
+// ============================================================================
+
+/** @deprecated Use EXTERNAL_TECH_FIELDS instead */
+export const TECH_FIELDS = SCOUTING_QUEUE_FIELDS;
+
+/** @deprecated Use SCOUTING_QUEUE_FIELDS instead */
+export const SCOUTING_FIELDS = SCOUTING_QUEUE_FIELDS;
+
+/** @deprecated Use REJECTED_TECH_FIELDS instead */
+export const REJECTED_FIELDS = REJECTED_TECH_FIELDS;
+
+// Legacy type aliases
+export type TechFieldKey = ScoutingQueueFieldKey;
+export type TechFieldValue = ScoutingQueueFieldValue;
+export type ScoutingFieldKey = ScoutingQueueFieldKey;
+export type RejectedFieldKey = RejectedTechFieldKey;
+
+/** @deprecated Use getFieldName instead */
+export function getField(
+  table: 'technologies' | 'scouting_queue' | 'rejected_technologies',
+  alias: string
+): string {
+  return getFieldName(table, alias);
 }
 
-/**
- * Lista de todos los campos de negocio en español (los que tienen espacios/caracteres especiales)
- */
-export const BUSINESS_FIELDS = [
-  TECH_FIELDS.nombre_tecnologia,
-  TECH_FIELDS.tipo_tecnologia,
-  TECH_FIELDS.subcategoria,
-  TECH_FIELDS.sector_subsector,
-  TECH_FIELDS.proveedor_empresa,
-  TECH_FIELDS.pais_origen,
-  TECH_FIELDS.paises_operacion,
-  TECH_FIELDS.web_empresa,
-  TECH_FIELDS.email_contacto,
-  TECH_FIELDS.descripcion_tecnica,
-  TECH_FIELDS.aplicacion_principal,
-  TECH_FIELDS.ventaja_competitiva,
-  TECH_FIELDS.innovacion,
-  TECH_FIELDS.grado_madurez_trl,
-  TECH_FIELDS.casos_referencia,
-  TECH_FIELDS.comentarios_analista,
-  TECH_FIELDS.fecha_scouting,
-  TECH_FIELDS.estado_seguimiento,
-] as const;
+/** @deprecated Use EXTERNAL_TECH_FIELDS with reverse lookup */
+export function getAlias(columnName: string): string {
+  const entries = Object.entries(EXTERNAL_TECH_FIELDS);
+  const found = entries.find(([_, col]) => col === columnName);
+  return found ? found[0] : columnName;
+}
 
-/**
- * Lista de campos técnicos/sistema (snake_case en inglés)
- */
-export const SYSTEM_FIELDS = [
-  TECH_FIELDS.id,
-  TECH_FIELDS.tipo_id,
-  TECH_FIELDS.subcategoria_id,
-  TECH_FIELDS.sector_id,
-  TECH_FIELDS.subsector_industrial,
-  TECH_FIELDS.status,
-  TECH_FIELDS.quality_score,
-  TECH_FIELDS.review_status,
-  TECH_FIELDS.created_at,
-  TECH_FIELDS.updated_at,
-] as const;
+/** @deprecated Use TECH_BUSINESS_FIELDS */
+export const BUSINESS_FIELDS = Object.values(TECH_BUSINESS_FIELDS);
+
+/** @deprecated Use TECH_SYSTEM_FIELDS */
+export const SYSTEM_FIELDS = Object.values(TECH_SYSTEM_FIELDS);
