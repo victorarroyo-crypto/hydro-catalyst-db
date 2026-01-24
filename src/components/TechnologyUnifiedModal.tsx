@@ -157,20 +157,44 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
 
+  // Detect if we only have an ID (stub object) and need to fetch full data
+  const needsFetch = technology && Object.keys(technology).length <= 2 && technology.id;
+  const technologyIdToFetch = needsFetch ? technology.id : null;
+
+  // Fetch full technology data when only ID is provided
+  const { data: fetchedTechnology, isLoading: isFetchingTech } = useQuery({
+    queryKey: ['technology-detail', technologyIdToFetch],
+    queryFn: async () => {
+      if (!technologyIdToFetch) return null;
+      const { data, error } = await externalSupabase
+        .from('technologies')
+        .select('*')
+        .eq('id', technologyIdToFetch)
+        .single();
+      if (error) throw error;
+      return data as Technology;
+    },
+    enabled: !!technologyIdToFetch && open,
+    staleTime: 30000,
+  });
+
+  // Use fetched data if we did a fetch, otherwise use the prop
+  const effectiveTechnology = fetchedTechnology || (needsFetch ? null : technology);
+
   // 1. Detect input type and map to unified format
   const { unifiedData, metadata, sourceId, sourceType } = useMemo(() => {
-    if (technology) {
-      const techData = mapFromTechnologies(technology);
+    if (effectiveTechnology) {
+      const techData = mapFromTechnologies(effectiveTechnology);
       const techMeta: TechMetadata = {
         ...createDatabaseMetadata(),
-        reviewStatus: technology.review_status as TechMetadata['reviewStatus'],
-        reviewerId: (technology as any).reviewer_id,
-        isCurrentReviewer: (technology as any).reviewer_id === user?.id,
+        reviewStatus: effectiveTechnology.review_status as TechMetadata['reviewStatus'],
+        reviewerId: (effectiveTechnology as any).reviewer_id,
+        isCurrentReviewer: (effectiveTechnology as any).reviewer_id === user?.id,
       };
       return {
         unifiedData: techData,
         metadata: techMeta,
-        sourceId: technology.id,
+        sourceId: effectiveTechnology.id,
         sourceType: 'database' as const,
       };
     }
@@ -274,7 +298,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
       sourceId: '',
       sourceType: 'database' as const,
     };
-  }, [technology, scoutingItem, longlistItem, caseStudyTech, linkedTechnology, user?.id, studyId, studyName, caseStudyName]);
+  }, [effectiveTechnology, scoutingItem, longlistItem, caseStudyTech, linkedTechnology, user?.id, studyId, studyName, caseStudyName]);
 
   // 2. Calculate permissions
   const actions = useMemo<TechActions>(() => {
@@ -640,6 +664,22 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
       projectId,
     });
   }, [sourceId, sourceType, metadata.linkedTechId, workflowActions.addToProject]);
+
+  // Show loading state while fetching technology data
+  if (isFetchingTech) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-4xl">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+              <p className="text-muted-foreground">Cargando tecnología...</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (!unifiedData) {
     return null;
