@@ -4,7 +4,7 @@ import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { TechnologyCard } from '@/components/TechnologyCard';
-import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
+import { TechnologyUnifiedModal } from '@/components/TechnologyUnifiedModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Star, Loader2, Trash2 } from 'lucide-react';
@@ -124,7 +124,7 @@ const Favorites: React.FC = () => {
         </div>
       )}
 
-      <TechnologyDetailModal
+      <TechnologyUnifiedModal
         technology={selectedTechnology}
         open={modalOpen}
         onOpenChange={setModalOpen}

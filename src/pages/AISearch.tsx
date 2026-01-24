@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TRLBadge } from '@/components/TRLBadge';
-import { TechnologyDetailModal } from '@/components/TechnologyDetailModal';
+import { TechnologyUnifiedModal } from '@/components/TechnologyUnifiedModal';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Select,
@@ -843,7 +843,7 @@ const AISearch: React.FC = () => {
       )}
 
       {/* Technology Detail Modal */}
-      <TechnologyDetailModal
+      <TechnologyUnifiedModal
         technology={selectedTechnology}
         open={detailModalOpen}
         onOpenChange={setDetailModalOpen}
