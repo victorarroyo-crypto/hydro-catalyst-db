@@ -23,10 +23,15 @@ export interface UnifiedTechData {
   estado_seguimiento: string | null;
   fecha_scouting: string | null;
   
-  // Clasificación
+  // Clasificación (campos legacy para compatibilidad)
   tipo: string | null;
   subcategoria: string | null;
   sector: string | null;
+  
+  // Taxonomía de 3 niveles (arrays)
+  categorias: string[] | null;
+  tipos: string[] | null;
+  subcategorias: string[] | null;
   aplicacion: string | null;
   
   // Descripción e Innovación

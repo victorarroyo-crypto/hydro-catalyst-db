@@ -576,10 +576,12 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
   const saveTechnology = useMutation({
     mutationFn: async ({ 
       id, 
-      editData 
+      editData,
+      taxonomySelections,
     }: { 
       id: string; 
       editData: UnifiedTechEditData;
+      taxonomySelections?: { categorias: string[]; tipos: string[]; subcategorias: string[] };
     }) => {
       const { data, error } = await externalSupabase
         .from('technologies')
@@ -605,6 +607,16 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
           sector_id: editData.sector_id,
           subsector_industrial: editData.subsector_industrial,
           status: editData.status,
+          // Guardar arrays de taxonomía de 3 niveles
+          categorias: taxonomySelections?.categorias?.length 
+            ? taxonomySelections.categorias 
+            : null,
+          tipos: taxonomySelections?.tipos?.length 
+            ? taxonomySelections.tipos 
+            : (editData.tipo ? [editData.tipo] : null),
+          subcategorias: taxonomySelections?.subcategorias?.length 
+            ? taxonomySelections.subcategorias 
+            : (editData.subcategoria ? [editData.subcategoria] : null),
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)

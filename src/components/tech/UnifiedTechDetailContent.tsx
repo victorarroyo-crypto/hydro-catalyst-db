@@ -13,8 +13,9 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Loader2, Lock, ExternalLink } from 'lucide-react';
+import { Loader2, Lock, ExternalLink, Layers, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Building2,
   MapPin,
@@ -461,14 +462,67 @@ export const UnifiedTechDetailContent: React.FC<UnifiedTechDetailContentProps> =
 
           <Separator />
 
-          {/* Clasificación */}
+          {/* Clasificación - Taxonomía de 3 niveles */}
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-foreground border-b border-border pb-2 mb-3 flex items-center gap-2">
               <Tag className="w-4 h-4 text-primary" />
               CLASIFICACIÓN
             </h3>
-            <UnifiedInfoRow icon={Tag} label="Tipo de tecnología" value={data.tipo} />
-            <UnifiedInfoRow icon={Tag} label="Subcategoría" value={data.subcategoria} />
+            
+            {/* Categorías */}
+            {data.categorias && data.categorias.length > 0 && (
+              <div className="flex items-start gap-2 py-2">
+                <Tag className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <span className="text-xs text-muted-foreground block mb-1">Categorías</span>
+                  <div className="flex flex-wrap gap-1">
+                    {data.categorias.map((cat, i) => (
+                      <Badge key={i} variant="outline" className="text-xs">{cat}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Tipos */}
+            {data.tipos && data.tipos.length > 0 && (
+              <div className="flex items-start gap-2 py-2">
+                <Layers className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <span className="text-xs text-muted-foreground block mb-1">Tipos de tecnología</span>
+                  <div className="flex flex-wrap gap-1">
+                    {data.tipos.map((tipo, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">{tipo}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Subcategorías */}
+            {data.subcategorias && data.subcategorias.length > 0 && (
+              <div className="flex items-start gap-2 py-2">
+                <Grid3X3 className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <span className="text-xs text-muted-foreground block mb-1">Subcategorías</span>
+                  <div className="flex flex-wrap gap-1">
+                    {data.subcategorias.map((sub, i) => (
+                      <Badge key={i} variant="default" className="text-xs">{sub}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Fallback a campos legacy si no hay arrays */}
+            {!data.categorias?.length && !data.tipos?.length && !data.subcategorias?.length && (
+              <>
+                <UnifiedInfoRow icon={Tag} label="Tipo de tecnología" value={data.tipo} />
+                <UnifiedInfoRow icon={Tag} label="Subcategoría" value={data.subcategoria} />
+              </>
+            )}
+            
+            {/* Sector siempre visible */}
             <UnifiedInfoRow icon={Tag} label="Sector y subsector" value={data.sector} />
             <UnifiedInfoRow icon={FileText} label="Aplicación principal" value={data.aplicacion} />
           </div>

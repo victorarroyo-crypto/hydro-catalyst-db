@@ -28,9 +28,14 @@ export function mapFromTechnologies(tech: Technology): UnifiedTechData {
     trl: tech.trl,
     estado_seguimiento: tech.estado_seguimiento,
     fecha_scouting: tech.fecha_scouting,
+    // Campos legacy para compatibilidad
     tipo: tech.tipo || tech.tipos?.[0] || null,
     subcategoria: tech.subcategorias?.[0] || null,
     sector: tech.sector,
+    // Taxonomía de 3 niveles (arrays completos)
+    categorias: tech.categorias || null,
+    tipos: tech.tipos || null,
+    subcategorias: tech.subcategorias || null,
     aplicacion: tech.aplicacion,
     descripcion: tech.descripcion,
     ventaja: tech.ventaja,
@@ -73,6 +78,10 @@ export function mapFromLonglist(
     tipo: item.type_suggested,
     subcategoria: item.subcategory_suggested,
     sector: extendedItem.sector || null,
+    // Longlist no tiene arrays de taxonomía
+    categorias: null,
+    tipos: item.type_suggested ? [item.type_suggested] : null,
+    subcategorias: item.subcategory_suggested ? [item.subcategory_suggested] : null,
     aplicacion: item.applications?.join(', ') || null,
     descripcion: item.brief_description,
     ventaja: extendedItem.ventaja_competitiva || null,
@@ -92,6 +101,9 @@ export function mapFromLonglist(
  * Translates column names with spaces/accents to canonical names
  */
 export function mapFromScouting(item: ScoutingQueueItem): UnifiedTechData {
+  const tipo = item['Tipo de tecnología'];
+  const subcategoria = item['Subcategoría'];
+  
   return {
     id: item.id,
     nombre: item['Nombre de la tecnología'],
@@ -103,9 +115,13 @@ export function mapFromScouting(item: ScoutingQueueItem): UnifiedTechData {
     trl: item['Grado de madurez (TRL)'],
     estado_seguimiento: item['Estado del seguimiento'],
     fecha_scouting: item['Fecha de scouting'],
-    tipo: item['Tipo de tecnología'],
-    subcategoria: item['Subcategoría'],
+    tipo: tipo,
+    subcategoria: subcategoria,
     sector: item['Sector y subsector'],
+    // Scouting no tiene arrays, crear desde campos individuales
+    categorias: null,
+    tipos: tipo ? [tipo] : null,
+    subcategorias: subcategoria ? [subcategoria] : null,
     aplicacion: item['Aplicación principal'],
     descripcion: item['Descripción técnica breve'],
     ventaja: item['Ventaja competitiva clave'],
@@ -269,6 +285,8 @@ export function createScoutingActions(status: string): TechActions {
 export function mapFromCaseStudyTech(record: any): UnifiedTechData {
   // Extended fields stored in application_data JSONB
   const appData = record.application_data || {};
+  const tipo = appData.tipo || null;
+  const subcategoria = appData.subcategoria || null;
   
   return {
     id: record.id,
@@ -281,9 +299,13 @@ export function mapFromCaseStudyTech(record: any): UnifiedTechData {
     trl: appData.trl ?? null,
     estado_seguimiento: appData.estado_seguimiento || null,
     fecha_scouting: null,
-    tipo: appData.tipo || null,
-    subcategoria: appData.subcategoria || null,
+    tipo: tipo,
+    subcategoria: subcategoria,
     sector: appData.sector || null,
+    // Taxonomía de 3 niveles (desde appData si existe)
+    categorias: appData.categorias || null,
+    tipos: appData.tipos || (tipo ? [tipo] : null),
+    subcategorias: appData.subcategorias || (subcategoria ? [subcategoria] : null),
     aplicacion: appData.aplicacion || null,
     descripcion: appData.descripcion || record.selection_rationale || null,
     ventaja: appData.ventaja || null,
