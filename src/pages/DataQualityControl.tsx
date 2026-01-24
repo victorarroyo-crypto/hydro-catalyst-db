@@ -4,7 +4,7 @@
  * Comprehensive module for auditing and improving technology database quality:
  * - Dashboard with health metrics
  * - Incomplete data detection
- * - Duplicate detection
+ * - Duplicate detection with compare & merge
  * - Generic name identification
  * - Taxonomy classification management
  */
@@ -12,6 +12,16 @@ import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { 
   Database, 
   LayoutDashboard, 
@@ -23,22 +33,37 @@ import {
   Download,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDataQualityStats } from '@/hooks/useDataQualityStats';
+import { useDataQualityStats, type DuplicateGroup } from '@/hooks/useDataQualityStats';
 import { QualityDashboard } from '@/components/quality/QualityDashboard';
 import { IncompleteDataTab } from '@/components/quality/IncompleteDataTab';
 import { GenericNamesTab } from '@/components/quality/GenericNamesTab';
 import { DuplicatesTab } from '@/components/quality/DuplicatesTab';
 import { ClassificationTab } from '@/components/quality/ClassificationTab';
+import { DuplicateCompareModal } from '@/components/quality/DuplicateCompareModal';
 import { TechnologyUnifiedModal } from '@/components/TechnologyUnifiedModal';
+import { 
+  computeMergedData, 
+  executeMerge, 
+  deleteTechnology,
+  markAsNotDuplicate,
+  getExcludedGroups,
+} from '@/lib/mergeTechnologies';
 import { toast } from 'sonner';
 
 export default function DataQualityControl() {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [issueFilter, setIssueFilter] = useState<string | undefined>();
   const [selectedTechId, setSelectedTechId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Duplicate management state
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<DuplicateGroup | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [techToDelete, setTechToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const {
     technologies,
@@ -64,6 +89,11 @@ export default function DataQualityControl() {
       </div>
     );
   }
+
+  // Get duplicates filtered by exclusions
+  const allDuplicates = getDuplicates();
+  const excludedGroups = getExcludedGroups();
+  const duplicateGroups = allDuplicates.filter(g => !excludedGroups.has(g.key));
 
   const handleIssueClick = (issueType: string) => {
     if (issueType === 'duplicados') {
@@ -98,7 +128,132 @@ export default function DataQualityControl() {
     toast.info('Exportación en desarrollo');
   };
 
-  const duplicateGroups = getDuplicates();
+  // Duplicate management handlers
+  const handleCompare = (group: DuplicateGroup) => {
+    setSelectedGroup(group);
+    setCompareModalOpen(true);
+  };
+
+  const handleQuickMerge = async (group: DuplicateGroup) => {
+    if (group.technologies.length < 2) return;
+    
+    const master = group.technologies[0];
+    const duplicates = group.technologies.slice(1);
+    
+    const confirm = window.confirm(
+      `¿Fusionar ${duplicates.length} tecnología(s) en "${master.nombre}"?\n\n` +
+      `Se eliminarán:\n${duplicates.map(d => `• ${d.nombre}`).join('\n')}`
+    );
+    
+    if (!confirm) return;
+    
+    setIsProcessing(true);
+    try {
+      const { mergedData } = computeMergedData(master, duplicates);
+      const result = await executeMerge(
+        master.id,
+        duplicates.map(d => d.id),
+        mergedData
+      );
+      
+      if (result.success) {
+        toast.success(
+          `Fusión completada: ${result.deletedIds.length} tecnología(s) eliminadas` +
+          (result.mergedFields.length > 0 ? `, ${result.mergedFields.length} campo(s) actualizados` : '')
+        );
+        refetch();
+      } else {
+        toast.error(result.error || 'Error en la fusión');
+      }
+    } catch (error) {
+      console.error('Quick merge error:', error);
+      toast.error('Error al fusionar tecnologías');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleMergeFromModal = async (masterId: string, duplicateIds: string[]) => {
+    if (!selectedGroup) return;
+    
+    const master = selectedGroup.technologies.find(t => t.id === masterId);
+    const duplicates = selectedGroup.technologies.filter(t => duplicateIds.includes(t.id));
+    
+    if (!master || duplicates.length === 0) return;
+    
+    setIsProcessing(true);
+    try {
+      const { mergedData } = computeMergedData(master, duplicates);
+      const result = await executeMerge(masterId, duplicateIds, mergedData);
+      
+      if (result.success) {
+        toast.success(
+          `Fusión completada: ${result.deletedIds.length} tecnología(s) eliminadas` +
+          (result.mergedFields.length > 0 ? `, ${result.mergedFields.length} campo(s) actualizados` : '')
+        );
+        setCompareModalOpen(false);
+        refetch();
+      } else {
+        toast.error(result.error || 'Error en la fusión');
+      }
+    } catch (error) {
+      console.error('Merge error:', error);
+      toast.error('Error al fusionar tecnologías');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteFromModal = async (id: string, name: string) => {
+    setTechToDelete({ id, name });
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteTechnology = async (id: string, name: string) => {
+    setTechToDelete({ id, name });
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!techToDelete) return;
+    
+    setIsProcessing(true);
+    try {
+      const result = await deleteTechnology(techToDelete.id);
+      
+      if (result.success) {
+        toast.success(`"${techToDelete.name}" eliminada`);
+        setDeleteConfirmOpen(false);
+        setTechToDelete(null);
+        refetch();
+      } else {
+        toast.error(result.error || 'Error al eliminar');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Error al eliminar tecnología');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleMarkAsNotDuplicate = async (groupKey: string) => {
+    const group = duplicateGroups.find(g => g.key === groupKey);
+    if (!group) return;
+    
+    const result = await markAsNotDuplicate(
+      groupKey,
+      group.technologies.map(t => t.id),
+      user?.id
+    );
+    
+    if (result.success) {
+      toast.success('Grupo marcado como no duplicados');
+      refetch();
+    } else {
+      toast.error(result.error || 'Error al marcar');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -114,7 +269,7 @@ export default function DataQualityControl() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isProcessing}>
             <RefreshCw className="h-4 w-4 mr-1" />
             Actualizar
           </Button>
@@ -191,6 +346,10 @@ export default function DataQualityControl() {
             <DuplicatesTab
               duplicateGroups={duplicateGroups}
               onOpenTechnology={handleOpenTechnology}
+              onMarkAsNotDuplicate={handleMarkAsNotDuplicate}
+              onCompare={handleCompare}
+              onQuickMerge={handleQuickMerge}
+              onDeleteTechnology={handleDeleteTechnology}
             />
           </TabsContent>
 
@@ -220,6 +379,39 @@ export default function DataQualityControl() {
           onSuccess={handleModalSuccess}
         />
       )}
+
+      {/* Duplicate Compare Modal */}
+      <DuplicateCompareModal
+        open={compareModalOpen}
+        onOpenChange={setCompareModalOpen}
+        group={selectedGroup}
+        onMerge={handleMergeFromModal}
+        onDelete={handleDeleteFromModal}
+        isLoading={isProcessing}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar tecnología?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente "{techToDelete?.name}" de la base de datos. 
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              disabled={isProcessing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isProcessing ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
