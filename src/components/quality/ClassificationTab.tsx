@@ -255,7 +255,7 @@ export function ClassificationTab({ technologies, onOpenTechnology, onClassifyWi
                     <TableCell>
                       {tech.subcategoria_id ? (
                         <Badge variant="outline" className="text-xs bg-emerald-50 border-emerald-200">
-                          {tech.subcategoria || `ID: ${tech.subcategoria_id}`}
+                          {(tech.subcategorias && tech.subcategorias.length > 0 ? tech.subcategorias[0] : null) || `ID: ${tech.subcategoria_id}`}
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-600">
