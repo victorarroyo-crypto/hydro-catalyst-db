@@ -339,6 +339,7 @@ export default function DataQualityControl() {
               technologies={technologies || []}
               initialFilter={issueFilter}
               onOpenTechnology={handleOpenTechnology}
+              onRefresh={refetch}
             />
           </TabsContent>
 
