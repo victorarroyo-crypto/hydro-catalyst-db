@@ -7,12 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Edit, Sparkles, Search } from 'lucide-react';
+import { AlertTriangle, Edit, Sparkles, Search, Trash2 } from 'lucide-react';
 import type { QualityIssue } from '@/hooks/useDataQualityStats';
 
 interface GenericNamesTabProps {
   technologies: QualityIssue[];
   onOpenTechnology: (id: string) => void;
+  onDeleteTechnology?: (id: string, name: string) => void;
 }
 
 // Common generic patterns with suggestions
@@ -69,7 +70,7 @@ function generateSuggestedName(tech: QualityIssue): string {
   return parts.length > 0 ? parts.join(' ') : 'Revisar descripción para nombre';
 }
 
-export function GenericNamesTab({ technologies, onOpenTechnology }: GenericNamesTabProps) {
+export function GenericNamesTab({ technologies, onOpenTechnology, onDeleteTechnology }: GenericNamesTabProps) {
   const [search, setSearch] = useState('');
 
   // Filter only technologies with generic names
@@ -183,14 +184,26 @@ export function GenericNamesTab({ technologies, onOpenTechnology }: GenericNames
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onOpenTechnology(tech.id)}
-                        >
-                          <Edit className="h-4 w-4 mr-1" />
-                          Corregir
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onOpenTechnology(tech.id)}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Corregir
+                          </Button>
+                          {onDeleteTechnology && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => onDeleteTechnology(tech.id, tech.nombre)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
