@@ -209,6 +209,9 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
       if (isUIItem) {
         // Map from ScoutingItemUI to canonical names
         const uiItem = scoutingItem as ScoutingItemUI;
+        const tipo = uiItem.suggestedType || null;
+        const subcategoria = uiItem.suggestedSubcategory || null;
+        
         scoutData = {
           id: uiItem.id,
           nombre: uiItem.name,
@@ -220,9 +223,13 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
           trl: uiItem.trl || null,
           estado_seguimiento: null,
           fecha_scouting: uiItem.created_at || null,
-          tipo: uiItem.suggestedType || null,
-          subcategoria: uiItem.suggestedSubcategory || null,
+          tipo: tipo,
+          subcategoria: subcategoria,
           sector: uiItem.sector || null,
+          // Taxonomía de 3 niveles
+          categorias: null,
+          tipos: tipo ? [tipo] : null,
+          subcategorias: subcategoria ? [subcategoria] : null,
           aplicacion: uiItem.aplicacionPrincipal || null,
           descripcion: uiItem.description || null,
           ventaja: uiItem.competitiveAdvantage || null,
@@ -362,11 +369,19 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
     }
   }, [open, startInEditMode, technology, scoutingItem, longlistItem, caseStudyTech]);
 
+  // Inicializar taxonomySelections y editData cuando se abre el modal con datos existentes
   useEffect(() => {
     if (unifiedData && isEditing) {
       setEditData(toEditData(unifiedData));
+      // Inicializar taxonomySelections desde los datos existentes
+      const dataToUse = overrideUnifiedData || unifiedData;
+      setTaxonomySelections({
+        categorias: dataToUse.categorias || [],
+        tipos: dataToUse.tipos || [],
+        subcategorias: dataToUse.subcategorias || [],
+      });
     }
-  }, [unifiedData, isEditing]);
+  }, [unifiedData, isEditing, overrideUnifiedData]);
 
   // ========================================
   // HANDLERS
@@ -407,6 +422,7 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
           savedData = await workflowActions.saveTechnology.mutateAsync({
             id: sourceId,
             editData: enrichedEditData,
+            taxonomySelections,
           });
           break;
         case 'longlist':
@@ -451,43 +467,66 @@ export const TechnologyUnifiedModal: React.FC<TechnologyUnifiedModalProps> = ({
           return;
       }
       
-      // Para case_study, crear override inmediato con datos guardados
-      if (sourceType === 'case_study' && savedData) {
-        const updatedUnified: UnifiedTechData = {
-          id: savedData.id,
-          nombre: savedData.nombre || enrichedEditData.nombre,
-          proveedor: savedData.proveedor || enrichedEditData.proveedor || null,
-          pais: null,
-          paises_actua: savedData.paises_actua || enrichedEditData.paises_actua || null,
-          web: savedData.web || enrichedEditData.web || null,
-          email: null,
-          trl: savedData.trl ?? enrichedEditData.trl ?? null,
-          estado_seguimiento: null,
-          fecha_scouting: null,
-          tipo: null,
-          subcategoria: null,
-          sector: null,
-          aplicacion: savedData.aplicacion || enrichedEditData.aplicacion || null,
-          descripcion: savedData.descripcion || enrichedEditData.descripcion || null,
-          ventaja: savedData.ventaja || enrichedEditData.ventaja || null,
-          innovacion: savedData.innovacion || enrichedEditData.innovacion || null,
-          casos_referencia: savedData.casos_referencia || enrichedEditData.casos_referencia || null,
-          comentarios: savedData.comentarios || enrichedEditData.comentarios || null,
-          capacity: null,
-          removal_efficiency: null,
-          footprint: null,
-          power_consumption: null,
-          price_range: null,
-          business_model: null,
-          lead_time: null,
-          status: null,
-          quality_score: null,
-          review_status: null,
-          created_at: savedData.created_at || null,
-          updated_at: null,
-        };
-        setOverrideUnifiedData(updatedUnified);
-        console.log('[handleSave] Override set with:', updatedUnified);
+      // Crear override inmediato con datos guardados para CUALQUIER tipo
+      if (savedData) {
+        let updatedUnified: UnifiedTechData | null = null;
+        
+        if (sourceType === 'database') {
+          updatedUnified = mapFromTechnologies(savedData);
+        } else if (sourceType === 'scouting') {
+          updatedUnified = mapFromScouting(savedData);
+        } else if (sourceType === 'longlist') {
+          updatedUnified = mapFromLonglist(savedData, linkedTechnology);
+        } else if (sourceType === 'case_study') {
+          // Mapear desde los datos guardados de case study
+          updatedUnified = {
+            id: savedData.id,
+            nombre: savedData.nombre || enrichedEditData.nombre,
+            proveedor: savedData.proveedor || enrichedEditData.proveedor || null,
+            pais: savedData.pais || enrichedEditData.pais || null,
+            paises_actua: savedData.paises_actua || enrichedEditData.paises_actua || null,
+            web: savedData.web || enrichedEditData.web || null,
+            email: savedData.email || enrichedEditData.email || null,
+            trl: savedData.trl ?? enrichedEditData.trl ?? null,
+            estado_seguimiento: null,
+            fecha_scouting: null,
+            tipo: savedData.tipo || enrichedEditData.tipo || null,
+            subcategoria: savedData.subcategoria || enrichedEditData.subcategoria || null,
+            sector: savedData.sector || enrichedEditData.sector || null,
+            categorias: taxonomySelections.categorias.length ? taxonomySelections.categorias : null,
+            tipos: taxonomySelections.tipos.length ? taxonomySelections.tipos : null,
+            subcategorias: taxonomySelections.subcategorias.length ? taxonomySelections.subcategorias : null,
+            aplicacion: savedData.aplicacion || enrichedEditData.aplicacion || null,
+            descripcion: savedData.descripcion || enrichedEditData.descripcion || null,
+            ventaja: savedData.ventaja || enrichedEditData.ventaja || null,
+            innovacion: savedData.innovacion || enrichedEditData.innovacion || null,
+            casos_referencia: savedData.casos_referencia || enrichedEditData.casos_referencia || null,
+            comentarios: savedData.comentarios || enrichedEditData.comentarios || null,
+            capacity: null,
+            removal_efficiency: null,
+            footprint: null,
+            power_consumption: null,
+            price_range: null,
+            business_model: null,
+            lead_time: null,
+            status: null,
+            quality_score: null,
+            review_status: null,
+            created_at: savedData.created_at || null,
+            updated_at: null,
+          };
+        }
+        
+        if (updatedUnified) {
+          setOverrideUnifiedData(updatedUnified);
+          // También actualizar taxonomySelections para mantener sincronía
+          setTaxonomySelections({
+            categorias: updatedUnified.categorias || [],
+            tipos: updatedUnified.tipos || [],
+            subcategorias: updatedUnified.subcategorias || [],
+          });
+          console.log('[handleSave] UI updated immediately with:', updatedUnified);
+        }
       }
       
       setIsEditing(false);

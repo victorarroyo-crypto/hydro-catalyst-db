@@ -23,11 +23,16 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
 }) => {
   const isInactive = technology.status === 'inactive';
   
-  // Get taxonomy from arrays or legacy text field
+  // Priorizar arrays de taxonomía sobre campos legacy
+  const hasArrayTaxonomy = (technology.categorias && technology.categorias.length > 0) ||
+                           (technology.tipos && technology.tipos.length > 0) ||
+                           (technology.subcategorias && technology.subcategorias.length > 0);
+  
+  // Get legacy taxonomy from arrays or text field (fallback)
   const displayTipo = technology.tipos?.[0] || technology.tipo;
   const displaySubcat = technology.subcategorias?.[0] || null;
   const displaySector = technology.sector;
-  const hasTaxonomy = !!(displayTipo || displaySubcat || displaySector);
+  const hasTaxonomy = hasArrayTaxonomy || !!(displayTipo || displaySubcat || displaySector);
   
   // Check if unclassified (no tipo in any form)
   const isUnclassified = !displayTipo && !technology.tipo_id;
@@ -109,22 +114,48 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
         </div>
 
         <div className="mt-3 pt-3 border-t border-border space-y-2">
-          {/* Taxonomy badges */}
+          {/* Taxonomy badges - priorizar arrays de 3 niveles */}
           {hasTaxonomy && (
             <div className="flex flex-wrap gap-1.5">
-              {displayTipo && (
+              {/* Mostrar categorías si hay arrays */}
+              {technology.categorias && technology.categorias.length > 0 && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Tag className="w-3 h-3" />
+                  {technology.categorias[0]}
+                  {technology.categorias.length > 1 && ` +${technology.categorias.length - 1}`}
+                </Badge>
+              )}
+              
+              {/* Mostrar tipos (priorizar array, fallback a legacy) */}
+              {technology.tipos && technology.tipos.length > 0 ? (
+                <Badge variant="default" className="text-xs gap-1">
+                  <Layers className="w-3 h-3" />
+                  {technology.tipos[0]}
+                  {technology.tipos.length > 1 && ` +${technology.tipos.length - 1}`}
+                </Badge>
+              ) : displayTipo && !technology.categorias?.length && (
                 <Badge variant="default" className="text-xs gap-1">
                   <Tag className="w-3 h-3" />
                   {displayTipo}
                 </Badge>
               )}
-              {displaySubcat && (
+              
+              {/* Mostrar subcategorías (priorizar array, fallback a legacy) */}
+              {technology.subcategorias && technology.subcategorias.length > 0 ? (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  <Grid3X3 className="w-3 h-3" />
+                  {technology.subcategorias[0]}
+                  {technology.subcategorias.length > 1 && ` +${technology.subcategorias.length - 1}`}
+                </Badge>
+              ) : displaySubcat && !hasArrayTaxonomy && (
                 <Badge variant="secondary" className="text-xs gap-1">
                   <Layers className="w-3 h-3" />
                   {displaySubcat}
                 </Badge>
               )}
-              {displaySector && (
+              
+              {/* Sector solo si no hay arrays y hay valor */}
+              {!hasArrayTaxonomy && displaySector && (
                 <Badge variant="outline" className="text-xs gap-1">
                   <Grid3X3 className="w-3 h-3" />
                   {displaySector}
