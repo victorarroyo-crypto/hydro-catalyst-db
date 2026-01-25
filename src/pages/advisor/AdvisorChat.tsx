@@ -30,6 +30,8 @@ import { ToolCard } from '@/components/advisor/ToolCard';
 import { AdvisorMessage } from '@/components/advisor/AdvisorMessage';
 import { ServicesBar } from '@/components/advisor/ServicesBar';
 import { DeepAdvisorConfigPopover } from '@/components/advisor/DeepAdvisorConfigPopover';
+import { DeepModeToggle, useDeepMode } from '@/components/advisor/DeepModeToggle';
+import { AgentAnalysesAccordion } from '@/components/advisor/AgentAnalysesAccordion';
 import { ComparadorModal, type ComparadorData } from '@/components/advisor/modals/ComparadorModal';
 import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/ChecklistModal';
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
@@ -47,6 +49,7 @@ export default function AdvisorChat() {
     messages, 
     isLoading, 
     isStreaming,
+    isDeepProcessing,
     sendMessage, 
     startNewChat, 
     chatId,
@@ -54,6 +57,7 @@ export default function AdvisorChat() {
   } = useAdvisorChat(advisorUser?.id);
   const { balance, freeRemaining, refetch: refetchCredits } = useAdvisorCredits(advisorUser?.id);
   const { config: deepConfig } = useDeepAdvisorConfig();
+  const { deepMode, setDeepMode } = useDeepMode();
   
   const [inputValue, setInputValue] = useState('');
   const [activeModal, setActiveModal] = useState<'comparador' | 'checklist' | 'ficha' | 'presupuesto' | null>(null);
@@ -138,7 +142,19 @@ export default function AdvisorChat() {
     setInputValue('');
 
     try {
-      await sendMessage(message, synthesisModel);
+      // Pass deep mode flag and config to sendMessage
+      await sendMessage(
+        message, 
+        synthesisModel, 
+        deepMode,
+        deepMode ? {
+          synthesis_model: deepConfig?.current?.synthesis_model,
+          analysis_model: deepConfig?.current?.analysis_model,
+          search_model: deepConfig?.current?.search_model,
+          enable_web_search: deepConfig?.current?.enable_web_search,
+          enable_rag: deepConfig?.current?.enable_rag,
+        } : undefined
+      );
       refetchCredits();
     } catch (error) {
       toast.error('Error al enviar el mensaje. Inténtalo de nuevo.');
@@ -177,6 +193,15 @@ export default function AdvisorChat() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Deep Mode Toggle */}
+            <DeepModeToggle 
+              isProcessing={isDeepProcessing}
+              onChange={setDeepMode}
+            />
+
+            {/* Separator */}
+            <div className="h-6 w-px bg-white/20" />
+
             {/* Credits Badge */}
             <Badge className="gap-1.5 px-3 py-1.5 bg-white/20 text-white border-white/30 hover:bg-white/30">
               <CreditCard className="w-3.5 h-3.5" />
@@ -325,6 +350,11 @@ export default function AdvisorChat() {
                   <ToolCard metadata={message.metadata.tool_data} />
                 )}
 
+                {/* Agent Analyses Accordion (Deep Mode) */}
+                {message.role === 'assistant' && message.agentAnalyses && message.agentAnalyses.length > 0 && (
+                  <AgentAnalysesAccordion analyses={message.agentAnalyses} />
+                )}
+
                 {/* Credits used indicator */}
                 {message.role === 'assistant' && message.credits_used !== undefined && (
                   <div className="mt-3 pt-2 border-t border-border/30 text-xs text-muted-foreground">
@@ -340,7 +370,14 @@ export default function AdvisorChat() {
             <div className="flex gap-3">
               <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
               <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
-                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#32b4cd' }} />
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#32b4cd' }} />
+                  {isDeepProcessing && (
+                    <span className="text-sm text-muted-foreground">
+                      Analizando con 4 expertos...
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           )}

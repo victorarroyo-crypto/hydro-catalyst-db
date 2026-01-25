@@ -1,6 +1,7 @@
 // Types for AI Advisor Chat functionality
 
 import { ToolMetadata } from './advisorTools';
+import type { AgentAnalysis } from '@/components/advisor/AgentAnalysesAccordion';
 
 export interface Source {
   name: string;
@@ -77,6 +78,7 @@ export interface Message {
   created_at: string;
   metadata?: MessageMetadata;
   attachments?: AttachmentInfo[];
+  agentAnalyses?: AgentAnalysis[];
 }
 
 export interface AttachmentInfo {
