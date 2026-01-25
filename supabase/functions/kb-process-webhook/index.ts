@@ -32,7 +32,9 @@ serve(async (req) => {
       chunks_created,  // Railway puede enviar este campo
       description,
       error_message,
-      chunks  // Railway puede enviar los chunks aquí
+      chunks,  // Railway puede enviar los chunks aquí
+      existing_document_id,  // Para duplicados
+      existing_document_name  // Para duplicados
     } = payload
 
     // Usar chunks_created si existe, chunk_count como fallback
@@ -53,6 +55,38 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Handle duplicate status - Railway ya eliminó el registro de la BD externa
+    // Actualizamos el registro local para notificar al frontend
+    if (status === 'duplicate') {
+      console.log(`[KB-WEBHOOK] Duplicate detected for ${document_id}`)
+      console.log(`[KB-WEBHOOK] Existing document: ${existing_document_name} (${existing_document_id})`)
+      
+      // Actualizar el documento local con status "duplicate" y metadata del existente
+      const { error: updateError } = await supabase
+        .from('knowledge_documents')
+        .update({
+          status: 'duplicate',
+          description: `Duplicado de: ${existing_document_name || 'documento existente'}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', document_id)
+      
+      if (updateError) {
+        console.error('[KB-WEBHOOK] Error updating duplicate status:', updateError)
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Duplicate acknowledged',
+          document_id,
+          existing_document_id,
+          existing_document_name
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     // Si Railway envía los chunks, insertarlos en knowledge_chunks
     let insertedChunksCount = 0

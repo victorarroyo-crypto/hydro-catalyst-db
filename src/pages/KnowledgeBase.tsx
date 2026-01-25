@@ -479,6 +479,13 @@ export default function KnowledgeBase() {
           } else if (oldDoc.status !== 'failed' && newDoc.status === 'failed') {
             toast.error(`"${newDoc.name}" falló al procesar`, { duration: 4000 });
             queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+          } else if (oldDoc.status !== 'duplicate' && newDoc.status === 'duplicate') {
+            // Documento duplicado detectado por Railway
+            toast.warning(
+              `Este documento ya existe: ${newDoc.description?.replace('Duplicado de: ', '') || 'ver documento existente'}`,
+              { duration: 6000 }
+            );
+            queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
           }
         }
       )
