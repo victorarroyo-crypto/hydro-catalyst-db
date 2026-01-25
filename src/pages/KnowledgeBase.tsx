@@ -244,6 +244,7 @@ const DOCUMENT_SECTOR_OPTIONS = [
   { value: 'food_beverage', label: 'Alimentación y Bebidas', icon: '🍔' },
   { value: 'pulp_paper', label: 'Celulosa y Papel', icon: '📜' },
   { value: 'textile', label: 'Textil', icon: '👕' },
+  { value: 'plastics', label: 'Plásticos', icon: '♻️' },
   { value: 'chemical', label: 'Química', icon: '⚗️' },
   { value: 'pharma', label: 'Farmacéutica', icon: '💊' },
   { value: 'oil_gas', label: 'Oil & Gas', icon: '⛽' },
