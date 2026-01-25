@@ -35,28 +35,38 @@ export const DeepAdvisorConfigPopover: React.FC = () => {
   const [hasChanges, setHasChanges] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Initialize from config
-  useEffect(() => {
-    if (config?.current) {
-      setSearchModel(config.current.search_model);
-      setAnalysisModel(config.current.analysis_model);
-      setSynthesisModel(config.current.synthesis_model);
-      setEnableWebSearch(config.current.enable_web_search);
-      setEnableRag(config.current.enable_rag);
-    }
-  }, [config]);
+  // Get effective current values (from config.current or defaults)
+  const effectiveSearch = config?.current?.search_model || config?.phases?.search?.default || '';
+  const effectiveAnalysis = config?.current?.analysis_model || config?.phases?.analysis?.default || '';
+  const effectiveSynthesis = config?.current?.synthesis_model || config?.phases?.synthesis?.default || '';
+  const effectiveWebSearch = config?.current?.enable_web_search ?? true;
+  const effectiveRag = config?.current?.enable_rag ?? true;
 
-  // Track changes
+  // Initialize from config (use effective values)
   useEffect(() => {
-    if (!config?.current) return;
+    if (config?.phases) {
+      setSearchModel(effectiveSearch);
+      setAnalysisModel(effectiveAnalysis);
+      setSynthesisModel(effectiveSynthesis);
+      setEnableWebSearch(effectiveWebSearch);
+      setEnableRag(effectiveRag);
+    }
+  }, [config, effectiveSearch, effectiveAnalysis, effectiveSynthesis, effectiveWebSearch, effectiveRag]);
+
+  // Track changes against effective values
+  useEffect(() => {
+    if (!config?.phases) {
+      setHasChanges(false);
+      return;
+    }
     const changed =
-      searchModel !== config.current.search_model ||
-      analysisModel !== config.current.analysis_model ||
-      synthesisModel !== config.current.synthesis_model ||
-      enableWebSearch !== config.current.enable_web_search ||
-      enableRag !== config.current.enable_rag;
+      searchModel !== effectiveSearch ||
+      analysisModel !== effectiveAnalysis ||
+      synthesisModel !== effectiveSynthesis ||
+      enableWebSearch !== effectiveWebSearch ||
+      enableRag !== effectiveRag;
     setHasChanges(changed);
-  }, [searchModel, analysisModel, synthesisModel, enableWebSearch, enableRag, config]);
+  }, [searchModel, analysisModel, synthesisModel, enableWebSearch, enableRag, effectiveSearch, effectiveAnalysis, effectiveSynthesis, effectiveWebSearch, effectiveRag, config]);
 
   const handleSave = () => {
     saveConfig({
