@@ -550,7 +550,7 @@ export default function KnowledgeBase() {
   const estimatedCostMin = (3000 * 0.6 * pricing.input + 3000 * 0.4 * pricing.output) / 1_000_000;
   const estimatedCostMax = (8000 * 0.6 * pricing.input + 8000 * 0.4 * pricing.output) / 1_000_000;
 
-  const STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024;
+  const STORAGE_LIMIT_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB Pro plan limit
 
   // Fetch documents from Lovable Cloud (source of truth for KB documents)
   const { data: documents, isLoading: loadingDocs } = useQuery({
@@ -2045,70 +2045,6 @@ export default function KnowledgeBase() {
             </CardContent>
           </Card>
 
-          {/* Query Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Search className="h-5 w-5" />
-                Consulta Técnica
-              </CardTitle>
-              <CardDescription>
-                Haz preguntas sobre tratamiento de aguas basadas en los documentos cargados
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <InstructionTip variant="green" icon="lightbulb" persistKey="kb-query-tip">
-                Escribe tu pregunta y la IA buscará respuestas en los documentos cargados. 
-                Coste estimado: ~${estimatedCostMin.toFixed(4)}-${estimatedCostMax.toFixed(4)}/consulta.
-              </InstructionTip>
-              
-              <div className="flex gap-2">
-                <Textarea
-                  placeholder="Ej: ¿Cuál es la eficiencia típica de un reactor MBR?"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="min-h-[100px]"
-                />
-              </div>
-              <div className="flex justify-between items-center">
-                <Button onClick={handleQuery} disabled={querying || !query.trim()}>
-                  {querying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                  Consultar
-                </Button>
-                {lastQueryCost && (
-                  <span className="text-xs text-muted-foreground">
-                    Coste: ${lastQueryCost.toFixed(4)}
-                  </span>
-                )}
-              </div>
-
-              {queryResult && (
-                <Card className="mt-4">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Respuesta</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                      <ReactMarkdown>{queryResult.answer}</ReactMarkdown>
-                    </div>
-                    {queryResult.sources.length > 0 && (
-                      <div className="mt-4 pt-4 border-t">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">Fuentes:</p>
-                        <div className="space-y-1">
-                          {queryResult.sources.map((source, i) => (
-                            <div key={i} className="text-xs text-muted-foreground flex items-center gap-1">
-                              <FileText className="w-3 h-3" />
-                              {source.documentName}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-            </CardContent>
-          </Card>
 
           {/* Documents List */}
           <Card>
