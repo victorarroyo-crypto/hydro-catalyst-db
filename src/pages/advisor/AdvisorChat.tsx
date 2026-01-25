@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import { 
   Send, 
   Loader2, 
@@ -19,7 +19,7 @@ import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
 import { useAdvisorServices } from '@/hooks/useAdvisorServices';
-import { useLLMModels, getDefaultModel, isFreeModel, formatModelCost } from '@/hooks/useLLMModels';
+import { useDeepAdvisorConfig } from '@/hooks/useDeepAdvisorConfig';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
@@ -53,13 +53,9 @@ export default function AdvisorChat() {
     stopStreaming,
   } = useAdvisorChat(advisorUser?.id);
   const { balance, freeRemaining, refetch: refetchCredits } = useAdvisorCredits(advisorUser?.id);
-  
-  // Fetch LLM models from Railway
-  const { data: llmData, isLoading: modelsLoading } = useLLMModels();
-  const models = llmData?.models ?? [];
+  const { config: deepConfig } = useDeepAdvisorConfig();
   
   const [inputValue, setInputValue] = useState('');
-  const [selectedModel, setSelectedModel] = useState<string>('');
   const [activeModal, setActiveModal] = useState<'comparador' | 'checklist' | 'ficha' | 'presupuesto' | null>(null);
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -76,14 +72,6 @@ export default function AdvisorChat() {
       // Credits updated callback - refetch will handle this
     }
   );
-  
-  // Set default model when models load
-  useEffect(() => {
-    if (llmData && !selectedModel) {
-      const defaultModel = getDefaultModel(llmData);
-      if (defaultModel) setSelectedModel(defaultModel.key);
-    }
-  }, [llmData, selectedModel]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -137,15 +125,11 @@ export default function AdvisorChat() {
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    const model = models.find(m => m.key === selectedModel);
-    if (!model) return;
+    // Use synthesis model from deep config
+    const synthesisModel = deepConfig?.current?.synthesis_model || 'claude-sonnet-4-5-20250929';
 
-    // Check if user can send (has free queries or credits)
-    const canUseFreeModel = freeRemaining > 0 && isFreeModel(model);
-    const creditCost = model.cost_per_query * 100; // Convert to credits (approx)
-    const hasCredits = balance >= creditCost;
-
-    if (!canUseFreeModel && !hasCredits) {
+    // Check if user has credits (simplified - deep advisor handles model costs)
+    if (freeRemaining <= 0 && balance <= 0) {
       toast.error('No tienes créditos suficientes. Compra un pack para continuar.');
       return;
     }
@@ -154,7 +138,7 @@ export default function AdvisorChat() {
     setInputValue('');
 
     try {
-      await sendMessage(message, selectedModel);
+      await sendMessage(message, synthesisModel);
       refetchCredits();
     } catch (error) {
       toast.error('Error al enviar el mensaje. Inténtalo de nuevo.');
@@ -177,8 +161,8 @@ export default function AdvisorChat() {
     );
   }
 
-  const currentModel = models.find(m => m.key === selectedModel);
-  const canUseFree = freeRemaining > 0 && currentModel && isFreeModel(currentModel);
+  // Determine if user can use free queries
+  const canUseFree = freeRemaining > 0;
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50">
@@ -202,34 +186,6 @@ export default function AdvisorChat() {
               )}
             </Badge>
 
-            {/* Model Selector */}
-            <Select value={selectedModel} onValueChange={setSelectedModel} disabled={modelsLoading}>
-              <SelectTrigger className="w-[200px] bg-white/10 border-white/30 text-white hover:bg-white/20">
-                <SelectValue placeholder={modelsLoading ? "Cargando..." : "Modelo"} />
-              </SelectTrigger>
-              <SelectContent className="max-w-[300px]">
-                {models.map((model) => (
-                  <SelectItem key={model.key} value={model.key}>
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <span className="truncate">{model.name}</span>
-                      {model.is_free && (
-                        <Badge variant="outline" className="text-[10px] px-1 py-0 bg-[#8cb63c]/10 text-[#8cb63c] border-[#8cb63c]/30 shrink-0">
-                          Gratis
-                        </Badge>
-                      )}
-                      {model.is_recommended && (
-                        <Badge className="text-[10px] px-1 py-0 shrink-0 bg-[#32b4cd] text-white">
-                          Recomendado
-                        </Badge>
-                      )}
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {formatModelCost(model.cost_per_query)}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <DeepAdvisorConfigPopover />
             <Button variant="ghost" size="icon" onClick={() => navigate('/advisor/dashboard')} title="Dashboard" className="text-white hover:bg-white/20">
               <LayoutDashboard className="w-4 h-4" />
@@ -450,7 +406,7 @@ export default function AdvisorChat() {
             <span>
               {canUseFree 
                 ? `Consulta gratuita (${freeRemaining} restantes)`
-                : currentModel ? formatModelCost(currentModel.cost_per_query) : ''
+                : `Créditos: ${balance.toFixed(2)}`
               }
             </span>
             <span className="text-border">•</span>
