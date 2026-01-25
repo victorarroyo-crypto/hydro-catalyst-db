@@ -126,11 +126,11 @@ export function getValidatedConfig(config: DeepAdvisorConfigResponse | undefined
 
 // Check if any configured model is invalid
 export function hasInvalidModels(config: DeepAdvisorConfigResponse | undefined): boolean {
-  if (!config) return false;
+  if (!config?.phases || !config?.current) return false;
   
-  const searchValid = config.phases.search.options.some(o => o.key === config.current.search_model);
-  const analysisValid = config.phases.analysis.options.some(o => o.key === config.current.analysis_model);
-  const synthesisValid = config.phases.synthesis.options.some(o => o.key === config.current.synthesis_model);
+  const searchValid = config.phases.search?.options?.some(o => o.key === config.current.search_model) ?? true;
+  const analysisValid = config.phases.analysis?.options?.some(o => o.key === config.current.analysis_model) ?? true;
+  const synthesisValid = config.phases.synthesis?.options?.some(o => o.key === config.current.synthesis_model) ?? true;
   
   return !searchValid || !analysisValid || !synthesisValid;
 }
