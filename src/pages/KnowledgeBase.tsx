@@ -579,6 +579,23 @@ export default function KnowledgeBase() {
     }
   }, [documents]);
 
+  // Polling fallback: refresh document list while any are processing
+  // This catches cases where Realtime events are missed (e.g., tab was inactive)
+  useEffect(() => {
+    const hasProcessingDocs = documents?.some(
+      doc => doc.status === 'pending' || doc.status === 'processing'
+    );
+    
+    if (!hasProcessingDocs) return;
+    
+    const interval = setInterval(() => {
+      console.log("[KB] Polling fallback: refreshing document list");
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+    }, 10000); // Refresh every 10 seconds while documents are processing
+    
+    return () => clearInterval(interval);
+  }, [documents, queryClient]);
+
   const { data: sources, isLoading: loadingSources } = useQuery({
     queryKey: ["scouting-sources"],
     queryFn: async () => {
