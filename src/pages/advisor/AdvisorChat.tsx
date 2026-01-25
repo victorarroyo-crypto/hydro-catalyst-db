@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
+import { useDeepAdvisorStream } from '@/hooks/useDeepAdvisorStream';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
 import { useAdvisorServices } from '@/hooks/useAdvisorServices';
 import { useDeepAdvisorConfig, getValidatedConfig } from '@/hooks/useDeepAdvisorConfig';
@@ -32,7 +33,8 @@ import { ServicesBar } from '@/components/advisor/ServicesBar';
 import { DeepAdvisorConfigPopover } from '@/components/advisor/DeepAdvisorConfigPopover';
 import { DeepModeToggle, useDeepMode } from '@/components/advisor/DeepModeToggle';
 import { AgentAnalysesAccordion } from '@/components/advisor/AgentAnalysesAccordion';
-import { DeepAdvisorProgressIndicator } from '@/components/advisor/DeepAdvisorProgressIndicator';
+import { StreamingProgress, StreamingResponse, SourcesPanel } from '@/components/advisor/streaming';
+import { StreamingModeToggle, useStreamingMode } from '@/components/advisor/streaming/StreamingModeToggle';
 import { ComparadorModal, type ComparadorData } from '@/components/advisor/modals/ComparadorModal';
 import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/ChecklistModal';
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
@@ -46,6 +48,8 @@ import type { Message, AttachmentInfo } from '@/types/advisorChat';
 export default function AdvisorChat() {
   const navigate = useNavigate();
   const { advisorUser, signOut, isAuthenticated, isLoading: authLoading } = useAdvisorAuth();
+  
+  // Standard chat hook (non-streaming)
   const { 
     messages, 
     isLoading, 
@@ -56,14 +60,25 @@ export default function AdvisorChat() {
     chatId,
     stopStreaming,
   } = useAdvisorChat(advisorUser?.id);
+  
+  // Streaming hook for Deep Mode
+  const deepStream = useDeepAdvisorStream();
+  
   const { balance, freeRemaining, refetch: refetchCredits } = useAdvisorCredits(advisorUser?.id);
   const { config: deepConfig } = useDeepAdvisorConfig();
   const { deepMode, setDeepMode } = useDeepMode();
+  const { streamingMode, setStreamingMode } = useStreamingMode();
   
   const [inputValue, setInputValue] = useState('');
   const [activeModal, setActiveModal] = useState<'comparador' | 'checklist' | 'ficha' | 'presupuesto' | null>(null);
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
+  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Determine if we should use streaming (Deep Mode + Streaming enabled)
+  const useStreamingUI = deepMode && streamingMode;
+  const isAnyLoading = isLoading || deepStream.isStreaming;
+  const isAnyStreaming = isStreaming || deepStream.isStreaming;
   
   // Hook for special services
   const { callService, isLoading: serviceLoading } = useAdvisorServices(
@@ -128,7 +143,7 @@ export default function AdvisorChat() {
   };
 
   const handleSend = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    if (!inputValue.trim() || isAnyLoading) return;
 
     // Get validated config to ensure all models are valid
     const validatedConfig = getValidatedConfig(deepConfig);
@@ -146,20 +161,39 @@ export default function AdvisorChat() {
     setInputValue('');
 
     try {
-      // Pass deep mode flag and validated config to sendMessage
-      await sendMessage(
-        message, 
-        synthesisModel, 
-        deepMode,
-        deepMode && validatedConfig ? {
-          synthesis_model: validatedConfig.synthesis_model,
-          analysis_model: validatedConfig.analysis_model,
-          search_model: validatedConfig.search_model,
-          enable_web_search: validatedConfig.enable_web_search,
-          enable_rag: validatedConfig.enable_rag,
-        } : undefined
-      );
-      refetchCredits();
+      // Use streaming endpoint if Deep Mode + Streaming are enabled
+      if (useStreamingUI && advisorUser?.id) {
+        setPendingUserMessage(message);
+        deepStream.reset();
+        await deepStream.sendMessage(
+          message,
+          advisorUser.id,
+          chatId,
+          validatedConfig ? {
+            synthesis_model: validatedConfig.synthesis_model,
+            analysis_model: validatedConfig.analysis_model,
+            search_model: validatedConfig.search_model,
+            enable_web_search: validatedConfig.enable_web_search,
+            enable_rag: validatedConfig.enable_rag,
+          } : undefined
+        );
+        refetchCredits();
+      } else {
+        // Use standard endpoint (streaming or non-streaming based on deep mode)
+        await sendMessage(
+          message, 
+          synthesisModel, 
+          deepMode,
+          deepMode && validatedConfig ? {
+            synthesis_model: validatedConfig.synthesis_model,
+            analysis_model: validatedConfig.analysis_model,
+            search_model: validatedConfig.search_model,
+            enable_web_search: validatedConfig.enable_web_search,
+            enable_rag: validatedConfig.enable_rag,
+          } : undefined
+        );
+        refetchCredits();
+      }
     } catch (error) {
       toast.error('Error al enviar el mensaje. Inténtalo de nuevo.');
     }
@@ -169,6 +203,14 @@ export default function AdvisorChat() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleStopStreaming = () => {
+    if (useStreamingUI) {
+      deepStream.stopStreaming();
+    } else {
+      stopStreaming();
     }
   };
 
@@ -197,9 +239,21 @@ export default function AdvisorChat() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Streaming Mode Toggle (only visible when Deep Mode is on) */}
+            {deepMode && (
+              <>
+                <StreamingModeToggle
+                  enabled={streamingMode}
+                  onChange={setStreamingMode}
+                  disabled={isAnyLoading}
+                />
+                <div className="h-6 w-px bg-white/20" />
+              </>
+            )}
+
             {/* Deep Mode Toggle */}
             <DeepModeToggle 
-              isProcessing={isDeepProcessing}
+              isProcessing={isDeepProcessing || deepStream.isStreaming}
               onChange={setDeepMode}
             />
 
@@ -369,21 +423,75 @@ export default function AdvisorChat() {
             </div>
           ))}
 
-          {/* Loading indicator */}
-          {isLoading && (
+          {/* Streaming Deep Mode Response */}
+          {useStreamingUI && (deepStream.isStreaming || deepStream.response || pendingUserMessage) && (
+            <>
+              {/* User message for streaming */}
+              {pendingUserMessage && (
+                <div className="flex gap-3 flex-row-reverse">
+                  <div
+                    className="flex-1 max-w-[85%] rounded-2xl p-4 text-white rounded-tr-none"
+                    style={{ background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)' }}
+                  >
+                    <div className="whitespace-pre-wrap">{pendingUserMessage}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Streaming assistant response */}
+              <div className="flex gap-3">
+                <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
+                <div className="flex-1 max-w-[85%] space-y-3">
+                  {/* Progress Panel */}
+                  {deepStream.isStreaming && (
+                    <StreamingProgress
+                      phase={deepStream.phase}
+                      phaseMessage={deepStream.phaseMessage}
+                      agents={deepStream.agents}
+                      isStreaming={deepStream.isStreaming}
+                      error={deepStream.error}
+                    />
+                  )}
+
+                  {/* Streaming Response */}
+                  {(deepStream.response || deepStream.isStreaming) && (
+                    <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
+                      <StreamingResponse
+                        content={deepStream.response}
+                        isStreaming={deepStream.isStreaming}
+                      />
+                      
+                      {/* Sources Panel - appears when complete */}
+                      {!deepStream.isStreaming && deepStream.sources.length > 0 && (
+                        <SourcesPanel sources={deepStream.sources} />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Error display */}
+                  {deepStream.error && !deepStream.isStreaming && (
+                    <div className="bg-red-50 border border-red-200 rounded-2xl rounded-tl-none p-4 text-red-700 text-sm">
+                      {deepStream.error}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Standard Loading indicator (non-streaming) */}
+          {isLoading && !useStreamingUI && (
             <div className="flex gap-3">
               <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
               <div className="flex-1 max-w-[85%]">
-                {isDeepProcessing ? (
-                  <DeepAdvisorProgressIndicator isProcessing={isDeepProcessing} />
-                ) : (
-                  <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#32b4cd' }} />
-                      <span className="text-sm text-muted-foreground">Pensando...</span>
-                    </div>
+                <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">
+                      {isDeepProcessing ? 'Analizando en profundidad...' : 'Pensando...'}
+                    </span>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
@@ -407,22 +515,21 @@ export default function AdvisorChat() {
                 setAttachments(prev => [...prev, ...newAttachments]);
               }}
               onRemove={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
-              disabled={isLoading}
+              disabled={isAnyLoading}
             />
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Escribe tu consulta sobre tratamiento de agua..."
-              disabled={isLoading}
+              disabled={isAnyLoading}
               className="flex-1 border-0 shadow-none focus-visible:ring-0 h-14 text-base px-4"
             />
-            {isStreaming ? (
+            {isAnyStreaming ? (
               <Button 
-                onClick={stopStreaming}
+                onClick={handleStopStreaming}
                 size="lg" 
-                className="h-14 px-6 gap-2 text-white"
-                style={{ background: '#ffa720' }}
+                className="h-14 px-6 gap-2 text-white bg-amber-500 hover:bg-amber-600"
               >
                 <Square className="w-4 h-4" />
                 Detener
@@ -430,12 +537,12 @@ export default function AdvisorChat() {
             ) : (
               <Button 
                 onClick={handleSend} 
-                disabled={isLoading || !inputValue.trim()} 
+                disabled={isAnyLoading || !inputValue.trim()} 
                 size="lg" 
                 className="h-14 px-8 text-white"
                 style={{ background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)' }}
               >
-                {isLoading ? (
+                {isAnyLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <Send className="w-5 h-5" />
