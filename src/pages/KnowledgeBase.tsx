@@ -2596,8 +2596,8 @@ export default function KnowledgeBase() {
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-2">
-                                    <p 
-                                      className="font-medium truncate cursor-pointer hover:text-primary"
+                                  <p 
+                                      className="font-medium line-clamp-2 break-all cursor-pointer hover:text-primary"
                                       onClick={() => { setEditingGroupBaseName(group.baseName); setEditingGroupNewName(group.baseName); }}
                                       title="Clic para editar"
                                     >
@@ -2749,7 +2749,7 @@ export default function KnowledgeBase() {
                                 </Button>
                               </div>
                             ) : (
-                              <p className="font-medium truncate">{doc.name}</p>
+                              <p className="font-medium line-clamp-2 break-all">{doc.name}</p>
                             )}
                             
                             {/* Editable description */}
