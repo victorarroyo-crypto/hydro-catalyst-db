@@ -25,6 +25,7 @@ import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { DeepAdvisorConfigPanel } from '@/components/advisor/DeepAdvisorConfigPanel';
 
 export default function AdvisorDashboard() {
   const navigate = useNavigate();
@@ -244,6 +245,9 @@ export default function AdvisorDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Deep Advisor Configuration */}
+        <DeepAdvisorConfigPanel variant="collapsible" />
 
         {/* Consultation CTA */}
         <Card className="bg-primary/5 border-primary/20">
