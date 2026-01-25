@@ -1484,15 +1484,35 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Download document handler - direct Railway call
+  // Download document handler - fetches as blob to avoid ad-blocker issues
   const handleDownloadDocument = async (doc: KnowledgeDocument) => {
     try {
       console.log('Download document via Railway:', doc.id);
       const data = await callKBRailway(`/api/kb/document/${doc.id}/download`, 'GET');
       
       if (data.download_url) {
-        // Open the pre-signed download URL in a new tab
-        window.open(data.download_url, '_blank');
+        // Fetch the file as blob to avoid browser/extension blocking
+        const response = await fetch(data.download_url);
+        
+        if (!response.ok) {
+          throw new Error(`Error al descargar: ${response.status}`);
+        }
+        
+        const blob = await response.blob();
+        
+        // Create a local blob URL and trigger download
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = doc.name || 'documento.pdf';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Clean up blob URL after a short delay
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        
+        toast.success('Documento descargado correctamente');
       } else {
         throw new Error('No se recibió URL de descarga');
       }
@@ -1502,6 +1522,8 @@ export default function KnowledgeBase() {
       const errorMsg = error?.message || '';
       if (errorMsg.includes('500') || errorMsg.includes('not found') || errorMsg.includes('no file_url')) {
         toast.error('Este documento fue procesado antes del fix de URLs. Reprocésalo para habilitar la descarga.');
+      } else if (errorMsg.includes('blocked') || errorMsg.includes('CORS')) {
+        toast.error('Descarga bloqueada. Desactiva tu ad-blocker temporalmente.');
       } else {
         toast.error(errorMsg || 'Error al descargar el documento');
       }
