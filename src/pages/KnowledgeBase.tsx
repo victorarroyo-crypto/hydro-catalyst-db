@@ -35,6 +35,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { splitPdfIfNeeded } from "@/hooks/usePdfSplitter";
+import { compressPdf } from "@/hooks/usePdfCompressor";
 import { getModelPricing, formatCost, estimateCostFromTotal } from "@/lib/aiModelPricing";
 import { useLLMModels, getDefaultModel, formatModelCost } from "@/hooks/useLLMModels";
 import { API_URL } from "@/lib/api";
@@ -602,14 +603,35 @@ export default function KnowledgeBase() {
       }
       console.log("[KB-UPLOAD] User authenticated:", authData.user.id);
 
+      // Comprimir PDF antes de subir
+      let fileToUpload: Blob | File = file;
+      let finalSize = file.size;
+      
+      if (file.type === 'application/pdf') {
+        try {
+          const { compressedBlob, originalSize, compressedSize, compressionRatio } = 
+            await compressPdf(file, { removeMetadata: true });
+          
+          // Solo usar comprimido si realmente es más pequeño
+          if (compressedSize < originalSize) {
+            fileToUpload = compressedBlob;
+            finalSize = compressedSize;
+            toast.info(`PDF comprimido: ${compressionRatio.toFixed(0)}% reducción`);
+          }
+        } catch (compressError) {
+          console.warn("[KB-UPLOAD] Compression failed, using original:", compressError);
+          // Continuar con archivo original si falla compresión
+        }
+      }
+
       // Store under user folder so paths are unique and consistent
       const filePath = `${authData.user.id}/${Date.now()}-${file.name}`;
-      console.log("[KB-UPLOAD] Uploading to path:", filePath);
+      console.log("[KB-UPLOAD] Uploading to path:", filePath, "Size:", (finalSize / 1024 / 1024).toFixed(2), "MB");
 
       // Upload to Lovable Cloud storage (where edge function reads from)
       const { error: uploadError } = await supabase.storage
         .from("knowledge-documents")
-        .upload(filePath, file);
+        .upload(filePath, fileToUpload);
 
       if (uploadError) {
         console.error("[KB-UPLOAD] Storage upload error:", uploadError);
@@ -618,12 +640,13 @@ export default function KnowledgeBase() {
       console.log("[KB-UPLOAD] File uploaded to storage successfully");
 
       // Insert into Lovable Cloud database (where edge function queries)
+      // Guardar tamaño comprimido real
       const { data: doc, error: docError } = await supabase
         .from("knowledge_documents")
         .insert({
           name: file.name,
           file_path: filePath,
-          file_size: file.size,
+          file_size: finalSize, // Usar tamaño comprimido
           mime_type: file.type,
           status: "pending",
           category: uploadCategory,
