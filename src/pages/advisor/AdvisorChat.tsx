@@ -29,6 +29,7 @@ import { WaterAnalysisCard } from '@/components/advisor/WaterAnalysisCard';
 import { ToolCard } from '@/components/advisor/ToolCard';
 import { AdvisorMessage } from '@/components/advisor/AdvisorMessage';
 import { ServicesBar } from '@/components/advisor/ServicesBar';
+import { DeepAdvisorConfigPopover } from '@/components/advisor/DeepAdvisorConfigPopover';
 import { ComparadorModal, type ComparadorData } from '@/components/advisor/modals/ComparadorModal';
 import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/ChecklistModal';
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
@@ -229,6 +230,7 @@ export default function AdvisorChat() {
                 ))}
               </SelectContent>
             </Select>
+            <DeepAdvisorConfigPopover />
             <Button variant="ghost" size="icon" onClick={() => navigate('/advisor/dashboard')} title="Dashboard" className="text-white hover:bg-white/20">
               <LayoutDashboard className="w-4 h-4" />
             </Button>
