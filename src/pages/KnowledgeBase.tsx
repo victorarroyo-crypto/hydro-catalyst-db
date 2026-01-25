@@ -145,17 +145,57 @@ function normalizeUrl(url: string): string {
 function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
   // Flexible regex: supports "_parteXdeY.pdf" or " parteXdeY.pdf" (space or underscore)
   const partRegex = /^(.+?)[\s_]parte(\d+)de(\d+)\.pdf$/i;
+  
+  // Helper to normalize filename for deduplication (removes timestamp prefixes and part suffixes)
+  const normalizeForDedup = (name: string): string => {
+    // Remove common timestamp patterns from start: "1769356908635-" or similar
+    let normalized = name.replace(/^\d{13,}-/, '');
+    // Remove part suffix
+    normalized = normalized.replace(/[\s_]parte\d+de\d+\.pdf$/i, '.pdf');
+    // Lowercase and trim
+    return normalized.toLowerCase().trim();
+  };
+  
+  // Step 1: Deduplicate documents - keep the one with most chunks per normalized name + part number
+  const deduplicationMap: Map<string, KnowledgeDocument> = new Map();
+  docs.forEach(doc => {
+    const partMatch = doc.name.match(partRegex);
+    // Create unique key: normalized base name + part number (or "0" for standalone)
+    const baseName = partMatch ? partMatch[1].trim() : doc.name.replace(/\.pdf$/i, '').trim();
+    const partNum = partMatch ? partMatch[2] : '0';
+    const normalizedBase = normalizeForDedup(baseName);
+    const dedupKey = `${normalizedBase}__part${partNum}`;
+    
+    const existing = deduplicationMap.get(dedupKey);
+    if (!existing) {
+      deduplicationMap.set(dedupKey, doc);
+    } else {
+      // Keep the one with more chunks, or if equal, the most recent
+      const existingChunks = existing.chunk_count || 0;
+      const docChunks = doc.chunk_count || 0;
+      if (docChunks > existingChunks || 
+          (docChunks === existingChunks && new Date(doc.created_at) > new Date(existing.created_at))) {
+        deduplicationMap.set(dedupKey, doc);
+      }
+    }
+  });
+  
+  // Use deduplicated documents
+  const dedupedDocs = Array.from(deduplicationMap.values());
+  
   const groups: Map<string, KnowledgeDocument[]> = new Map();
   const standalone: KnowledgeDocument[] = [];
   
-  docs.forEach(doc => {
+  dedupedDocs.forEach(doc => {
     const match = doc.name.match(partRegex);
     if (match) {
       const baseName = match[1].trim();
-      if (!groups.has(baseName)) {
-        groups.set(baseName, []);
+      // Normalize base name for grouping (to group same doc uploaded at different times)
+      const normalizedBase = normalizeForDedup(baseName);
+      if (!groups.has(normalizedBase)) {
+        groups.set(normalizedBase, []);
       }
-      groups.get(baseName)!.push(doc);
+      groups.get(normalizedBase)!.push(doc);
     } else {
       standalone.push(doc);
     }
@@ -166,9 +206,10 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
   const standaloneToRemove: Set<string> = new Set();
   standalone.forEach(doc => {
     const docBaseName = doc.name.replace(/\.pdf$/i, '').trim();
-    if (groups.has(docBaseName)) {
+    const normalizedBase = normalizeForDedup(docBaseName);
+    if (groups.has(normalizedBase)) {
       // This standalone doc is the base document - add it as "part 1" to the group
-      const parts = groups.get(docBaseName)!;
+      const parts = groups.get(normalizedBase)!;
       parts.unshift(doc); // Add at the beginning
       standaloneToRemove.add(doc.id);
     }
@@ -177,7 +218,7 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
   const result: GroupedDocument[] = [];
   
   // Add grouped documents
-  groups.forEach((parts, baseName) => {
+  groups.forEach((parts, normalizedBaseName) => {
     // Sort parts: first the base doc (no parteXdeY), then by part number
     parts.sort((a, b) => {
       const matchA = a.name.match(partRegex);
@@ -196,8 +237,12 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
     const stuckCount = parts.filter(p => isStuckProcessing(p)).length;
     const totalChunks = parts.reduce((sum, p) => sum + (p.chunk_count || 0), 0);
     
+    // Use original baseName from first part for display
+    const displayBaseName = parts[0].name.match(partRegex)?.[1]?.trim() || 
+                            parts[0].name.replace(/\.pdf$/i, '').replace(/^\d{13,}-/, '').trim();
+    
     result.push({
-      baseName,
+      baseName: displayBaseName,
       isMultiPart: true,
       totalParts: parts.length,
       mainDoc: parts[0], // First part (or base doc) has the description
@@ -215,7 +260,7 @@ function groupDocumentParts(docs: KnowledgeDocument[]): GroupedDocument[] {
     const isFailed = doc.status === 'failed' || doc.status === 'error';
     const isStuck = isStuckProcessing(doc);
     result.push({
-      baseName: doc.name.replace(/\.pdf$/i, ''),
+      baseName: doc.name.replace(/\.pdf$/i, '').replace(/^\d{13,}-/, '').trim(),
       isMultiPart: false,
       totalParts: 1,
       mainDoc: doc,
