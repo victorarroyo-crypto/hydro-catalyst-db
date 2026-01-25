@@ -57,32 +57,41 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Handle duplicate status - Railway ya eliminó el registro de la BD externa
-    // Actualizamos el registro local para notificar al frontend
+    // Eliminamos el registro local del documento duplicado
     if (status === 'duplicate') {
       console.log(`[KB-WEBHOOK] Duplicate detected for ${document_id}`)
       console.log(`[KB-WEBHOOK] Existing document: ${existing_document_name} (${existing_document_id})`)
       
-      // Actualizar el documento local con status "duplicate" y metadata del existente
-      const { error: updateError } = await supabase
+      // Eliminar el documento duplicado de la base de datos local
+      const { error: deleteError } = await supabase
         .from('knowledge_documents')
-        .update({
-          status: 'duplicate',
-          description: `Duplicado de: ${existing_document_name || 'documento existente'}`,
-          updated_at: new Date().toISOString(),
-        })
+        .delete()
         .eq('id', document_id)
       
-      if (updateError) {
-        console.error('[KB-WEBHOOK] Error updating duplicate status:', updateError)
+      if (deleteError) {
+        console.error('[KB-WEBHOOK] Error deleting duplicate document:', deleteError)
+      } else {
+        console.log(`[KB-WEBHOOK] Successfully deleted duplicate document: ${document_id}`)
+      }
+      
+      // También eliminar cualquier chunk que pudiera haberse creado
+      const { error: deleteChunksError } = await supabase
+        .from('knowledge_chunks')
+        .delete()
+        .eq('document_id', document_id)
+      
+      if (deleteChunksError) {
+        console.error('[KB-WEBHOOK] Error deleting duplicate chunks:', deleteChunksError)
       }
       
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: 'Duplicate acknowledged',
+          message: 'Duplicate document deleted',
           document_id,
           existing_document_id,
-          existing_document_name
+          existing_document_name,
+          action: 'deleted'
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
