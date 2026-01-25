@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Brain, Info, Loader2 } from 'lucide-react';
+import { Brain, Loader2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -34,72 +34,70 @@ export const DeepModeToggle: React.FC<DeepModeToggleProps> = ({
   };
 
   return (
-    <TooltipProvider>
-      <div className={cn("flex items-center gap-2", className)}>
-        <Switch
-          id="deep-mode"
-          checked={deepMode}
-          onCheckedChange={handleChange}
-          disabled={isProcessing}
-          className={cn(
-            "data-[state=checked]:bg-[#32b4cd]",
-            isProcessing && "opacity-50"
-          )}
-        />
-        
-        {/* Desktop label */}
-        <Label 
-          htmlFor="deep-mode" 
-          className="hidden sm:flex items-center gap-1.5 cursor-pointer text-white/90 text-sm"
-        >
-          <span>Deep</span>
-          {deepMode && !isProcessing && (
-            <Badge 
-              variant="secondary" 
-              className="px-1.5 py-0 text-[10px] bg-[#32b4cd]/20 text-[#32b4cd] border-[#32b4cd]/30"
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={cn("flex items-center gap-2 cursor-help", className)}>
+            <Switch
+              id="deep-mode"
+              checked={deepMode}
+              onCheckedChange={handleChange}
+              disabled={isProcessing}
+              className={cn(
+                "data-[state=checked]:bg-[#32b4cd]",
+                isProcessing && "opacity-50"
+              )}
+            />
+            
+            {/* Desktop label */}
+            <Label 
+              htmlFor="deep-mode" 
+              className="hidden sm:flex items-center gap-1.5 cursor-pointer text-white/90 text-sm"
             >
-              🧠
-            </Badge>
-          )}
-          {isProcessing && (
-            <Badge 
-              variant="secondary" 
-              className="px-1.5 py-0 text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30 animate-pulse"
+              <span>Deep</span>
+              {deepMode && !isProcessing && (
+                <Badge 
+                  variant="secondary" 
+                  className="px-1.5 py-0 text-[10px] bg-[#32b4cd]/20 text-[#32b4cd] border-[#32b4cd]/30"
+                >
+                  🧠
+                </Badge>
+              )}
+              {isProcessing && (
+                <Badge 
+                  variant="secondary" 
+                  className="px-1.5 py-0 text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30 animate-pulse"
+                >
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  Analizando
+                </Badge>
+              )}
+            </Label>
+
+            {/* Mobile icon only */}
+            <Label 
+              htmlFor="deep-mode" 
+              className="flex sm:hidden items-center cursor-pointer"
             >
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              Analizando
-            </Badge>
-          )}
-        </Label>
-
-        {/* Mobile icon only */}
-        <Label 
-          htmlFor="deep-mode" 
-          className="flex sm:hidden items-center cursor-pointer"
-        >
-          {isProcessing ? (
-            <Loader2 className="h-4 w-4 text-amber-400 animate-spin" />
-          ) : (
-            <Brain className={cn(
-              "h-4 w-4",
-              deepMode ? "text-[#32b4cd]" : "text-white/50"
-            )} />
-          )}
-        </Label>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Info className="h-3.5 w-3.5 text-white/50 hover:text-white/80 cursor-help hidden sm:block" />
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-xs text-sm">
-            <p className="font-medium mb-1">Deep Mode</p>
-            <p className="text-muted-foreground">
-              Activa 4 expertos especializados (Técnico, Operativo, Económico, Regulatorio) 
-              que analizan tu pregunta en paralelo y sintetizan una respuesta profesional completa.
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 text-amber-400 animate-spin" />
+              ) : (
+                <Brain className={cn(
+                  "h-4 w-4",
+                  deepMode ? "text-[#32b4cd]" : "text-white/50"
+                )} />
+              )}
+            </Label>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-xs text-sm">
+          <p className="font-medium mb-1">Deep Mode</p>
+          <p className="text-muted-foreground">
+            Activa 4 expertos especializados (Técnico, Operativo, Económico, Regulatorio) 
+            que analizan tu pregunta en paralelo y sintetizan una respuesta profesional completa.
+          </p>
+        </TooltipContent>
+      </Tooltip>
     </TooltipProvider>
   );
 };
