@@ -29,7 +29,6 @@ import { WaterAnalysisCard } from '@/components/advisor/WaterAnalysisCard';
 import { ToolCard } from '@/components/advisor/ToolCard';
 import { AdvisorMessage } from '@/components/advisor/AdvisorMessage';
 import { ServicesBar } from '@/components/advisor/ServicesBar';
-import { DeepAdvisorConfigPanel } from '@/components/advisor/DeepAdvisorConfigPanel';
 import { ComparadorModal, type ComparadorData } from '@/components/advisor/modals/ComparadorModal';
 import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/ChecklistModal';
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
@@ -249,11 +248,6 @@ export default function AdvisorChat() {
         userCredits={balance}
         onNewChat={startNewChat}
       />
-
-      {/* Deep Advisor Configuration Panel */}
-      <div className="px-4 py-2 max-w-5xl mx-auto w-full">
-        <DeepAdvisorConfigPanel variant="collapsible" />
-      </div>
 
       {/* Messages Area */}
       <ScrollArea className="flex-1 px-4" ref={scrollRef}>
