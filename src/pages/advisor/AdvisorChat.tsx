@@ -287,7 +287,10 @@ export default function AdvisorChat() {
       <ServicesBar 
         onServiceClick={setActiveModal} 
         userCredits={balance}
-        onNewChat={startNewChat}
+        onNewChat={() => {
+          startNewChat();
+          deepStream.reset();
+        }}
       />
 
       {/* Messages Area */}
