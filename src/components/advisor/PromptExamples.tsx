@@ -75,44 +75,78 @@ export function PromptExamples({ onSelectPrompt }: PromptExamplesProps) {
         <p className="text-muted-foreground text-sm mt-2">Haz click en cualquier ejemplo para empezar</p>
       </div>
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+      {/* Category Headers Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-4">
         {PROMPT_EXAMPLES.map((category, idx) => {
           const Icon = category.icon;
           const brandColor = BRAND_COLORS[idx % BRAND_COLORS.length];
           return (
-            <div key={idx} className="space-y-3">
-              <div className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: `${brandColor}40` }}>
-                <Icon className="w-5 h-5" style={{ color: brandColor }} />
-                <h3 className="text-sm font-semibold" style={{ color: brandColor }}>{category.category}</h3>
-              </div>
-              <div className="space-y-3">
-                {category.examples.map((example, i) => (
-                  <button
-                    key={i}
-                    onClick={() => onSelectPrompt(example.prompt)}
-                    className="w-full text-left p-4 rounded-xl bg-card border-2 transition-all group shadow-sm hover:shadow-lg hover:-translate-y-0.5"
-                    style={{ 
-                      borderColor: `${brandColor}25`,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = brandColor;
-                      e.currentTarget.style.background = `${brandColor}10`;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = `${brandColor}25`;
-                      e.currentTarget.style.background = '';
-                    }}
-                  >
-                    <span className="font-semibold text-sm text-foreground block mb-1.5">
-                      {example.title}
-                    </span>
-                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-                      {example.prompt.substring(0, 100)}...
-                    </p>
-                  </button>
-                ))}
-              </div>
+            <div key={idx} className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: `${brandColor}40` }}>
+              <Icon className="w-5 h-5" style={{ color: brandColor }} />
+              <h3 className="text-sm font-semibold" style={{ color: brandColor }}>{category.category}</h3>
             </div>
+          );
+        })}
+      </div>
+
+      {/* First Row of Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-3">
+        {PROMPT_EXAMPLES.map((category, idx) => {
+          const example = category.examples[0];
+          const brandColor = BRAND_COLORS[idx % BRAND_COLORS.length];
+          return (
+            <button
+              key={idx}
+              onClick={() => onSelectPrompt(example.prompt)}
+              className="w-full text-left p-4 rounded-xl bg-card border-2 transition-all group shadow-sm hover:shadow-lg hover:-translate-y-0.5 h-full"
+              style={{ borderColor: `${brandColor}25` }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = brandColor;
+                e.currentTarget.style.background = `${brandColor}10`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = `${brandColor}25`;
+                e.currentTarget.style.background = '';
+              }}
+            >
+              <span className="font-semibold text-sm text-foreground block mb-1.5">
+                {example.title}
+              </span>
+              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+                {example.prompt.substring(0, 100)}...
+              </p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Second Row of Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+        {PROMPT_EXAMPLES.map((category, idx) => {
+          const example = category.examples[1];
+          const brandColor = BRAND_COLORS[idx % BRAND_COLORS.length];
+          return (
+            <button
+              key={idx}
+              onClick={() => onSelectPrompt(example.prompt)}
+              className="w-full text-left p-4 rounded-xl bg-card border-2 transition-all group shadow-sm hover:shadow-lg hover:-translate-y-0.5 h-full"
+              style={{ borderColor: `${brandColor}25` }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = brandColor;
+                e.currentTarget.style.background = `${brandColor}10`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = `${brandColor}25`;
+                e.currentTarget.style.background = '';
+              }}
+            >
+              <span className="font-semibold text-sm text-foreground block mb-1.5">
+                {example.title}
+              </span>
+              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+                {example.prompt.substring(0, 100)}...
+              </p>
+            </button>
           );
         })}
       </div>
