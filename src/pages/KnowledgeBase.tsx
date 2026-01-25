@@ -460,6 +460,9 @@ export default function KnowledgeBase() {
   const isAdmin = userRole === "admin";
 
   // Real-time subscription for document status updates (Lovable Cloud)
+  // Track documents being processed to detect duplicates when deleted
+  const processingDocsRef = useRef<Map<string, string>>(new Map());
+
   useEffect(() => {
     const channel = supabase
       .channel('doc-status-changes')
@@ -481,14 +484,31 @@ export default function KnowledgeBase() {
           } else if (oldDoc.status !== 'failed' && newDoc.status === 'failed') {
             toast.error(`"${newDoc.name}" falló al procesar`, { duration: 4000 });
             queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
-          } else if (oldDoc.status !== 'duplicate' && newDoc.status === 'duplicate') {
-            // Documento duplicado detectado por Railway
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'knowledge_documents',
+        },
+        (payload) => {
+          const oldDoc = payload.old as Partial<KnowledgeDocument>;
+          
+          // Check if this was a document being processed (likely duplicate)
+          if (oldDoc.id && processingDocsRef.current.has(oldDoc.id)) {
+            const docName = processingDocsRef.current.get(oldDoc.id);
             toast.warning(
-              `Este documento ya existe: ${newDoc.description?.replace('Duplicado de: ', '') || 'ver documento existente'}`,
+              `Documento duplicado: "${docName}" ya existe en la base de conocimiento`,
               { duration: 6000 }
             );
-            queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+            processingDocsRef.current.delete(oldDoc.id);
           }
+          
+          // Refresh the list
+          queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
         }
       )
       .subscribe();
@@ -546,7 +566,19 @@ export default function KnowledgeBase() {
     },
   });
 
-  // Fetch scouting sources (from Lovable Cloud DB)
+  // Update tracking when documents change - for duplicate detection
+  useEffect(() => {
+    if (documents) {
+      const newMap = new Map<string, string>();
+      documents.forEach(doc => {
+        if (doc.status === 'pending' || doc.status === 'processing') {
+          newMap.set(doc.id, doc.name);
+        }
+      });
+      processingDocsRef.current = newMap;
+    }
+  }, [documents]);
+
   const { data: sources, isLoading: loadingSources } = useQuery({
     queryKey: ["scouting-sources"],
     queryFn: async () => {
