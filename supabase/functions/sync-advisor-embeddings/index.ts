@@ -129,19 +129,17 @@ serve(async (req) => {
         break;
 
       case 'knowledge_documents':
-        // Only sync when status is 'processed'
-        if (record.status === 'processed') {
-          const docData = prepareDocumentData(record);
-          syncResult = await syncToRailway('/document', docData);
-        } else {
-          console.log(`Skipping document sync - status is ${record.status}, not 'processed'`);
-          syncResult = { success: true, error: null };
-        }
+        // OBSOLETO: Railway escribe directamente a la BD externa
+        // Los triggers que llamaban a esta función han sido eliminados
+        // Este case se mantiene por si acaso llegan webhooks residuales
+        console.log('Skipping knowledge_documents sync - Railway writes directly to external DB');
+        syncResult = { success: true, error: null };
         break;
 
       case 'knowledge_chunks':
-        const chunkData = prepareChunkData(record);
-        syncResult = await syncToRailway('/chunks', chunkData);
+        // OBSOLETO: Railway escribe directamente a la BD externa
+        console.log('Skipping knowledge_chunks sync - Railway writes directly to external DB');
+        syncResult = { success: true, error: null };
         break;
 
       default:
