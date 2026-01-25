@@ -19,7 +19,7 @@ import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
 import { useAdvisorServices } from '@/hooks/useAdvisorServices';
-import { useDeepAdvisorConfig } from '@/hooks/useDeepAdvisorConfig';
+import { useDeepAdvisorConfig, getValidatedConfig } from '@/hooks/useDeepAdvisorConfig';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
@@ -130,8 +130,11 @@ export default function AdvisorChat() {
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    // Use synthesis model from deep config
-    const synthesisModel = deepConfig?.current?.synthesis_model || 'claude-sonnet-4-5-20250929';
+    // Get validated config to ensure all models are valid
+    const validatedConfig = getValidatedConfig(deepConfig);
+    
+    // Use validated synthesis model with safe fallback
+    const synthesisModel = validatedConfig?.synthesis_model || 'deepseek';
 
     // Check if user has credits (simplified - deep advisor handles model costs)
     if (freeRemaining <= 0 && balance <= 0) {
@@ -143,17 +146,17 @@ export default function AdvisorChat() {
     setInputValue('');
 
     try {
-      // Pass deep mode flag and config to sendMessage
+      // Pass deep mode flag and validated config to sendMessage
       await sendMessage(
         message, 
         synthesisModel, 
         deepMode,
-        deepMode ? {
-          synthesis_model: deepConfig?.current?.synthesis_model,
-          analysis_model: deepConfig?.current?.analysis_model,
-          search_model: deepConfig?.current?.search_model,
-          enable_web_search: deepConfig?.current?.enable_web_search,
-          enable_rag: deepConfig?.current?.enable_rag,
+        deepMode && validatedConfig ? {
+          synthesis_model: validatedConfig.synthesis_model,
+          analysis_model: validatedConfig.analysis_model,
+          search_model: validatedConfig.search_model,
+          enable_web_search: validatedConfig.enable_web_search,
+          enable_rag: validatedConfig.enable_rag,
         } : undefined
       );
       refetchCredits();

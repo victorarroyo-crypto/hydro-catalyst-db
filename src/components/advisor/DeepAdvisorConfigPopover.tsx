@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Loader2, Search, Brain, Sparkles, Globe, Database } from 'lucide-react';
+import { Settings, Loader2, Search, Brain, Sparkles, Globe, Database, AlertTriangle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useDeepAdvisorConfig, getCostLevel, type ModelOption } from '@/hooks/useDeepAdvisorConfig';
+import { useDeepAdvisorConfig, getCostLevel, hasInvalidModels, type ModelOption } from '@/hooks/useDeepAdvisorConfig';
 import { cn } from '@/lib/utils';
 
 const costColors = {
@@ -24,6 +24,7 @@ const costBgColors = {
 
 export const DeepAdvisorConfigPopover: React.FC = () => {
   const { config, isLoading, isError, saveConfig, isSaving } = useDeepAdvisorConfig();
+  const invalidModels = hasInvalidModels(config);
 
   // Local state for form
   const [searchModel, setSearchModel] = useState('');
@@ -65,6 +66,15 @@ export const DeepAdvisorConfigPopover: React.FC = () => {
       enable_web_search: enableWebSearch,
       enable_rag: enableRag,
     });
+  };
+
+  const handleReset = () => {
+    if (!config) return;
+    setSearchModel(config.phases.search.default);
+    setAnalysisModel(config.phases.analysis.default);
+    setSynthesisModel(config.phases.synthesis.default);
+    setEnableWebSearch(true);
+    setEnableRag(true);
   };
 
   const estimatedCost = getCostLevel(config, {
@@ -146,6 +156,13 @@ export const DeepAdvisorConfigPopover: React.FC = () => {
               {estimatedCost.level}
             </Badge>
           </div>
+
+          {invalidModels && (
+            <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded p-2 flex items-center gap-2">
+              <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+              <span>Hay modelos inválidos configurados. Se usarán los predeterminados.</span>
+            </div>
+          )}
 
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
@@ -237,6 +254,17 @@ export const DeepAdvisorConfigPopover: React.FC = () => {
                 ) : (
                   'Guardar'
                 )}
+              </Button>
+
+              {/* Reset Button */}
+              <Button
+                variant="ghost"
+                onClick={handleReset}
+                size="sm"
+                className="w-full text-xs h-7 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+              >
+                <RotateCcw className="h-3 w-3 mr-1" />
+                Restablecer configuración
               </Button>
             </>
           )}
