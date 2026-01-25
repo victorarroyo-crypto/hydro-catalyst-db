@@ -32,6 +32,7 @@ import { ServicesBar } from '@/components/advisor/ServicesBar';
 import { DeepAdvisorConfigPopover } from '@/components/advisor/DeepAdvisorConfigPopover';
 import { DeepModeToggle, useDeepMode } from '@/components/advisor/DeepModeToggle';
 import { AgentAnalysesAccordion } from '@/components/advisor/AgentAnalysesAccordion';
+import { DeepAdvisorProgressIndicator } from '@/components/advisor/DeepAdvisorProgressIndicator';
 import { ComparadorModal, type ComparadorData } from '@/components/advisor/modals/ComparadorModal';
 import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/ChecklistModal';
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
@@ -369,15 +370,17 @@ export default function AdvisorChat() {
           {isLoading && (
             <div className="flex gap-3">
               <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
-              <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#32b4cd' }} />
-                  {isDeepProcessing && (
-                    <span className="text-sm text-muted-foreground">
-                      Analizando con 4 expertos...
-                    </span>
-                  )}
-                </div>
+              <div className="flex-1 max-w-[85%]">
+                {isDeepProcessing ? (
+                  <DeepAdvisorProgressIndicator isProcessing={isDeepProcessing} />
+                ) : (
+                  <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#32b4cd' }} />
+                      <span className="text-sm text-muted-foreground">Pensando...</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
