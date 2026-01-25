@@ -626,8 +626,13 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      // Invalidar lista general de tecnologías
       queryClient.invalidateQueries({ queryKey: ['technologies'] });
+      // Invalidar cache de detalle específico para que el modal muestre datos frescos
+      queryClient.invalidateQueries({ queryKey: ['technology-detail', variables.id] });
+      // Invalidar lista de data quality para refrescar conteos e issues
+      queryClient.invalidateQueries({ queryKey: ['data-quality-technologies'] });
       toast.success('Cambios guardados');
     },
     onError: (error: Error) => {

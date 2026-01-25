@@ -190,7 +190,7 @@ export function useDataQualityStats() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return ((data as any[]) || []).map((record) => mapTechnology(record as Record<string, unknown>));
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 1, // 1 minute - reduced for faster refresh after edits
   });
 
   // Calculate statistics
