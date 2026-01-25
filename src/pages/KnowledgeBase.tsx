@@ -2402,21 +2402,24 @@ export default function KnowledgeBase() {
                   ).length;
                   
                   return (
-                  <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Status badges */}
                     {group.isMultiPart ? (
                       <div className="flex items-center gap-1">
-                        <Badge variant="outline" className="text-xs">
-                          {group.processedCount}/{group.totalParts} procesados
+                        <Badge variant="outline" className="text-xs whitespace-nowrap">
+                          {group.processedCount}/{group.totalParts}
                         </Badge>
                         {hasFailedOrStuck && (
                           <Badge variant="destructive" className="text-xs">
-                            {group.failedCount + group.stuckCount} fallidas
+                            {group.failedCount + group.stuckCount}
                           </Badge>
                         )}
                       </div>
                     ) : (
                       getStatusBadge(doc.status, doc)
                     )}
+                    
+                    {/* Primary actions - always visible */}
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -2427,6 +2430,7 @@ export default function KnowledgeBase() {
                         <TooltipContent>{group.isMultiPart ? 'Descargar parte 1' : 'Descargar PDF'}</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                    
                     {/* Batch reprocess for multi-part with failures */}
                     {canManage && group.isMultiPart && toReprocessCount > 0 && (
                       <TooltipProvider>
@@ -2455,6 +2459,8 @@ export default function KnowledgeBase() {
                         </Tooltip>
                       </TooltipProvider>
                     )}
+                    
+                    {/* Reprocess for single document */}
                     {canManage && !group.isMultiPart && (
                       <TooltipProvider>
                         <Tooltip>
@@ -2478,71 +2484,64 @@ export default function KnowledgeBase() {
                         </Tooltip>
                       </TooltipProvider>
                     )}
+                    
+                    {/* Secondary actions in dropdown menu */}
                     {canManage && (
-                      <>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button size="sm" variant="ghost" onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}>
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Renombrar</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                onClick={() => { 
-                                  setEditingCategoryDocId(doc.id); 
-                                  setEditCategory(doc.category || ''); 
-                                  setEditSector(doc.sector || ''); 
-                                }}
-                              >
-                                📁
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Categorizar</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        {isAdmin && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="text-destructive" 
-                                  onClick={() => {
-                                    if (group.isMultiPart) {
-                                      if (window.confirm(`¿Eliminar "${group.baseName}" y sus ${group.totalParts} partes? Esta acción no se puede deshacer.`)) {
-                                        deleteGroupMutation.mutate(group.parts);
-                                      }
-                                    } else {
-                                      if (window.confirm(`¿Eliminar "${doc.name}"? Esta acción no se puede deshacer.`)) {
-                                        deleteMutation.mutate(doc);
-                                      }
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="ghost">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem 
+                            onClick={() => { 
+                              setEditingDocId(doc.id); 
+                              setEditingName(doc.name); 
+                            }}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Renombrar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => { 
+                              setEditingCategoryDocId(doc.id); 
+                              setEditCategory(doc.category || ''); 
+                              setEditSector(doc.sector || ''); 
+                            }}
+                          >
+                            <span className="mr-2">📁</span>
+                            Categorizar
+                          </DropdownMenuItem>
+                          {isAdmin && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => {
+                                  if (group.isMultiPart) {
+                                    if (window.confirm(`¿Eliminar "${group.baseName}" y sus ${group.totalParts} partes? Esta acción no se puede deshacer.`)) {
+                                      deleteGroupMutation.mutate(group.parts);
                                     }
-                                  }}
-                                  disabled={deleteMutation.isPending || deleteGroupMutation.isPending}
-                                >
-                                  {(deleteMutation.isPending || deleteGroupMutation.isPending) ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
+                                  } else {
+                                    if (window.confirm(`¿Eliminar "${doc.name}"? Esta acción no se puede deshacer.`)) {
+                                      deleteMutation.mutate(doc);
+                                    }
+                                  }
+                                }}
+                                disabled={deleteMutation.isPending || deleteGroupMutation.isPending}
+                              >
+                                {(deleteMutation.isPending || deleteGroupMutation.isPending) ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                )}
                                 {group.isMultiPart ? `Eliminar ${group.totalParts} partes` : 'Eliminar'}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </>
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     )}
                   </div>
                 );};
@@ -2557,7 +2556,7 @@ export default function KnowledgeBase() {
                       // Multi-part document - render as collapsible
                       return (
                         <Collapsible key={group.baseName} className="border rounded-lg">
-                          <div className="flex items-start justify-between p-3 hover:bg-muted/50">
+                          <div className="flex items-start justify-between p-3 hover:bg-muted/50 overflow-hidden gap-2">
                             <div className="flex items-start gap-3 flex-1 min-w-0">
                               <CollapsibleTrigger asChild>
                                 <Button variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0 mt-0.5">
@@ -2731,7 +2730,7 @@ export default function KnowledgeBase() {
                     
                     // Single document - render normally
                     return (
-                      <div key={doc.id} className="flex items-start justify-between p-3 border rounded-lg hover:bg-muted/50">
+                      <div key={doc.id} className="flex items-start justify-between p-3 border rounded-lg hover:bg-muted/50 overflow-hidden gap-2">
                         <div className="flex items-start gap-3 flex-1 min-w-0">
                           <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                           <div className="min-w-0 flex-1 space-y-2">
