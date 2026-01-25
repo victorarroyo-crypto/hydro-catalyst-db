@@ -93,6 +93,48 @@ export function useDeepAdvisorConfig() {
   };
 }
 
+// Helper function to validate a model against phase options
+function getValidModel(
+  savedModel: string | undefined,
+  phaseConfig: PhaseConfig | undefined
+): string {
+  if (!phaseConfig) return '';
+  
+  const validKeys = phaseConfig.options.map(o => o.key);
+  
+  // If saved model is valid, use it
+  if (savedModel && validKeys.includes(savedModel)) {
+    return savedModel;
+  }
+  
+  // Otherwise use backend default
+  return phaseConfig.default;
+}
+
+// Get validated config with all models verified against backend options
+export function getValidatedConfig(config: DeepAdvisorConfigResponse | undefined): DeepAdvisorConfigUpdate | null {
+  if (!config) return null;
+  
+  return {
+    search_model: getValidModel(config.current.search_model, config.phases.search),
+    analysis_model: getValidModel(config.current.analysis_model, config.phases.analysis),
+    synthesis_model: getValidModel(config.current.synthesis_model, config.phases.synthesis),
+    enable_web_search: config.current.enable_web_search,
+    enable_rag: config.current.enable_rag,
+  };
+}
+
+// Check if any configured model is invalid
+export function hasInvalidModels(config: DeepAdvisorConfigResponse | undefined): boolean {
+  if (!config) return false;
+  
+  const searchValid = config.phases.search.options.some(o => o.key === config.current.search_model);
+  const analysisValid = config.phases.analysis.options.some(o => o.key === config.current.analysis_model);
+  const synthesisValid = config.phases.synthesis.options.some(o => o.key === config.current.synthesis_model);
+  
+  return !searchValid || !analysisValid || !synthesisValid;
+}
+
 export function getCostLevel(config: DeepAdvisorConfigResponse | undefined, selectedModels: {
   search_model: string;
   analysis_model: string;
