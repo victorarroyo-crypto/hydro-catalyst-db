@@ -60,7 +60,7 @@ function MetricCard({ label, count, total, icon, variant = 'warning', onClick }:
 export function QualityDashboard({ stats, isLoading, onIssueClick }: QualityDashboardProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {[...Array(8)].map((_, i) => (
           <Card key={i} className="animate-pulse">
             <CardContent className="p-4">
@@ -102,7 +102,7 @@ export function QualityDashboard({ stats, isLoading, onIssueClick }: QualityDash
       </Card>
 
       {/* Issue Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         <MetricCard
           label="Sin Proveedor"
           count={stats.issues.noProvider}

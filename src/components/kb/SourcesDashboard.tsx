@@ -100,7 +100,7 @@ export function SourcesDashboard({ sources, filters, onFiltersChange }: SourcesD
   return (
     <div className="space-y-4 mb-6">
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {/* Total stats */}
         <Card>
           <CardHeader className="pb-2">
