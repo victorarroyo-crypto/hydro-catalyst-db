@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useDeepAdvisorConfig, getCostLevel, hasInvalidModels, type ModelOption } from '@/hooks/useDeepAdvisorConfig';
+import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { cn } from '@/lib/utils';
 
 const costColors = {
@@ -23,7 +24,9 @@ const costBgColors = {
 };
 
 export const DeepAdvisorConfigPopover: React.FC = () => {
-  const { config, isLoading, isError, saveConfig, isSaving } = useDeepAdvisorConfig();
+  const { advisorUser } = useAdvisorAuth();
+  const userId = advisorUser?.id;
+  const { config, isLoading, isError, saveConfig, isSaving } = useDeepAdvisorConfig(userId);
   const invalidModels = hasInvalidModels(config);
 
   // Local state for form
@@ -69,12 +72,14 @@ export const DeepAdvisorConfigPopover: React.FC = () => {
   }, [searchModel, analysisModel, synthesisModel, enableWebSearch, enableRag, effectiveSearch, effectiveAnalysis, effectiveSynthesis, effectiveWebSearch, effectiveRag, config]);
 
   const handleSave = () => {
+    if (!userId) return;
     saveConfig({
       search_model: searchModel,
       analysis_model: analysisModel,
       synthesis_model: synthesisModel,
       enable_web_search: enableWebSearch,
       enable_rag: enableRag,
+      user_id: userId,
     });
   };
 

@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useDeepAdvisorConfig, getCostLevel, type ModelOption } from '@/hooks/useDeepAdvisorConfig';
+import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { cn } from '@/lib/utils';
 
 interface DeepAdvisorConfigPanelProps {
@@ -33,7 +34,9 @@ export const DeepAdvisorConfigPanel: React.FC<DeepAdvisorConfigPanelProps> = ({
   variant = 'card',
   defaultOpen = false,
 }) => {
-  const { config, isLoading, isError, saveConfig, isSaving } = useDeepAdvisorConfig();
+  const { advisorUser } = useAdvisorAuth();
+  const userId = advisorUser?.id;
+  const { config, isLoading, isError, saveConfig, isSaving } = useDeepAdvisorConfig(userId);
 
   // Local state for form
   const [searchModel, setSearchModel] = useState('');
@@ -68,12 +71,14 @@ export const DeepAdvisorConfigPanel: React.FC<DeepAdvisorConfigPanelProps> = ({
   }, [searchModel, analysisModel, synthesisModel, enableWebSearch, enableRag, config]);
 
   const handleSave = () => {
+    if (!userId) return;
     saveConfig({
       search_model: searchModel,
       analysis_model: analysisModel,
       synthesis_model: synthesisModel,
       enable_web_search: enableWebSearch,
       enable_rag: enableRag,
+      user_id: userId,
     });
   };
 

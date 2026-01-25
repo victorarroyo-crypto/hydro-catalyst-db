@@ -40,10 +40,14 @@ export interface DeepAdvisorConfigUpdate {
   synthesis_model: string;
   enable_web_search: boolean;
   enable_rag: boolean;
+  user_id: string;
 }
 
-async function fetchDeepAdvisorConfig(): Promise<DeepAdvisorConfigResponse> {
-  const response = await fetch(`${API_URL}/api/advisor/deep/config`);
+async function fetchDeepAdvisorConfig(userId?: string): Promise<DeepAdvisorConfigResponse> {
+  const url = userId 
+    ? `${API_URL}/api/advisor/deep/config?user_id=${userId}`
+    : `${API_URL}/api/advisor/deep/config`;
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error('Error al cargar configuración');
   }
@@ -62,20 +66,21 @@ async function updateDeepAdvisorConfig(config: DeepAdvisorConfigUpdate): Promise
   }
 }
 
-export function useDeepAdvisorConfig() {
+export function useDeepAdvisorConfig(userId?: string) {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['deep-advisor-config'],
-    queryFn: fetchDeepAdvisorConfig,
+    queryKey: ['deep-advisor-config', userId],
+    queryFn: () => fetchDeepAdvisorConfig(userId),
     staleTime: 1000 * 60 * 5, // 5 minutes
     retry: 2,
+    enabled: !!userId,
   });
 
   const mutation = useMutation({
     mutationFn: updateDeepAdvisorConfig,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deep-advisor-config'] });
+      queryClient.invalidateQueries({ queryKey: ['deep-advisor-config', userId] });
       toast.success('Configuración guardada correctamente');
     },
     onError: (error: Error) => {
@@ -112,15 +117,15 @@ function getValidModel(
 }
 
 // Get validated config with all models verified against backend options
-export function getValidatedConfig(config: DeepAdvisorConfigResponse | undefined): DeepAdvisorConfigUpdate | null {
+export function getValidatedConfig(config: DeepAdvisorConfigResponse | undefined, userId?: string): Omit<DeepAdvisorConfigUpdate, 'user_id'> | null {
   if (!config) return null;
   
   return {
-    search_model: getValidModel(config.current.search_model, config.phases.search),
-    analysis_model: getValidModel(config.current.analysis_model, config.phases.analysis),
-    synthesis_model: getValidModel(config.current.synthesis_model, config.phases.synthesis),
-    enable_web_search: config.current.enable_web_search,
-    enable_rag: config.current.enable_rag,
+    search_model: getValidModel(config.current?.search_model, config.phases.search),
+    analysis_model: getValidModel(config.current?.analysis_model, config.phases.analysis),
+    synthesis_model: getValidModel(config.current?.synthesis_model, config.phases.synthesis),
+    enable_web_search: config.current?.enable_web_search ?? true,
+    enable_rag: config.current?.enable_rag ?? true,
   };
 }
 
