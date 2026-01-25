@@ -453,8 +453,8 @@ export default function AdvisorChat() {
                     />
                   )}
 
-                  {/* Streaming Response */}
-                  {(deepStream.response || deepStream.isStreaming) && (
+                  {/* Streaming Response - only show when there's actual content */}
+                  {deepStream.response && (
                     <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
                       <StreamingResponse
                         content={deepStream.response}
