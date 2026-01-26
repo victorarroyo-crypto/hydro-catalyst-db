@@ -221,58 +221,12 @@ export function enhanceTitleFormatting(text: string): string {
 }
 
 /**
- * Wraps flow diagrams in code blocks for better formatting.
- * Detects treatment trains and process flows with arrows.
+ * NOTE: Flow diagrams are now rendered visually by FlowDiagramRenderer component
+ * instead of being wrapped in code blocks.
  */
 export function formatFlowDiagrams(text: string): string {
-  if (!text) return text;
-  
-  const lines = text.split('\n');
-  const result: string[] = [];
-  let inFlowBlock = false;
-  let flowLines: string[] = [];
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    
-    // Check if this is a flow diagram line
-    const isFlow = (trimmed.includes('→') || trimmed.includes('←')) && 
-                   (trimmed.includes('[') || /\d+\./.test(trimmed));
-    
-    // Also catch continuation lines (starting with [ or containing → in sequence)
-    const isContinuation = inFlowBlock && 
-                          (trimmed.startsWith('[') || trimmed.includes('→') || 
-                           trimmed === '↓' || /^\[\d+\./.test(trimmed));
-    
-    if (isFlow || isContinuation) {
-      if (!inFlowBlock) {
-        inFlowBlock = true;
-        flowLines = [];
-      }
-      flowLines.push(trimmed);
-    } else {
-      // End of flow block
-      if (inFlowBlock && flowLines.length > 0) {
-        // Don't wrap if already in a code block context
-        result.push('```');
-        result.push(...flowLines);
-        result.push('```');
-        flowLines = [];
-        inFlowBlock = false;
-      }
-      result.push(line);
-    }
-  }
-  
-  // Handle flow block at end of text
-  if (inFlowBlock && flowLines.length > 0) {
-    result.push('```');
-    result.push(...flowLines);
-    result.push('```');
-  }
-  
-  return result.join('\n');
+  // Flow diagrams are now handled by FlowDiagramRenderer in AdvisorMessage
+  return text;
 }
 
 /**
@@ -286,8 +240,7 @@ export function cleanMarkdownContent(text: string): string {
   // First enhance title formatting
   cleaned = enhanceTitleFormatting(cleaned);
   
-  // Format flow diagrams as code blocks
-  cleaned = formatFlowDiagrams(cleaned);
+  // Note: Flow diagrams are handled by FlowDiagramRenderer component
   
   // Then fix tables
   cleaned = fixMarkdownTables(cleaned);
