@@ -79,8 +79,21 @@ export function useDeepAdvisorConfig(userId?: string) {
 
   const mutation = useMutation({
     mutationFn: updateDeepAdvisorConfig,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deep-advisor-config', userId] });
+    onSuccess: (_, variables) => {
+      // Optimistically update the cache with the saved values
+      queryClient.setQueryData(['deep-advisor-config', userId], (old: DeepAdvisorConfigResponse | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          current: {
+            search_model: variables.search_model,
+            analysis_model: variables.analysis_model,
+            synthesis_model: variables.synthesis_model,
+            enable_web_search: variables.enable_web_search,
+            enable_rag: variables.enable_rag,
+          },
+        };
+      });
       toast.success('Configuración guardada correctamente');
     },
     onError: (error: Error) => {
