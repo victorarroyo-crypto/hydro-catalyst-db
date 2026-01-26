@@ -87,6 +87,7 @@ export interface AttachmentInfo {
   type: string;
   size: number;
   url?: string;
+  file?: File; // The actual file object for upload
 }
 
 export interface ChatResponse {
