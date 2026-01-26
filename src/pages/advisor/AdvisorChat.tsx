@@ -35,6 +35,7 @@ import { DeepModeToggle, useDeepMode } from '@/components/advisor/DeepModeToggle
 import { AgentAnalysesAccordion } from '@/components/advisor/AgentAnalysesAccordion';
 import { StreamingProgress, StreamingResponse, SourcesPanel } from '@/components/advisor/streaming';
 import { StreamingModeToggle, useStreamingMode } from '@/components/advisor/streaming/StreamingModeToggle';
+import { SessionContextIndicator } from '@/components/advisor/SessionContextIndicator';
 import { ComparadorModal, type ComparadorData } from '@/components/advisor/modals/ComparadorModal';
 import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/ChecklistModal';
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
@@ -454,6 +455,14 @@ export default function AdvisorChat() {
               <div className="flex gap-3">
                 <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
                 <div className="flex-1 max-w-[85%] space-y-3">
+                  {/* Session Context Indicator */}
+                  {deepStream.hasContext && (
+                    <SessionContextIndicator 
+                      hasContext={deepStream.hasContext}
+                      className="mb-2"
+                    />
+                  )}
+
                   {/* Progress Panel */}
                   {deepStream.isStreaming && (
                     <StreamingProgress
@@ -476,6 +485,15 @@ export default function AdvisorChat() {
                       {/* Sources Panel - appears when complete */}
                       {!deepStream.isStreaming && deepStream.sources.length > 0 && (
                         <SourcesPanel sources={deepStream.sources} />
+                      )}
+
+                      {/* Extracted Facts - appears when complete */}
+                      {!deepStream.isStreaming && deepStream.factsExtracted.length > 0 && (
+                        <SessionContextIndicator 
+                          hasContext={false}
+                          factsExtracted={deepStream.factsExtracted}
+                          className="mt-3 pt-3 border-t border-border/30"
+                        />
                       )}
                     </div>
                   )}
