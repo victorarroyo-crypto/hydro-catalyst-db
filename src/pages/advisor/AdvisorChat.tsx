@@ -42,6 +42,7 @@ import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaMod
 import { PresupuestoModal, type PresupuestoData } from '@/components/advisor/modals/PresupuestoModal';
 import { PromptExamples } from '@/components/advisor/PromptExamples';
 import { FileAttachmentButton, type UploadProgress } from '@/components/advisor/FileAttachmentButton';
+import { AttachmentsPreview } from '@/components/advisor/AttachmentsPreview';
 import type { Message, AttachmentInfo } from '@/types/advisorChat';
 
 
@@ -603,11 +604,20 @@ export default function AdvisorChat() {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t p-8" style={{ background: 'linear-gradient(180deg, rgba(48,113,119,0.03) 0%, rgba(50,180,205,0.05) 100%)' }}>
+      <div className="border-t p-4 pb-6" style={{ background: 'linear-gradient(180deg, rgba(48,113,119,0.03) 0%, rgba(50,180,205,0.05) 100%)' }}>
         <div className="max-w-4xl mx-auto">
+          {/* Attachments Preview - Above input */}
+          {(attachments.length > 0 || uploadProgress.status === 'uploading') && (
+            <AttachmentsPreview
+              attachments={attachments}
+              onRemove={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
+              uploadProgress={uploadProgress}
+            />
+          )}
+          
+          {/* Input row - fixed height */}
           <div className="flex gap-3 bg-white rounded-2xl p-3 shadow-lg items-center" style={{ border: '2px solid rgba(48,113,119,0.2)' }}>
             <FileAttachmentButton
-              attachments={attachments}
               onAttach={(files) => {
                 const newAttachments: AttachmentInfo[] = files.map(f => ({
                   id: crypto.randomUUID(),
@@ -620,9 +630,8 @@ export default function AdvisorChat() {
                 // Reset progress when adding new files
                 setUploadProgress({ status: 'idle', progress: 0, completedCount: 0, totalCount: 0 });
               }}
-              onRemove={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
-              disabled={isAnyLoading || uploadProgress.status === 'uploading'}
-              uploadProgress={uploadProgress}
+              disabled={isAnyLoading}
+              isUploading={uploadProgress.status === 'uploading'}
             />
             <Input
               value={inputValue}
