@@ -59,6 +59,7 @@ export default function AdvisorChat() {
     startNewChat, 
     chatId,
     stopStreaming,
+    loadChat,
   } = useAdvisorChat(advisorUser?.id);
   
   // Streaming hook for Deep Mode
@@ -98,6 +99,14 @@ export default function AdvisorChat() {
       navigate('/advisor/auth');
     }
   }, [isAuthenticated, authLoading, navigate]);
+
+  // Auto-load active chat from localStorage on mount
+  useEffect(() => {
+    const savedChatId = localStorage.getItem('advisor_active_chat_id');
+    if (savedChatId && messages.length === 0 && advisorUser?.id) {
+      loadChat(savedChatId);
+    }
+  }, [advisorUser?.id, loadChat, messages.length]);
 
   useEffect(() => {
     // Scroll to bottom on new messages

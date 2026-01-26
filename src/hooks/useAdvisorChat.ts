@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import type { Message, Source } from '@/types/advisorChat';
 import type { AgentAnalysis } from '@/components/advisor/AgentAnalysesAccordion';
@@ -13,15 +13,31 @@ export interface DeepModeConfig {
   enable_rag?: boolean;
 }
 
+const STORAGE_KEY = 'advisor_active_chat_id';
+
 export function useAdvisorChat(userId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isDeepProcessing, setIsDeepProcessing] = useState(false);
-  const [chatId, setChatId] = useState<string | null>(null);
+  const [chatId, setChatId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(STORAGE_KEY);
+    }
+    return null;
+  });
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
   const [lastAgentAnalyses, setLastAgentAnalyses] = useState<AgentAnalysis[] | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Persist chatId to localStorage
+  useEffect(() => {
+    if (chatId) {
+      localStorage.setItem(STORAGE_KEY, chatId);
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [chatId]);
 
   const loadChat = useCallback(async (existingChatId: string) => {
     if (!userId) return;
@@ -225,6 +241,7 @@ export function useAdvisorChat(userId: string | undefined) {
     setMessages([]);
     setChatId(null);
     setLastAgentAnalyses(null);
+    localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   return {
