@@ -5,6 +5,7 @@ import { ExternalLink, Wrench, FileText, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
+import { FlowDiagramRenderer, extractFlowDiagrams } from './FlowDiagramRenderer';
 
 interface AdvisorMessageProps {
   content: string;
@@ -67,11 +68,21 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
     return () => clearInterval(interval);
   }, [cleanedContent, isStreaming]);
 
+  // Extract flow diagrams from the content
+  const { segments } = extractFlowDiagrams(displayedText);
+
   return (
     <div className="advisor-message">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
+      {segments.map((segment, idx) => {
+        if (segment.type === 'flow') {
+          return <FlowDiagramRenderer key={idx} content={segment.content} />;
+        }
+        
+        return (
+          <ReactMarkdown
+            key={idx}
+            remarkPlugins={[remarkGfm]}
+            components={{
           // Subtle headers - no borders, just size increase
           h1: ({ children }) => (
             <h1 className="text-lg font-semibold text-foreground mt-4 mb-2 first:mt-0">
@@ -190,10 +201,12 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               {children}
             </td>
           ),
-        }}
-      >
-        {displayedText}
-      </ReactMarkdown>
+            }}
+          >
+            {segment.content}
+          </ReactMarkdown>
+        );
+      })}
       
       {/* Typing cursor */}
       {isTyping && (
