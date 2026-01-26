@@ -41,7 +41,7 @@ import { ChecklistModal, type ChecklistData } from '@/components/advisor/modals/
 import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaModal';
 import { PresupuestoModal, type PresupuestoData } from '@/components/advisor/modals/PresupuestoModal';
 import { PromptExamples } from '@/components/advisor/PromptExamples';
-import { FileAttachmentButton } from '@/components/advisor/FileAttachmentButton';
+import { FileAttachmentButton, type UploadProgress } from '@/components/advisor/FileAttachmentButton';
 import type { Message, AttachmentInfo } from '@/types/advisorChat';
 
 
@@ -75,6 +75,12 @@ export default function AdvisorChat() {
   const [activeModal, setActiveModal] = useState<'comparador' | 'checklist' | 'ficha' | 'presupuesto' | null>(null);
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
   const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({
+    status: 'idle',
+    progress: 0,
+    completedCount: 0,
+    totalCount: 0,
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   
   // Determine if we should use streaming (Deep Mode + Streaming enabled)
@@ -180,12 +186,46 @@ export default function AdvisorChat() {
           .map(a => ({ id: a.id, file: a.file!, name: a.name, type: a.type }));
         
         if (filesToUpload.length > 0) {
-          toast.info('Subiendo archivos adjuntos...');
-          const uploaded = await uploadMultipleAttachments(filesToUpload, advisorUser.id);
+          // Set upload progress to uploading
+          setUploadProgress({
+            status: 'uploading',
+            progress: 0,
+            completedCount: 0,
+            totalCount: filesToUpload.length,
+          });
+          
+          const uploaded = await uploadMultipleAttachments(
+            filesToUpload, 
+            advisorUser.id,
+            (progress) => {
+              setUploadProgress({
+                status: 'uploading',
+                progress: progress.progress,
+                completedCount: progress.completedCount,
+                totalCount: progress.totalCount,
+                currentFile: progress.currentFile,
+              });
+            }
+          );
+          
+          // Mark upload as complete
+          setUploadProgress({
+            status: 'complete',
+            progress: 100,
+            completedCount: filesToUpload.length,
+            totalCount: filesToUpload.length,
+          });
+          
           uploadedAttachments = uploaded.map(u => ({ url: u.url, type: u.type, name: u.name }));
         }
       } catch (uploadError) {
         console.error('Upload error:', uploadError);
+        setUploadProgress({
+          status: 'error',
+          progress: 0,
+          completedCount: 0,
+          totalCount: 0,
+        });
         toast.error('Error al subir archivos. Enviando mensaje sin adjuntos.');
       }
     }
@@ -218,8 +258,9 @@ export default function AdvisorChat() {
           }
         );
         
-        // Clear attachments after sending
+        // Clear attachments and reset upload progress after sending
         setAttachments([]);
+        setUploadProgress({ status: 'idle', progress: 0, completedCount: 0, totalCount: 0 });
         refetchCredits();
       } else {
         // Use standard endpoint (streaming or non-streaming based on deep mode)
@@ -576,9 +617,12 @@ export default function AdvisorChat() {
                   file: f,
                 }));
                 setAttachments(prev => [...prev, ...newAttachments]);
+                // Reset progress when adding new files
+                setUploadProgress({ status: 'idle', progress: 0, completedCount: 0, totalCount: 0 });
               }}
               onRemove={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
-              disabled={isAnyLoading}
+              disabled={isAnyLoading || uploadProgress.status === 'uploading'}
+              uploadProgress={uploadProgress}
             />
             <Input
               value={inputValue}
