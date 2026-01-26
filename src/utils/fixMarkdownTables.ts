@@ -114,6 +114,84 @@ export function removeAsciiDiagrams(text: string): string {
 }
 
 /**
+ * Enhances title formatting by detecting common patterns and converting them to markdown headers.
+ * This handles cases where the backend sends titles without proper markdown syntax.
+ */
+export function enhanceTitleFormatting(text: string): string {
+  if (!text) return text;
+  
+  const lines = text.split('\n');
+  const result: string[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    const trimmed = line.trim();
+    
+    // Skip if already a markdown header
+    if (trimmed.startsWith('#')) {
+      result.push(line);
+      continue;
+    }
+    
+    // Skip if inside a table or list
+    if (trimmed.startsWith('|') || trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('>')) {
+      result.push(line);
+      continue;
+    }
+    
+    // Pattern 1: Document titles like "Informe Técnico:", "Resumen Ejecutivo:", "Análisis de..."
+    // Only at the start of the document (first non-empty line)
+    if (i === 0 || (i > 0 && lines.slice(0, i).every(l => l.trim() === ''))) {
+      if (/^(Informe|Resumen|Análisis|Evaluación|Reporte|Diagnóstico|Estudio|Propuesta)\s+\w+/i.test(trimmed)) {
+        result.push(`# ${trimmed}`);
+        continue;
+      }
+    }
+    
+    // Pattern 2: Main sections with number like "1. Título", "2. Título" (not "1.1")
+    if (/^\d+\.\s+[A-ZÁÉÍÓÚÑ][^.]*$/i.test(trimmed) && !/^\d+\.\d+/.test(trimmed)) {
+      // Check it's a title (usually followed by empty line or more content, not a list item)
+      const nextLine = lines[i + 1]?.trim() || '';
+      if (nextLine === '' || nextLine.startsWith('-') || /^[A-ZÁÉÍÓÚÑ]/.test(nextLine) || /^\d+\./.test(nextLine)) {
+        result.push(`## ${trimmed}`);
+        continue;
+      }
+    }
+    
+    // Pattern 3: Subsections like "1.1 Título", "2.3 Subtítulo"
+    if (/^\d+\.\d+\.?\s+[A-ZÁÉÍÓÚÑ]/.test(trimmed)) {
+      result.push(`### ${trimmed}`);
+      continue;
+    }
+    
+    // Pattern 4: ALL CAPS titles (short lines, likely headers)
+    if (/^[A-ZÁÉÍÓÚÑ\s]{5,50}$/.test(trimmed) && trimmed === trimmed.toUpperCase() && !trimmed.includes('|')) {
+      const nextLine = lines[i + 1]?.trim() || '';
+      if (nextLine === '' || /^[A-Za-záéíóúñ]/.test(nextLine)) {
+        result.push(`## ${trimmed}`);
+        continue;
+      }
+    }
+    
+    // Pattern 5: Bold-like titles without asterisks (short lines ending with colon or standalone)
+    if (/^[A-ZÁÉÍÓÚÑ][^:]{3,40}:?\s*$/.test(trimmed) && !trimmed.includes('|')) {
+      const prevLine = lines[i - 1]?.trim() || '';
+      const nextLine = lines[i + 1]?.trim() || '';
+      // If preceded by empty line and followed by content, it's likely a section header
+      if (prevLine === '' && nextLine !== '' && !nextLine.startsWith('#')) {
+        // Make it bold instead of header for inline section titles
+        result.push(`**${trimmed}**`);
+        continue;
+      }
+    }
+    
+    result.push(line);
+  }
+  
+  return result.join('\n');
+}
+
+/**
  * Clean and normalize markdown content for better rendering.
  */
 export function cleanMarkdownContent(text: string): string {
@@ -121,7 +199,10 @@ export function cleanMarkdownContent(text: string): string {
   
   let cleaned = text;
   
-  // First fix tables
+  // First enhance title formatting
+  cleaned = enhanceTitleFormatting(cleaned);
+  
+  // Then fix tables
   cleaned = fixMarkdownTables(cleaned);
   
   // Remove ASCII diagrams (but preserve tables)
