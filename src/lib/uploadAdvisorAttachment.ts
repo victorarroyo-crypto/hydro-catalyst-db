@@ -1,4 +1,4 @@
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { supabase } from '@/integrations/supabase/client';
 
 const BUCKET_NAME = 'advisor-attachments';
 
@@ -21,7 +21,7 @@ export async function uploadAdvisorAttachment(
   const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
   const filePath = `${userId}/${timestamp}-${sanitizedName}`;
 
-  const { data, error } = await externalSupabase.storage
+  const { data, error } = await supabase.storage
     .from(BUCKET_NAME)
     .upload(filePath, file, {
       cacheControl: '3600',
@@ -34,7 +34,7 @@ export async function uploadAdvisorAttachment(
   }
 
   // Get public URL
-  const { data: urlData } = externalSupabase.storage
+  const { data: urlData } = supabase.storage
     .from(BUCKET_NAME)
     .getPublicUrl(data.path);
 
