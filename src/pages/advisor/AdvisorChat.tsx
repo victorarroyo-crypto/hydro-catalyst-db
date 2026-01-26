@@ -170,6 +170,26 @@ export default function AdvisorChat() {
     const message = inputValue;
     setInputValue('');
 
+    // Upload attachments to storage if any
+    let uploadedAttachments: Array<{ url: string; type: string; name: string }> = [];
+    if (attachments.length > 0 && advisorUser?.id) {
+      try {
+        const { uploadMultipleAttachments } = await import('@/lib/uploadAdvisorAttachment');
+        const filesToUpload = attachments
+          .filter(a => a.file)
+          .map(a => ({ id: a.id, file: a.file!, name: a.name, type: a.type }));
+        
+        if (filesToUpload.length > 0) {
+          toast.info('Subiendo archivos adjuntos...');
+          const uploaded = await uploadMultipleAttachments(filesToUpload, advisorUser.id);
+          uploadedAttachments = uploaded.map(u => ({ url: u.url, type: u.type, name: u.name }));
+        }
+      } catch (uploadError) {
+        console.error('Upload error:', uploadError);
+        toast.error('Error al subir archivos. Enviando mensaje sin adjuntos.');
+      }
+    }
+
     try {
       // Use streaming endpoint if Deep Mode + Streaming are enabled
       if (useStreamingUI && advisorUser?.id) {
@@ -188,14 +208,18 @@ export default function AdvisorChat() {
           message,
           advisorUser.id,
           currentDeepChatId || chatId, // Prioritize deepStream.chatId for session continuity
-          validatedConfig ? {
-            synthesis_model: validatedConfig.synthesis_model,
-            analysis_model: validatedConfig.analysis_model,
-            search_model: validatedConfig.search_model,
-            enable_web_search: validatedConfig.enable_web_search,
-            enable_rag: validatedConfig.enable_rag,
-          } : undefined
+          {
+            synthesis_model: validatedConfig?.synthesis_model,
+            analysis_model: validatedConfig?.analysis_model,
+            search_model: validatedConfig?.search_model,
+            enable_web_search: validatedConfig?.enable_web_search,
+            enable_rag: validatedConfig?.enable_rag,
+            attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+          }
         );
+        
+        // Clear attachments after sending
+        setAttachments([]);
         refetchCredits();
       } else {
         // Use standard endpoint (streaming or non-streaming based on deep mode)

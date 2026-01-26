@@ -34,12 +34,19 @@ export interface StreamState {
   factsExtracted: ExtractedFact[];
 }
 
+interface StreamAttachment {
+  url: string;
+  type: string;
+  name: string;
+}
+
 interface DeepStreamConfig {
   synthesis_model?: string;
   analysis_model?: string;
   search_model?: string;
   enable_web_search?: boolean;
   enable_rag?: boolean;
+  attachments?: StreamAttachment[];
 }
 
 const INITIAL_STATE: StreamState = {
@@ -103,6 +110,10 @@ export function useDeepAdvisorStream() {
           search_model: config?.search_model,
           enable_web_search: config?.enable_web_search ?? true,
           enable_rag: config?.enable_rag ?? true,
+          // Include file attachments if present
+          attachments: config?.attachments && config.attachments.length > 0 
+            ? config.attachments 
+            : undefined,
         }),
         signal: abortControllerRef.current.signal,
       });
