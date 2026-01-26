@@ -174,11 +174,20 @@ export default function AdvisorChat() {
       // Use streaming endpoint if Deep Mode + Streaming are enabled
       if (useStreamingUI && advisorUser?.id) {
         setPendingUserMessage(message);
-        deepStream.reset();
+        
+        // CRITICAL: Use chat_id from deepStream if available (session memory)
+        // Only reset if starting a completely new conversation
+        const currentDeepChatId = deepStream.chatId;
+        
+        // Don't reset if we have an active session - preserve context
+        if (!currentDeepChatId) {
+          deepStream.reset();
+        }
+        
         await deepStream.sendMessage(
           message,
           advisorUser.id,
-          chatId,
+          currentDeepChatId || chatId, // Prioritize deepStream.chatId for session continuity
           validatedConfig ? {
             synthesis_model: validatedConfig.synthesis_model,
             analysis_model: validatedConfig.analysis_model,
@@ -299,7 +308,7 @@ export default function AdvisorChat() {
         userCredits={balance}
         onNewChat={() => {
           startNewChat();
-          deepStream.reset();
+          deepStream.reset(); // This clears chatId, ensuring next message starts fresh session
         }}
       />
 
