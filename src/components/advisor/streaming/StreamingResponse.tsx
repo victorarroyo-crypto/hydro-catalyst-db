@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
+import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
 
 interface StreamingResponseProps {
   content: string;
@@ -13,10 +14,13 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
   const [displayedContent, setDisplayedContent] = useState('');
   const [showCursor, setShowCursor] = useState(true);
 
+  // Clean and enhance the markdown content
+  const cleanedContent = useMemo(() => cleanMarkdownContent(content), [content]);
+
   // Typing effect - update displayed content as new content arrives
   useEffect(() => {
-    setDisplayedContent(content);
-  }, [content]);
+    setDisplayedContent(cleanedContent);
+  }, [cleanedContent]);
 
   // Blinking cursor effect
   useEffect(() => {
