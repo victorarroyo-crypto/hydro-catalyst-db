@@ -53,7 +53,23 @@ export function fixMarkdownTables(text: string): string {
 function isTableRow(line: string): boolean {
   if (!line) return false;
   const trimmed = line.trim();
-  return trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.length > 2;
+  
+  // Must start and end with | and have some content
+  if (!trimmed.startsWith('|') || !trimmed.endsWith('|') || trimmed.length <= 2) {
+    return false;
+  }
+  
+  // NOT a table if it contains flow diagram indicators
+  // These are typically treatment trains or process flows
+  if (trimmed.includes('→') || trimmed.includes('←') || 
+      trimmed.includes('↓') || trimmed.includes('↑') ||
+      /\[\d+\./.test(trimmed)) { // [1. Step], [2. Step] patterns
+    return false;
+  }
+  
+  // A valid table row should have multiple cells (at least 2 | besides start/end)
+  const pipeCount = (trimmed.match(/\|/g) || []).length;
+  return pipeCount >= 3; // |cell1|cell2| = 3 pipes minimum
 }
 
 function isSeparatorRow(line: string): boolean {
@@ -61,6 +77,19 @@ function isSeparatorRow(line: string): boolean {
   const trimmed = line.trim();
   // Separator rows contain only |, -, :, and spaces
   return /^\|[\s\-:|]+\|$/.test(trimmed) && trimmed.includes('-');
+}
+
+/**
+ * Checks if content looks like a flow diagram (treatment train, process flow, etc.)
+ * These should be rendered as code blocks for proper formatting.
+ */
+function isFlowDiagram(line: string): boolean {
+  if (!line) return false;
+  const trimmed = line.trim();
+  
+  // Contains arrows and bracketed steps
+  return (trimmed.includes('→') || trimmed.includes('←')) && 
+         (trimmed.includes('[') || trimmed.includes(']'));
 }
 
 /**
@@ -192,6 +221,61 @@ export function enhanceTitleFormatting(text: string): string {
 }
 
 /**
+ * Wraps flow diagrams in code blocks for better formatting.
+ * Detects treatment trains and process flows with arrows.
+ */
+export function formatFlowDiagrams(text: string): string {
+  if (!text) return text;
+  
+  const lines = text.split('\n');
+  const result: string[] = [];
+  let inFlowBlock = false;
+  let flowLines: string[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    // Check if this is a flow diagram line
+    const isFlow = (trimmed.includes('→') || trimmed.includes('←')) && 
+                   (trimmed.includes('[') || /\d+\./.test(trimmed));
+    
+    // Also catch continuation lines (starting with [ or containing → in sequence)
+    const isContinuation = inFlowBlock && 
+                          (trimmed.startsWith('[') || trimmed.includes('→') || 
+                           trimmed === '↓' || /^\[\d+\./.test(trimmed));
+    
+    if (isFlow || isContinuation) {
+      if (!inFlowBlock) {
+        inFlowBlock = true;
+        flowLines = [];
+      }
+      flowLines.push(trimmed);
+    } else {
+      // End of flow block
+      if (inFlowBlock && flowLines.length > 0) {
+        // Don't wrap if already in a code block context
+        result.push('```');
+        result.push(...flowLines);
+        result.push('```');
+        flowLines = [];
+        inFlowBlock = false;
+      }
+      result.push(line);
+    }
+  }
+  
+  // Handle flow block at end of text
+  if (inFlowBlock && flowLines.length > 0) {
+    result.push('```');
+    result.push(...flowLines);
+    result.push('```');
+  }
+  
+  return result.join('\n');
+}
+
+/**
  * Clean and normalize markdown content for better rendering.
  */
 export function cleanMarkdownContent(text: string): string {
@@ -201,6 +285,9 @@ export function cleanMarkdownContent(text: string): string {
   
   // First enhance title formatting
   cleaned = enhanceTitleFormatting(cleaned);
+  
+  // Format flow diagrams as code blocks
+  cleaned = formatFlowDiagrams(cleaned);
   
   // Then fix tables
   cleaned = fixMarkdownTables(cleaned);
