@@ -14,6 +14,12 @@ export interface StreamSource {
   url?: string;
 }
 
+export interface ExtractedFact {
+  type: string;
+  key: string;
+  value: string;
+}
+
 export interface StreamState {
   phase: string;
   phaseMessage: string;
@@ -24,6 +30,8 @@ export interface StreamState {
   isStreaming: boolean;
   error: string | null;
   chatId: string | null;
+  hasContext: boolean;
+  factsExtracted: ExtractedFact[];
 }
 
 interface DeepStreamConfig {
@@ -44,6 +52,8 @@ const INITIAL_STATE: StreamState = {
   isStreaming: false,
   error: null,
   chatId: null,
+  hasContext: false,
+  factsExtracted: [],
 };
 
 export function useDeepAdvisorStream() {
@@ -127,6 +137,15 @@ export function useDeepAdvisorStream() {
               const data = JSON.parse(jsonStr);
               
               switch (data.event) {
+                case 'session':
+                  // Session initialization with chat_id and context status
+                  setState(prev => ({
+                    ...prev,
+                    chatId: data.chat_id || prev.chatId,
+                    hasContext: data.has_context || false,
+                  }));
+                  break;
+
                 case 'phase':
                   setState(prev => ({
                     ...prev,
@@ -189,12 +208,13 @@ export function useDeepAdvisorStream() {
                   break;
 
                 case 'complete':
-                  // Finalize with sources and scores
+                  // Finalize with sources, scores, and extracted facts
                   setState(prev => ({
                     ...prev,
                     sources: data.sources || prev.sources,
                     domainScores: data.domain_scores || null,
                     chatId: data.chat_id || prev.chatId,
+                    factsExtracted: data.facts_extracted || prev.factsExtracted,
                     isStreaming: false,
                     phase: 'complete',
                     phaseMessage: 'Análisis completado',
