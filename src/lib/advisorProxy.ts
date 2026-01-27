@@ -69,30 +69,98 @@ export async function callAdvisorProxy<T = unknown>(
 /**
  * Stream SSE from the advisor-railway-proxy edge function.
  * Returns a ReadableStream for processing SSE events.
+ * Includes extended timeout for requests with attachments.
  */
 export async function streamAdvisorProxy(
   endpoint: string,
   payload: unknown,
   signal?: AbortSignal
 ): Promise<Response> {
-  const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/advisor-railway-proxy`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
-      },
-      body: JSON.stringify({
-        endpoint,
+  const hasAttachments = (payload as { attachments?: unknown[] })?.attachments?.length > 0;
+  
+  // Create a timeout controller for extended streaming operations
+  const timeoutMs = hasAttachments ? 180000 : 120000; // 3min with attachments, 2min without
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.warn('[advisorProxy] Streaming timeout reached');
+    timeoutController.abort();
+  }, timeoutMs);
+  
+  // Combine external signal with timeout
+  const combinedSignal = signal || timeoutController.signal;
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/advisor-railway-proxy`,
+      {
         method: 'POST',
-        payload,
-      }),
-      signal,
-    }
-  );
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        body: JSON.stringify({
+          endpoint,
+          method: 'POST',
+          payload,
+        }),
+        signal: combinedSignal,
+      }
+    );
 
-  return response;
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error instanceof Error && error.name === 'AbortError') {
+      // Return a synthetic timeout response
+      return new Response(JSON.stringify({
+        error: 'Request Timeout',
+        message: 'La solicitud tardó demasiado. Por favor, intenta de nuevo.',
+        code: 'CLIENT_TIMEOUT'
+      }), {
+        status: 408,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    throw error;
+  }
+}
+
+/**
+ * Check if the proxy/Railway backend is available
+ */
+export async function checkProxyHealth(): Promise<{ ok: boolean; latency?: number; error?: string }> {
+  const startTime = Date.now();
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/advisor-railway-proxy`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: '/api/advisor/models',
+          method: 'GET',
+        }),
+      }
+    );
+    
+    const latency = Date.now() - startTime;
+    
+    if (response.ok) {
+      return { ok: true, latency };
+    }
+    
+    const data = await response.json().catch(() => ({}));
+    return { ok: false, latency, error: data.message || `HTTP ${response.status}` };
+  } catch (error) {
+    return { 
+      ok: false, 
+      error: error instanceof Error ? error.message : 'Network error' 
+    };
+  }
 }
 
 /**

@@ -82,18 +82,22 @@ export function useDeepAdvisorStream() {
     message: string,
     userId: string,
     chatId?: string | null,
-    config?: DeepStreamConfig
+    config?: DeepStreamConfig,
+    retryCount = 0
   ) => {
+    const MAX_RETRIES = 1;
     abortControllerRef.current = new AbortController();
 
     setState(prev => ({
       ...INITIAL_STATE,
       isStreaming: true,
       phase: 'starting',
-      phaseMessage: 'Iniciando análisis profundo...',
+      phaseMessage: retryCount > 0 ? 'Reintentando conexión...' : 'Iniciando análisis profundo...',
     }));
 
     try {
+      const hasAttachments = config?.attachments && config.attachments.length > 0;
+      
       const payload = {
         user_id: userId,
         message,
@@ -104,9 +108,7 @@ export function useDeepAdvisorStream() {
         search_model: config?.search_model,
         enable_web_search: config?.enable_web_search ?? true,
         enable_rag: config?.enable_rag ?? true,
-        attachments: config?.attachments && config.attachments.length > 0 
-          ? config.attachments 
-          : undefined,
+        attachments: hasAttachments ? config.attachments : undefined,
       };
 
       // Use proxy for streaming
@@ -115,6 +117,21 @@ export function useDeepAdvisorStream() {
         payload,
         abortControllerRef.current.signal
       );
+
+      // Check for error response (non-streaming)
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const errorData = await response.json();
+        const errorCode = errorData.code || '';
+        
+        // Retry on timeout/connection errors
+        if ((errorCode === 'TIMEOUT' || errorCode === 'SSE_TIMEOUT' || errorCode === 'CONNECTION_FAILED') && retryCount < MAX_RETRIES) {
+          console.log('[useDeepAdvisorStream] Retrying after error:', errorCode);
+          return sendMessage(message, userId, chatId, config, retryCount + 1);
+        }
+        
+        throw new Error(errorData.message || errorData.error || `HTTP error ${response.status}`);
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -254,9 +271,18 @@ export function useDeepAdvisorStream() {
           isStreaming: false,
         }));
       } else {
+        const errorMessage = error instanceof Error ? error.message : 'Error de conexión';
+        const isConnectionError = errorMessage.includes('timeout') || 
+                                   errorMessage.includes('conexión') || 
+                                   errorMessage.includes('servidor');
+        
         setState(prev => ({
           ...prev,
-          error: error instanceof Error ? error.message : 'Error de conexión',
+          error: errorMessage,
+          phase: 'error',
+          phaseMessage: isConnectionError 
+            ? 'Error de conexión con el servidor' 
+            : 'Error durante el análisis',
           isStreaming: false,
         }));
       }

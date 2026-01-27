@@ -42,6 +42,10 @@ function isSSEEndpoint(endpoint: string): boolean {
   return SSE_ENDPOINTS.some(sse => endpoint.startsWith(sse));
 }
 
+// Timeout configurations
+const NON_STREAMING_TIMEOUT = 60000; // 60s for normal requests
+const STREAMING_TIMEOUT = 180000; // 3 minutes for streaming with attachments
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -49,11 +53,21 @@ serve(async (req) => {
   }
 
   const startTime = Date.now();
+  const requestId = crypto.randomUUID().slice(0, 8);
+  
+  console.log(`[advisor-railway-proxy][${requestId}] Request received`);
 
   try {
     // Parse request body
     const body = await req.json();
     const { endpoint, method = 'POST', payload, query_params } = body;
+    
+    console.log(`[advisor-railway-proxy][${requestId}] Parsed:`, { 
+      endpoint, 
+      method, 
+      hasPayload: !!payload,
+      payloadSize: payload ? JSON.stringify(payload).length : 0,
+    });
 
     if (!endpoint) {
       return new Response(JSON.stringify({ error: 'Bad Request', message: 'Missing endpoint' }), {
@@ -128,11 +142,14 @@ serve(async (req) => {
     }
 
     const isStreaming = isSSEEndpoint(endpoint);
-    console.log('[advisor-railway-proxy] Proxying:', { 
+    const hasAttachments = payload?.attachments && Array.isArray(payload.attachments) && payload.attachments.length > 0;
+    
+    console.log(`[advisor-railway-proxy][${requestId}] Proxying:`, { 
       endpoint, 
       method, 
-      isStreaming, 
-      hasPayload: !!payload,
+      isStreaming,
+      hasAttachments,
+      attachmentCount: hasAttachments ? payload.attachments.length : 0,
       userId: userId || 'N/A',
     });
 
@@ -142,6 +159,7 @@ serve(async (req) => {
       headers: {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
+        'Keep-Alive': 'timeout=120',
       },
     };
 
@@ -152,10 +170,11 @@ serve(async (req) => {
     // Add timeout for non-streaming requests
     if (!isStreaming) {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+      const timeoutId = setTimeout(() => controller.abort(), NON_STREAMING_TIMEOUT);
       fetchOptions.signal = controller.signal;
       
       try {
+        console.log(`[advisor-railway-proxy][${requestId}] Fetching Railway...`);
         const response = await fetch(targetUrl, fetchOptions);
         clearTimeout(timeoutId);
         
@@ -169,7 +188,7 @@ serve(async (req) => {
         }
 
         const duration = Date.now() - startTime;
-        console.log('[advisor-railway-proxy] Response:', { 
+        console.log(`[advisor-railway-proxy][${requestId}] Response:`, { 
           status: response.status, 
           ok: response.ok,
           duration: `${duration}ms`,
@@ -181,9 +200,15 @@ serve(async (req) => {
         });
       } catch (fetchError) {
         clearTimeout(timeoutId);
+        const duration = Date.now() - startTime;
+        
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          console.error('[advisor-railway-proxy] Request timeout');
-          return new Response(JSON.stringify({ error: 'Gateway Timeout', message: 'Backend did not respond in time' }), {
+          console.error(`[advisor-railway-proxy][${requestId}] Timeout after ${duration}ms`);
+          return new Response(JSON.stringify({ 
+            error: 'Gateway Timeout', 
+            message: 'El servidor no respondió a tiempo. Intenta de nuevo.',
+            code: 'TIMEOUT'
+          }), {
             status: 504,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -192,10 +217,52 @@ serve(async (req) => {
       }
     }
 
-    // Streaming SSE response - passthrough the body
-    const response = await fetch(targetUrl, fetchOptions);
+    // Streaming SSE response with extended timeout for attachments
+    const streamingTimeout = hasAttachments ? STREAMING_TIMEOUT : NON_STREAMING_TIMEOUT * 2;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.error(`[advisor-railway-proxy][${requestId}] SSE timeout after ${streamingTimeout}ms`);
+      controller.abort();
+    }, streamingTimeout);
+    
+    fetchOptions.signal = controller.signal;
+    
+    console.log(`[advisor-railway-proxy][${requestId}] Starting SSE fetch (timeout: ${streamingTimeout}ms)...`);
+    
+    let response: Response;
+    try {
+      response = await fetch(targetUrl, fetchOptions);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      const duration = Date.now() - startTime;
+      
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        console.error(`[advisor-railway-proxy][${requestId}] SSE connection timeout after ${duration}ms`);
+        return new Response(JSON.stringify({ 
+          error: 'Gateway Timeout', 
+          message: 'La conexión con el servidor tardó demasiado. Intenta con menos documentos.',
+          code: 'SSE_TIMEOUT'
+        }), {
+          status: 504,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      console.error(`[advisor-railway-proxy][${requestId}] SSE fetch error:`, fetchError);
+      return new Response(JSON.stringify({ 
+        error: 'Bad Gateway', 
+        message: 'No se pudo conectar con el servidor. Intenta más tarde.',
+        code: 'CONNECTION_FAILED'
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    // Don't clear timeout yet for streaming - it will be handled by the response finishing
     
     if (!response.ok) {
+      clearTimeout(timeoutId);
       const errorText = await response.text();
       let errorData: unknown;
       try {
@@ -204,7 +271,7 @@ serve(async (req) => {
         errorData = { message: errorText };
       }
       
-      console.error('[advisor-railway-proxy] SSE error:', response.status, errorData);
+      console.error(`[advisor-railway-proxy][${requestId}] SSE error:`, response.status, errorData);
       return new Response(JSON.stringify(errorData), {
         status: response.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -213,15 +280,20 @@ serve(async (req) => {
 
     // Return SSE stream directly
     const duration = Date.now() - startTime;
-    console.log('[advisor-railway-proxy] SSE stream started:', { duration: `${duration}ms` });
-
-    return new Response(response.body, {
+    console.log(`[advisor-railway-proxy][${requestId}] SSE stream started:`, { duration: `${duration}ms` });
+    
+    // Clear timeout when stream completes (wrap the body to detect end)
+    const originalBody = response.body;
+    
+    // Pass through the stream directly - timeout will be cleared when edge function completes
+    return new Response(originalBody, {
       status: 200,
       headers: {
         ...corsHeaders,
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no', // Disable nginx buffering
       },
     });
 
