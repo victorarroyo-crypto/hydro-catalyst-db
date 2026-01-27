@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { API_URL } from '@/lib/api';
+import { callAdvisorProxy } from '@/lib/advisorProxy';
 import { toast } from 'sonner';
 
 export interface ModelOption {
@@ -44,25 +44,28 @@ export interface DeepAdvisorConfigUpdate {
 }
 
 async function fetchDeepAdvisorConfig(userId?: string): Promise<DeepAdvisorConfigResponse> {
-  const url = userId 
-    ? `${API_URL}/api/advisor/deep/config?user_id=${userId}`
-    : `${API_URL}/api/advisor/deep/config`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error('Error al cargar configuración');
+  const { data, error } = await callAdvisorProxy<DeepAdvisorConfigResponse>({
+    endpoint: '/api/advisor/deep/config',
+    method: 'GET',
+    queryParams: userId ? { user_id: userId } : undefined,
+  });
+
+  if (error || !data) {
+    throw new Error(error || 'Error al cargar configuración');
   }
-  return response.json();
+
+  return data;
 }
 
 async function updateDeepAdvisorConfig(config: DeepAdvisorConfigUpdate): Promise<void> {
-  const response = await fetch(`${API_URL}/api/advisor/deep/config`, {
+  const { error } = await callAdvisorProxy({
+    endpoint: '/api/advisor/deep/config',
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
+    payload: config,
   });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Error al guardar' }));
-    throw new Error(error.detail || 'Error al guardar configuración');
+
+  if (error) {
+    throw new Error(error);
   }
 }
 

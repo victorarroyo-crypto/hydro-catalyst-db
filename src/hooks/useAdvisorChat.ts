@@ -1,9 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { streamAdvisorProxy, callAdvisorProxy } from '@/lib/advisorProxy';
 import type { Message, Source } from '@/types/advisorChat';
 import type { AgentAnalysis } from '@/components/advisor/AgentAnalysesAccordion';
-
-const API_BASE = 'https://watertech-scouting-production.up.railway.app';
 
 export interface DeepModeConfig {
   synthesis_model?: string;
@@ -97,74 +96,82 @@ export function useAdvisorChat(userId: string | undefined) {
     }]);
     
     try {
-      // Choose endpoint based on deep mode
-      const endpoint = deepMode 
-        ? `${API_BASE}/api/advisor/deep/chat`
-        : `${API_BASE}/api/advisor/chat/stream`;
-      
-      const body = deepMode 
-        ? {
-            user_id: userId,
-            message: message,
-            chat_id: chatId || undefined,
-            deep_mode: true,
-            synthesis_model: deepConfig?.synthesis_model || model,
-            analysis_model: deepConfig?.analysis_model,
-            search_model: deepConfig?.search_model,
-            enable_web_search: deepConfig?.enable_web_search ?? true,
-            enable_rag: deepConfig?.enable_rag ?? true,
-          }
-        : {
-            user_id: userId,
-            message: message,
-            chat_id: chatId || undefined,
-            model: model
-          };
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache'
-        },
-        cache: 'no-store',
-        body: JSON.stringify(body),
-        signal: abortControllerRef.current.signal
-      });
-
       if (deepMode) {
-        // Deep mode returns JSON, not stream
-        const data = await response.json();
-        
-        if (data.error) {
-          throw new Error(data.error);
-        }
+        // Deep mode - use proxy for JSON response
+        const payload = {
+          user_id: userId,
+          message: message,
+          chat_id: chatId || undefined,
+          deep_mode: true,
+          synthesis_model: deepConfig?.synthesis_model || model,
+          analysis_model: deepConfig?.analysis_model,
+          search_model: deepConfig?.search_model,
+          enable_web_search: deepConfig?.enable_web_search ?? true,
+          enable_rag: deepConfig?.enable_rag ?? true,
+        };
 
-        // Update message with full response
-        setMessages(prev => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1] = { 
-            ...newMessages[newMessages.length - 1],
-            content: data.response || data.synthesis || '',
-            agentAnalyses: data.agent_analyses,
-          };
-          return newMessages;
+        const { data, error } = await callAdvisorProxy<{
+          response?: string;
+          synthesis?: string;
+          agent_analyses?: AgentAnalysis[];
+          chat_id?: string;
+          credits_remaining?: number;
+          error?: string;
+        }>({
+          endpoint: '/api/advisor/deep/chat',
+          method: 'POST',
+          payload,
         });
 
-        // Store agent analyses
-        if (data.agent_analyses) {
-          setLastAgentAnalyses(data.agent_analyses);
+        if (error || data?.error) {
+          throw new Error(error || data?.error || 'Unknown error');
         }
 
-        // Capture chat_id and credits
-        if (data.chat_id) {
-          setChatId(data.chat_id);
-        }
-        if (data.credits_remaining !== undefined) {
-          setCreditsRemaining(data.credits_remaining);
+        if (data) {
+          // Update message with full response
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1] = { 
+              ...newMessages[newMessages.length - 1],
+              content: data.response || data.synthesis || '',
+              agentAnalyses: data.agent_analyses,
+            };
+            return newMessages;
+          });
+
+          // Store agent analyses
+          if (data.agent_analyses) {
+            setLastAgentAnalyses(data.agent_analyses);
+          }
+
+          // Capture chat_id and credits
+          if (data.chat_id) {
+            setChatId(data.chat_id);
+          }
+          if (data.credits_remaining !== undefined) {
+            setCreditsRemaining(data.credits_remaining);
+          }
         }
       } else {
-        // Standard streaming mode
+        // Standard streaming mode - use proxy
+        const payload = {
+          user_id: userId,
+          message: message,
+          chat_id: chatId || undefined,
+          model: model
+        };
+
+        const response = await streamAdvisorProxy(
+          '/api/advisor/chat/stream',
+          payload,
+          abortControllerRef.current.signal
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
+        }
+
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
         let fullResponse = '';

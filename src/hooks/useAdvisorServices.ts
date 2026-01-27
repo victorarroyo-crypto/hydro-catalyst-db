@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-
-const RAILWAY_URL = "https://watertech-scouting-production.up.railway.app";
+import { callAdvisorProxy } from "@/lib/advisorProxy";
 
 interface ServiceResponse {
   success: boolean;
@@ -36,33 +35,29 @@ export const useAdvisorServices = (
     setIsLoading(true);
     
     try {
-      const response = await fetch(
-        `${RAILWAY_URL}/api/advisor/service/${serviceType}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            chat_id: chatId,
-            ...params
-          })
-        }
-      );
+      const { data, error, status } = await callAdvisorProxy<ServiceResponse>({
+        endpoint: `/api/advisor/service/${serviceType}`,
+        method: 'POST',
+        payload: {
+          user_id: userId,
+          chat_id: chatId,
+          ...params
+        },
+      });
       
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        
-        if (response.status === 402) {
-          toast.error(`Créditos insuficientes. Necesitas ${error.detail?.required || '?'} créditos.`);
+      if (error) {
+        if (status === 402) {
+          const errorData = data as { detail?: { required?: number } } | null;
+          toast.error(`Créditos insuficientes. Necesitas ${errorData?.detail?.required || '?'} créditos.`);
           return null;
         }
         
-        throw new Error(error.detail || 'Error en el servicio');
+        throw new Error(error);
       }
       
-      const data: ServiceResponse = await response.json();
+      if (!data) {
+        throw new Error('No response data');
+      }
       
       // Notify completion to refetch data
       onServiceComplete();
