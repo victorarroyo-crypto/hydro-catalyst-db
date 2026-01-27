@@ -178,21 +178,35 @@ serve(async (req) => {
         const response = await fetch(targetUrl, fetchOptions);
         clearTimeout(timeoutId);
         
-        const responseText = await response.text();
-        
-        let responseData: unknown;
-        try {
-          responseData = JSON.parse(responseText);
-        } catch {
-          responseData = { raw: responseText };
-        }
-
         const duration = Date.now() - startTime;
         console.log(`[advisor-railway-proxy][${requestId}] Response:`, { 
           status: response.status, 
           ok: response.ok,
           duration: `${duration}ms`,
         });
+    
+    // Handle Railway-specific errors (502 = Railway down)
+    if (response.status === 502) {
+      console.error(`[advisor-railway-proxy][${requestId}] Railway backend no disponible (502)`);
+      return new Response(JSON.stringify({ 
+        error: 'Backend No Disponible', 
+        message: 'El servidor backend no está respondiendo. Por favor, intenta de nuevo en unos minutos.',
+        code: 'BACKEND_UNAVAILABLE',
+        technical_details: 'Railway application failed to respond'
+      }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    const responseText = await response.text();
+    
+    let responseData: unknown;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      responseData = { raw: responseText };
+    }
 
         return new Response(JSON.stringify(responseData), {
           status: response.status,
