@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-
-const RAILWAY_API_URL = 'https://watertech-scouting-production.up.railway.app';
+import { callAdvisorProxy } from '@/lib/advisorProxy';
 
 // Map deprecated models to valid equivalents
 const MODEL_MIGRATION_MAP: Record<string, string> = {
@@ -31,13 +30,14 @@ function migrateModelKey(key: string): string {
 }
 
 async function fetchLLMModels(): Promise<LLMModelsResponse> {
-  const response = await fetch(`${RAILWAY_API_URL}/api/advisor/models`);
-  
-  if (!response.ok) {
-    throw new Error('Error fetching LLM models');
+  const { data, error } = await callAdvisorProxy<LLMModelsResponse>({
+    endpoint: '/api/advisor/models',
+    method: 'GET',
+  });
+
+  if (error || !data) {
+    throw new Error(error || 'Error fetching LLM models');
   }
-  
-  const data: LLMModelsResponse = await response.json();
   
   // Migrate any deprecated model keys in the response
   const migratedModels = data.models.map(model => ({

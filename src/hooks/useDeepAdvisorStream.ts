@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { API_URL } from '@/lib/api';
+import { streamAdvisorProxy } from '@/lib/advisorProxy';
 
 export interface AgentState {
   id: string;
@@ -94,32 +94,31 @@ export function useDeepAdvisorStream() {
     }));
 
     try {
-      const response = await fetch(`${API_URL}/api/advisor/deep/chat/stream`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          message,
-          chat_id: chatId || undefined,
-          deep_mode: true,
-          synthesis_model: config?.synthesis_model || 'deepseek',
-          analysis_model: config?.analysis_model,
-          search_model: config?.search_model,
-          enable_web_search: config?.enable_web_search ?? true,
-          enable_rag: config?.enable_rag ?? true,
-          // Include file attachments if present
-          attachments: config?.attachments && config.attachments.length > 0 
-            ? config.attachments 
-            : undefined,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
+      const payload = {
+        user_id: userId,
+        message,
+        chat_id: chatId || undefined,
+        deep_mode: true,
+        synthesis_model: config?.synthesis_model || 'deepseek',
+        analysis_model: config?.analysis_model,
+        search_model: config?.search_model,
+        enable_web_search: config?.enable_web_search ?? true,
+        enable_rag: config?.enable_rag ?? true,
+        attachments: config?.attachments && config.attachments.length > 0 
+          ? config.attachments 
+          : undefined,
+      };
+
+      // Use proxy for streaming
+      const response = await streamAdvisorProxy(
+        '/api/advisor/deep/chat/stream',
+        payload,
+        abortControllerRef.current.signal
+      );
 
       if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || `HTTP error ${response.status}`);
       }
 
       const reader = response.body?.getReader();
@@ -149,7 +148,6 @@ export function useDeepAdvisorStream() {
               
               switch (data.event) {
                 case 'session':
-                  // Session initialization with chat_id and context status
                   setState(prev => ({
                     ...prev,
                     chatId: data.chat_id || prev.chatId,
@@ -166,7 +164,6 @@ export function useDeepAdvisorStream() {
                   break;
 
                 case 'context':
-                  // Context sources found during analysis
                   if (data.source && data.found !== undefined) {
                     setState(prev => ({
                       ...prev,
@@ -179,7 +176,6 @@ export function useDeepAdvisorStream() {
                   break;
 
                 case 'agents':
-                  // Initialize all agents as pending
                   if (data.active && Array.isArray(data.active)) {
                     const agentState: Record<string, AgentState> = {};
                     data.active.forEach((agentId: string) => {
@@ -190,7 +186,6 @@ export function useDeepAdvisorStream() {
                   break;
 
                 case 'agent':
-                  // Update individual agent status
                   if (data.agent && data.status) {
                     setState(prev => ({
                       ...prev,
@@ -207,7 +202,6 @@ export function useDeepAdvisorStream() {
                   break;
 
                 case 'synthesis':
-                  // Append text chunk to response
                   if (data.chunk) {
                     setState(prev => ({
                       ...prev,
@@ -219,7 +213,6 @@ export function useDeepAdvisorStream() {
                   break;
 
                 case 'complete':
-                  // Finalize with sources, scores, and extracted facts
                   setState(prev => ({
                     ...prev,
                     sources: data.sources || prev.sources,
@@ -241,7 +234,6 @@ export function useDeepAdvisorStream() {
                   break;
 
                 default:
-                  // Handle any unrecognized events gracefully
                   console.log('Unhandled SSE event:', data.event, data);
               }
             } catch (parseError) {
