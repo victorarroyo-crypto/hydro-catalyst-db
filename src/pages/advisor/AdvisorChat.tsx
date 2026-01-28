@@ -102,11 +102,42 @@ export default function AdvisorChat() {
     }
   );
 
+  // Ref to track if streaming was active (persists across renders)
+  const wasStreamingRef = useRef(false);
+  
+  // Update ref whenever streaming state changes
   useEffect(() => {
+    if (isAnyStreaming) {
+      wasStreamingRef.current = true;
+    }
+  }, [isAnyStreaming]);
+  
+  // Protected authentication redirect - never redirect during active streaming
+  useEffect(() => {
+    // Skip redirect if streaming is active
+    if (isAnyStreaming || isAnyLoading) {
+      return;
+    }
+    
+    // Skip if we just finished streaming (give time to complete)
+    if (wasStreamingRef.current) {
+      wasStreamingRef.current = false;
+      return;
+    }
+    
     if (!authLoading && !isAuthenticated) {
+      // Double-check localStorage as last line of defense
+      const storedUser = localStorage.getItem('advisor_user');
+      if (storedUser) {
+        // User exists in localStorage but context says not authenticated
+        // This is a race condition - don't redirect, let context sync
+        console.warn('[AdvisorChat] Auth context out of sync with localStorage, skipping redirect');
+        return;
+      }
+      
       navigate('/advisor/auth');
     }
-  }, [isAuthenticated, authLoading, navigate]);
+  }, [isAuthenticated, authLoading, navigate, isAnyStreaming, isAnyLoading]);
 
   // Auto-load active chat from localStorage on mount
   useEffect(() => {
