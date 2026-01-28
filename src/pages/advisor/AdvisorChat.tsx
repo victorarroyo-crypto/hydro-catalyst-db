@@ -82,7 +82,18 @@ export default function AdvisorChat() {
     completedCount: 0,
     totalCount: 0,
   });
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('advisor_sidebar_collapsed') === 'true';
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed(prev => {
+      const newValue = !prev;
+      localStorage.setItem('advisor_sidebar_collapsed', String(newValue));
+      return newValue;
+    });
+  };
   
   // Determine if we should use streaming (Deep Mode + Streaming enabled)
   const useStreamingUI = deepMode && streamingMode;
@@ -417,6 +428,8 @@ export default function AdvisorChat() {
           onRemove={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
           uploadProgress={uploadProgress}
           isVisible={attachments.length > 0 || uploadProgress.status === 'uploading'}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
         />
 
         {/* Messages Area */}
