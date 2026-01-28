@@ -1,61 +1,37 @@
 
+# Plan: Prevenir Desconexiones Espurias Durante Streaming
 
-# Plan: Mejorar la Resiliencia del Streaming con Documentos
+## Diagnóstico
 
-## Problema Detectado
+El streaming funcionó correctamente (los logs muestran ~71 segundos de SSE exitoso con status 200). Sin embargo, fuiste redirigido a la página de autenticación porque el componente detectó momentáneamente `isAuthenticated = false`.
 
-La subida de documentos funcionó correctamente (6 PDFs subidos). El fallo ocurre al enviar el mensaje con adjuntos al proxy de streaming. El edge function no llegó a loguear la solicitud, lo que indica que:
+Esto puede ocurrir cuando:
+- React remonta el componente (por error de renderizado o cambio de estado)
+- El contexto de autenticación se reinicializa brevemente
+- Hay una condición de carrera entre el estado de carga y la lectura de localStorage
 
-1. La solicitud puede ser demasiado grande para el edge function
-2. Hay un timeout antes de que Railway responda
-3. Railway sigue sin responder correctamente
+## Cambios Propuestos
 
-## Solución Propuesta
+### 1. Proteger la redirección durante streaming activo
 
-### Paso 1: Agregar timeout y retry en el streaming
-
-Modificar el proxy para manejar mejor las conexiones largas con documentos:
-
-```text
-supabase/functions/advisor-railway-proxy/index.ts
-- Agregar log al inicio del request (para saber si llega)
-- Agregar timeout específico para streaming (120s en lugar de 60s)
-- Agregar headers para keep-alive más robustos
-```
-
-### Paso 2: Mejorar el manejo de errores en el frontend
-
-Modificar el hook para detectar y reportar errores de conexión más claramente:
+Modificar el `useEffect` de autenticación en `AdvisorChat.tsx` para que **no redirija si hay un streaming en curso**:
 
 ```text
-src/hooks/useDeepAdvisorStream.ts
-- Agregar timeout configurable (2 minutos para requests con adjuntos)
-- Mostrar mensaje específico cuando falla la conexión al proxy
-- Agregar retry automático (1 intento)
+src/pages/advisor/AdvisorChat.tsx (líneas 105-109)
+- Agregar verificación: si deepStream.isStreaming o isStreaming están activos, NO redirigir
+- Esto previene que una fluctuación temporal del estado de autenticación interrumpa la respuesta
 ```
 
-### Paso 3: Agregar indicador de estado de conexión
+### 2. Agregar ref para tracking de streaming
 
-Agregar feedback visual cuando el proxy está conectando:
+Crear una referencia que persista entre renders para saber si se estaba haciendo streaming antes de una posible desconexión.
 
-```text
-src/lib/advisorProxy.ts
-- Agregar función para verificar salud del proxy/Railway
-- Retornar error descriptivo cuando Railway no responde
-```
+### 3. Validar localStorage antes de redirigir
+
+Agregar una verificación directa de localStorage como "última línea de defensa" antes de ejecutar la navegación.
 
 ## Resultado Esperado
 
-- Si Railway está caído, verás un mensaje claro: "Servidor no disponible, intenta más tarde"
-- Si el request es muy grande, habrá un timeout controlado
-- Logs completos en el edge function para diagnóstico
-
-## Nota Técnica
-
-El `Failed to fetch` en la última solicitud indica que la conexión al proxy se cortó antes de poder establecerse. Esto puede ser:
-1. Railway completamente caído (más probable dado tu comentario anterior)
-2. El edge function no pudo procesar el payload grande
-3. Un timeout a nivel de red
-
-La solución añade capas de resiliencia para cada escenario.
-
+- Si estás recibiendo una respuesta de streaming, la aplicación **nunca** te redirigirá a la página de login
+- Si hay una desconexión real de sesión, se mostrará un toast de error en lugar de redirigir abruptamente
+- El streaming completará aunque haya fluctuaciones en el estado de autenticación
