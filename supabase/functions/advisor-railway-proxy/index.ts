@@ -45,8 +45,8 @@ function isSSEEndpoint(endpoint: string): boolean {
 // Timeout configurations - Railway backend can take a long time for complex queries
 // NOTE: We keep a shorter default for most endpoints, but allow longer waits for
 // config/model endpoints which can be slow when the backend is cold-starting.
-const DEFAULT_NON_STREAMING_TIMEOUT = 60000; // 60s for most normal requests
-const CONFIG_NON_STREAMING_TIMEOUT = 120000; // 120s for /models and /deep/config
+const DEFAULT_NON_STREAMING_TIMEOUT = 120000; // 120s for most normal requests (backend can cold-start)
+const CONFIG_NON_STREAMING_TIMEOUT = 180000; // 180s for /models and /deep/config
 const STREAMING_TIMEOUT = 300000; // 5 minutes for streaming (Railway deep mode is slow)
 
 function getNonStreamingTimeoutMs(endpoint: string): number {
