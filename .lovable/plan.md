@@ -1,37 +1,101 @@
 
-# Plan: Prevenir Desconexiones Espurias Durante Streaming
+# Plan: Sidebar de Adjuntos Colapsable
 
-## Diagnóstico
-
-El streaming funcionó correctamente (los logs muestran ~71 segundos de SSE exitoso con status 200). Sin embargo, fuiste redirigido a la página de autenticación porque el componente detectó momentáneamente `isAuthenticated = false`.
-
-Esto puede ocurrir cuando:
-- React remonta el componente (por error de renderizado o cambio de estado)
-- El contexto de autenticación se reinicializa brevemente
-- Hay una condición de carrera entre el estado de carga y la lectura de localStorage
+## Objetivo
+Agregar un botón de toggle que permita ocultar/mostrar la barra lateral de adjuntos hacia la izquierda con una animación suave.
 
 ## Cambios Propuestos
 
-### 1. Proteger la redirección durante streaming activo
+### 1. Modificar `AttachmentsSidebar.tsx`
+- Agregar prop `isCollapsed` y `onToggle` para controlar el estado desde el padre
+- Agregar botón de toggle (flecha) en el borde derecho del sidebar
+- Implementar animación CSS de transición `transition-all duration-300`
+- Cuando esté colapsado: ancho mínimo (~12px) mostrando solo el botón de expandir
+- Cuando esté expandido: ancho normal de 208px (w-52)
 
-Modificar el `useEffect` de autenticación en `AdvisorChat.tsx` para que **no redirija si hay un streaming en curso**:
+### 2. Modificar `AdvisorChat.tsx`  
+- Agregar estado `isSidebarCollapsed` con `useState`
+- Pasar el estado y la función toggle al componente `AttachmentsSidebar`
+- Guardar preferencia en localStorage para persistir entre sesiones
+
+## Diseño Visual
 
 ```text
-src/pages/advisor/AdvisorChat.tsx (líneas 105-109)
-- Agregar verificación: si deepStream.isStreaming o isStreaming están activos, NO redirigir
-- Esto previene que una fluctuación temporal del estado de autenticación interrumpa la respuesta
+┌──────────────────────────────────────────────────────┐
+│ Header                                               │
+├──────────────────────────────────────────────────────┤
+│ Services Bar                                         │
+├────────┬─────────────────────────────────────────────┤
+│        │                                             │
+│ [◀]    │  Área de Chat                              │
+│ Sidebar│                                             │
+│ 208px  │  max-w-3xl                                 │
+│        │                                             │
+├────────┴─────────────────────────────────────────────┤
+│ Input Area                                           │
+└──────────────────────────────────────────────────────┘
+
+Colapsado:
+┌───┬───────────────────────────────────────────────────┐
+│[▶]│  Área de Chat (más ancha)                        │
+│12px                                                   │
+└───┴───────────────────────────────────────────────────┘
 ```
 
-### 2. Agregar ref para tracking de streaming
+## Detalles Técnicos
 
-Crear una referencia que persista entre renders para saber si se estaba haciendo streaming antes de una posible desconexión.
+### Props Nuevas para AttachmentsSidebar
+```typescript
+interface AttachmentsSidebarProps {
+  attachments: AttachmentInfo[];
+  onRemove: (id: string) => void;
+  uploadProgress?: UploadProgress;
+  isVisible: boolean;
+  isCollapsed: boolean;        // NUEVO
+  onToggleCollapse: () => void; // NUEVO
+}
+```
 
-### 3. Validar localStorage antes de redirigir
+### Estado en AdvisorChat.tsx
+```typescript
+const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+  return localStorage.getItem('advisor_sidebar_collapsed') === 'true';
+});
 
-Agregar una verificación directa de localStorage como "última línea de defensa" antes de ejecutar la navegación.
+const toggleSidebar = () => {
+  setIsSidebarCollapsed(prev => {
+    const newValue = !prev;
+    localStorage.setItem('advisor_sidebar_collapsed', String(newValue));
+    return newValue;
+  });
+};
+```
 
-## Resultado Esperado
+### Animación del Sidebar
+```typescript
+<div className={cn(
+  "border-r bg-muted/20 flex flex-col shrink-0 transition-all duration-300 relative",
+  isCollapsed ? "w-3" : "w-52"
+)}>
+  {/* Botón toggle siempre visible en el borde derecho */}
+  <button 
+    onClick={onToggleCollapse}
+    className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-background border shadow-sm flex items-center justify-center hover:bg-muted"
+  >
+    {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
+  </button>
+  
+  {/* Contenido del sidebar - oculto cuando colapsado */}
+  {!isCollapsed && (
+    <>
+      {/* Header, progress, file list */}
+    </>
+  )}
+</div>
+```
 
-- Si estás recibiendo una respuesta de streaming, la aplicación **nunca** te redirigirá a la página de login
-- Si hay una desconexión real de sesión, se mostrará un toast de error en lugar de redirigir abruptamente
-- El streaming completará aunque haya fluctuaciones en el estado de autenticación
+## Comportamiento
+- Al hacer clic en el botón de flecha, el sidebar se colapsa/expande con animación
+- La preferencia se guarda en localStorage
+- El botón de toggle aparece como un círculo flotante en el borde del sidebar
+- Cuando está colapsado, solo se ve una línea delgada con el botón de expandir
