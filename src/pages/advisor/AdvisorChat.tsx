@@ -42,7 +42,7 @@ import { FichaModal, type FichaData } from '@/components/advisor/modals/FichaMod
 import { PresupuestoModal, type PresupuestoData } from '@/components/advisor/modals/PresupuestoModal';
 import { PromptExamples } from '@/components/advisor/PromptExamples';
 import { FileAttachmentButton, type UploadProgress } from '@/components/advisor/FileAttachmentButton';
-import { AttachmentsPreview } from '@/components/advisor/AttachmentsPreview';
+import { AttachmentsSidebar } from '@/components/advisor/AttachmentsSidebar';
 import type { Message, AttachmentInfo } from '@/types/advisorChat';
 
 
@@ -409,71 +409,71 @@ export default function AdvisorChat() {
         }}
       />
 
-      {/* Messages Area */}
-      <ScrollArea className="flex-1 px-4" ref={scrollRef}>
-        <div className="max-w-4xl mx-auto py-6 space-y-6">
-          {/* Welcome with example queries */}
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-8 space-y-6">
-              {/* Hero section */}
-              <div className="text-center space-y-4">
-                <div className="relative">
-                  <div className="absolute inset-0 blur-3xl rounded-full" style={{ background: 'linear-gradient(135deg, rgba(48,113,119,0.2), rgba(50,180,205,0.15))' }} />
-                  <img src={vandarumSymbolBlue} alt="Vandarum" className="h-16 w-auto mx-auto relative" />
+      {/* Main Content Area with optional sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Attachments Sidebar - Left side */}
+        <AttachmentsSidebar
+          attachments={attachments}
+          onRemove={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
+          uploadProgress={uploadProgress}
+          isVisible={attachments.length > 0 || uploadProgress.status === 'uploading'}
+        />
+
+        {/* Messages Area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <ScrollArea className="flex-1 px-4" ref={scrollRef}>
+            <div className="max-w-3xl mx-auto py-6 space-y-5">
+              {/* Welcome with example queries */}
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-8 space-y-6">
+                  {/* Hero section */}
+                  <div className="text-center space-y-4">
+                    <div className="relative">
+                      <div className="absolute inset-0 blur-3xl rounded-full" style={{ background: 'linear-gradient(135deg, rgba(48,113,119,0.2), rgba(50,180,205,0.15))' }} />
+                      <img src={vandarumSymbolBlue} alt="Vandarum" className="h-14 w-auto mx-auto relative" />
+                    </div>
+                    <h2 className="text-xl font-bold" style={{ 
+                      background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                    }}>
+                      Tu Experto en Agua Industrial
+                    </h2>
+                    <p className="text-muted-foreground max-w-md mx-auto text-sm">
+                      Resuelve tus dudas sobre tratamiento de agua con IA especializada.
+                    </p>
+                  </div>
+
+                  {/* Value propositions - more compact */}
+                  <div className="flex flex-wrap justify-center gap-2 text-xs">
+                    <Badge variant="outline" className="px-2 py-1 bg-primary/10 border-primary/30 text-primary">
+                      ✓ Respuestas inmediatas
+                    </Badge>
+                    <Badge variant="outline" className="px-2 py-1 bg-primary/10 border-primary/30 text-primary">
+                      ✓ Conocimiento experto
+                    </Badge>
+                  </div>
+                  
+                  <PromptExamples onSelectPrompt={(prompt) => setInputValue(prompt)} />
+
+                  {/* Compact Marketing CTA */}
+                  <div className="border rounded-xl p-4 max-w-md w-full text-center space-y-2 bg-muted/30 border-border/50">
+                    <p className="text-sm font-medium">¿Necesitas una solución personalizada?</p>
+                    <Button 
+                      onClick={() => setActiveModal('presupuesto')}
+                      size="sm"
+                      className="text-white"
+                      style={{
+                        background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)',
+                      }}
+                    >
+                      <Briefcase className="w-3.5 h-3.5 mr-1.5" />
+                      Solicitar Consultoría
+                    </Button>
+                  </div>
                 </div>
-                <h2 className="text-2xl font-bold" style={{ 
-                  background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}>
-                  Tu Experto en Agua Industrial
-                </h2>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  Resuelve tus dudas sobre tratamiento de agua con IA especializada. 
-                  <span className="font-medium" style={{ color: '#307177' }}> +20 años de experiencia</span> en el sector.
-                </p>
-              </div>
-
-              {/* Value propositions */}
-              <div className="flex flex-wrap justify-center gap-3 text-xs">
-                <Badge variant="outline" className="px-3 py-1.5 bg-[#307177]/10 border-[#307177]/30 text-[#307177]">
-                  ✓ Respuestas inmediatas
-                </Badge>
-                <Badge variant="outline" className="px-3 py-1.5 bg-[#32b4cd]/10 border-[#32b4cd]/30 text-[#32b4cd]">
-                  ✓ Conocimiento experto
-                </Badge>
-                <Badge variant="outline" className="px-3 py-1.5 bg-[#8cb63c]/10 border-[#8cb63c]/30 text-[#8cb63c]">
-                  ✓ Normativa actualizada
-                </Badge>
-              </div>
-              
-              <PromptExamples onSelectPrompt={(prompt) => setInputValue(prompt)} />
-
-              {/* Marketing CTA */}
-              <div className="border rounded-xl p-5 max-w-lg w-full text-center space-y-3" style={{
-                background: 'linear-gradient(135deg, rgba(48,113,119,0.08) 0%, rgba(50,180,205,0.05) 50%, rgba(140,182,60,0.08) 100%)',
-                borderColor: 'rgba(48,113,119,0.25)'
-              }}>
-                <p className="text-sm font-medium">
-                  ¿Necesitas una solución personalizada para tu planta?
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Nuestros ingenieros pueden diseñar el tratamiento óptimo para tu caso específico
-                </p>
-                <Button 
-                  onClick={() => setActiveModal('presupuesto')}
-                  className="text-white shadow-lg hover:shadow-xl transition-all"
-                  style={{
-                    background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)',
-                  }}
-                >
-                  <Briefcase className="w-4 h-4 mr-2" />
-                  Solicitar Consultoría
-                </Button>
-              </div>
-            </div>
-          )}
+              )}
 
           {/* Chat Messages */}
           {messages.map((message) => (
@@ -634,18 +634,9 @@ export default function AdvisorChat() {
         </div>
       </ScrollArea>
 
-      {/* Input Area */}
+      {/* Input Area - inside the flex container */}
       <div className="border-t p-4 pb-6" style={{ background: 'linear-gradient(180deg, rgba(48,113,119,0.03) 0%, rgba(50,180,205,0.05) 100%)' }}>
-        <div className="max-w-4xl mx-auto">
-          {/* Attachments Preview - Above input */}
-          {(attachments.length > 0 || uploadProgress.status === 'uploading') && (
-            <AttachmentsPreview
-              attachments={attachments}
-              onRemove={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
-              uploadProgress={uploadProgress}
-            />
-          )}
-          
+        <div className="max-w-3xl mx-auto">
           {/* Input row - fixed height */}
           <div className="flex gap-3 bg-white rounded-2xl p-3 shadow-lg items-center" style={{ border: '2px solid rgba(48,113,119,0.2)' }}>
             <FileAttachmentButton
@@ -670,13 +661,13 @@ export default function AdvisorChat() {
               onKeyDown={handleKeyDown}
               placeholder="Escribe tu consulta sobre tratamiento de agua..."
               disabled={isAnyLoading}
-              className="flex-1 border-0 shadow-none focus-visible:ring-0 h-14 text-base px-4"
+              className="flex-1 border-0 shadow-none focus-visible:ring-0 h-12 text-base px-4"
             />
             {isAnyStreaming ? (
               <Button 
                 onClick={handleStopStreaming}
                 size="lg" 
-                className="h-14 px-6 gap-2 text-white bg-amber-500 hover:bg-amber-600"
+                className="h-12 px-5 gap-2 text-white bg-amber-500 hover:bg-amber-600"
               >
                 <Square className="w-4 h-4" />
                 Detener
@@ -686,7 +677,7 @@ export default function AdvisorChat() {
                 onClick={handleSend} 
                 disabled={isAnyLoading || !inputValue.trim()} 
                 size="lg" 
-                className="h-14 px-8 text-white"
+                className="h-12 px-6 text-white"
                 style={{ background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)' }}
               >
                 {isAnyLoading ? (
@@ -699,7 +690,7 @@ export default function AdvisorChat() {
           </div>
           
           {/* Cost indicator */}
-          <div className="flex items-center justify-center mt-3 text-xs text-muted-foreground gap-4">
+          <div className="flex items-center justify-center mt-2 text-xs text-muted-foreground gap-3">
             <span>
               {canUseFree 
                 ? `Consulta gratuita (${freeRemaining} restantes)`
@@ -710,6 +701,8 @@ export default function AdvisorChat() {
             <span>Las recomendaciones son orientativas</span>
           </div>
         </div>
+      </div>
+      </div>
       </div>
 
       {/* Service Modals */}
