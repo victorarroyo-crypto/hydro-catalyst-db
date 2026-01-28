@@ -1,195 +1,36 @@
 
-
-# Plan: Corregir Bug de AbortSignal en Streaming
+# Plan: Limpiar Adjuntos al Iniciar Nuevo Chat
 
 ## Problema Identificado
-El código actual en `advisorProxy.ts` no combina correctamente el signal del usuario con el timeout interno. Esto causa que las conexiones de streaming se aborten inesperadamente cuando:
-- El navegador aplica su propio timeout (más corto que nuestros 5 minutos)
-- Hay micro-cortes de red sin oportunidad de reintento
+Cuando el usuario hace clic en "Nuevo Chat", el handler en `AdvisorChat.tsx` llama a `startNewChat()` y `deepStream.reset()`, pero **no limpia el array de adjuntos ni el estado de progreso de upload**. Esto causa que los documentos subidos en la sesión anterior permanezcan visibles en el sidebar.
 
-## Cambios Propuestos
+## Solución
+Agregar la limpieza de adjuntos y estado de upload en el handler de "Nuevo Chat".
 
-### 1. Arreglar `src/lib/advisorProxy.ts`
+## Cambio Propuesto
 
-**Antes (bug):**
-```typescript
-const combinedSignal = signal || timeoutController.signal;
+**Archivo:** `src/pages/advisor/AdvisorChat.tsx`
+
+**Antes (líneas 417-420):**
+```tsx
+onNewChat={() => {
+  startNewChat();
+  deepStream.reset();
+}}
 ```
 
-**Después (correcto):**
-```typescript
-// Usar AbortSignal.any() para combinar ambos signals
-// Si el navegador soporta AbortSignal.any() (Chrome 116+, Firefox 124+)
-// O usar un AbortController manual como fallback
-
-const combinedController = new AbortController();
-
-// Abortar si el timeout se alcanza
-const timeoutId = setTimeout(() => {
-  console.warn('[advisorProxy] Streaming timeout reached (5 min)');
-  combinedController.abort(new Error('CLIENT_TIMEOUT'));
-}, timeoutMs);
-
-// Abortar si el signal externo se aborta
-if (signal) {
-  signal.addEventListener('abort', () => {
-    combinedController.abort(signal.reason);
-  });
-}
-
-// Usar el controller combinado
-const combinedSignal = combinedController.signal;
+**Después:**
+```tsx
+onNewChat={() => {
+  startNewChat();
+  deepStream.reset();
+  // Clear attachments and upload state when starting a new chat
+  setAttachments([]);
+  setUploadProgress({ status: 'idle', progress: 0, completedCount: 0, totalCount: 0 });
+}}
 ```
 
-### 2. Mejorar manejo de errores en `useDeepAdvisorStream.ts`
-
-- Distinguir entre abort por timeout vs abort por usuario
-- Agregar retry automático cuando el error es timeout del cliente
-- Mostrar mensaje más claro al usuario
-
-**Cambios:**
-```typescript
-catch (error: unknown) {
-  if (error instanceof Error && error.name === 'AbortError') {
-    // Distinguir causa del abort
-    const reason = error.message || '';
-    
-    if (reason === 'CLIENT_TIMEOUT') {
-      // Timeout del cliente - ofrecer reintento
-      setState(prev => ({
-        ...prev,
-        error: 'La conexión tardó demasiado. Intenta de nuevo o reduce los adjuntos.',
-        phase: 'timeout',
-        phaseMessage: 'Timeout de conexión',
-        isStreaming: false,
-      }));
-    } else {
-      // Abort por usuario (botón Stop)
-      setState(prev => ({
-        ...prev,
-        response: prev.response + '\n\n*[Generación detenida por el usuario]*',
-        isStreaming: false,
-      }));
-    }
-  }
-  // ... resto del manejo de errores
-}
-```
-
-### 3. Agregar diagnóstico visual (opcional)
-
-Agregar un pequeño indicador en la UI que muestre:
-- Tiempo de conexión activa
-- Estado de la conexión (conectando/recibiendo/procesando)
-
-## Archivos a Modificar
-
-| Archivo | Cambio |
-|:--------|:-------|
-| `src/lib/advisorProxy.ts` | Combinar signals correctamente |
-| `src/hooks/useDeepAdvisorStream.ts` | Mejorar manejo de timeout vs abort |
-
-## Detalles Técnicos
-
-### Compatibilidad de `AbortSignal.any()`
-- Chrome 116+ ✅
-- Firefox 124+ ✅
-- Safari 17.4+ ✅
-- Para navegadores antiguos, usaremos el fallback con listeners manuales
-
-### Código Completo para `streamAdvisorProxy`
-
-```typescript
-export async function streamAdvisorProxy(
-  endpoint: string,
-  payload: unknown,
-  signal?: AbortSignal
-): Promise<Response> {
-  const timeoutMs = 300000; // 5 minutos
-  
-  // Crear controller combinado
-  const combinedController = new AbortController();
-  let timeoutId: number | undefined;
-  
-  // Configurar timeout
-  timeoutId = window.setTimeout(() => {
-    console.warn('[advisorProxy] Streaming timeout reached (5 min)');
-    combinedController.abort(new DOMException('CLIENT_TIMEOUT', 'AbortError'));
-  }, timeoutMs);
-  
-  // Escuchar abort externo (usuario presiona Stop o componente se desmonta)
-  const handleExternalAbort = () => {
-    clearTimeout(timeoutId);
-    combinedController.abort(signal?.reason || new DOMException('User cancelled', 'AbortError'));
-  };
-  
-  if (signal) {
-    if (signal.aborted) {
-      // Ya abortado, no hacer fetch
-      clearTimeout(timeoutId);
-      return new Response(JSON.stringify({
-        error: 'Request cancelled',
-        code: 'CANCELLED'
-      }), { status: 499, headers: { 'Content-Type': 'application/json' } });
-    }
-    signal.addEventListener('abort', handleExternalAbort, { once: true });
-  }
-  
-  try {
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/advisor-railway-proxy`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-        body: JSON.stringify({
-          endpoint,
-          method: 'POST',
-          payload,
-        }),
-        signal: combinedController.signal,
-      }
-    );
-
-    clearTimeout(timeoutId);
-    if (signal) {
-      signal.removeEventListener('abort', handleExternalAbort);
-    }
-    
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (signal) {
-      signal.removeEventListener('abort', handleExternalAbort);
-    }
-    
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      const reason = error.message || 'Unknown';
-      
-      if (reason === 'CLIENT_TIMEOUT') {
-        return new Response(JSON.stringify({
-          error: 'Request Timeout',
-          message: 'La solicitud tardó demasiado. Por favor, intenta de nuevo.',
-          code: 'CLIENT_TIMEOUT'
-        }), {
-          status: 408,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      
-      // Abort por usuario - propagarlo silenciosamente
-      throw error;
-    }
-    
-    throw error;
-  }
-}
-```
-
-## Resultado Esperado
-- Las conexiones de streaming tendrán un timeout consistente de 5 minutos
-- El abort por timeout mostrará un mensaje claro diferente al abort por usuario
-- La combinación de signals evitará cortes inesperados del navegador
-
+## Impacto
+- **Mínimo:** Solo 2 líneas adicionales
+- **Sin riesgo:** Usa las mismas funciones que ya se usan en otras partes del código (línea 305-306)
+- **UX mejorada:** Al iniciar un nuevo chat, el sidebar de adjuntos se oculta automáticamente ya que `attachments.length === 0`
