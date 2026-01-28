@@ -416,7 +416,10 @@ export default function AdvisorChat() {
         userCredits={balance}
         onNewChat={() => {
           startNewChat();
-          deepStream.reset(); // This clears chatId, ensuring next message starts fresh session
+          deepStream.reset();
+          // Clear attachments and upload state when starting a new chat
+          setAttachments([]);
+          setUploadProgress({ status: 'idle', progress: 0, completedCount: 0, totalCount: 0 });
         }}
       />
 
