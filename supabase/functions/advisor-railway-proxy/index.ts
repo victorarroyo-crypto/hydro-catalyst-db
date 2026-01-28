@@ -43,8 +43,19 @@ function isSSEEndpoint(endpoint: string): boolean {
 }
 
 // Timeout configurations - Railway backend can take a long time for complex queries
-const NON_STREAMING_TIMEOUT = 60000; // 60s for normal requests
+// NOTE: We keep a shorter default for most endpoints, but allow longer waits for
+// config/model endpoints which can be slow when the backend is cold-starting.
+const DEFAULT_NON_STREAMING_TIMEOUT = 60000; // 60s for most normal requests
+const CONFIG_NON_STREAMING_TIMEOUT = 120000; // 120s for /models and /deep/config
 const STREAMING_TIMEOUT = 300000; // 5 minutes for streaming (Railway deep mode is slow)
+
+function getNonStreamingTimeoutMs(endpoint: string): number {
+  // These endpoints are frequently called on page load and can be slow on backend cold-start.
+  if (endpoint === '/api/advisor/models' || endpoint === '/api/advisor/deep/config') {
+    return CONFIG_NON_STREAMING_TIMEOUT;
+  }
+  return DEFAULT_NON_STREAMING_TIMEOUT;
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -169,8 +180,9 @@ serve(async (req) => {
 
     // Add timeout for non-streaming requests
     if (!isStreaming) {
+      const nonStreamingTimeout = getNonStreamingTimeoutMs(endpoint);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), NON_STREAMING_TIMEOUT);
+      const timeoutId = setTimeout(() => controller.abort(), nonStreamingTimeout);
       fetchOptions.signal = controller.signal;
       
       try {
