@@ -42,9 +42,9 @@ function isSSEEndpoint(endpoint: string): boolean {
   return SSE_ENDPOINTS.some(sse => endpoint.startsWith(sse));
 }
 
-// Timeout configurations
+// Timeout configurations - Railway backend can take a long time for complex queries
 const NON_STREAMING_TIMEOUT = 60000; // 60s for normal requests
-const STREAMING_TIMEOUT = 180000; // 3 minutes for streaming with attachments
+const STREAMING_TIMEOUT = 300000; // 5 minutes for streaming (Railway deep mode is slow)
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -231,8 +231,8 @@ serve(async (req) => {
       }
     }
 
-    // Streaming SSE response with extended timeout for attachments
-    const streamingTimeout = hasAttachments ? STREAMING_TIMEOUT : NON_STREAMING_TIMEOUT * 2;
+    // Streaming SSE response - always use full timeout for deep mode (Railway is slow)
+    const streamingTimeout = STREAMING_TIMEOUT;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.error(`[advisor-railway-proxy][${requestId}] SSE timeout after ${streamingTimeout}ms`);
