@@ -265,11 +265,26 @@ export function useDeepAdvisorStream() {
 
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
-        setState(prev => ({
-          ...prev,
-          response: prev.response + '\n\n*[Generación detenida por el usuario]*',
-          isStreaming: false,
-        }));
+        // Distinguish between timeout and user abort
+        const reason = error.message || '';
+        
+        if (reason === 'CLIENT_TIMEOUT') {
+          // Client-side timeout - offer retry option
+          setState(prev => ({
+            ...prev,
+            error: 'La conexión tardó demasiado. Intenta de nuevo o reduce los adjuntos.',
+            phase: 'timeout',
+            phaseMessage: 'Timeout de conexión',
+            isStreaming: false,
+          }));
+        } else {
+          // User abort (Stop button)
+          setState(prev => ({
+            ...prev,
+            response: prev.response + '\n\n*[Generación detenida por el usuario]*',
+            isStreaming: false,
+          }));
+        }
       } else {
         const errorMessage = error instanceof Error ? error.message : 'Error de conexión';
         const isConnectionError = errorMessage.includes('timeout') || 

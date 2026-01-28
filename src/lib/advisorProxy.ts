@@ -76,16 +76,35 @@ export async function streamAdvisorProxy(
   payload: unknown,
   signal?: AbortSignal
 ): Promise<Response> {
-  // Create a timeout controller for extended streaming operations (match server-side: 5 min)
   const timeoutMs = 300000; // 5 minutes - Railway deep mode can be very slow
-  const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => {
-    console.warn('[advisorProxy] Streaming timeout reached');
-    timeoutController.abort();
+  
+  // Create a combined controller that handles both timeout and external abort
+  const combinedController = new AbortController();
+  let timeoutId: number | undefined;
+  
+  // Configure timeout - aborts with CLIENT_TIMEOUT reason
+  timeoutId = window.setTimeout(() => {
+    console.warn('[advisorProxy] Streaming timeout reached (5 min)');
+    combinedController.abort(new DOMException('CLIENT_TIMEOUT', 'AbortError'));
   }, timeoutMs);
   
-  // Combine external signal with timeout
-  const combinedSignal = signal || timeoutController.signal;
+  // Listen for external abort (user presses Stop or component unmounts)
+  const handleExternalAbort = () => {
+    clearTimeout(timeoutId);
+    combinedController.abort(signal?.reason || new DOMException('User cancelled', 'AbortError'));
+  };
+  
+  if (signal) {
+    // Check if already aborted
+    if (signal.aborted) {
+      clearTimeout(timeoutId);
+      return new Response(JSON.stringify({
+        error: 'Request cancelled',
+        code: 'CANCELLED'
+      }), { status: 499, headers: { 'Content-Type': 'application/json' } });
+    }
+    signal.addEventListener('abort', handleExternalAbort, { once: true });
+  }
   
   try {
     const response = await fetch(
@@ -101,25 +120,39 @@ export async function streamAdvisorProxy(
           method: 'POST',
           payload,
         }),
-        signal: combinedSignal,
+        signal: combinedController.signal,
       }
     );
 
     clearTimeout(timeoutId);
+    if (signal) {
+      signal.removeEventListener('abort', handleExternalAbort);
+    }
+    
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
+    if (signal) {
+      signal.removeEventListener('abort', handleExternalAbort);
+    }
     
-    if (error instanceof Error && error.name === 'AbortError') {
-      // Return a synthetic timeout response
-      return new Response(JSON.stringify({
-        error: 'Request Timeout',
-        message: 'La solicitud tardó demasiado. Por favor, intenta de nuevo.',
-        code: 'CLIENT_TIMEOUT'
-      }), {
-        status: 408,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      const reason = error.message || 'Unknown';
+      
+      if (reason === 'CLIENT_TIMEOUT') {
+        // Timeout - return synthetic response with clear message
+        return new Response(JSON.stringify({
+          error: 'Request Timeout',
+          message: 'La solicitud tardó demasiado. Por favor, intenta de nuevo.',
+          code: 'CLIENT_TIMEOUT'
+        }), {
+          status: 408,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // User abort - propagate silently
+      throw error;
     }
     
     throw error;
