@@ -76,10 +76,8 @@ export async function streamAdvisorProxy(
   payload: unknown,
   signal?: AbortSignal
 ): Promise<Response> {
-  const hasAttachments = (payload as { attachments?: unknown[] })?.attachments?.length > 0;
-  
-  // Create a timeout controller for extended streaming operations
-  const timeoutMs = hasAttachments ? 180000 : 120000; // 3min with attachments, 2min without
+  // Create a timeout controller for extended streaming operations (match server-side: 5 min)
+  const timeoutMs = 300000; // 5 minutes - Railway deep mode can be very slow
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => {
     console.warn('[advisorProxy] Streaming timeout reached');
