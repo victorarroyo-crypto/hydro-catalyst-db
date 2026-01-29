@@ -613,7 +613,7 @@ export default function AdvisorChat() {
           ))}
 
           {/* Deep Mode Response (Polling-based) - Keep visible after job completes */}
-          {useStreamingUI && (deepJob.isPolling || deepJob.status?.status === 'complete' || deepJob.status?.status === 'failed' || deepJob.response) && (
+          {useStreamingUI && (deepJob.isPolling || deepJob.status?.status === 'complete') && (
             <>
               {/* User message for polling mode */}
               {pendingUserMessage && (
@@ -631,14 +631,6 @@ export default function AdvisorChat() {
               <div className="flex gap-3">
                 <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
                 <div className="flex-1 max-w-[85%] space-y-3">
-                  {/* Session Context Indicator */}
-                  {deepJob.hasContext && (
-                    <SessionContextIndicator 
-                      hasContext={deepJob.hasContext}
-                      className="mb-2"
-                    />
-                  )}
-
                   {/* Progress Panel - only show while actively polling */}
                   {deepJob.isPolling && (
                     <DeepAdvisorProgress
@@ -650,32 +642,23 @@ export default function AdvisorChat() {
                     />
                   )}
 
-                  {/* Response - show when there's actual content (during or after polling) */}
-                  {deepJob.response && (
+                  {/* Response when complete - use result directly from status */}
+                  {deepJob.status?.status === 'complete' && deepJob.status?.result?.content && (
                     <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
                       <StreamingResponse
-                        content={deepJob.response}
-                        isStreaming={deepJob.isPolling}
+                        content={deepJob.status.result.content}
+                        isStreaming={false}
                       />
                       
-                      {/* Sources Panel - appears when complete */}
-                      {!deepJob.isPolling && deepJob.sources.length > 0 && (
-                        <SourcesPanel sources={deepJob.sources} />
-                      )}
-
-                      {/* Extracted Facts - appears when complete */}
-                      {!deepJob.isPolling && deepJob.factsExtracted.length > 0 && (
-                        <SessionContextIndicator 
-                          hasContext={false}
-                          factsExtracted={deepJob.factsExtracted}
-                          className="mt-3 pt-3 border-t border-border/30"
-                        />
+                      {/* Sources Panel */}
+                      {deepJob.status.result.sources && deepJob.status.result.sources.length > 0 && (
+                        <SourcesPanel sources={deepJob.status.result.sources} />
                       )}
                     </div>
                   )}
 
                   {/* Error display */}
-                  {deepJob.error && !deepJob.isPolling && (
+                  {deepJob.status?.status === 'failed' && deepJob.error && (
                     <div className="bg-red-50 border border-red-200 rounded-2xl rounded-tl-none p-4 text-red-700 text-sm">
                       {deepJob.error}
                     </div>
