@@ -1,114 +1,69 @@
 
-## Objetivo (lo que vamos a arreglar)
-Que cuando un Deep Job termine, **siempre** veas el resultado en pantalla (sin “pantalla vacía”), y que el historial/recarga carguen el chat correcto.
+## Problema identificado
 
-Ahora mismo ocurren dos fallos a la vez:
-1) **Se intenta “sincronizar” el chat al finalizar** llamando `loadChat(result.chat_id)`, pero `loadChat()` está leyendo de una BD equivocada (cliente externo). Resultado: vuelve vacío y “no sale nada”.
-2) **La UI de Deep Job está renderizada solo mientras `deepJob.isPolling === true`**. Cuando el job pasa a `complete`, `isPolling` se vuelve `false` y el bloque entero desaparece, aunque `deepJob.response` tenga contenido.
+Las "Conversaciones Recientes" del dashboard no muestran las conversaciones realmente recientes porque el campo `updated_at` de la tabla `advisor_chats` **no se actualiza** cuando se envían mensajes nuevos.
 
----
+### Datos actuales en la base de datos:
+- Hay 23 conversaciones totales
+- La conversación más recientemente "actualizada" es del **18 de enero**
+- Pero la fecha actual es **29 de enero** (11 días de diferencia)
+- Esto significa que aunque hayas enviado mensajes recientemente, el campo `updated_at` nunca se modificó
 
-## Diagnóstico técnico (por qué pasa)
-### A. `loadChat()` apunta al cliente incorrecto
-- Archivo: `src/hooks/useAdvisorChat.ts`
-- Línea actual: `import { externalSupabase } from '@/integrations/supabase/externalClient';`
-- `loadChat()` consulta `advisor_messages` en la base externa.
-- Pero los Deep Jobs (y tu app) guardan `advisor_chats` / `advisor_messages` en el backend principal.
-- Conclusión: al completar el job, el frontend hace `loadChat(chat_id)` pero consulta donde **no están** esos mensajes → la UI se queda sin nada que mostrar.
-
-### B. El bloque de “respuesta Deep” se oculta justo al completar
-- Archivo: `src/pages/advisor/AdvisorChat.tsx`
-- Render actual:
-  - `useStreamingUI && deepJob.isPolling && (...)`
-- Cuando `status === 'complete'`, el hook hace `setIsPolling(false)`, así que el bloque desaparece inmediatamente.
-- Aunque `deepJob.response` tenga texto, ya no se renderiza.
+### Causa raíz
+Cuando el backend (Railway) guarda mensajes en `advisor_messages`, no actualiza el campo `updated_at` del chat padre en `advisor_chats`. Tampoco existe un trigger automático que lo haga.
 
 ---
 
-## Cambios propuestos (solución robusta, sin dejarte en blanco)
-### 1) Corregir `loadChat()` para leer del backend correcto
-**Archivo:** `src/hooks/useAdvisorChat.ts`
+## Solución propuesta
 
-Cambios:
-- Sustituir `externalSupabase` por `supabase` (`@/integrations/supabase/client`).
-- Manejar también `error` de la query (ahora se ignora).
-- Mapear campos adicionales para que no se pierdan en UI:
-  - `metadata`
-  - `attachments`
-  - `agentAnalyses` (si existe en la tabla)
-  - `sources` (ya existe, mantener)
-  - `credits_used` (ya existe)
+Crear un **trigger en la base de datos** que automáticamente actualice `updated_at` en `advisor_chats` cada vez que se inserte un mensaje nuevo en `advisor_messages`.
 
-Resultado esperado:
-- `loadChat(result.chat_id)` cargará el historial real, y el mensaje final aparecerá como mensaje normal en el chat.
+### Cambios a implementar
 
----
+**1. Crear función y trigger en la base de datos:**
 
-### 2) Mantener visible el panel de resultado Deep al terminar (aunque deje de hacer polling)
-**Archivo:** `src/pages/advisor/AdvisorChat.tsx`
+```sql
+-- Función que actualiza updated_at del chat cuando se inserta un mensaje
+CREATE OR REPLACE FUNCTION update_advisor_chat_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE advisor_chats 
+  SET updated_at = NOW() 
+  WHERE id = NEW.chat_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-Cambios:
-- Reemplazar el guard actual:
-  - Antes: `useStreamingUI && deepJob.isPolling`
-  - Después: `useStreamingUI && (deepJob.isPolling || deepJob.status?.status === 'complete' || deepJob.status?.status === 'failed')`
-- Dentro del bloque:
-  - Mostrar `DeepAdvisorProgress` solo cuando `deepJob.isPolling === true` (como ya está).
-  - Mostrar el contenedor de respuesta si `deepJob.response` existe, **tanto si está polling como si ya terminó**.
-  - Mostrar Sources/Facts cuando `!deepJob.isPolling` (ya está previsto, pero hoy no se llega porque el bloque desaparece).
+-- Trigger que se ejecuta después de cada INSERT en advisor_messages
+CREATE TRIGGER trg_update_advisor_chat_on_message
+AFTER INSERT ON advisor_messages
+FOR EACH ROW
+EXECUTE FUNCTION update_advisor_chat_timestamp();
+```
 
-Resultado esperado:
-- Cuando el job termine, el progreso puede ocultarse, pero la **respuesta queda fija en pantalla**.
+**2. Actualizar los chats existentes (corrección de datos históricos):**
 
----
-
-### 3) “Cinturón y tirantes”: fallback visual si `loadChat()` tarda o falla
-**Archivo:** `src/pages/advisor/AdvisorChat.tsx`
-
-En `onComplete(result)`:
-- Mantener `loadChat(result.chat_id)` (porque queremos consistencia con el historial guardado).
-- Añadir una protección anti-frustración:
-  - Si `result.content` existe, guardar en un estado local tipo `deepResultFallback` (string) para mostrarlo aunque `messages` no llegue.
-  - Si tras X ms `messages` sigue vacío, mostrar toast “Sincronizando historial…” y mantener el fallback visible.
-  - Si `loadChat()` llega bien y ya hay mensajes, limpiar el fallback.
-
-Esto evita el “terminó y no saco nada” incluso si hay un fallo puntual de DB/red.
+```sql
+-- Actualiza updated_at basándose en el mensaje más reciente de cada chat
+UPDATE advisor_chats ac
+SET updated_at = (
+  SELECT MAX(created_at) 
+  FROM advisor_messages am 
+  WHERE am.chat_id = ac.id
+)
+WHERE EXISTS (
+  SELECT 1 FROM advisor_messages am WHERE am.chat_id = ac.id
+);
+```
 
 ---
 
-### 4) (Mejora clave para Historial) Cargar chat por URL `?id=...`
-**Archivo:** `src/pages/advisor/AdvisorChat.tsx`
+## Resultado esperado
 
-Hoy solo se auto-carga desde `localStorage` (`advisor_active_chat_id`). Si vienes desde “Historial” con una URL como `/advisor/chat?id=...`, no está garantizado que cargue ese chat.
-
-Cambios:
-- Leer query param `id` (con `useLocation` + `URLSearchParams`).
-- En el `useEffect` de autoload:
-  1) Si existe `id`, llamar `loadChat(id)`.
-  2) Si no existe `id`, entonces usar el `advisor_active_chat_id` como hasta ahora.
-
-Resultado:
-- Entrar desde Historial abre el chat correcto y muestra mensajes.
-
----
+Una vez implementado:
+- Las conversaciones con actividad reciente aparecerán primero
+- El orden será realmente cronológico basado en la última interacción
+- Los datos históricos también se corregirán
 
 ## Archivos afectados
-1) `src/hooks/useAdvisorChat.ts`
-2) `src/pages/advisor/AdvisorChat.tsx`
-
----
-
-## Riesgos y consideraciones
-- Este arreglo también reduce dependencia del cliente “externalSupabase” para Advisor, lo cual es positivo.
-- Si `advisor_messages` tiene RLS en el backend principal, debemos asegurarnos de que el usuario autenticado tiene permiso de lectura para sus propios chats (si hiciera falta, lo revisaremos después; primero corregimos el bug evidente del cliente equivocado).
-
----
-
-## Checklist de verificación (end-to-end)
-1) Iniciar un Deep Job y esperar a que complete:
-   - Debe mostrarse el resultado sin quedarse en blanco.
-2) Recargar durante el job:
-   - Debe reanudar el progreso (ya lo implementamos) y al terminar mostrar el resultado.
-3) Ir a Historial → abrir un chat:
-   - Debe cargar el chat correcto (vía `?id=`) y renderizar mensajes.
-4) Caso adverso (simular red lenta):
-   - Aunque `loadChat()` tarde, debe verse el resultado (fallback) y no quedar pantalla vacía.
+Solo se requiere una migración de base de datos (sin cambios en código frontend)
