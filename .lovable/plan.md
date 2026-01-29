@@ -1,186 +1,114 @@
 
-# Plan: Auto-Reanudar Deep Mode al Detectar Job Activo
+## Objetivo (lo que vamos a arreglar)
+Que cuando un Deep Job termine, **siempre** veas el resultado en pantalla (sin “pantalla vacía”), y que el historial/recarga carguen el chat correcto.
 
-## Problema Identificado
+Ahora mismo ocurren dos fallos a la vez:
+1) **Se intenta “sincronizar” el chat al finalizar** llamando `loadChat(result.chat_id)`, pero `loadChat()` está leyendo de una BD equivocada (cliente externo). Resultado: vuelve vacío y “no sale nada”.
+2) **La UI de Deep Job está renderizada solo mientras `deepJob.isPolling === true`**. Cuando el job pasa a `complete`, `isPolling` se vuelve `false` y el bloque entero desaparece, aunque `deepJob.response` tenga contenido.
 
-Cuando se recarga la página con un job en curso:
+---
 
-1. El hook `useDeepAdvisorJob` restaura el `jobId` desde `localStorage` y activa `isPolling` correctamente
-2. Los toggles de Deep Mode y Streaming Mode tienen sus propios `localStorage` keys separados
-3. La UI del progreso solo se muestra cuando `useStreamingUI = deepMode && streamingMode` Y `deepJob.isPolling`
-4. Si los toggles no están activos, el polling continúa pero la UI no se muestra
+## Diagnóstico técnico (por qué pasa)
+### A. `loadChat()` apunta al cliente incorrecto
+- Archivo: `src/hooks/useAdvisorChat.ts`
+- Línea actual: `import { externalSupabase } from '@/integrations/supabase/externalClient';`
+- `loadChat()` consulta `advisor_messages` en la base externa.
+- Pero los Deep Jobs (y tu app) guardan `advisor_chats` / `advisor_messages` en el backend principal.
+- Conclusión: al completar el job, el frontend hace `loadChat(chat_id)` pero consulta donde **no están** esos mensajes → la UI se queda sin nada que mostrar.
 
-## Flujo Actual
+### B. El bloque de “respuesta Deep” se oculta justo al completar
+- Archivo: `src/pages/advisor/AdvisorChat.tsx`
+- Render actual:
+  - `useStreamingUI && deepJob.isPolling && (...)`
+- Cuando `status === 'complete'`, el hook hace `setIsPolling(false)`, así que el bloque desaparece inmediatamente.
+- Aunque `deepJob.response` tenga texto, ya no se renderiza.
 
-```text
-                 Recarga
-                    │
-    ┌───────────────┴───────────────┐
-    ▼                               ▼
-useDeepAdvisorJob             useDeepMode
-(localStorage:                (localStorage:
-deep_advisor_active_job)      advisor_deep_mode)
-    │                               │
-    ▼                               ▼
-isPolling = true              deepMode = false ← Problema
-    │                               │
-    └──────────┬────────────────────┘
-               ▼
-      useStreamingUI = false
-               │
-               ▼
-    Panel de progreso OCULTO
-```
+---
 
-## Solución
+## Cambios propuestos (solución robusta, sin dejarte en blanco)
+### 1) Corregir `loadChat()` para leer del backend correcto
+**Archivo:** `src/hooks/useAdvisorChat.ts`
 
-Al detectar un job activo en `localStorage`, forzar automáticamente la activación de Deep Mode y Streaming Mode:
+Cambios:
+- Sustituir `externalSupabase` por `supabase` (`@/integrations/supabase/client`).
+- Manejar también `error` de la query (ahora se ignora).
+- Mapear campos adicionales para que no se pierdan en UI:
+  - `metadata`
+  - `attachments`
+  - `agentAnalyses` (si existe en la tabla)
+  - `sources` (ya existe, mantener)
+  - `credits_used` (ya existe)
 
-```text
-                 Recarga
-                    │
-                    ▼
-           useDeepAdvisorJob
-           (detecta job activo)
-                    │
-                    ▼
-      Auto-activa Deep + Streaming
-                    │
-    ┌───────────────┴───────────────┐
-    ▼                               ▼
-isPolling = true           useStreamingUI = true
-    │                               │
-    └──────────────┬────────────────┘
-                   ▼
-       Panel de progreso VISIBLE
-```
+Resultado esperado:
+- `loadChat(result.chat_id)` cargará el historial real, y el mensaje final aparecerá como mensaje normal en el chat.
 
-## Archivos a Modificar
+---
 
-| Archivo | Cambio |
-|:--------|:-------|
-| `src/hooks/useDeepAdvisorJob.ts` | Retornar flag `restoredFromStorage` cuando se recupera un job |
-| `src/pages/advisor/AdvisorChat.tsx` | Usar el flag para forzar activación de Deep + Streaming modes |
+### 2) Mantener visible el panel de resultado Deep al terminar (aunque deje de hacer polling)
+**Archivo:** `src/pages/advisor/AdvisorChat.tsx`
 
-## Implementación Detallada
+Cambios:
+- Reemplazar el guard actual:
+  - Antes: `useStreamingUI && deepJob.isPolling`
+  - Después: `useStreamingUI && (deepJob.isPolling || deepJob.status?.status === 'complete' || deepJob.status?.status === 'failed')`
+- Dentro del bloque:
+  - Mostrar `DeepAdvisorProgress` solo cuando `deepJob.isPolling === true` (como ya está).
+  - Mostrar el contenedor de respuesta si `deepJob.response` existe, **tanto si está polling como si ya terminó**.
+  - Mostrar Sources/Facts cuando `!deepJob.isPolling` (ya está previsto, pero hoy no se llega porque el bloque desaparece).
 
-### 1. Modificar `useDeepAdvisorJob.ts`
+Resultado esperado:
+- Cuando el job termine, el progreso puede ocultarse, pero la **respuesta queda fija en pantalla**.
 
-Añadir un estado que indica si el job fue restaurado desde storage:
+---
 
-```typescript
-const [restoredFromStorage, setRestoredFromStorage] = useState(false);
+### 3) “Cinturón y tirantes”: fallback visual si `loadChat()` tarda o falla
+**Archivo:** `src/pages/advisor/AdvisorChat.tsx`
 
-// En el useEffect de restauración:
-useEffect(() => {
-  const savedData = localStorage.getItem(STORAGE_KEY);
-  if (savedData) {
-    try {
-      const { jobId: savedJobId, chatId: savedChatId, startedAt } = JSON.parse(savedData);
-      const thirtyMinutesMs = 30 * 60 * 1000;
-      if (Date.now() - startedAt < thirtyMinutesMs) {
-        console.log('[useDeepAdvisorJob] Resuming job:', savedJobId);
-        setJobId(savedJobId);
-        setChatId(savedChatId);
-        setIsPolling(true);
-        setRestoredFromStorage(true); // ← Nuevo flag
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }
-}, []);
+En `onComplete(result)`:
+- Mantener `loadChat(result.chat_id)` (porque queremos consistencia con el historial guardado).
+- Añadir una protección anti-frustración:
+  - Si `result.content` existe, guardar en un estado local tipo `deepResultFallback` (string) para mostrarlo aunque `messages` no llegue.
+  - Si tras X ms `messages` sigue vacío, mostrar toast “Sincronizando historial…” y mantener el fallback visible.
+  - Si `loadChat()` llega bien y ya hay mensajes, limpiar el fallback.
 
-// En el return:
-return {
-  // ... existing properties
-  restoredFromStorage, // ← Exponer el flag
-};
-```
+Esto evita el “terminó y no saco nada” incluso si hay un fallo puntual de DB/red.
 
-### 2. Modificar `AdvisorChat.tsx`
+---
 
-Añadir un `useEffect` que reacciona cuando se detecta un job restaurado y fuerza los toggles:
+### 4) (Mejora clave para Historial) Cargar chat por URL `?id=...`
+**Archivo:** `src/pages/advisor/AdvisorChat.tsx`
 
-```typescript
-// After getting deepJob and setDeepMode, setStreamingMode
-const { deepMode, setDeepMode } = useDeepMode();
-const { streamingMode, setStreamingMode } = useStreamingMode();
+Hoy solo se auto-carga desde `localStorage` (`advisor_active_chat_id`). Si vienes desde “Historial” con una URL como `/advisor/chat?id=...`, no está garantizado que cargue ese chat.
 
-// Auto-activate Deep + Streaming when a job is restored from storage
-useEffect(() => {
-  if (deepJob.restoredFromStorage && deepJob.isPolling) {
-    console.log('[AdvisorChat] Detected restored job, auto-activating Deep + Streaming modes');
-    
-    // Force enable Deep Mode
-    if (!deepMode) {
-      setDeepMode(true);
-    }
-    
-    // Force enable Streaming Mode
-    if (!streamingMode) {
-      setStreamingMode(true);
-    }
-  }
-}, [deepJob.restoredFromStorage, deepJob.isPolling, deepMode, streamingMode, setDeepMode, setStreamingMode]);
-```
+Cambios:
+- Leer query param `id` (con `useLocation` + `URLSearchParams`).
+- En el `useEffect` de autoload:
+  1) Si existe `id`, llamar `loadChat(id)`.
+  2) Si no existe `id`, entonces usar el `advisor_active_chat_id` como hasta ahora.
 
-## Beneficios
+Resultado:
+- Entrar desde Historial abre el chat correcto y muestra mensajes.
 
-1. **Recuperación automática**: El usuario ve el progreso sin necesidad de acción manual
-2. **Consistencia de estado**: Los toggles reflejan que hay un job Deep en curso
-3. **Sin pérdida de trabajo**: El job sigue ejecutándose en Railway y el frontend lo sigue
+---
 
-## Consideración de UX
+## Archivos afectados
+1) `src/hooks/useAdvisorChat.ts`
+2) `src/pages/advisor/AdvisorChat.tsx`
 
-Opcionalmente, podríamos mostrar un toast informativo cuando se restaura un job:
+---
 
-```typescript
-import { toast } from 'sonner';
+## Riesgos y consideraciones
+- Este arreglo también reduce dependencia del cliente “externalSupabase” para Advisor, lo cual es positivo.
+- Si `advisor_messages` tiene RLS en el backend principal, debemos asegurarnos de que el usuario autenticado tiene permiso de lectura para sus propios chats (si hiciera falta, lo revisaremos después; primero corregimos el bug evidente del cliente equivocado).
 
-// In the useEffect:
-if (deepJob.restoredFromStorage && deepJob.isPolling) {
-  toast.info('Reanudando trabajo en curso...', {
-    description: `Job ${deepJob.jobId?.substring(0, 8)}...`,
-    duration: 3000,
-  });
-  // ... activate modes
-}
-```
+---
 
-## Flujo Final
-
-```text
-Usuario recarga página
-         │
-         ▼
-useDeepAdvisorJob detecta job
-en localStorage (< 30 min)
-         │
-         ▼
-restoredFromStorage = true
-isPolling = true
-         │
-         ▼
-AdvisorChat.useEffect detecta
-restoredFromStorage
-         │
-    ┌────┴────┐
-    ▼         ▼
-setDeepMode  setStreamingMode
-  (true)       (true)
-    │             │
-    └──────┬──────┘
-           ▼
-useStreamingUI = true
-           │
-           ▼
-Panel DeepAdvisorProgress
-      VISIBLE
-           │
-           ▼
-Polling continúa hasta
-complete/failed
-```
+## Checklist de verificación (end-to-end)
+1) Iniciar un Deep Job y esperar a que complete:
+   - Debe mostrarse el resultado sin quedarse en blanco.
+2) Recargar durante el job:
+   - Debe reanudar el progreso (ya lo implementamos) y al terminar mostrar el resultado.
+3) Ir a Historial → abrir un chat:
+   - Debe cargar el chat correcto (vía `?id=`) y renderizar mensajes.
+4) Caso adverso (simular red lenta):
+   - Aunque `loadChat()` tarde, debe verse el resultado (fallback) y no quedar pantalla vacía.
