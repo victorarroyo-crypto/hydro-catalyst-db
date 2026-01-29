@@ -1,360 +1,166 @@
 
-# Plan: Migrar Deep Advisor de SSE a Background Jobs + Polling
 
-## Contexto del Problema
+# Plan: Integrar `useDeepAdvisorJob` con el Array de Mensajes del Chat
 
-El backend de Railway tiene un **timeout de 5 minutos** para requests HTTP. El Deep Advisor con 4 agentes analizando documentos puede tardar más de 5 minutos, causando que el stream SSE se corte antes de completar aunque tengamos keep-alive pings.
+## Problema Identificado
 
-La solución es cambiar a una arquitectura de **Background Jobs + Polling** que elimina la dependencia de conexiones HTTP largas.
+Actualmente cuando un job de Deep Advisor completa:
+1. El backend guarda el resultado en la base de datos (`advisor_messages`)
+2. El frontend muestra el resultado desde `deepJob.response` (estado transitorio)
+3. El resultado NO se integra con el array `messages` de `useAdvisorChat`
+4. Si el usuario recarga la página, pierde la referencia visual del mensaje pendiente
 
-## Nueva Arquitectura
+## Solución
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│  Browser (Cliente)                                               │
-│  └── useDeepAdvisorJob                                           │
-│       ├── POST /api/advisor/deep/start → Recibe job_id (~500ms) │
-│       └── GET /api/advisor/deep/status/{job_id} cada 5s         │
-└─────────────────────────────────────────────────────────────────┘
-                              │ ▲
-                              │ │ Respuestas cortas (<1s cada una)
-                              ▼ │
-┌─────────────────────────────────────────────────────────────────┐
-│  advisor-railway-proxy (Edge Function)                           │
-│  └── Proxy simple sin SSE (timeout 30s por request)             │
-└─────────────────────────────────────────────────────────────────┘
-                              │ ▲
-                              ▼ │
-┌─────────────────────────────────────────────────────────────────┐
-│  Railway Backend                                                 │
-│  ├── POST /start: Crea job, retorna job_id                       │
-│  ├── GET /status/{job_id}: Retorna estado + progreso            │
-│  └── Background worker: Procesa sin límite de tiempo            │
-└─────────────────────────────────────────────────────────────────┘
-```
+Integrar el resultado del job directamente en el array `messages` cuando `onComplete` se ejecuta, siguiendo el patrón que proporcionaste.
 
-## Ventajas
+## Cambios en AdvisorChat.tsx
 
-| Aspecto | SSE Actual | Background Jobs |
-|:--------|:-----------|:----------------|
-| Timeout máximo | 10 min (limitado por Railway) | ∞ (sin límite) |
-| Reconexión | Pierde estado completo | Automática vía localStorage |
-| Complejidad proxy | Alta (TransformStream, pings) | Baja (requests simples) |
-| Recarga de página | Pierde todo | Continúa donde estaba |
-| Múltiples pestañas | Cada una consume recursos | Comparten job |
+### 1. Callback `onComplete` Mejorado
 
-## Archivos a Crear/Modificar
-
-| Archivo | Acción | Descripción |
-|:--------|:-------|:------------|
-| `src/hooks/useDeepAdvisorJob.ts` | CREAR | Hook de polling con persistencia localStorage |
-| `src/pages/advisor/AdvisorChat.tsx` | MODIFICAR | Usar nuevo hook en lugar de useDeepAdvisorStream |
-| `src/components/advisor/streaming/StreamingProgress.tsx` | MODIFICAR | Aceptar datos del polling (progress_percent) |
-| `supabase/functions/advisor-railway-proxy/index.ts` | MODIFICAR | Añadir endpoints `/deep/start` y `/deep/status/*` |
-
-## Implementación Detallada
-
-### 1. Nuevo Hook: `useDeepAdvisorJob.ts`
-
+**Actual:**
 ```typescript
-// src/hooks/useDeepAdvisorJob.ts
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { callAdvisorProxy } from '@/lib/advisorProxy';
-
-interface JobStatus {
-  job_id: string;
-  status: 'pending' | 'running' | 'complete' | 'failed';
-  phase?: string;
-  phase_detail?: string;
-  progress_percent: number;
-  agent_status: Record<string, 'pending' | 'running' | 'complete' | 'failed'>;
-  error?: string;
-  result?: {
-    content: string;
-    sources: any[];
-    facts: any[];
-    chat_id: string;
-  };
-}
-
-interface StartJobParams {
-  user_id: string;
-  message: string;
-  chat_id?: string;
-  deep_mode?: boolean;
-  synthesis_model?: string;
-  analysis_model?: string;
-  search_model?: string;
-  enable_web_search?: boolean;
-  enable_rag?: boolean;
-  attachments?: Array<{ url: string; type: string; name: string }>;
-}
-
-interface UseDeepAdvisorJobOptions {
-  pollingInterval?: number; // default 5000ms
-  onProgress?: (status: JobStatus) => void;
-  onComplete?: (result: JobStatus['result']) => void;
-  onError?: (error: string) => void;
-}
-
-const STORAGE_KEY = 'deep_advisor_active_job';
-
-export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
-  const { pollingInterval = 5000, onProgress, onComplete, onError } = options;
-  
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [status, setStatus] = useState<JobStatus | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
-  const pollingRef = useRef<number | null>(null);
-
-  // Start a new job
-  const startJob = useCallback(async (params: StartJobParams): Promise<string> => {
-    try {
-      const { data, error } = await callAdvisorProxy<{ job_id: string }>({
-        endpoint: '/api/advisor/deep/start',
-        method: 'POST',
-        payload: params,
-      });
-      
-      if (error || !data?.job_id) {
-        throw new Error(error || 'No job_id returned');
-      }
-      
-      const newJobId = data.job_id;
-      setJobId(newJobId);
-      setIsPolling(true);
-      setStatus({ 
-        job_id: newJobId, 
-        status: 'pending', 
-        progress_percent: 0, 
-        agent_status: {} 
-      });
-      
-      // Persist for reconnection
-      localStorage.setItem(STORAGE_KEY, newJobId);
-      
-      return newJobId;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to start job';
-      onError?.(msg);
-      throw err;
-    }
-  }, [onError]);
-
-  // Poll for status
-  const pollStatus = useCallback(async (id: string): Promise<boolean> => {
-    try {
-      const { data, error } = await callAdvisorProxy<JobStatus>({
-        endpoint: `/api/advisor/deep/status/${id}`,
-        method: 'GET',
-      });
-      
-      if (error || !data) {
-        console.warn('[useDeepAdvisorJob] Poll error:', error);
-        return false; // Continue polling
-      }
-      
-      setStatus(data);
-      onProgress?.(data);
-      
-      if (data.status === 'complete') {
-        setIsPolling(false);
-        localStorage.removeItem(STORAGE_KEY);
-        onComplete?.(data.result);
-        return true; // Stop
-      }
-      
-      if (data.status === 'failed') {
-        setIsPolling(false);
-        localStorage.removeItem(STORAGE_KEY);
-        onError?.(data.error || 'Job failed');
-        return true; // Stop
-      }
-      
-      return false; // Continue
-    } catch (err) {
-      console.error('[useDeepAdvisorJob] Poll exception:', err);
-      return false; // Continue on error
-    }
-  }, [onProgress, onComplete, onError]);
-
-  // Polling effect
-  useEffect(() => {
-    if (!isPolling || !jobId) return;
-    
-    const poll = async () => {
-      const shouldStop = await pollStatus(jobId);
-      if (!shouldStop && isPolling) {
-        pollingRef.current = window.setTimeout(poll, pollingInterval);
-      }
-    };
-    
-    poll();
-    
-    return () => {
-      if (pollingRef.current) {
-        clearTimeout(pollingRef.current);
-      }
-    };
-  }, [isPolling, jobId, pollStatus, pollingInterval]);
-
-  // Resume from localStorage on mount
-  useEffect(() => {
-    const savedJobId = localStorage.getItem(STORAGE_KEY);
-    if (savedJobId) {
-      setJobId(savedJobId);
-      setIsPolling(true);
-    }
-  }, []);
-
-  // Cancel polling
-  const cancel = useCallback(() => {
-    setIsPolling(false);
-    localStorage.removeItem(STORAGE_KEY);
-    if (pollingRef.current) {
-      clearTimeout(pollingRef.current);
-    }
-    // Optionally call backend to cancel job
-  }, []);
-
-  // Reset state
-  const reset = useCallback(() => {
-    cancel();
-    setJobId(null);
-    setStatus(null);
-  }, [cancel]);
-
-  return {
-    startJob,
-    cancel,
-    reset,
-    jobId,
-    status,
-    isPolling,
-    isRunning: status?.status === 'running' || status?.status === 'pending',
-    isComplete: status?.status === 'complete',
-    progress: status?.progress_percent || 0,
-    phase: status?.phase || '',
-    phaseDetail: status?.phase_detail || '',
-    agentStatus: status?.agent_status || {},
-    result: status?.result,
-    error: status?.error,
-  };
-}
-```
-
-### 2. Modificar Edge Function: Añadir Endpoints
-
-En `advisor-railway-proxy/index.ts`:
-
-```typescript
-// Añadir a ALLOWED_ENDPOINT_PATTERNS:
-/^\/api\/advisor\/deep\/start$/,
-/^\/api\/advisor\/deep\/status\/[\w-]+$/,
-
-// Estos endpoints NO son SSE, se manejan con el flujo normal
-```
-
-### 3. Modificar AdvisorChat.tsx
-
-Cambiar de `useDeepAdvisorStream` a `useDeepAdvisorJob`:
-
-```typescript
-// Reemplazar:
-import { useDeepAdvisorStream } from '@/hooks/useDeepAdvisorStream';
-// Por:
-import { useDeepAdvisorJob } from '@/hooks/useDeepAdvisorJob';
-
-// En el componente:
 const deepJob = useDeepAdvisorJob({
   pollingInterval: 5000,
   onComplete: (result) => {
-    // Añadir mensaje al historial
+    console.log('[AdvisorChat] Deep job complete:', result?.chat_id);
+    refetchCredits();
+    setPendingUserMessage(null);
+  },
+  // ...
+});
+```
+
+**Propuesto:**
+```typescript
+const deepJob = useDeepAdvisorJob({
+  pollingInterval: 5000,
+  onComplete: (result) => {
+    console.log('[AdvisorChat] Deep job complete:', result?.chat_id);
+    
+    // Integrar el resultado en el array de mensajes
+    if (result?.content) {
+      const assistantMessage: Message = {
+        id: `assistant-deep-${Date.now()}`,
+        role: 'assistant',
+        content: result.content,
+        sources: result.sources?.map(s => ({
+          name: s.name,
+          type: s.type,
+          similarity: 0.8, // Default since polling doesn't return similarity
+          url: s.url,
+        })),
+        created_at: new Date().toISOString(),
+      };
+      
+      // El pendingUserMessage también debería añadirse
+      // pero el backend ya lo guardó, mejor recargar desde DB
+      if (result.chat_id) {
+        loadChat(result.chat_id); // Sincroniza mensajes desde la DB
+      }
+    }
+    
     refetchCredits();
     setPendingUserMessage(null);
   },
   onError: (error) => {
+    console.error('[AdvisorChat] Deep job error:', error);
     toast.error(error);
     setPendingUserMessage(null);
   },
 });
-
-// En handleSend(), reemplazar deepStream.sendMessage() por:
-await deepJob.startJob({
-  user_id: advisorUser.id,
-  message,
-  chat_id: deepJob.status?.result?.chat_id || chatId,
-  deep_mode: true,
-  synthesis_model: validatedConfig?.synthesis_model,
-  // ... resto de config
-  attachments: uploadedAttachments,
-});
 ```
 
-### 4. Modificar StreamingProgress.tsx
+### 2. Alternativa Más Simple: Recargar Chat desde DB
 
-Añadir soporte para `progress_percent`:
+Dado que el backend ya guarda los mensajes en `advisor_messages`, la solución más limpia es recargar el chat completo cuando el job termina:
 
 ```typescript
-interface StreamingProgressProps {
-  phase: string;
-  phaseMessage: string;
-  agents: Record<string, AgentState>;
-  isStreaming: boolean;
-  error: string | null;
-  progressPercent?: number; // NUEVO: 0-100
-}
+onComplete: (result) => {
+  // El backend guardó user message + assistant response en DB
+  // Recargamos el chat para sincronizar el estado
+  if (result?.chat_id) {
+    loadChat(result.chat_id);
+  }
+  
+  refetchCredits();
+  setPendingUserMessage(null);
+},
+```
 
-// Añadir barra de progreso visual
-{progressPercent !== undefined && (
-  <div className="mt-3">
-    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-      <div 
-        className="h-full bg-gradient-to-r from-[#307177] to-[#32b4cd] transition-all duration-500"
-        style={{ width: `${progressPercent}%` }}
-      />
-    </div>
-    <p className="text-xs text-muted-foreground mt-1 text-center">
-      {progressPercent}% completado
-    </p>
-  </div>
+Esta aproximación:
+- Evita duplicados
+- Sincroniza IDs correctos desde la DB
+- Mantiene consistencia si el usuario recargó la página
+
+### 3. Ocultar la Sección de Polling Cuando Hay Mensajes Sincronizados
+
+Después de `loadChat`, el mensaje del asistente estará en `messages`, por lo que debemos ajustar la condición para no mostrar la sección de polling duplicada:
+
+```typescript
+{/* Deep Mode Response - solo mientras está en progreso O hay respuesta transitoria */}
+{useStreamingUI && deepJob.isPolling && (
+  // ... progress and pending response
 )}
 ```
 
-## Migración Gradual
+En lugar de:
+```typescript
+{useStreamingUI && (deepJob.isPolling || deepJob.response || pendingUserMessage) && (
+```
 
-Para minimizar riesgos, mantendremos ambos hooks durante la transición:
+## Secuencia de Implementación
 
-1. **Fase 1**: Crear `useDeepAdvisorJob` sin romper `useDeepAdvisorStream`
-2. **Fase 2**: Añadir feature flag `usePollingMode` (localStorage)
-3. **Fase 3**: Si el backend soporta `/deep/start` y `/deep/status`, usar polling
-4. **Fase 4**: Eliminar SSE cuando polling esté validado
+| Paso | Archivo | Cambio |
+|:-----|:--------|:-------|
+| 1 | `src/pages/advisor/AdvisorChat.tsx` | Actualizar `onComplete` para llamar `loadChat(result.chat_id)` |
+| 2 | `src/pages/advisor/AdvisorChat.tsx` | Simplificar condición de renderizado del bloque de polling |
+| 3 | `src/hooks/useDeepAdvisorJob.ts` | Asegurar que `reset()` se llama después de `loadChat` para limpiar estado transitorio |
 
-## Requisitos del Backend (Railway)
+## Flujo Resultante
 
-El backend debe implementar:
-
-```python
-# POST /api/advisor/deep/start
-# Request: { user_id, message, chat_id?, attachments?, ... }
-# Response: { job_id: "uuid" }
-
-# GET /api/advisor/deep/status/{job_id}
-# Response: {
-#   job_id: "uuid",
-#   status: "pending" | "running" | "complete" | "failed",
-#   phase: "domain" | "rag" | "web" | "agents" | "synthesis",
-#   phase_detail: "Buscando en Knowledge Base...",
-#   progress_percent: 45,
-#   agent_status: { technical: "running", economic: "pending", ... },
-#   error?: "mensaje si failed",
-#   result?: { content, sources, facts, chat_id } # solo cuando complete
-# }
+```text
+Usuario envía mensaje
+        │
+        ▼
+setPendingUserMessage(msg)
+        │
+        ▼
+deepJob.startJob(...)
+        │
+        ▼
+┌─────────────────────────────────┐
+│ Polling cada 5s                 │
+│ UI muestra:                     │
+│  - pendingUserMessage           │
+│  - StreamingProgress            │
+└─────────────────────────────────┘
+        │
+        ▼ status === 'complete'
+        │
+onComplete(result)
+        │
+        ├── loadChat(result.chat_id)  ──► messages[] actualizado desde DB
+        │
+        ├── setPendingUserMessage(null)
+        │
+        └── deepJob.reset() opcional
+        │
+        ▼
+┌─────────────────────────────────┐
+│ UI muestra:                     │
+│  - messages[] (incluye user +   │
+│    assistant de la DB)          │
+│  - No hay bloque de polling     │
+└─────────────────────────────────┘
 ```
 
 ## Notas Técnicas
 
-- El polling cada 5 segundos es un buen balance entre responsividad y carga del servidor
-- localStorage permite que el usuario recargue la página sin perder el job
-- Si el usuario cierra el navegador y vuelve, el job sigue procesándose y puede reconectarse
-- El backend guarda el resultado en el historial de chat, así que aunque el polling falle al final, el usuario puede ver el resultado en el historial
+- `loadChat` ya existe en `useAdvisorChat` y recarga mensajes desde la tabla `advisor_messages`
+- El backend de Railway guarda tanto el mensaje del usuario como la respuesta del asistente
+- Esta solución es más robusta que construir mensajes manualmente porque:
+  - Usa los IDs reales de la DB
+  - Incluye `credits_used` y otros metadatos
+  - Maneja reconexiones después de page refresh
+
