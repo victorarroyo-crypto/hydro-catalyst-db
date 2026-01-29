@@ -69,6 +69,12 @@ export default function AdvisorChat() {
     pollingInterval: 5000,
     onComplete: (result) => {
       console.log('[AdvisorChat] Deep job complete:', result?.chat_id);
+      
+      // Sync messages from DB - backend already saved user + assistant messages
+      if (result?.chat_id) {
+        loadChat(result.chat_id);
+      }
+      
       refetchCredits();
       setPendingUserMessage(null);
     },
@@ -569,7 +575,7 @@ export default function AdvisorChat() {
           ))}
 
           {/* Deep Mode Response (Polling-based) */}
-          {useStreamingUI && (deepJob.isPolling || deepJob.response || pendingUserMessage) && (
+          {useStreamingUI && deepJob.isPolling && (
             <>
               {/* User message for polling mode */}
               {pendingUserMessage && (
