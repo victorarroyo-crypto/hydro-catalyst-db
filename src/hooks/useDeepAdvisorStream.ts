@@ -242,6 +242,10 @@ export function useDeepAdvisorStream() {
                   }));
                   break;
 
+                case 'ping':
+                  // Keep-alive ping - ignore silently (prevents connection timeout)
+                  break;
+
                 case 'error':
                   setState(prev => ({
                     ...prev,
