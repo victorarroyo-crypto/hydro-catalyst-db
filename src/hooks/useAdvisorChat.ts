@@ -1,9 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { supabase } from '@/integrations/supabase/client';
 import { streamAdvisorProxy, callAdvisorProxy } from '@/lib/advisorProxy';
-import type { Message, Source } from '@/types/advisorChat';
+import type { Message, Source, MessageMetadata, AttachmentInfo } from '@/types/advisorChat';
 import type { AgentAnalysis } from '@/components/advisor/AgentAnalysesAccordion';
-
 export interface DeepModeConfig {
   synthesis_model?: string;
   analysis_model?: string;
@@ -41,22 +40,39 @@ export function useAdvisorChat(userId: string | undefined) {
   const loadChat = useCallback(async (existingChatId: string) => {
     if (!userId) return;
 
-    const { data } = await externalSupabase
+    // Use primary supabase client (Lovable Cloud) where advisor data is stored
+    const { data, error } = await supabase
       .from('advisor_messages')
       .select('*')
       .eq('chat_id', existingChatId)
       .order('created_at', { ascending: true });
 
-    if (data) {
-      setMessages(data.map(msg => ({
-        id: msg.id,
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-        sources: (msg.sources as unknown as Source[]) || undefined,
-        credits_used: msg.credits_used ? Number(msg.credits_used) : undefined,
-        created_at: msg.created_at || new Date().toISOString(),
-      })));
+    if (error) {
+      console.error('[loadChat] Error fetching messages:', error);
+      return;
+    }
+
+    if (data && data.length > 0) {
+      setMessages(data.map(msg => {
+        // Safely extract optional fields from the raw record
+        const rawMsg = msg as Record<string, unknown>;
+        
+        return {
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          sources: (msg.sources as unknown as Source[]) || undefined,
+          credits_used: msg.credits_used ? Number(msg.credits_used) : undefined,
+          created_at: msg.created_at || new Date().toISOString(),
+          // Map additional fields if they exist in the DB record
+          metadata: rawMsg.metadata ? (rawMsg.metadata as unknown as MessageMetadata) : undefined,
+          attachments: rawMsg.attachments ? (rawMsg.attachments as unknown as AttachmentInfo[]) : undefined,
+          agentAnalyses: rawMsg.agent_analyses ? (rawMsg.agent_analyses as unknown as AgentAnalysis[]) : undefined,
+        };
+      }));
       setChatId(existingChatId);
+    } else {
+      console.warn('[loadChat] No messages found for chat:', existingChatId);
     }
   }, [userId]);
 

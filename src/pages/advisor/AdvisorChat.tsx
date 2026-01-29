@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +50,7 @@ import type { Message, AttachmentInfo } from '@/types/advisorChat';
 
 export default function AdvisorChat() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { advisorUser, signOut, isAuthenticated, isLoading: authLoading } = useAdvisorAuth();
   
   // Standard chat hook (non-streaming)
@@ -169,13 +170,28 @@ export default function AdvisorChat() {
     }
   }, [isAuthenticated, authLoading, navigate, isAnyStreaming, isAnyLoading]);
 
-  // Auto-load active chat from localStorage on mount
+  // Auto-load active chat: prioritize URL param, fallback to localStorage
   useEffect(() => {
+    if (!advisorUser?.id || messages.length > 0) return;
+    
+    // Check URL query param first (e.g., /advisor/chat?id=xxx from History)
+    const searchParams = new URLSearchParams(location.search);
+    const urlChatId = searchParams.get('id');
+    
+    if (urlChatId) {
+      console.log('[AdvisorChat] Loading chat from URL param:', urlChatId);
+      loadChat(urlChatId);
+      // Update localStorage to keep it in sync
+      localStorage.setItem('advisor_active_chat_id', urlChatId);
+      return;
+    }
+    
+    // Fallback to localStorage
     const savedChatId = localStorage.getItem('advisor_active_chat_id');
-    if (savedChatId && messages.length === 0 && advisorUser?.id) {
+    if (savedChatId) {
       loadChat(savedChatId);
     }
-  }, [advisorUser?.id, loadChat, messages.length]);
+  }, [advisorUser?.id, loadChat, messages.length, location.search]);
 
   // Auto-activate Deep + Streaming when a job is restored from storage
   useEffect(() => {
@@ -596,8 +612,8 @@ export default function AdvisorChat() {
             </div>
           ))}
 
-          {/* Deep Mode Response (Polling-based) */}
-          {useStreamingUI && deepJob.isPolling && (
+          {/* Deep Mode Response (Polling-based) - Keep visible after job completes */}
+          {useStreamingUI && (deepJob.isPolling || deepJob.status?.status === 'complete' || deepJob.status?.status === 'failed' || deepJob.response) && (
             <>
               {/* User message for polling mode */}
               {pendingUserMessage && (
@@ -623,7 +639,7 @@ export default function AdvisorChat() {
                     />
                   )}
 
-                  {/* Progress Panel */}
+                  {/* Progress Panel - only show while actively polling */}
                   {deepJob.isPolling && (
                     <DeepAdvisorProgress
                       phase={deepJob.phase}
@@ -634,7 +650,7 @@ export default function AdvisorChat() {
                     />
                   )}
 
-                  {/* Response - only show when there's actual content */}
+                  {/* Response - show when there's actual content (during or after polling) */}
                   {deepJob.response && (
                     <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
                       <StreamingResponse
