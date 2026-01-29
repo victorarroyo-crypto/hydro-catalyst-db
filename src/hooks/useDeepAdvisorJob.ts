@@ -1,58 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { callAdvisorProxy } from '@/lib/advisorProxy';
+import { 
+  startDeepJob as apiStartDeepJob, 
+  getDeepJobStatus,
+  DeepJobStatus,
+  DeepJobStartParams,
+  DeepJobSource,
+  DeepJobFact,
+} from '@/lib/advisorProxy';
+
+// Re-export types for consumers
+export type { DeepJobStatus, DeepJobStartParams, DeepJobSource, DeepJobFact };
 
 export interface AgentStatus {
   id: string;
   status: 'pending' | 'running' | 'complete' | 'failed';
 }
 
-export interface JobSource {
-  type: string;
-  name: string;
-  count?: number;
-  url?: string;
-}
-
-export interface ExtractedFact {
-  type: string;
-  key: string;
-  value: string;
-}
-
-export interface JobStatus {
-  job_id: string;
-  status: 'pending' | 'running' | 'complete' | 'failed';
-  phase?: string;
-  phase_detail?: string;
-  progress_percent: number;
-  agent_status: Record<string, 'pending' | 'running' | 'complete' | 'failed'>;
-  error?: string;
-  result?: {
-    content: string;
-    sources: JobSource[];
-    facts_extracted: ExtractedFact[];
-    chat_id: string;
-    has_context?: boolean;
-  };
-}
-
-export interface StartJobParams {
-  user_id: string;
-  message: string;
-  chat_id?: string;
-  deep_mode?: boolean;
-  synthesis_model?: string;
-  analysis_model?: string;
-  search_model?: string;
-  enable_web_search?: boolean;
-  enable_rag?: boolean;
-  attachments?: Array<{ url: string; type: string; name: string }>;
-}
-
 export interface UseDeepAdvisorJobOptions {
   pollingInterval?: number; // default 5000ms
-  onProgress?: (status: JobStatus) => void;
-  onComplete?: (result: JobStatus['result']) => void;
+  onProgress?: (status: DeepJobStatus) => void;
+  onComplete?: (result: DeepJobStatus['result']) => void;
   onError?: (error: string) => void;
 }
 
@@ -62,7 +29,7 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
   const { pollingInterval = 5000, onProgress, onComplete, onError } = options;
   
   const [jobId, setJobId] = useState<string | null>(null);
-  const [status, setStatus] = useState<JobStatus | null>(null);
+  const [status, setStatus] = useState<DeepJobStatus | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [hasContext, setHasContext] = useState(false);
@@ -78,16 +45,12 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
     onProgressRef.current = onProgress;
   }, [onComplete, onError, onProgress]);
 
-  // Start a new job
-  const startJob = useCallback(async (params: StartJobParams): Promise<string> => {
+  // Start a new job using the dedicated deep-advisor endpoint
+  const startJob = useCallback(async (params: DeepJobStartParams): Promise<string> => {
     try {
-      const { data, error } = await callAdvisorProxy<{ job_id: string; chat_id?: string }>({
-        endpoint: '/api/advisor/deep/start',
-        method: 'POST',
-        payload: {
-          ...params,
-          deep_mode: true,
-        },
+      const { data, error } = await apiStartDeepJob({
+        ...params,
+        deep_mode: true,
       });
       
       if (error || !data?.job_id) {
@@ -125,13 +88,10 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
     }
   }, []);
 
-  // Poll for status
+  // Poll for status using the dedicated deep-advisor endpoint
   const pollStatus = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const { data, error } = await callAdvisorProxy<JobStatus>({
-        endpoint: `/api/advisor/deep/status/${id}`,
-        method: 'GET',
-      });
+      const { data, error } = await getDeepJobStatus(id);
       
       if (error || !data) {
         console.warn('[useDeepAdvisorJob] Poll error:', error);
@@ -244,7 +204,7 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
     setHasContext(false);
   }, [cancel]);
 
-  // Derive agent states in the format expected by StreamingProgress
+  // Derive agent states in the format expected by DeepAdvisorProgress
   const agents: Record<string, { id: string; status: 'pending' | 'running' | 'complete' | 'failed'; preview?: string }> = {};
   if (status?.agent_status) {
     Object.entries(status.agent_status).forEach(([id, agentStatus]) => {
