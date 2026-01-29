@@ -33,7 +33,8 @@ import { ServicesBar } from '@/components/advisor/ServicesBar';
 import { DeepAdvisorConfigPopover } from '@/components/advisor/DeepAdvisorConfigPopover';
 import { DeepModeToggle, useDeepMode } from '@/components/advisor/DeepModeToggle';
 import { AgentAnalysesAccordion } from '@/components/advisor/AgentAnalysesAccordion';
-import { StreamingProgress, StreamingResponse, SourcesPanel } from '@/components/advisor/streaming';
+import { StreamingResponse, SourcesPanel } from '@/components/advisor/streaming';
+import { DeepAdvisorProgress } from '@/components/advisor/DeepAdvisorProgress';
 import { StreamingModeToggle, useStreamingMode } from '@/components/advisor/streaming/StreamingModeToggle';
 import { SessionContextIndicator } from '@/components/advisor/SessionContextIndicator';
 import { ComparadorModal, type ComparadorData } from '@/components/advisor/modals/ComparadorModal';
@@ -603,13 +604,12 @@ export default function AdvisorChat() {
 
                   {/* Progress Panel */}
                   {deepJob.isPolling && (
-                    <StreamingProgress
+                    <DeepAdvisorProgress
                       phase={deepJob.phase}
-                      phaseMessage={deepJob.phaseMessage}
-                      agents={deepJob.agents}
-                      isStreaming={deepJob.isPolling}
-                      error={deepJob.error}
-                      progressPercent={deepJob.progress}
+                      phaseDetail={deepJob.phaseMessage}
+                      progress={deepJob.progress}
+                      agentStatus={deepJob.status?.agent_status || {}}
+                      onCancel={deepJob.cancel}
                     />
                   )}
 
