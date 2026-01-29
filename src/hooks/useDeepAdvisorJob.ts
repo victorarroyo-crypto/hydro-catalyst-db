@@ -33,6 +33,7 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
   const [isPolling, setIsPolling] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [hasContext, setHasContext] = useState(false);
+  const [restoredFromStorage, setRestoredFromStorage] = useState(false);
   const pollingRef = useRef<number | null>(null);
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
@@ -170,10 +171,11 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
         // Only resume if job was started less than 30 minutes ago
         const thirtyMinutesMs = 30 * 60 * 1000;
         if (Date.now() - startedAt < thirtyMinutesMs) {
-          console.log('[useDeepAdvisorJob] Resuming job:', savedJobId);
+          console.log('[useDeepAdvisorJob] Resuming job from storage:', savedJobId);
           setJobId(savedJobId);
           setChatId(savedChatId);
           setIsPolling(true);
+          setRestoredFromStorage(true);
         } else {
           // Job is too old, clean up
           localStorage.removeItem(STORAGE_KEY);
@@ -202,6 +204,7 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
     setStatus(null);
     setChatId(null);
     setHasContext(false);
+    setRestoredFromStorage(false);
   }, [cancel]);
 
   // Derive agent states in the format expected by DeepAdvisorProgress
@@ -238,5 +241,6 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
     factsExtracted: status?.result?.facts_extracted || [],
     error: status?.error || null,
     result: status?.result,
+    restoredFromStorage,
   };
 }
