@@ -1,201 +1,306 @@
 
 
-# Plan: Crear Componente `DeepAdvisorProgress` para Polling Mode
+# Plan: Crear Edge Function Dedicada `deep-advisor`
 
 ## Contexto
 
-El código actual usa `StreamingProgress` para mostrar el progreso del Deep Advisor tanto en SSE como en polling mode. El usuario proporciona un diseño más limpio y específico para el modo polling que incluye:
+Actualmente los endpoints de Background Jobs (`/api/advisor/deep/start`, `/api/advisor/deep/status/{job_id}`) se invocan a través de `advisor-railway-proxy` usando un patrón wrapper donde el `endpoint` se pasa en el body. El usuario propone crear una Edge Function dedicada con rutas RESTful directas.
 
-- Labels de fase específicos para el flujo de background jobs
-- Barra de progreso con porcentaje
-- Estado de los 4 agentes en un grid
-- Botón de cancelar
+## Comparación de Arquitecturas
+
+| Aspecto | Actual (via proxy) | Propuesto (función dedicada) |
+|:--------|:-------------------|:-----------------------------|
+| URL para iniciar | `POST /advisor-railway-proxy` + body `{endpoint: "/api/advisor/deep/start"}` | `POST /deep-advisor/start` |
+| URL para status | `POST /advisor-railway-proxy` + body `{endpoint: "/api/advisor/deep/status/xxx"}` | `GET /deep-advisor/status/xxx` |
+| Complejidad cliente | Wrapper adicional | Llamadas HTTP directas |
+| Mantenimiento | Un proxy genérico | Función específica |
 
 ## Archivos a Crear/Modificar
 
 | Archivo | Acción | Descripción |
 |:--------|:-------|:------------|
-| `src/components/advisor/DeepAdvisorProgress.tsx` | CREAR | Componente de progreso específico para polling mode |
-| `src/pages/advisor/AdvisorChat.tsx` | MODIFICAR | Usar `DeepAdvisorProgress` en lugar de `StreamingProgress` para polling |
+| `supabase/functions/deep-advisor/index.ts` | CREAR | Nueva Edge Function con rutas REST |
+| `supabase/config.toml` | MODIFICAR | Añadir configuración para `deep-advisor` |
+| `src/lib/advisorProxy.ts` | MODIFICAR | Añadir helper `callDeepAdvisor` para la nueva función |
+| `src/hooks/useDeepAdvisorJob.ts` | MODIFICAR | Usar nuevas URLs directas |
 
 ## Implementación
 
-### 1. Crear `DeepAdvisorProgress.tsx`
-
-Basado en el código proporcionado, con mejoras:
+### 1. Nueva Edge Function: `deep-advisor/index.ts`
 
 ```typescript
-// src/components/advisor/DeepAdvisorProgress.tsx
-import React from 'react';
-import { Brain, Check, Loader2, X, AlertCircle, FlaskConical, Settings, DollarSign, ScrollText } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+// supabase/functions/deep-advisor/index.ts
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-interface DeepAdvisorProgressProps {
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+
+// Timeout for Railway requests (2 minutes should be enough for non-streaming)
+const REQUEST_TIMEOUT_MS = 120000;
+
+async function proxyToRailway(
+  railwayUrl: string, 
+  endpoint: string, 
+  options?: { method?: string; body?: unknown }
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  
+  try {
+    const fetchOptions: RequestInit = {
+      method: options?.method || 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+    };
+    
+    if (options?.body && options.method !== 'GET') {
+      fetchOptions.body = JSON.stringify(options.body);
+    }
+    
+    const response = await fetch(`${railwayUrl}${endpoint}`, fetchOptions);
+    clearTimeout(timeoutId);
+    
+    const data = await response.json();
+    
+    return new Response(JSON.stringify(data), {
+      status: response.status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error instanceof Error && error.name === 'AbortError') {
+      return new Response(JSON.stringify({ error: 'Timeout', message: 'Request timed out' }), {
+        status: 504,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    throw error;
+  }
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const url = new URL(req.url);
+  const path = url.pathname.replace('/deep-advisor', '').replace('/functions/v1/deep-advisor', '');
+  const method = req.method;
+
+  const railwayApiUrl = Deno.env.get('RAILWAY_API_URL');
+  if (!railwayApiUrl) {
+    return new Response(JSON.stringify({ error: 'Backend not configured' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // POST /start - Iniciar nuevo job
+    if (path === '/start' && method === 'POST') {
+      const body = await req.json();
+      
+      // Validar user_id
+      if (!body.user_id) {
+        return new Response(JSON.stringify({ error: 'user_id is required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      return proxyToRailway(railwayApiUrl, '/api/advisor/deep/start', { 
+        method: 'POST', 
+        body 
+      });
+    }
+
+    // GET /status/:job_id - Consultar estado del job
+    if (path.startsWith('/status/') && method === 'GET') {
+      const jobId = path.split('/status/')[1];
+      
+      if (!jobId || !/^[\w-]+$/.test(jobId)) {
+        return new Response(JSON.stringify({ error: 'Invalid job_id' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      return proxyToRailway(railwayApiUrl, `/api/advisor/deep/status/${jobId}`);
+    }
+
+    // GET /jobs?user_id=xxx - Listar jobs de un usuario
+    if (path === '/jobs' && method === 'GET') {
+      const userId = url.searchParams.get('user_id');
+      
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'user_id query param is required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      return proxyToRailway(railwayApiUrl, `/api/advisor/deep/jobs?user_id=${userId}`);
+    }
+
+    // 404 for unknown routes
+    return new Response(JSON.stringify({ error: 'Not found', path }), {
+      status: 404,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+    
+  } catch (error) {
+    console.error('[deep-advisor] Error:', error);
+    return new Response(JSON.stringify({ 
+      error: 'Internal error', 
+      message: error instanceof Error ? error.message : 'Unknown' 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+```
+
+### 2. Configuración en `config.toml`
+
+Añadir:
+```toml
+[functions.deep-advisor]
+verify_jwt = false
+```
+
+### 3. Nuevo Helper en `advisorProxy.ts`
+
+```typescript
+const DEEP_ADVISOR_URL = `${SUPABASE_URL}/functions/v1/deep-advisor`;
+
+export interface DeepJobStartParams {
+  user_id: string;
+  message: string;
+  chat_id?: string;
+  deep_mode?: boolean;
+  synthesis_model?: string;
+  analysis_model?: string;
+  search_model?: string;
+  enable_web_search?: boolean;
+  enable_rag?: boolean;
+  attachments?: Array<{ url: string; type: string; name: string }>;
+}
+
+export interface DeepJobStartResponse {
+  job_id: string;
+  chat_id?: string;
+}
+
+export interface DeepJobStatus {
+  job_id: string;
+  status: 'pending' | 'running' | 'complete' | 'failed';
   phase?: string;
-  phaseDetail?: string;
-  progress: number;
-  agentStatus: Record<string, 'pending' | 'running' | 'complete' | 'failed'>;
-  onCancel?: () => void;
+  phase_detail?: string;
+  progress_percent: number;
+  agent_status: Record<string, 'pending' | 'running' | 'complete' | 'failed'>;
+  error?: string;
+  result?: {
+    content: string;
+    sources: Array<{ type: string; name: string; url?: string }>;
+    facts_extracted: Array<{ type: string; key: string; value: string }>;
+    chat_id: string;
+    has_context?: boolean;
+  };
 }
 
-const PHASE_LABELS: Record<string, string> = {
-  starting: 'Inicializando...',
-  init: 'Inicializando...',
-  context: 'Recopilando contexto...',
-  domain: 'Analizando dominio...',
-  rag: 'Buscando en Knowledge Base...',
-  web: 'Buscando en web...',
-  agents: 'Analizando con agentes especializados...',
-  synthesis: 'Sintetizando respuesta...',
-  synthesizing: 'Sintetizando respuesta...',
-  saving: 'Guardando en historial...',
-  complete: 'Completado',
-};
-
-const AGENT_CONFIG: Record<string, { label: string; icon: React.ReactNode }> = {
-  technical: { label: 'Técnico', icon: <FlaskConical className="h-3.5 w-3.5" /> },
-  operative: { label: 'Operativo', icon: <Settings className="h-3.5 w-3.5" /> },
-  economic: { label: 'Económico', icon: <DollarSign className="h-3.5 w-3.5" /> },
-  regulatory: { label: 'Regulatorio', icon: <ScrollText className="h-3.5 w-3.5" /> },
-};
-
-export function DeepAdvisorProgress({
-  phase,
-  phaseDetail,
-  progress,
-  agentStatus,
-  onCancel,
-}: DeepAdvisorProgressProps) {
-  const hasAgents = Object.keys(agentStatus).length > 0;
-  const isAgentsPhase = phase === 'agents';
-
-  return (
-    <div className="p-4 bg-gradient-to-br from-[#32b4cd]/5 to-[#307177]/5 rounded-xl border border-[#32b4cd]/20 animate-fade-in">
-      {/* Header with phase label and progress */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-[#32b4cd] animate-pulse" />
-          <span className="font-medium text-[#307177]">
-            {PHASE_LABELS[phase || 'init'] || phase || 'Procesando...'}
-          </span>
-        </div>
-        <span className="text-sm font-medium text-[#32b4cd]">{progress}%</span>
-      </div>
-      
-      {/* Progress bar */}
-      <div className="w-full bg-slate-100 rounded-full h-2 mb-3 overflow-hidden">
-        <div 
-          className="h-full bg-gradient-to-r from-[#307177] to-[#32b4cd] rounded-full transition-all duration-500 ease-out"
-          style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
-        />
-      </div>
-      
-      {/* Phase detail */}
-      {phaseDetail && (
-        <p className="text-sm text-muted-foreground mb-3">{phaseDetail}</p>
-      )}
-      
-      {/* Agent status grid (when in agents phase or when agents have status) */}
-      {hasAgents && (isAgentsPhase || Object.values(agentStatus).some(s => s !== 'pending')) && (
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          {Object.entries(agentStatus).map(([agentId, status]) => {
-            const config = AGENT_CONFIG[agentId] || { label: agentId, icon: null };
-            
-            return (
-              <div 
-                key={agentId}
-                className={cn(
-                  'flex items-center gap-2 text-sm p-2 rounded-lg transition-all',
-                  status === 'complete' && 'bg-green-50 text-green-700 border border-green-200',
-                  status === 'running' && 'bg-amber-50 text-amber-700 border border-amber-200',
-                  status === 'failed' && 'bg-red-50 text-red-700 border border-red-200',
-                  status === 'pending' && 'bg-slate-50 text-slate-500 border border-slate-200'
-                )}
-              >
-                {/* Status icon */}
-                {status === 'complete' && <Check className="h-3.5 w-3.5" />}
-                {status === 'running' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {status === 'failed' && <AlertCircle className="h-3.5 w-3.5" />}
-                {status === 'pending' && <span className="h-3.5 w-3.5 flex items-center justify-center text-xs">○</span>}
-                
-                {/* Agent icon and label */}
-                {config.icon}
-                <span className="font-medium">{config.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      
-      {/* Cancel button */}
-      {onCancel && (
-        <div className="flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-            className="text-muted-foreground hover:text-destructive text-xs"
-          >
-            <X className="h-3 w-3 mr-1" />
-            Cancelar
-          </Button>
-        </div>
-      )}
-    </div>
-  );
+/**
+ * Start a new Deep Advisor background job
+ */
+export async function startDeepJob(params: DeepJobStartParams): Promise<ProxyResponse<DeepJobStartResponse>> {
+  try {
+    const response = await fetch(`${DEEP_ADVISOR_URL}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { data: null, error: data.error || data.message || `HTTP ${response.status}`, status: response.status };
+    }
+    
+    return { data, error: null, status: response.status };
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : 'Network error', status: 0 };
+  }
 }
 
-export default DeepAdvisorProgress;
+/**
+ * Get status of a Deep Advisor job
+ */
+export async function getDeepJobStatus(jobId: string): Promise<ProxyResponse<DeepJobStatus>> {
+  try {
+    const response = await fetch(`${DEEP_ADVISOR_URL}/status/${jobId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { data: null, error: data.error || data.message || `HTTP ${response.status}`, status: response.status };
+    }
+    
+    return { data, error: null, status: response.status };
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : 'Network error', status: 0 };
+  }
+}
 ```
 
-### 2. Modificar `AdvisorChat.tsx`
+### 4. Actualizar Hook para Usar Nuevos Helpers
 
-Cambiar el import y uso:
+En `useDeepAdvisorJob.ts`, cambiar de `callAdvisorProxy` a los helpers directos:
 
-**Antes:**
 ```typescript
-import { StreamingProgress } from '@/components/advisor/streaming';
+// Antes:
+import { callAdvisorProxy } from '@/lib/advisorProxy';
+// ...
+const { data, error } = await callAdvisorProxy<{ job_id: string }>({
+  endpoint: '/api/advisor/deep/start',
+  method: 'POST',
+  payload: params,
+});
 
-// En el JSX:
-<StreamingProgress
-  phase={deepJob.phase}
-  phaseMessage={deepJob.phaseMessage}
-  agents={deepJob.agents}
-  isStreaming={deepJob.isPolling}
-  error={deepJob.error}
-  progressPercent={deepJob.progress}
-/>
+// Después:
+import { startDeepJob, getDeepJobStatus } from '@/lib/advisorProxy';
+// ...
+const { data, error } = await startDeepJob(params);
+
+// Y para el polling:
+// Antes:
+const { data, error } = await callAdvisorProxy<JobStatus>({
+  endpoint: `/api/advisor/deep/status/${id}`,
+  method: 'GET',
+});
+
+// Después:
+const { data, error } = await getDeepJobStatus(id);
 ```
 
-**Después:**
-```typescript
-import { DeepAdvisorProgress } from '@/components/advisor/DeepAdvisorProgress';
+## Ventajas de la Función Dedicada
 
-// En el JSX:
-<DeepAdvisorProgress
-  phase={deepJob.phase}
-  phaseDetail={deepJob.phaseMessage}
-  progress={deepJob.progress}
-  agentStatus={deepJob.status?.agent_status || {}}
-  onCancel={deepJob.cancel}
-/>
-```
-
-## Diferencias con `StreamingProgress`
-
-| Aspecto | StreamingProgress | DeepAdvisorProgress |
-|:--------|:------------------|:--------------------|
-| Diseño | Lista vertical de fases | Barra de progreso horizontal |
-| Uso | SSE streaming (fases secuenciales) | Polling (% progreso) |
-| Agentes | Sublista expandible | Grid 2x2 siempre visible |
-| Cancelar | No incluido | Botón integrado |
-| Estilo | Neutral | Colores de marca Vandarum |
+1. **URLs más limpias**: `GET /deep-advisor/status/xxx` vs wrapper complejo
+2. **Mejor debugging**: Logs específicos para Deep Advisor
+3. **Menor coupling**: El hook no depende del proxy genérico
+4. **Validación específica**: Validar `job_id` y `user_id` en la función
+5. **Futura extensibilidad**: Añadir `/cancel`, `/retry`, etc.
 
 ## Notas Técnicas
 
-- El componente recibe `agentStatus` directamente como `Record<string, status>` sin necesidad de la transformación `agents` del hook
-- El botón cancelar llama a `deepJob.cancel()` que limpia el polling y localStorage
-- El gradiente usa los colores de marca `#307177` y `#32b4cd`
-- La animación `animate-fade-in` ya existe en el proyecto
-
+- El proxy genérico `advisor-railway-proxy` seguirá funcionando para SSE streaming y otros endpoints
+- La función dedicada solo maneja los endpoints REST de background jobs
+- No se elimina nada del proxy existente, esta es una adición
