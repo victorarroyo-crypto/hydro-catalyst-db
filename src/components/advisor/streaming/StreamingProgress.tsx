@@ -1,7 +1,12 @@
 import React from 'react';
 import { Check, Loader2, Search, Database, Globe, Bot, Sparkles, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { AgentState } from '@/hooks/useDeepAdvisorStream';
+
+export interface AgentState {
+  id: string;
+  status: 'pending' | 'running' | 'complete' | 'failed';
+  preview?: string;
+}
 
 interface StreamingProgressProps {
   phase: string;
@@ -9,6 +14,7 @@ interface StreamingProgressProps {
   agents: Record<string, AgentState>;
   isStreaming: boolean;
   error: string | null;
+  progressPercent?: number; // 0-100 for polling mode
 }
 
 interface PhaseStep {
@@ -54,10 +60,12 @@ export function StreamingProgress({
   agents,
   isStreaming,
   error,
+  progressPercent,
 }: StreamingProgressProps) {
   const currentPhaseIndex = PHASE_ORDER[phase] ?? -1;
   const agentList = Object.values(agents);
   const hasAgents = agentList.length > 0;
+  const showProgressBar = progressPercent !== undefined && progressPercent > 0;
 
   const getStepStatus = (stepIndex: number): 'pending' | 'running' | 'complete' => {
     if (currentPhaseIndex > stepIndex) return 'complete';
@@ -144,8 +152,23 @@ export function StreamingProgress({
         })}
       </div>
 
+      {/* Progress Bar (polling mode) */}
+      {showProgressBar && (
+        <div className="mt-3 pt-2 border-t border-slate-100">
+          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500 ease-out"
+              style={{ width: `${Math.min(progressPercent, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5 text-center">
+            {progressPercent}% completado
+          </p>
+        </div>
+      )}
+
       {/* Current phase message */}
-      {phaseMessage && isStreaming && (
+      {phaseMessage && isStreaming && !showProgressBar && (
         <div className="mt-3 pt-2 border-t border-slate-100 text-xs text-muted-foreground">
           {phaseMessage}
         </div>

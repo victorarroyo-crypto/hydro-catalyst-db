@@ -15,6 +15,9 @@ const ALLOWED_ENDPOINT_PATTERNS = [
   /^\/api\/advisor\/chat\/stream$/,
   /^\/api\/advisor\/deep\/chat$/,
   /^\/api\/advisor\/deep\/chat\/stream$/,
+  // Background Jobs + Polling endpoints (new architecture)
+  /^\/api\/advisor\/deep\/start$/,
+  /^\/api\/advisor\/deep\/status\/[\w-]+$/,
   /^\/api\/advisor\/service\/(comparador|checklist|ficha|presupuesto)$/,
   /^\/api\/advisor\/credits$/,
   /^\/api\/advisor\/history$/,

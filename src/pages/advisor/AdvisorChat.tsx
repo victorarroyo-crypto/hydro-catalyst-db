@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
-import { useDeepAdvisorStream } from '@/hooks/useDeepAdvisorStream';
+import { useDeepAdvisorJob } from '@/hooks/useDeepAdvisorJob';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
 import { useAdvisorServices } from '@/hooks/useAdvisorServices';
 import { useDeepAdvisorConfig, getValidatedConfig } from '@/hooks/useDeepAdvisorConfig';
@@ -64,8 +64,20 @@ export default function AdvisorChat() {
     loadChat,
   } = useAdvisorChat(advisorUser?.id);
   
-  // Streaming hook for Deep Mode
-  const deepStream = useDeepAdvisorStream();
+  // Polling-based hook for Deep Mode (replaces SSE streaming)
+  const deepJob = useDeepAdvisorJob({
+    pollingInterval: 5000,
+    onComplete: (result) => {
+      console.log('[AdvisorChat] Deep job complete:', result?.chat_id);
+      refetchCredits();
+      setPendingUserMessage(null);
+    },
+    onError: (error) => {
+      console.error('[AdvisorChat] Deep job error:', error);
+      toast.error(error);
+      setPendingUserMessage(null);
+    },
+  });
   
   const { balance, freeRemaining, refetch: refetchCredits } = useAdvisorCredits(advisorUser?.id);
   const { config: deepConfig } = useDeepAdvisorConfig();
@@ -95,10 +107,10 @@ export default function AdvisorChat() {
     });
   };
   
-  // Determine if we should use streaming (Deep Mode + Streaming enabled)
+  // Determine if we should use polling (Deep Mode + Streaming enabled)
   const useStreamingUI = deepMode && streamingMode;
-  const isAnyLoading = isLoading || deepStream.isStreaming;
-  const isAnyStreaming = isStreaming || deepStream.isStreaming;
+  const isAnyLoading = isLoading || deepJob.isPolling;
+  const isAnyStreaming = isStreaming || deepJob.isPolling;
   
   // Hook for special services
   const { callService, isLoading: serviceLoading } = useAdvisorServices(
@@ -274,37 +286,35 @@ export default function AdvisorChat() {
     }
 
     try {
-      // Use streaming endpoint if Deep Mode + Streaming are enabled
+      // Use polling-based job if Deep Mode + Streaming are enabled
       if (useStreamingUI && advisorUser?.id) {
         setPendingUserMessage(message);
         
-        // CRITICAL: Use chat_id from deepStream if available (session memory)
+        // CRITICAL: Use chat_id from deepJob if available (session memory)
         // Only reset if starting a completely new conversation
-        const currentDeepChatId = deepStream.chatId;
+        const currentDeepChatId = deepJob.chatId;
         
         // Don't reset if we have an active session - preserve context
         if (!currentDeepChatId) {
-          deepStream.reset();
+          deepJob.reset();
         }
         
-        await deepStream.sendMessage(
+        await deepJob.startJob({
+          user_id: advisorUser.id,
           message,
-          advisorUser.id,
-          currentDeepChatId || chatId, // Prioritize deepStream.chatId for session continuity
-          {
-            synthesis_model: validatedConfig?.synthesis_model,
-            analysis_model: validatedConfig?.analysis_model,
-            search_model: validatedConfig?.search_model,
-            enable_web_search: validatedConfig?.enable_web_search,
-            enable_rag: validatedConfig?.enable_rag,
-            attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
-          }
-        );
+          chat_id: currentDeepChatId || chatId, // Prioritize deepJob.chatId for session continuity
+          synthesis_model: validatedConfig?.synthesis_model,
+          analysis_model: validatedConfig?.analysis_model,
+          search_model: validatedConfig?.search_model,
+          enable_web_search: validatedConfig?.enable_web_search,
+          enable_rag: validatedConfig?.enable_rag,
+          attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        });
         
         // Clear attachments and reset upload progress after sending
         setAttachments([]);
         setUploadProgress({ status: 'idle', progress: 0, completedCount: 0, totalCount: 0 });
-        refetchCredits();
+        // refetchCredits is called in onComplete callback
       } else {
         // Use standard endpoint (streaming or non-streaming based on deep mode)
         await sendMessage(
@@ -335,7 +345,7 @@ export default function AdvisorChat() {
 
   const handleStopStreaming = () => {
     if (useStreamingUI) {
-      deepStream.stopStreaming();
+      deepJob.cancel();
     } else {
       stopStreaming();
     }
@@ -380,7 +390,7 @@ export default function AdvisorChat() {
 
             {/* Deep Mode Toggle */}
             <DeepModeToggle 
-              isProcessing={isDeepProcessing || deepStream.isStreaming}
+              isProcessing={isDeepProcessing || deepJob.isPolling}
               onChange={setDeepMode}
             />
 
@@ -416,7 +426,7 @@ export default function AdvisorChat() {
         userCredits={balance}
         onNewChat={() => {
           startNewChat();
-          deepStream.reset();
+          deepJob.reset();
           // Clear attachments and upload state when starting a new chat
           setAttachments([]);
           setUploadProgress({ status: 'idle', progress: 0, completedCount: 0, totalCount: 0 });
@@ -558,10 +568,10 @@ export default function AdvisorChat() {
             </div>
           ))}
 
-          {/* Streaming Deep Mode Response */}
-          {useStreamingUI && (deepStream.isStreaming || deepStream.response || pendingUserMessage) && (
+          {/* Deep Mode Response (Polling-based) */}
+          {useStreamingUI && (deepJob.isPolling || deepJob.response || pendingUserMessage) && (
             <>
-              {/* User message for streaming */}
+              {/* User message for polling mode */}
               {pendingUserMessage && (
                 <div className="flex gap-3 flex-row-reverse">
                   <div
@@ -573,47 +583,48 @@ export default function AdvisorChat() {
                 </div>
               )}
 
-              {/* Streaming assistant response */}
+              {/* Polling assistant response */}
               <div className="flex gap-3">
                 <img src={vandarumSymbolBlue} alt="Vandarum" className="h-8 w-auto flex-shrink-0" />
                 <div className="flex-1 max-w-[85%] space-y-3">
                   {/* Session Context Indicator */}
-                  {deepStream.hasContext && (
+                  {deepJob.hasContext && (
                     <SessionContextIndicator 
-                      hasContext={deepStream.hasContext}
+                      hasContext={deepJob.hasContext}
                       className="mb-2"
                     />
                   )}
 
                   {/* Progress Panel */}
-                  {deepStream.isStreaming && (
+                  {deepJob.isPolling && (
                     <StreamingProgress
-                      phase={deepStream.phase}
-                      phaseMessage={deepStream.phaseMessage}
-                      agents={deepStream.agents}
-                      isStreaming={deepStream.isStreaming}
-                      error={deepStream.error}
+                      phase={deepJob.phase}
+                      phaseMessage={deepJob.phaseMessage}
+                      agents={deepJob.agents}
+                      isStreaming={deepJob.isPolling}
+                      error={deepJob.error}
+                      progressPercent={deepJob.progress}
                     />
                   )}
 
-                  {/* Streaming Response - only show when there's actual content */}
-                  {deepStream.response && (
+                  {/* Response - only show when there's actual content */}
+                  {deepJob.response && (
                     <div className="bg-white/80 border border-slate-200/50 rounded-2xl rounded-tl-none p-4 shadow-sm">
                       <StreamingResponse
-                        content={deepStream.response}
-                        isStreaming={deepStream.isStreaming}
+                        content={deepJob.response}
+                        isStreaming={deepJob.isPolling}
                       />
                       
                       {/* Sources Panel - appears when complete */}
-                      {!deepStream.isStreaming && deepStream.sources.length > 0 && (
-                        <SourcesPanel sources={deepStream.sources} />
+                      {!deepJob.isPolling && deepJob.sources.length > 0 && (
+                        <SourcesPanel sources={deepJob.sources} />
                       )}
 
                       {/* Extracted Facts - appears when complete */}
-                      {!deepStream.isStreaming && deepStream.factsExtracted.length > 0 && (
+                      {!deepJob.isPolling && deepJob.factsExtracted.length > 0 && (
                         <SessionContextIndicator 
                           hasContext={false}
-                          factsExtracted={deepStream.factsExtracted}
+                          factsExtracted={deepJob.factsExtracted}
                           className="mt-3 pt-3 border-t border-border/30"
                         />
                       )}
@@ -621,9 +632,9 @@ export default function AdvisorChat() {
                   )}
 
                   {/* Error display */}
-                  {deepStream.error && !deepStream.isStreaming && (
+                  {deepJob.error && !deepJob.isPolling && (
                     <div className="bg-red-50 border border-red-200 rounded-2xl rounded-tl-none p-4 text-red-700 text-sm">
-                      {deepStream.error}
+                      {deepJob.error}
                     </div>
                   )}
                 </div>
