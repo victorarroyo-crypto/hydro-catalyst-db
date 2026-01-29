@@ -177,6 +177,27 @@ export default function AdvisorChat() {
     }
   }, [advisorUser?.id, loadChat, messages.length]);
 
+  // Auto-activate Deep + Streaming when a job is restored from storage
+  useEffect(() => {
+    if (deepJob.restoredFromStorage && deepJob.isPolling) {
+      console.log('[AdvisorChat] Detected restored job, auto-activating Deep + Streaming modes');
+      
+      // Force enable both modes to show the progress UI
+      if (!deepMode) {
+        setDeepMode(true);
+      }
+      if (!streamingMode) {
+        setStreamingMode(true);
+      }
+      
+      // Show toast to inform user
+      toast.info('Reanudando trabajo en curso...', {
+        description: `Job ${deepJob.jobId?.substring(0, 8)}...`,
+        duration: 3000,
+      });
+    }
+  }, [deepJob.restoredFromStorage, deepJob.isPolling, deepJob.jobId, deepMode, streamingMode, setDeepMode, setStreamingMode]);
+
   useEffect(() => {
     // Scroll to bottom on new messages
     if (scrollRef.current) {
