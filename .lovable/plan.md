@@ -1,306 +1,186 @@
 
+# Plan: Auto-Reanudar Deep Mode al Detectar Job Activo
 
-# Plan: Crear Edge Function Dedicada `deep-advisor`
+## Problema Identificado
 
-## Contexto
+Cuando se recarga la página con un job en curso:
 
-Actualmente los endpoints de Background Jobs (`/api/advisor/deep/start`, `/api/advisor/deep/status/{job_id}`) se invocan a través de `advisor-railway-proxy` usando un patrón wrapper donde el `endpoint` se pasa en el body. El usuario propone crear una Edge Function dedicada con rutas RESTful directas.
+1. El hook `useDeepAdvisorJob` restaura el `jobId` desde `localStorage` y activa `isPolling` correctamente
+2. Los toggles de Deep Mode y Streaming Mode tienen sus propios `localStorage` keys separados
+3. La UI del progreso solo se muestra cuando `useStreamingUI = deepMode && streamingMode` Y `deepJob.isPolling`
+4. Si los toggles no están activos, el polling continúa pero la UI no se muestra
 
-## Comparación de Arquitecturas
+## Flujo Actual
 
-| Aspecto | Actual (via proxy) | Propuesto (función dedicada) |
-|:--------|:-------------------|:-----------------------------|
-| URL para iniciar | `POST /advisor-railway-proxy` + body `{endpoint: "/api/advisor/deep/start"}` | `POST /deep-advisor/start` |
-| URL para status | `POST /advisor-railway-proxy` + body `{endpoint: "/api/advisor/deep/status/xxx"}` | `GET /deep-advisor/status/xxx` |
-| Complejidad cliente | Wrapper adicional | Llamadas HTTP directas |
-| Mantenimiento | Un proxy genérico | Función específica |
+```text
+                 Recarga
+                    │
+    ┌───────────────┴───────────────┐
+    ▼                               ▼
+useDeepAdvisorJob             useDeepMode
+(localStorage:                (localStorage:
+deep_advisor_active_job)      advisor_deep_mode)
+    │                               │
+    ▼                               ▼
+isPolling = true              deepMode = false ← Problema
+    │                               │
+    └──────────┬────────────────────┘
+               ▼
+      useStreamingUI = false
+               │
+               ▼
+    Panel de progreso OCULTO
+```
 
-## Archivos a Crear/Modificar
+## Solución
 
-| Archivo | Acción | Descripción |
-|:--------|:-------|:------------|
-| `supabase/functions/deep-advisor/index.ts` | CREAR | Nueva Edge Function con rutas REST |
-| `supabase/config.toml` | MODIFICAR | Añadir configuración para `deep-advisor` |
-| `src/lib/advisorProxy.ts` | MODIFICAR | Añadir helper `callDeepAdvisor` para la nueva función |
-| `src/hooks/useDeepAdvisorJob.ts` | MODIFICAR | Usar nuevas URLs directas |
+Al detectar un job activo en `localStorage`, forzar automáticamente la activación de Deep Mode y Streaming Mode:
 
-## Implementación
+```text
+                 Recarga
+                    │
+                    ▼
+           useDeepAdvisorJob
+           (detecta job activo)
+                    │
+                    ▼
+      Auto-activa Deep + Streaming
+                    │
+    ┌───────────────┴───────────────┐
+    ▼                               ▼
+isPolling = true           useStreamingUI = true
+    │                               │
+    └──────────────┬────────────────┘
+                   ▼
+       Panel de progreso VISIBLE
+```
 
-### 1. Nueva Edge Function: `deep-advisor/index.ts`
+## Archivos a Modificar
+
+| Archivo | Cambio |
+|:--------|:-------|
+| `src/hooks/useDeepAdvisorJob.ts` | Retornar flag `restoredFromStorage` cuando se recupera un job |
+| `src/pages/advisor/AdvisorChat.tsx` | Usar el flag para forzar activación de Deep + Streaming modes |
+
+## Implementación Detallada
+
+### 1. Modificar `useDeepAdvisorJob.ts`
+
+Añadir un estado que indica si el job fue restaurado desde storage:
 
 ```typescript
-// supabase/functions/deep-advisor/index.ts
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+const [restoredFromStorage, setRestoredFromStorage] = useState(false);
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+// En el useEffect de restauración:
+useEffect(() => {
+  const savedData = localStorage.getItem(STORAGE_KEY);
+  if (savedData) {
+    try {
+      const { jobId: savedJobId, chatId: savedChatId, startedAt } = JSON.parse(savedData);
+      const thirtyMinutesMs = 30 * 60 * 1000;
+      if (Date.now() - startedAt < thirtyMinutesMs) {
+        console.log('[useDeepAdvisorJob] Resuming job:', savedJobId);
+        setJobId(savedJobId);
+        setChatId(savedChatId);
+        setIsPolling(true);
+        setRestoredFromStorage(true); // ← Nuevo flag
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+}, []);
+
+// En el return:
+return {
+  // ... existing properties
+  restoredFromStorage, // ← Exponer el flag
 };
-
-// Timeout for Railway requests (2 minutes should be enough for non-streaming)
-const REQUEST_TIMEOUT_MS = 120000;
-
-async function proxyToRailway(
-  railwayUrl: string, 
-  endpoint: string, 
-  options?: { method?: string; body?: unknown }
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  
-  try {
-    const fetchOptions: RequestInit = {
-      method: options?.method || 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-    };
-    
-    if (options?.body && options.method !== 'GET') {
-      fetchOptions.body = JSON.stringify(options.body);
-    }
-    
-    const response = await fetch(`${railwayUrl}${endpoint}`, fetchOptions);
-    clearTimeout(timeoutId);
-    
-    const data = await response.json();
-    
-    return new Response(JSON.stringify(data), {
-      status: response.status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (error) {
-    clearTimeout(timeoutId);
-    
-    if (error instanceof Error && error.name === 'AbortError') {
-      return new Response(JSON.stringify({ error: 'Timeout', message: 'Request timed out' }), {
-        status: 504,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    
-    throw error;
-  }
-}
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const url = new URL(req.url);
-  const path = url.pathname.replace('/deep-advisor', '').replace('/functions/v1/deep-advisor', '');
-  const method = req.method;
-
-  const railwayApiUrl = Deno.env.get('RAILWAY_API_URL');
-  if (!railwayApiUrl) {
-    return new Response(JSON.stringify({ error: 'Backend not configured' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  try {
-    // POST /start - Iniciar nuevo job
-    if (path === '/start' && method === 'POST') {
-      const body = await req.json();
-      
-      // Validar user_id
-      if (!body.user_id) {
-        return new Response(JSON.stringify({ error: 'user_id is required' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      
-      return proxyToRailway(railwayApiUrl, '/api/advisor/deep/start', { 
-        method: 'POST', 
-        body 
-      });
-    }
-
-    // GET /status/:job_id - Consultar estado del job
-    if (path.startsWith('/status/') && method === 'GET') {
-      const jobId = path.split('/status/')[1];
-      
-      if (!jobId || !/^[\w-]+$/.test(jobId)) {
-        return new Response(JSON.stringify({ error: 'Invalid job_id' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      
-      return proxyToRailway(railwayApiUrl, `/api/advisor/deep/status/${jobId}`);
-    }
-
-    // GET /jobs?user_id=xxx - Listar jobs de un usuario
-    if (path === '/jobs' && method === 'GET') {
-      const userId = url.searchParams.get('user_id');
-      
-      if (!userId) {
-        return new Response(JSON.stringify({ error: 'user_id query param is required' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      
-      return proxyToRailway(railwayApiUrl, `/api/advisor/deep/jobs?user_id=${userId}`);
-    }
-
-    // 404 for unknown routes
-    return new Response(JSON.stringify({ error: 'Not found', path }), {
-      status: 404,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-    
-  } catch (error) {
-    console.error('[deep-advisor] Error:', error);
-    return new Response(JSON.stringify({ 
-      error: 'Internal error', 
-      message: error instanceof Error ? error.message : 'Unknown' 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-});
 ```
 
-### 2. Configuración en `config.toml`
+### 2. Modificar `AdvisorChat.tsx`
 
-Añadir:
-```toml
-[functions.deep-advisor]
-verify_jwt = false
-```
-
-### 3. Nuevo Helper en `advisorProxy.ts`
+Añadir un `useEffect` que reacciona cuando se detecta un job restaurado y fuerza los toggles:
 
 ```typescript
-const DEEP_ADVISOR_URL = `${SUPABASE_URL}/functions/v1/deep-advisor`;
+// After getting deepJob and setDeepMode, setStreamingMode
+const { deepMode, setDeepMode } = useDeepMode();
+const { streamingMode, setStreamingMode } = useStreamingMode();
 
-export interface DeepJobStartParams {
-  user_id: string;
-  message: string;
-  chat_id?: string;
-  deep_mode?: boolean;
-  synthesis_model?: string;
-  analysis_model?: string;
-  search_model?: string;
-  enable_web_search?: boolean;
-  enable_rag?: boolean;
-  attachments?: Array<{ url: string; type: string; name: string }>;
-}
-
-export interface DeepJobStartResponse {
-  job_id: string;
-  chat_id?: string;
-}
-
-export interface DeepJobStatus {
-  job_id: string;
-  status: 'pending' | 'running' | 'complete' | 'failed';
-  phase?: string;
-  phase_detail?: string;
-  progress_percent: number;
-  agent_status: Record<string, 'pending' | 'running' | 'complete' | 'failed'>;
-  error?: string;
-  result?: {
-    content: string;
-    sources: Array<{ type: string; name: string; url?: string }>;
-    facts_extracted: Array<{ type: string; key: string; value: string }>;
-    chat_id: string;
-    has_context?: boolean;
-  };
-}
-
-/**
- * Start a new Deep Advisor background job
- */
-export async function startDeepJob(params: DeepJobStartParams): Promise<ProxyResponse<DeepJobStartResponse>> {
-  try {
-    const response = await fetch(`${DEEP_ADVISOR_URL}/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
+// Auto-activate Deep + Streaming when a job is restored from storage
+useEffect(() => {
+  if (deepJob.restoredFromStorage && deepJob.isPolling) {
+    console.log('[AdvisorChat] Detected restored job, auto-activating Deep + Streaming modes');
     
-    const data = await response.json();
-    
-    if (!response.ok) {
-      return { data: null, error: data.error || data.message || `HTTP ${response.status}`, status: response.status };
+    // Force enable Deep Mode
+    if (!deepMode) {
+      setDeepMode(true);
     }
     
-    return { data, error: null, status: response.status };
-  } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : 'Network error', status: 0 };
-  }
-}
-
-/**
- * Get status of a Deep Advisor job
- */
-export async function getDeepJobStatus(jobId: string): Promise<ProxyResponse<DeepJobStatus>> {
-  try {
-    const response = await fetch(`${DEEP_ADVISOR_URL}/status/${jobId}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    
-    const data = await response.json();
-    
-    if (!response.ok) {
-      return { data: null, error: data.error || data.message || `HTTP ${response.status}`, status: response.status };
+    // Force enable Streaming Mode
+    if (!streamingMode) {
+      setStreamingMode(true);
     }
-    
-    return { data, error: null, status: response.status };
-  } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : 'Network error', status: 0 };
   }
-}
+}, [deepJob.restoredFromStorage, deepJob.isPolling, deepMode, streamingMode, setDeepMode, setStreamingMode]);
 ```
 
-### 4. Actualizar Hook para Usar Nuevos Helpers
+## Beneficios
 
-En `useDeepAdvisorJob.ts`, cambiar de `callAdvisorProxy` a los helpers directos:
+1. **Recuperación automática**: El usuario ve el progreso sin necesidad de acción manual
+2. **Consistencia de estado**: Los toggles reflejan que hay un job Deep en curso
+3. **Sin pérdida de trabajo**: El job sigue ejecutándose en Railway y el frontend lo sigue
+
+## Consideración de UX
+
+Opcionalmente, podríamos mostrar un toast informativo cuando se restaura un job:
 
 ```typescript
-// Antes:
-import { callAdvisorProxy } from '@/lib/advisorProxy';
-// ...
-const { data, error } = await callAdvisorProxy<{ job_id: string }>({
-  endpoint: '/api/advisor/deep/start',
-  method: 'POST',
-  payload: params,
-});
+import { toast } from 'sonner';
 
-// Después:
-import { startDeepJob, getDeepJobStatus } from '@/lib/advisorProxy';
-// ...
-const { data, error } = await startDeepJob(params);
-
-// Y para el polling:
-// Antes:
-const { data, error } = await callAdvisorProxy<JobStatus>({
-  endpoint: `/api/advisor/deep/status/${id}`,
-  method: 'GET',
-});
-
-// Después:
-const { data, error } = await getDeepJobStatus(id);
+// In the useEffect:
+if (deepJob.restoredFromStorage && deepJob.isPolling) {
+  toast.info('Reanudando trabajo en curso...', {
+    description: `Job ${deepJob.jobId?.substring(0, 8)}...`,
+    duration: 3000,
+  });
+  // ... activate modes
+}
 ```
 
-## Ventajas de la Función Dedicada
+## Flujo Final
 
-1. **URLs más limpias**: `GET /deep-advisor/status/xxx` vs wrapper complejo
-2. **Mejor debugging**: Logs específicos para Deep Advisor
-3. **Menor coupling**: El hook no depende del proxy genérico
-4. **Validación específica**: Validar `job_id` y `user_id` en la función
-5. **Futura extensibilidad**: Añadir `/cancel`, `/retry`, etc.
-
-## Notas Técnicas
-
-- El proxy genérico `advisor-railway-proxy` seguirá funcionando para SSE streaming y otros endpoints
-- La función dedicada solo maneja los endpoints REST de background jobs
-- No se elimina nada del proxy existente, esta es una adición
+```text
+Usuario recarga página
+         │
+         ▼
+useDeepAdvisorJob detecta job
+en localStorage (< 30 min)
+         │
+         ▼
+restoredFromStorage = true
+isPolling = true
+         │
+         ▼
+AdvisorChat.useEffect detecta
+restoredFromStorage
+         │
+    ┌────┴────┐
+    ▼         ▼
+setDeepMode  setStreamingMode
+  (true)       (true)
+    │             │
+    └──────┬──────┘
+           ▼
+useStreamingUI = true
+           │
+           ▼
+Panel DeepAdvisorProgress
+      VISIBLE
+           │
+           ▼
+Polling continúa hasta
+complete/failed
+```
