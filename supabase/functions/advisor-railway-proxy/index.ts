@@ -28,6 +28,9 @@ const SSE_ENDPOINTS = [
   '/api/advisor/deep/chat/stream',
 ];
 
+// Keep-alive ping interval (15 seconds)
+const PING_INTERVAL_MS = 15000;
+
 function isEndpointAllowed(endpoint: string): boolean {
   // Prevent path traversal
   if (endpoint.includes('..') || endpoint.includes('//')) return false;
@@ -43,11 +46,9 @@ function isSSEEndpoint(endpoint: string): boolean {
 }
 
 // Timeout configurations - Railway backend can take a long time for complex queries
-// NOTE: We keep a shorter default for most endpoints, but allow longer waits for
-// config/model endpoints which can be slow when the backend is cold-starting.
 const DEFAULT_NON_STREAMING_TIMEOUT = 120000; // 120s for most normal requests (backend can cold-start)
 const CONFIG_NON_STREAMING_TIMEOUT = 180000; // 180s for /models and /deep/config
-const STREAMING_TIMEOUT = 300000; // 5 minutes for streaming (Railway deep mode is slow)
+const STREAMING_TIMEOUT = 600000; // 10 minutes for streaming (Railway deep mode can be very slow with complex documents)
 
 function getNonStreamingTimeoutMs(endpoint: string): number {
   // These endpoints are frequently called on page load and can be slow on backend cold-start.
@@ -55,6 +56,61 @@ function getNonStreamingTimeoutMs(endpoint: string): number {
     return CONFIG_NON_STREAMING_TIMEOUT;
   }
   return DEFAULT_NON_STREAMING_TIMEOUT;
+}
+
+/**
+ * Create a TransformStream that injects keep-alive pings every PING_INTERVAL_MS
+ * to prevent proxies/CDN from closing the SSE connection due to inactivity.
+ */
+function createKeepAliveStream(
+  originalBody: ReadableStream<Uint8Array>,
+  requestId: string
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const pingData = encoder.encode('data: {"event":"ping"}\n\n');
+  
+  let pingIntervalId: number | undefined;
+  
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  
+  // Pipe original stream and inject pings
+  (async () => {
+    const writer = writable.getWriter();
+    const reader = originalBody.getReader();
+    
+    // Start ping interval
+    pingIntervalId = setInterval(() => {
+      writer.write(pingData).catch(() => {
+        // Ignore write errors - stream might be closed
+      });
+      console.log(`[advisor-railway-proxy][${requestId}] Sent keep-alive ping`);
+    }, PING_INTERVAL_MS);
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log(`[advisor-railway-proxy][${requestId}] SSE stream completed`);
+          break;
+        }
+        await writer.write(value);
+      }
+    } catch (err) {
+      console.error(`[advisor-railway-proxy][${requestId}] SSE read error:`, err);
+    } finally {
+      if (pingIntervalId !== undefined) {
+        clearInterval(pingIntervalId);
+        console.log(`[advisor-railway-proxy][${requestId}] Stopped keep-alive pings`);
+      }
+      try {
+        await writer.close();
+      } catch {
+        // Ignore close errors
+      }
+    }
+  })();
+  
+  return readable;
 }
 
 serve(async (req) => {
@@ -197,28 +253,28 @@ serve(async (req) => {
           duration: `${duration}ms`,
         });
     
-    // Handle Railway-specific errors (502 = Railway down)
-    if (response.status === 502) {
-      console.error(`[advisor-railway-proxy][${requestId}] Railway backend no disponible (502)`);
-      return new Response(JSON.stringify({ 
-        error: 'Backend No Disponible', 
-        message: 'El servidor backend no está respondiendo. Por favor, intenta de nuevo en unos minutos.',
-        code: 'BACKEND_UNAVAILABLE',
-        technical_details: 'Railway application failed to respond'
-      }), {
-        status: 503,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+        // Handle Railway-specific errors (502 = Railway down)
+        if (response.status === 502) {
+          console.error(`[advisor-railway-proxy][${requestId}] Railway backend no disponible (502)`);
+          return new Response(JSON.stringify({ 
+            error: 'Backend No Disponible', 
+            message: 'El servidor backend no está respondiendo. Por favor, intenta de nuevo en unos minutos.',
+            code: 'BACKEND_UNAVAILABLE',
+            technical_details: 'Railway application failed to respond'
+          }), {
+            status: 503,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
     
-    const responseText = await response.text();
+        const responseText = await response.text();
     
-    let responseData: unknown;
-    try {
-      responseData = JSON.parse(responseText);
-    } catch {
-      responseData = { raw: responseText };
-    }
+        let responseData: unknown;
+        try {
+          responseData = JSON.parse(responseText);
+        } catch {
+          responseData = { raw: responseText };
+        }
 
         return new Response(JSON.stringify(responseData), {
           status: response.status,
@@ -243,7 +299,7 @@ serve(async (req) => {
       }
     }
 
-    // Streaming SSE response - always use full timeout for deep mode (Railway is slow)
+    // Streaming SSE response - use extended timeout for deep mode (Railway is slow)
     const streamingTimeout = STREAMING_TIMEOUT;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -253,7 +309,7 @@ serve(async (req) => {
     
     fetchOptions.signal = controller.signal;
     
-    console.log(`[advisor-railway-proxy][${requestId}] Starting SSE fetch (timeout: ${streamingTimeout}ms)...`);
+    console.log(`[advisor-railway-proxy][${requestId}] Starting SSE fetch (timeout: ${streamingTimeout / 1000}s, keepalive: ${PING_INTERVAL_MS / 1000}s)...`);
     
     let response: Response;
     try {
@@ -304,15 +360,27 @@ serve(async (req) => {
       });
     }
 
-    // Return SSE stream directly
+    // Wrap SSE stream with keep-alive pings
     const duration = Date.now() - startTime;
     console.log(`[advisor-railway-proxy][${requestId}] SSE stream started:`, { duration: `${duration}ms` });
     
-    // Clear timeout when stream completes (wrap the body to detect end)
     const originalBody = response.body;
     
-    // Pass through the stream directly - timeout will be cleared when edge function completes
-    return new Response(originalBody, {
+    if (!originalBody) {
+      clearTimeout(timeoutId);
+      return new Response(JSON.stringify({ error: 'No response body from backend' }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    // Create keep-alive stream that injects pings every 15 seconds
+    const keepAliveStream = createKeepAliveStream(originalBody, requestId);
+    
+    // Clear timeout after stream completes (the keep-alive stream handles its own cleanup)
+    // We still keep the global timeout as a safety net
+    
+    return new Response(keepAliveStream, {
       status: 200,
       headers: {
         ...corsHeaders,

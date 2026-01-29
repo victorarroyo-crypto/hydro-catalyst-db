@@ -76,7 +76,7 @@ export async function streamAdvisorProxy(
   payload: unknown,
   signal?: AbortSignal
 ): Promise<Response> {
-  const timeoutMs = 300000; // 5 minutes - Railway deep mode can be very slow
+  const timeoutMs = 600000; // 10 minutes - Railway deep mode with complex documents can be very slow
   
   // Create a combined controller that handles both timeout and external abort
   const combinedController = new AbortController();
@@ -84,7 +84,7 @@ export async function streamAdvisorProxy(
   
   // Configure timeout - aborts with CLIENT_TIMEOUT reason
   timeoutId = window.setTimeout(() => {
-    console.warn('[advisorProxy] Streaming timeout reached (5 min)');
+    console.warn('[advisorProxy] Streaming timeout reached (10 min)');
     combinedController.abort(new DOMException('CLIENT_TIMEOUT', 'AbortError'));
   }, timeoutMs);
   
