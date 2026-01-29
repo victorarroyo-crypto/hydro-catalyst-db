@@ -1,166 +1,201 @@
 
 
-# Plan: Integrar `useDeepAdvisorJob` con el Array de Mensajes del Chat
+# Plan: Crear Componente `DeepAdvisorProgress` para Polling Mode
 
-## Problema Identificado
+## Contexto
 
-Actualmente cuando un job de Deep Advisor completa:
-1. El backend guarda el resultado en la base de datos (`advisor_messages`)
-2. El frontend muestra el resultado desde `deepJob.response` (estado transitorio)
-3. El resultado NO se integra con el array `messages` de `useAdvisorChat`
-4. Si el usuario recarga la página, pierde la referencia visual del mensaje pendiente
+El código actual usa `StreamingProgress` para mostrar el progreso del Deep Advisor tanto en SSE como en polling mode. El usuario proporciona un diseño más limpio y específico para el modo polling que incluye:
 
-## Solución
+- Labels de fase específicos para el flujo de background jobs
+- Barra de progreso con porcentaje
+- Estado de los 4 agentes en un grid
+- Botón de cancelar
 
-Integrar el resultado del job directamente en el array `messages` cuando `onComplete` se ejecuta, siguiendo el patrón que proporcionaste.
+## Archivos a Crear/Modificar
 
-## Cambios en AdvisorChat.tsx
+| Archivo | Acción | Descripción |
+|:--------|:-------|:------------|
+| `src/components/advisor/DeepAdvisorProgress.tsx` | CREAR | Componente de progreso específico para polling mode |
+| `src/pages/advisor/AdvisorChat.tsx` | MODIFICAR | Usar `DeepAdvisorProgress` en lugar de `StreamingProgress` para polling |
 
-### 1. Callback `onComplete` Mejorado
+## Implementación
 
-**Actual:**
+### 1. Crear `DeepAdvisorProgress.tsx`
+
+Basado en el código proporcionado, con mejoras:
+
 ```typescript
-const deepJob = useDeepAdvisorJob({
-  pollingInterval: 5000,
-  onComplete: (result) => {
-    console.log('[AdvisorChat] Deep job complete:', result?.chat_id);
-    refetchCredits();
-    setPendingUserMessage(null);
-  },
-  // ...
-});
-```
+// src/components/advisor/DeepAdvisorProgress.tsx
+import React from 'react';
+import { Brain, Check, Loader2, X, AlertCircle, FlaskConical, Settings, DollarSign, ScrollText } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
-**Propuesto:**
-```typescript
-const deepJob = useDeepAdvisorJob({
-  pollingInterval: 5000,
-  onComplete: (result) => {
-    console.log('[AdvisorChat] Deep job complete:', result?.chat_id);
-    
-    // Integrar el resultado en el array de mensajes
-    if (result?.content) {
-      const assistantMessage: Message = {
-        id: `assistant-deep-${Date.now()}`,
-        role: 'assistant',
-        content: result.content,
-        sources: result.sources?.map(s => ({
-          name: s.name,
-          type: s.type,
-          similarity: 0.8, // Default since polling doesn't return similarity
-          url: s.url,
-        })),
-        created_at: new Date().toISOString(),
-      };
+interface DeepAdvisorProgressProps {
+  phase?: string;
+  phaseDetail?: string;
+  progress: number;
+  agentStatus: Record<string, 'pending' | 'running' | 'complete' | 'failed'>;
+  onCancel?: () => void;
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  starting: 'Inicializando...',
+  init: 'Inicializando...',
+  context: 'Recopilando contexto...',
+  domain: 'Analizando dominio...',
+  rag: 'Buscando en Knowledge Base...',
+  web: 'Buscando en web...',
+  agents: 'Analizando con agentes especializados...',
+  synthesis: 'Sintetizando respuesta...',
+  synthesizing: 'Sintetizando respuesta...',
+  saving: 'Guardando en historial...',
+  complete: 'Completado',
+};
+
+const AGENT_CONFIG: Record<string, { label: string; icon: React.ReactNode }> = {
+  technical: { label: 'Técnico', icon: <FlaskConical className="h-3.5 w-3.5" /> },
+  operative: { label: 'Operativo', icon: <Settings className="h-3.5 w-3.5" /> },
+  economic: { label: 'Económico', icon: <DollarSign className="h-3.5 w-3.5" /> },
+  regulatory: { label: 'Regulatorio', icon: <ScrollText className="h-3.5 w-3.5" /> },
+};
+
+export function DeepAdvisorProgress({
+  phase,
+  phaseDetail,
+  progress,
+  agentStatus,
+  onCancel,
+}: DeepAdvisorProgressProps) {
+  const hasAgents = Object.keys(agentStatus).length > 0;
+  const isAgentsPhase = phase === 'agents';
+
+  return (
+    <div className="p-4 bg-gradient-to-br from-[#32b4cd]/5 to-[#307177]/5 rounded-xl border border-[#32b4cd]/20 animate-fade-in">
+      {/* Header with phase label and progress */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-[#32b4cd] animate-pulse" />
+          <span className="font-medium text-[#307177]">
+            {PHASE_LABELS[phase || 'init'] || phase || 'Procesando...'}
+          </span>
+        </div>
+        <span className="text-sm font-medium text-[#32b4cd]">{progress}%</span>
+      </div>
       
-      // El pendingUserMessage también debería añadirse
-      // pero el backend ya lo guardó, mejor recargar desde DB
-      if (result.chat_id) {
-        loadChat(result.chat_id); // Sincroniza mensajes desde la DB
-      }
-    }
-    
-    refetchCredits();
-    setPendingUserMessage(null);
-  },
-  onError: (error) => {
-    console.error('[AdvisorChat] Deep job error:', error);
-    toast.error(error);
-    setPendingUserMessage(null);
-  },
-});
+      {/* Progress bar */}
+      <div className="w-full bg-slate-100 rounded-full h-2 mb-3 overflow-hidden">
+        <div 
+          className="h-full bg-gradient-to-r from-[#307177] to-[#32b4cd] rounded-full transition-all duration-500 ease-out"
+          style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
+        />
+      </div>
+      
+      {/* Phase detail */}
+      {phaseDetail && (
+        <p className="text-sm text-muted-foreground mb-3">{phaseDetail}</p>
+      )}
+      
+      {/* Agent status grid (when in agents phase or when agents have status) */}
+      {hasAgents && (isAgentsPhase || Object.values(agentStatus).some(s => s !== 'pending')) && (
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {Object.entries(agentStatus).map(([agentId, status]) => {
+            const config = AGENT_CONFIG[agentId] || { label: agentId, icon: null };
+            
+            return (
+              <div 
+                key={agentId}
+                className={cn(
+                  'flex items-center gap-2 text-sm p-2 rounded-lg transition-all',
+                  status === 'complete' && 'bg-green-50 text-green-700 border border-green-200',
+                  status === 'running' && 'bg-amber-50 text-amber-700 border border-amber-200',
+                  status === 'failed' && 'bg-red-50 text-red-700 border border-red-200',
+                  status === 'pending' && 'bg-slate-50 text-slate-500 border border-slate-200'
+                )}
+              >
+                {/* Status icon */}
+                {status === 'complete' && <Check className="h-3.5 w-3.5" />}
+                {status === 'running' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {status === 'failed' && <AlertCircle className="h-3.5 w-3.5" />}
+                {status === 'pending' && <span className="h-3.5 w-3.5 flex items-center justify-center text-xs">○</span>}
+                
+                {/* Agent icon and label */}
+                {config.icon}
+                <span className="font-medium">{config.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      
+      {/* Cancel button */}
+      {onCancel && (
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onCancel}
+            className="text-muted-foreground hover:text-destructive text-xs"
+          >
+            <X className="h-3 w-3 mr-1" />
+            Cancelar
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default DeepAdvisorProgress;
 ```
 
-### 2. Alternativa Más Simple: Recargar Chat desde DB
+### 2. Modificar `AdvisorChat.tsx`
 
-Dado que el backend ya guarda los mensajes en `advisor_messages`, la solución más limpia es recargar el chat completo cuando el job termina:
+Cambiar el import y uso:
 
+**Antes:**
 ```typescript
-onComplete: (result) => {
-  // El backend guardó user message + assistant response en DB
-  // Recargamos el chat para sincronizar el estado
-  if (result?.chat_id) {
-    loadChat(result.chat_id);
-  }
-  
-  refetchCredits();
-  setPendingUserMessage(null);
-},
+import { StreamingProgress } from '@/components/advisor/streaming';
+
+// En el JSX:
+<StreamingProgress
+  phase={deepJob.phase}
+  phaseMessage={deepJob.phaseMessage}
+  agents={deepJob.agents}
+  isStreaming={deepJob.isPolling}
+  error={deepJob.error}
+  progressPercent={deepJob.progress}
+/>
 ```
 
-Esta aproximación:
-- Evita duplicados
-- Sincroniza IDs correctos desde la DB
-- Mantiene consistencia si el usuario recargó la página
-
-### 3. Ocultar la Sección de Polling Cuando Hay Mensajes Sincronizados
-
-Después de `loadChat`, el mensaje del asistente estará en `messages`, por lo que debemos ajustar la condición para no mostrar la sección de polling duplicada:
-
+**Después:**
 ```typescript
-{/* Deep Mode Response - solo mientras está en progreso O hay respuesta transitoria */}
-{useStreamingUI && deepJob.isPolling && (
-  // ... progress and pending response
-)}
+import { DeepAdvisorProgress } from '@/components/advisor/DeepAdvisorProgress';
+
+// En el JSX:
+<DeepAdvisorProgress
+  phase={deepJob.phase}
+  phaseDetail={deepJob.phaseMessage}
+  progress={deepJob.progress}
+  agentStatus={deepJob.status?.agent_status || {}}
+  onCancel={deepJob.cancel}
+/>
 ```
 
-En lugar de:
-```typescript
-{useStreamingUI && (deepJob.isPolling || deepJob.response || pendingUserMessage) && (
-```
+## Diferencias con `StreamingProgress`
 
-## Secuencia de Implementación
-
-| Paso | Archivo | Cambio |
-|:-----|:--------|:-------|
-| 1 | `src/pages/advisor/AdvisorChat.tsx` | Actualizar `onComplete` para llamar `loadChat(result.chat_id)` |
-| 2 | `src/pages/advisor/AdvisorChat.tsx` | Simplificar condición de renderizado del bloque de polling |
-| 3 | `src/hooks/useDeepAdvisorJob.ts` | Asegurar que `reset()` se llama después de `loadChat` para limpiar estado transitorio |
-
-## Flujo Resultante
-
-```text
-Usuario envía mensaje
-        │
-        ▼
-setPendingUserMessage(msg)
-        │
-        ▼
-deepJob.startJob(...)
-        │
-        ▼
-┌─────────────────────────────────┐
-│ Polling cada 5s                 │
-│ UI muestra:                     │
-│  - pendingUserMessage           │
-│  - StreamingProgress            │
-└─────────────────────────────────┘
-        │
-        ▼ status === 'complete'
-        │
-onComplete(result)
-        │
-        ├── loadChat(result.chat_id)  ──► messages[] actualizado desde DB
-        │
-        ├── setPendingUserMessage(null)
-        │
-        └── deepJob.reset() opcional
-        │
-        ▼
-┌─────────────────────────────────┐
-│ UI muestra:                     │
-│  - messages[] (incluye user +   │
-│    assistant de la DB)          │
-│  - No hay bloque de polling     │
-└─────────────────────────────────┘
-```
+| Aspecto | StreamingProgress | DeepAdvisorProgress |
+|:--------|:------------------|:--------------------|
+| Diseño | Lista vertical de fases | Barra de progreso horizontal |
+| Uso | SSE streaming (fases secuenciales) | Polling (% progreso) |
+| Agentes | Sublista expandible | Grid 2x2 siempre visible |
+| Cancelar | No incluido | Botón integrado |
+| Estilo | Neutral | Colores de marca Vandarum |
 
 ## Notas Técnicas
 
-- `loadChat` ya existe en `useAdvisorChat` y recarga mensajes desde la tabla `advisor_messages`
-- El backend de Railway guarda tanto el mensaje del usuario como la respuesta del asistente
-- Esta solución es más robusta que construir mensajes manualmente porque:
-  - Usa los IDs reales de la DB
-  - Incluye `credits_used` y otros metadatos
-  - Maneja reconexiones después de page refresh
+- El componente recibe `agentStatus` directamente como `Record<string, status>` sin necesidad de la transformación `agents` del hook
+- El botón cancelar llama a `deepJob.cancel()` que limpia el polling y localStorage
+- El gradiente usa los colores de marca `#307177` y `#32b4cd`
+- La animación `animate-fade-in` ya existe en el proyecto
 
