@@ -1,6 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
-
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const DEEP_ADVISOR_URL = `${SUPABASE_URL}/functions/v1/deep-advisor`;
 
 interface ProxyRequestOptions {
   endpoint: string;
@@ -9,10 +8,60 @@ interface ProxyRequestOptions {
   queryParams?: Record<string, string | number | boolean | undefined>;
 }
 
-interface ProxyResponse<T = unknown> {
+export interface ProxyResponse<T = unknown> {
   data: T | null;
   error: string | null;
   status: number;
+}
+
+// ============== Deep Advisor Job Types ==============
+
+export interface DeepJobStartParams {
+  user_id: string;
+  message: string;
+  chat_id?: string;
+  deep_mode?: boolean;
+  synthesis_model?: string;
+  analysis_model?: string;
+  search_model?: string;
+  enable_web_search?: boolean;
+  enable_rag?: boolean;
+  attachments?: Array<{ url: string; type: string; name: string }>;
+}
+
+export interface DeepJobStartResponse {
+  job_id: string;
+  chat_id?: string;
+}
+
+export interface DeepJobSource {
+  type: string;
+  name: string;
+  count?: number;
+  url?: string;
+}
+
+export interface DeepJobFact {
+  type: string;
+  key: string;
+  value: string;
+}
+
+export interface DeepJobStatus {
+  job_id: string;
+  status: 'pending' | 'running' | 'complete' | 'failed';
+  phase?: string;
+  phase_detail?: string;
+  progress_percent: number;
+  agent_status: Record<string, 'pending' | 'running' | 'complete' | 'failed'>;
+  error?: string;
+  result?: {
+    content: string;
+    sources: DeepJobSource[];
+    facts_extracted: DeepJobFact[];
+    chat_id: string;
+    has_context?: boolean;
+  };
 }
 
 /**
@@ -199,4 +248,76 @@ export async function checkProxyHealth(): Promise<{ ok: boolean; latency?: numbe
  */
 export function getAdvisorProxyUrl(): string {
   return `${SUPABASE_URL}/functions/v1/advisor-railway-proxy`;
+}
+
+// ============== Deep Advisor Job API ==============
+
+/**
+ * Start a new Deep Advisor background job
+ */
+export async function startDeepJob(params: DeepJobStartParams): Promise<ProxyResponse<DeepJobStartResponse>> {
+  try {
+    const response = await fetch(`${DEEP_ADVISOR_URL}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { data: null, error: data.error || data.message || `HTTP ${response.status}`, status: response.status };
+    }
+    
+    return { data, error: null, status: response.status };
+  } catch (error) {
+    console.error('[startDeepJob] Network error:', error);
+    return { data: null, error: error instanceof Error ? error.message : 'Network error', status: 0 };
+  }
+}
+
+/**
+ * Get status of a Deep Advisor job (for polling)
+ */
+export async function getDeepJobStatus(jobId: string): Promise<ProxyResponse<DeepJobStatus>> {
+  try {
+    const response = await fetch(`${DEEP_ADVISOR_URL}/status/${jobId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { data: null, error: data.error || data.message || `HTTP ${response.status}`, status: response.status };
+    }
+    
+    return { data, error: null, status: response.status };
+  } catch (error) {
+    console.error('[getDeepJobStatus] Network error:', error);
+    return { data: null, error: error instanceof Error ? error.message : 'Network error', status: 0 };
+  }
+}
+
+/**
+ * Get user's jobs history (optional, for future use)
+ */
+export async function getUserDeepJobs(userId: string): Promise<ProxyResponse<DeepJobStatus[]>> {
+  try {
+    const response = await fetch(`${DEEP_ADVISOR_URL}/jobs?user_id=${userId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { data: null, error: data.error || data.message || `HTTP ${response.status}`, status: response.status };
+    }
+    
+    return { data, error: null, status: response.status };
+  } catch (error) {
+    console.error('[getUserDeepJobs] Network error:', error);
+    return { data: null, error: error instanceof Error ? error.message : 'Network error', status: 0 };
+  }
 }
