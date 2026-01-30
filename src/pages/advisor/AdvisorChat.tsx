@@ -789,23 +789,37 @@ export default function AdvisorChat() {
                         <SourcesPanel sources={deepJob.status.result.sources} />
                       )}
                       
-                      {/* Download PDF Button */}
-                      {deepJob.jobId && (
+                      {/* Download PDF Button - Use pdf_url from status when available */}
+                      {(deepJob.status?.result?.pdf_url || deepJob.jobId) && (
                         <div className="mt-4 pt-3 border-t border-slate-200/50 flex justify-end">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDownloadPDF}
-                            disabled={isDownloadingPdf}
-                            className="gap-2 text-[#307177] border-[#307177]/30 hover:bg-[#307177]/5 hover:border-[#307177]/50"
-                          >
-                            {isDownloadingPdf ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
+                          {deepJob.status?.result?.pdf_url ? (
+                            // Direct link when pdf_url is available from backend
+                            <a
+                              href={deepJob.status.result.pdf_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-[#307177] text-white hover:bg-[#265a5f] transition-colors"
+                            >
                               <FileDown className="h-4 w-4" />
-                            )}
-                            {isDownloadingPdf ? 'Generando PDF...' : 'Descargar PDF'}
-                          </Button>
+                              Descargar PDF
+                            </a>
+                          ) : (
+                            // Fallback: call export endpoint
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleDownloadPDF}
+                              disabled={isDownloadingPdf}
+                              className="gap-2 text-[#307177] border-[#307177]/30 hover:bg-[#307177]/5 hover:border-[#307177]/50"
+                            >
+                              {isDownloadingPdf ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <FileDown className="h-4 w-4" />
+                              )}
+                              {isDownloadingPdf ? 'Generando PDF...' : 'Descargar PDF'}
+                            </Button>
+                          )}
                         </div>
                       )}
                     </div>

@@ -61,6 +61,7 @@ export interface DeepJobStatus {
     facts_extracted: DeepJobFact[];
     chat_id: string;
     has_context?: boolean;
+    pdf_url?: string; // Pre-generated PDF URL from Railway backend
   };
 }
 
