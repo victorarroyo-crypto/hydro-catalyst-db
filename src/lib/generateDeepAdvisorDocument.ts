@@ -223,21 +223,26 @@ function isTableRow(line: string): boolean {
   if (!line) return false;
   const trimmed = line.trim();
   
-  // Must start and end with | and have some content
-  if (!trimmed.startsWith('|') || !trimmed.endsWith('|') || trimmed.length <= 2) {
+  // Must start with | and contain at least one more |
+  if (!trimmed.startsWith('|')) {
     return false;
   }
   
-  // NOT a table if it contains flow diagram indicators
-  if (trimmed.includes('→') || trimmed.includes('←') || 
-      trimmed.includes('↓') || trimmed.includes('↑') ||
-      /\[\d+\./.test(trimmed)) {
-    return false;
-  }
-  
-  // A valid table row should have multiple cells (at least 2 | besides start/end)
+  // Count pipes - needs at least 2 to be a valid table row
   const pipeCount = (trimmed.match(/\|/g) || []).length;
-  return pipeCount >= 3;
+  if (pipeCount < 2) {
+    return false;
+  }
+  
+  // If it ends with |, it's definitely a table row
+  if (trimmed.endsWith('|')) {
+    return true;
+  }
+  
+  // If it doesn't end with | but has multiple cells, still consider it a table
+  // This handles markdown tables that don't have trailing pipes
+  const cells = trimmed.split('|').filter(c => c.trim());
+  return cells.length >= 2;
 }
 
 /**
@@ -253,10 +258,19 @@ function isSeparatorRow(line: string): boolean {
  * Parse table row cells from a markdown table line
  */
 function parseTableRowCells(line: string): string[] {
-  return line.trim()
-    .slice(1, -1)  // Remove leading and trailing |
-    .split('|')
-    .map(cell => cell.trim());
+  let trimmed = line.trim();
+  
+  // Remove leading pipe if present
+  if (trimmed.startsWith('|')) {
+    trimmed = trimmed.slice(1);
+  }
+  
+  // Remove trailing pipe if present
+  if (trimmed.endsWith('|')) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  
+  return trimmed.split('|').map(cell => cell.trim());
 }
 
 /**
