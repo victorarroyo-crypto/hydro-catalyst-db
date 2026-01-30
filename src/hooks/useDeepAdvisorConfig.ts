@@ -44,11 +44,18 @@ export interface DeepAdvisorConfigUpdate {
 }
 
 async function fetchDeepAdvisorConfig(userId?: string): Promise<DeepAdvisorConfigResponse> {
-  const { data, error } = await callAdvisorProxy<DeepAdvisorConfigResponse>({
+  const { data, error, status } = await callAdvisorProxy<DeepAdvisorConfigResponse>({
     endpoint: '/api/advisor/deep/config',
     method: 'GET',
     queryParams: userId ? { user_id: userId } : undefined,
   });
+
+  // Backend unavailable - throw specific error for UI handling
+  if (status === 503 || status === 502) {
+    const err = new Error('El servidor no está disponible. Intenta de nuevo en unos minutos.');
+    (err as any).code = 'BACKEND_UNAVAILABLE';
+    throw err;
+  }
 
   if (error || !data) {
     throw new Error(error || 'Error al cargar configuración');
@@ -76,7 +83,8 @@ export function useDeepAdvisorConfig(userId?: string) {
     queryKey: ['deep-advisor-config', userId],
     queryFn: () => fetchDeepAdvisorConfig(userId),
     staleTime: 1000 * 60 * 5, // 5 minutes
-    retry: 2,
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     enabled: !!userId,
   });
 
