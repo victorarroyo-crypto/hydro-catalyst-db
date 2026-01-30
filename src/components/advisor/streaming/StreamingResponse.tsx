@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
+import { isMermaidContent, extractTextFromChildren } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from '../FlowDiagramRenderer';
 import { MermaidRenderer } from '../MermaidRenderer';
 
@@ -168,10 +169,19 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
           h3: ({ children }) => (
             <h3 className="text-base font-semibold text-foreground mt-4 mb-2">{children}</h3>
           ),
-          // Paragraph with relaxed spacing
-          p: ({ children }) => (
-            <p className="mb-4 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
-          ),
+          // Paragraph with relaxed spacing - also detect unformatted Mermaid diagrams
+          p: ({ children }) => {
+            const textContent = extractTextFromChildren(children);
+            
+            // Check if this paragraph contains a Mermaid diagram without code fences
+            if (isMermaidContent(textContent)) {
+              return <MermaidRenderer content={textContent} />;
+            }
+            
+            return (
+              <p className="mb-4 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
+            );
+          },
           // List styling
           ul: ({ children }) => (
             <ul className="list-disc list-inside space-y-1.5 my-3">{children}</ul>
