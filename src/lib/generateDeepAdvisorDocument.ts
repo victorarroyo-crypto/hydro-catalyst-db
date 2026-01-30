@@ -217,15 +217,131 @@ function createFormattedTextRuns(text: string, baseOptions: TextRunOptions = {})
 }
 
 /**
- * Parse markdown content and convert to docx paragraphs
+ * Check if a line is a markdown table row
  */
-function parseMarkdownToParagraphs(markdown: string): Paragraph[] {
-  const paragraphs: Paragraph[] = [];
+function isTableRow(line: string): boolean {
+  if (!line) return false;
+  const trimmed = line.trim();
+  
+  // Must start and end with | and have some content
+  if (!trimmed.startsWith('|') || !trimmed.endsWith('|') || trimmed.length <= 2) {
+    return false;
+  }
+  
+  // NOT a table if it contains flow diagram indicators
+  if (trimmed.includes('→') || trimmed.includes('←') || 
+      trimmed.includes('↓') || trimmed.includes('↑') ||
+      /\[\d+\./.test(trimmed)) {
+    return false;
+  }
+  
+  // A valid table row should have multiple cells (at least 2 | besides start/end)
+  const pipeCount = (trimmed.match(/\|/g) || []).length;
+  return pipeCount >= 3;
+}
+
+/**
+ * Check if a line is a table separator row (e.g., |---|---|)
+ */
+function isSeparatorRow(line: string): boolean {
+  if (!line) return false;
+  const trimmed = line.trim();
+  return /^\|[\s\-:|]+\|$/.test(trimmed) && trimmed.includes('-');
+}
+
+/**
+ * Parse table row cells from a markdown table line
+ */
+function parseTableRowCells(line: string): string[] {
+  return line.trim()
+    .slice(1, -1)  // Remove leading and trailing |
+    .split('|')
+    .map(cell => cell.trim());
+}
+
+/**
+ * Create a Word Table from markdown table lines
+ */
+function parseMarkdownTable(tableLines: string[]): Table {
+  // Filter out separator rows, keep only data rows
+  const dataLines = tableLines.filter(l => !isSeparatorRow(l.trim()));
+  
+  if (dataLines.length === 0) {
+    // Return empty table if no data
+    return new Table({
+      rows: [],
+      width: { size: 100, type: WidthType.PERCENTAGE },
+    });
+  }
+  
+  // First line = headers
+  const headerCells = parseTableRowCells(dataLines[0]);
+  const bodyLines = dataLines.slice(1);
+  
+  // Create header row with Vandarum styling
+  const headerRow = new TableRow({
+    children: headerCells.map(cell => 
+      new TableCell({
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: sanitizeEmojis(cell),
+                bold: true,
+                size: VANDARUM_SIZES.texto,
+                color: 'FFFFFF',
+                font: VANDARUM_FONTS.texto,
+              }),
+            ],
+          }),
+        ],
+        shading: { type: ShadingType.SOLID, color: VANDARUM_COLORS.verdeOscuro },
+      })
+    ),
+  });
+  
+  // Create data rows with zebra striping
+  const dataRows = bodyLines.map((line, idx) => {
+    const cells = parseTableRowCells(line);
+    // Pad cells to match header count if needed
+    while (cells.length < headerCells.length) {
+      cells.push('');
+    }
+    
+    return new TableRow({
+      children: cells.map(cell =>
+        new TableCell({
+          children: [
+            new Paragraph({
+              children: createFormattedTextRuns(cell),
+            }),
+          ],
+          shading: { 
+            type: ShadingType.SOLID, 
+            color: idx % 2 === 0 ? 'FFFFFF' : 'F5F5F5' 
+          },
+        })
+      ),
+    });
+  });
+  
+  return new Table({
+    rows: [headerRow, ...dataRows],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  });
+}
+
+/**
+ * Parse markdown content and convert to docx elements (paragraphs and tables)
+ */
+function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
   const lines = markdown.split('\n');
   
   let inCodeBlock = false;
   let codeBlockContent: string[] = [];
-  let inList = false;
+  let inTable = false;
+  let tableLines: string[] = [];
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -233,9 +349,16 @@ function parseMarkdownToParagraphs(markdown: string): Paragraph[] {
     
     // Handle code blocks
     if (trimmedLine.startsWith('```')) {
+      // If we were in a table, finalize it first
+      if (inTable && tableLines.length > 0) {
+        elements.push(parseMarkdownTable(tableLines));
+        inTable = false;
+        tableLines = [];
+      }
+      
       if (inCodeBlock) {
         // End of code block - render as monospace
-        paragraphs.push(
+        elements.push(
           new Paragraph({
             children: [
               new TextRun({
@@ -262,17 +385,34 @@ function parseMarkdownToParagraphs(markdown: string): Paragraph[] {
       continue;
     }
     
+    // Handle table rows
+    if (isTableRow(trimmedLine) || isSeparatorRow(trimmedLine)) {
+      if (!inTable) {
+        inTable = true;
+        tableLines = [];
+      }
+      tableLines.push(trimmedLine);
+      continue;
+    }
+    
+    // If we were in a table but this line is not a table row, finalize the table
+    if (inTable && tableLines.length > 0) {
+      elements.push(parseMarkdownTable(tableLines));
+      inTable = false;
+      tableLines = [];
+    }
+    
     // Skip empty lines but add spacing
     if (!trimmedLine) {
-      if (paragraphs.length > 0) {
-        paragraphs.push(new Paragraph({ children: [], spacing: { after: 100 } }));
+      if (elements.length > 0) {
+        elements.push(new Paragraph({ children: [], spacing: { after: 100 } }));
       }
       continue;
     }
     
     // Handle headings
     if (trimmedLine.startsWith('### ')) {
-      paragraphs.push(
+      elements.push(
         new Paragraph({
           children: createFormattedTextRuns(trimmedLine.slice(4), { bold: true }),
           heading: HeadingLevel.HEADING_3,
@@ -283,7 +423,7 @@ function parseMarkdownToParagraphs(markdown: string): Paragraph[] {
     }
     
     if (trimmedLine.startsWith('## ')) {
-      paragraphs.push(
+      elements.push(
         new Paragraph({
           children: [
             new TextRun({
@@ -302,7 +442,7 @@ function parseMarkdownToParagraphs(markdown: string): Paragraph[] {
     }
     
     if (trimmedLine.startsWith('# ')) {
-      paragraphs.push(
+      elements.push(
         new Paragraph({
           children: [
             new TextRun({
@@ -323,7 +463,7 @@ function parseMarkdownToParagraphs(markdown: string): Paragraph[] {
     // Handle bullet lists
     if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
       const listContent = trimmedLine.slice(2);
-      paragraphs.push(
+      elements.push(
         new Paragraph({
           children: [
             new TextRun({
@@ -345,7 +485,7 @@ function parseMarkdownToParagraphs(markdown: string): Paragraph[] {
     // Handle numbered lists
     const numberedMatch = trimmedLine.match(/^(\d+)\.\s+(.+)$/);
     if (numberedMatch) {
-      paragraphs.push(
+      elements.push(
         new Paragraph({
           children: [
             new TextRun({
@@ -388,7 +528,7 @@ function parseMarkdownToParagraphs(markdown: string): Paragraph[] {
       textRuns.push(...createFormattedTextRuns(processedLine.slice(lastIndex)));
     }
     
-    paragraphs.push(
+    elements.push(
       new Paragraph({
         children: textRuns.length > 0 ? textRuns : createFormattedTextRuns(processedLine),
         spacing: { after: 100 },
@@ -396,7 +536,12 @@ function parseMarkdownToParagraphs(markdown: string): Paragraph[] {
     );
   }
   
-  return paragraphs;
+  // Finalize any remaining table at end of content
+  if (inTable && tableLines.length > 0) {
+    elements.push(parseMarkdownTable(tableLines));
+  }
+  
+  return elements;
 }
 
 /**
