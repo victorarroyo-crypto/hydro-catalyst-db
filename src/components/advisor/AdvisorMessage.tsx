@@ -209,9 +209,9 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               return <MermaidRenderer content={textContent} />;
             }
             
-            // Regular pre block - render as normal text without background
+            // Regular pre block - render as completely normal paragraph text
             return (
-              <div className="my-2 whitespace-pre-wrap leading-relaxed">
+              <div className="my-4 leading-[1.8] text-foreground/90">
                 {children}
               </div>
             );
