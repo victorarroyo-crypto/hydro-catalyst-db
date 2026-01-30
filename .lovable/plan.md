@@ -1,124 +1,89 @@
 
 
-## Plan: Mejoras en Visualización de Diagramas y Reset del Textarea
+## Plan: Mejorar Acceso al Historial de Conversaciones
 
-### Problema 1: Textarea no resetea su altura
+### Diagnóstico
 
-Cuando el usuario escribe un mensaje largo y lo envía, el textarea permanece expandido durante la espera de respuesta. Esto consume espacio innecesario.
+He investigado la base de datos y el código, y encontré lo siguiente:
 
-**Solución**: Reset explícito de la altura del textarea al enviar el mensaje
+| Aspecto | Estado |
+|---------|--------|
+| Los chats del Deep Mode se guardan | Correcto - Hay mensajes en la BD |
+| La página de historial existe | `/advisor/history` está configurada |
+| Los chats se pueden cargar | La función `loadChat` funciona |
+| Campo `message_count` | Siempre 0 (bug del backend Railway) |
+| Acceso al historial | Solo desde Dashboard, difícil de encontrar |
+
+### Problema Principal
+
+El historial existe y funciona, pero:
+1. No hay acceso directo desde la pantalla del chat
+2. El contador de mensajes siempre muestra 0 (dato incorrecto del backend)
+
+### Solución
+
+Agregar un botón de "Historial" visible en la barra superior del chat, junto a los otros iconos de navegación, para acceso directo a conversaciones pasadas.
+
+---
+
+### Cambios a Implementar
+
+#### 1. Agregar botón de Historial en la barra del chat
 
 **Archivo**: `src/pages/advisor/AdvisorChat.tsx`
 
+En la sección del header (donde están los iconos de Dashboard y Logout), agregar un botón para ir al historial:
+
 ```typescript
-// En handleSend, después de setInputValue('')
-setInputValue('');
+// En el header, junto a los otros botones
+<Button 
+  variant="ghost" 
+  size="icon"
+  onClick={() => navigate('/advisor/history')}
+  title="Historial de conversaciones"
+>
+  <History className="w-5 h-5" />
+</Button>
+```
 
-// Añadir reset de altura del textarea
-const textareaEl = document.querySelector('textarea');
-if (textareaEl) {
-  textareaEl.style.height = 'auto';
-}
+#### 2. Calcular `message_count` en el cliente (workaround)
+
+Dado que el backend no actualiza correctamente `message_count`, se puede hacer una subconsulta para contar mensajes reales:
+
+**Archivo**: `src/hooks/useAdvisorHistory.ts`
+
+Modificar la consulta para obtener el conteo real de mensajes:
+
+```typescript
+// Opción A: Agregar join con conteo
+const { data, error } = await supabase
+  .from('advisor_chats')
+  .select(`
+    *,
+    advisor_messages(count)
+  `)
+  .eq('user_id', userId)
+  .order('updated_at', { ascending: false })
+  .limit(50);
+
+// Luego mapear:
+message_count: data[0]?.advisor_messages?.[0]?.count || 0
 ```
 
 ---
 
-### Problema 2: Diagramas de flujo horizontales se ven mal
-
-Los diagramas generados por la IA tienen un formato horizontal con flechas (`→`) pero el renderizador actual los convierte a tarjetas verticales que ocupan mucho espacio y pierden la estructura visual horizontal.
-
-**Antes (actual)**: Tarjetas verticales con flechas hacia abajo - no representa bien procesos industriales
-
-**Solución propuesta**: Diseño horizontal compacto tipo "pipeline" que mantiene la dirección del flujo original
-
-**Archivo**: `src/components/advisor/FlowDiagramRenderer.tsx`
-
-Rediseñar el componente para:
-
-1. **Layout horizontal scrolleable** - Los pasos se muestran de izquierda a derecha como un tren de proceso
-2. **Chips compactos** - Cada paso es un chip/badge pequeño en lugar de una tarjeta grande
-3. **Flechas horizontales** - Conectores → entre pasos
-4. **Detalles en tooltip** - Los paréntesis se muestran en hover para mantener compacto
-5. **Scroll suave** - Si el diagrama es muy largo, permite scroll horizontal
-
-**Diseño visual propuesto**:
-
-```text
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│ ┌───────────────┐    ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ │
-│ │ ENTRADA PET   │ →  │ PRE-LAVADO    │ →  │ LAVADO        │ →  │ ENJUAGUES     │ │
-│ │ SUCIO         │    │ (frío)        │    │ ALCALINO      │    │               │ │
-│ └───────────────┘    └───────────────┘    └───────────────┘    └───────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────────┘
-```
-
-Cada chip:
-- Borde redondeado con color primario sutil
-- Texto principal en negrita
-- Detalle (paréntesis) en texto más pequeño debajo
-- Flecha horizontal `→` entre chips
-
-**Para diagramas con múltiples líneas** (como "LÍNEA 1", "LÍNEA 2", etc.):
-- Detectar el patrón de encabezado de línea
-- Renderizar cada línea como un bloque separado con su título
-
----
-
-### Cambios en Archivos
+### Resumen de Archivos a Modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/pages/advisor/AdvisorChat.tsx` | Reset altura textarea al enviar mensaje |
-| `src/components/advisor/FlowDiagramRenderer.tsx` | Nuevo diseño horizontal tipo pipeline |
+| `src/pages/advisor/AdvisorChat.tsx` | Agregar botón de History en el header |
+| `src/hooks/useAdvisorHistory.ts` | Consulta con conteo real de mensajes |
 
 ---
 
-### Detalles Técnicos
+### Beneficios
 
-**FlowDiagramRenderer.tsx** - Nueva estructura:
-
-```typescript
-// Componente FlowChip individual
-function FlowChip({ step }: { step: FlowStep }) {
-  return (
-    <div className="flex-shrink-0 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20">
-      <span className="text-sm font-medium text-foreground">
-        {step.label}
-      </span>
-      {step.detail && (
-        <span className="text-xs text-muted-foreground block">
-          ({step.detail})
-        </span>
-      )}
-    </div>
-  );
-}
-
-// Flecha horizontal
-function FlowArrowHorizontal() {
-  return (
-    <span className="text-primary/60 mx-1 flex-shrink-0">→</span>
-  );
-}
-
-// Contenedor horizontal scrolleable
-export function FlowDiagramRenderer({ content }: FlowDiagramRendererProps) {
-  const steps = parseFlowSteps(content);
-  
-  return (
-    <div className="my-4 overflow-x-auto">
-      <div className="flex items-center gap-1 p-3 bg-muted/30 rounded-lg min-w-max">
-        {steps.map((step, idx) => (
-          <React.Fragment key={idx}>
-            <FlowChip step={step} />
-            {idx < steps.length - 1 && <FlowArrowHorizontal />}
-          </React.Fragment>
-        ))}
-      </div>
-    </div>
-  );
-}
-```
-
-**Mejora adicional**: Para diagramas con ramificaciones (como efluentes en paralelo), detectar el patrón de flechas verticales `↓` y mostrar como sub-items debajo del paso correspondiente.
+- Acceso directo al historial desde cualquier pantalla del chat
+- Contador de mensajes preciso en la lista de conversaciones
+- No requiere cambios en el backend de Railway
 
