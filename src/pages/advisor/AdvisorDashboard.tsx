@@ -204,11 +204,18 @@ export default function AdvisorDashboard() {
 
           {/* Recent Chats */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="flex items-center gap-2">
                 <MessageSquare className="w-5 h-5" />
                 Conversaciones Recientes
               </CardTitle>
+              {chats.length > 5 && (
+                <Link to="/advisor/history">
+                  <Button variant="ghost" size="sm" className="text-primary">
+                    Ver todo ({chats.length})
+                  </Button>
+                </Link>
+              )}
             </CardHeader>
             <CardContent>
               {historyLoading ? (
