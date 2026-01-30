@@ -151,48 +151,69 @@ serve(async (req) => {
       console.log(`[deep-advisor] Exporting PDF for job ${jobId}`);
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      // PDF generation can take longer, use 3 minutes timeout
+      const pdfTimeoutMs = 180000;
+      const timeoutId = setTimeout(() => controller.abort(), pdfTimeoutMs);
       
       try {
-        const response = await fetch(
-          `${railwayApiUrl}/api/advisor/deep/export/pdf/${jobId}`,
-          { signal: controller.signal }
-        );
+        const pdfUrl = `${railwayApiUrl}/api/advisor/deep/export/pdf/${jobId}`;
+        console.log(`[deep-advisor] Fetching PDF from: ${pdfUrl}`);
+        
+        const response = await fetch(pdfUrl, { 
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/pdf',
+          }
+        });
         clearTimeout(timeoutId);
+        
+        console.log(`[deep-advisor] PDF response status: ${response.status}`);
         
         if (!response.ok) {
           const errorText = await response.text();
           console.error(`[deep-advisor] PDF export failed: ${response.status}`, errorText);
           return new Response(JSON.stringify({ 
             error: 'PDF generation failed',
-            status: response.status 
+            status: response.status,
+            details: errorText.substring(0, 500)
           }), {
             status: response.status,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
         
-        const pdfBlob = await response.blob();
+        // Use arrayBuffer for better Deno compatibility
+        const pdfBuffer = await response.arrayBuffer();
+        console.log(`[deep-advisor] PDF size: ${pdfBuffer.byteLength} bytes`);
         
-        return new Response(pdfBlob, {
+        return new Response(pdfBuffer, {
           status: 200,
           headers: {
             ...corsHeaders,
             'Content-Type': 'application/pdf',
             'Content-Disposition': `attachment; filename="vandarum_report_${jobId}.pdf"`,
+            'Content-Length': pdfBuffer.byteLength.toString(),
           },
         });
       } catch (error) {
         clearTimeout(timeoutId);
         
+        console.error('[deep-advisor] PDF export error:', error);
+        
         if (error instanceof Error && error.name === 'AbortError') {
-          return new Response(JSON.stringify({ error: 'PDF generation timed out' }), {
+          return new Response(JSON.stringify({ error: 'PDF generation timed out (3 min limit)' }), {
             status: 504,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
         
-        throw error;
+        return new Response(JSON.stringify({ 
+          error: 'PDF generation failed',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
     }
 
