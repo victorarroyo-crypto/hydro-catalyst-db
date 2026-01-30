@@ -72,7 +72,7 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
   const { segments } = extractFlowDiagrams(displayedText);
 
   return (
-    <div className="advisor-message prose prose-sm dark:prose-invert max-w-none">
+    <div className="advisor-message prose prose-sm dark:prose-invert max-w-none leading-relaxed">
       {segments.map((segment, idx) => {
         if (segment.type === 'flow') {
           return <FlowDiagramRenderer key={idx} content={segment.content} />;
@@ -104,9 +104,9 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               {children}
             </h4>
           ),
-          // Normal paragraphs with better spacing
+          // Normal paragraphs with better spacing and line-height
           p: ({ children }) => (
-            <p className="mb-4 last:mb-0 leading-7 text-foreground/90">{children}</p>
+            <p className="mb-5 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
           ),
           // Subtle bold
           strong: ({ children }) => (
@@ -124,7 +124,7 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
             <ol className="my-4 ml-1 space-y-2 list-decimal list-inside">{children}</ol>
           ),
           li: ({ children }) => (
-            <li className="relative pl-6 leading-7 before:content-['•'] before:absolute before:left-0 before:text-primary before:font-bold">
+            <li className="relative pl-6 leading-[1.8] before:content-['•'] before:absolute before:left-0 before:text-primary before:font-bold">
               {children}
             </li>
           ),
