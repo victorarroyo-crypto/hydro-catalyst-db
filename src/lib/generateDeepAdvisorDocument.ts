@@ -313,7 +313,7 @@ function parseMarkdownTable(tableLines: string[]): Table {
         new TableCell({
           children: [
             new Paragraph({
-              children: createFormattedTextRuns(cell),
+              children: parseInlineFormattedRuns(cell),
             }),
           ],
           shading: { 
@@ -329,6 +329,34 @@ function parseMarkdownTable(tableLines: string[]): Table {
     rows: [headerRow, ...dataRows],
     width: { size: 100, type: WidthType.PERCENTAGE },
   });
+}
+
+/**
+ * Parse inline formatting (bold **text**) within any text content
+ * Returns properly formatted TextRuns with bold and subscript/superscript handling
+ */
+function parseInlineFormattedRuns(text: string, baseOptions: { bold?: boolean } = {}): TextRun[] {
+  const textRuns: TextRun[] = [];
+  const boldRegex = /\*\*([^*]+)\*\*/g;
+  let lastIndex = 0;
+  let match;
+  
+  while ((match = boldRegex.exec(text)) !== null) {
+    // Add text before the bold
+    if (match.index > lastIndex) {
+      textRuns.push(...createFormattedTextRuns(text.slice(lastIndex, match.index), baseOptions));
+    }
+    // Add bold text
+    textRuns.push(...createFormattedTextRuns(match[1], { ...baseOptions, bold: true }));
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    textRuns.push(...createFormattedTextRuns(text.slice(lastIndex), baseOptions));
+  }
+  
+  return textRuns.length > 0 ? textRuns : createFormattedTextRuns(text, baseOptions);
 }
 
 /**
@@ -655,7 +683,7 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
               color: VANDARUM_COLORS.verdeOscuro,
               bold: true,
             }),
-            ...createFormattedTextRuns(listContent),
+            ...parseInlineFormattedRuns(listContent),
           ],
           spacing: { before: 50, after: 50 },
           indent: { left: 300 },
@@ -677,7 +705,7 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
               color: VANDARUM_COLORS.verdeOscuro,
               bold: true,
             }),
-            ...createFormattedTextRuns(numberedMatch[2]),
+            ...parseInlineFormattedRuns(numberedMatch[2]),
           ],
           spacing: { before: 50, after: 50 },
           indent: { left: 300 },
