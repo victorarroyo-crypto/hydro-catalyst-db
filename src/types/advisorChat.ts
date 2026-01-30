@@ -79,6 +79,8 @@ export interface Message {
   metadata?: MessageMetadata;
   attachments?: AttachmentInfo[];
   agentAnalyses?: AgentAnalysis[];
+  // Deep Mode PDF export URL
+  pdf_url?: string;
 }
 
 export interface AttachmentInfo {
