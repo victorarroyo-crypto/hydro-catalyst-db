@@ -420,6 +420,7 @@ export default function AdvisorChat() {
   };
 
   // Download PDF handler - uses Edge Function proxy for CORS compatibility
+  // Supports both pre-generated PDF URLs (JSON response) and binary PDF fallback
   const handleDownloadPDF = async () => {
     if (!deepJob.jobId || isDownloadingPdf) return;
     
@@ -434,6 +435,20 @@ export default function AdvisorChat() {
         throw new Error(`HTTP ${response.status}`);
       }
       
+      const contentType = response.headers.get('content-type') || '';
+      
+      if (contentType.includes('application/json')) {
+        // New response: pre-generated PDF in Storage
+        const data = await response.json();
+        if (data.pdf_url) {
+          window.open(data.pdf_url, '_blank');
+          toast.success('PDF abierto en nueva pestaña');
+          return;
+        }
+        throw new Error('pdf_url no encontrada en respuesta');
+      }
+      
+      // Fallback: binary PDF (legacy jobs)
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -447,7 +462,7 @@ export default function AdvisorChat() {
       toast.success('PDF descargado correctamente');
     } catch (error) {
       console.error('[AdvisorChat] PDF download error:', error);
-      toast.error('Error al generar PDF. Inténtalo de nuevo.');
+      toast.error('Error al descargar PDF. Inténtalo de nuevo.');
     } finally {
       setIsDownloadingPdf(false);
     }

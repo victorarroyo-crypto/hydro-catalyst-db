@@ -191,7 +191,7 @@ serve(async (req) => {
         const response = await fetch(pdfUrl, { 
           signal: controller.signal,
           headers: {
-            'Accept': 'application/pdf',
+            'Accept': 'application/pdf, application/json',
           }
         });
         clearTimeout(timeoutId);
@@ -211,7 +211,21 @@ serve(async (req) => {
           });
         }
         
-        // Use arrayBuffer for better Deno compatibility
+        // Check Content-Type to determine response handling
+        const contentType = response.headers.get('content-type') || '';
+        console.log(`[deep-advisor] PDF response Content-Type: ${contentType}`);
+        
+        if (contentType.includes('application/json')) {
+          // Railway returns JSON with pre-generated pdf_url
+          const data = await response.json();
+          console.log(`[deep-advisor] PDF URL received: ${data.pdf_url ? 'yes' : 'no'}`);
+          return new Response(JSON.stringify(data), {
+            status: response.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        // Fallback: PDF binary (legacy behavior)
         const pdfBuffer = await response.arrayBuffer();
         console.log(`[deep-advisor] PDF size: ${pdfBuffer.byteLength} bytes`);
         
