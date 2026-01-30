@@ -170,7 +170,7 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               </code>
             );
           },
-          // Pre blocks - detect flow and chem types
+          // Pre blocks - detect flow, chem, and mermaid types
           pre: ({ children }) => {
             // Extract the code element
             const codeElement = React.Children.toArray(children).find(
@@ -196,6 +196,17 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               if (codeClassName.includes('language-chem') || codeClassName.includes('language-equation')) {
                 return <ChemEquation content={codeContent} />;
               }
+              
+              // FALLBACK: Check if unlabeled code block contains Mermaid syntax
+              if (isMermaidContent(codeContent)) {
+                return <MermaidRenderer content={codeContent} />;
+              }
+            }
+            
+            // Also check raw pre content for Mermaid (when no code element)
+            const textContent = extractTextFromChildren(children);
+            if (isMermaidContent(textContent)) {
+              return <MermaidRenderer content={textContent} />;
             }
             
             return (
