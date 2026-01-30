@@ -298,6 +298,12 @@ export default function AdvisorChat() {
 
     const message = inputValue;
     setInputValue('');
+    
+    // Reset textarea height after sending
+    const textareaEl = document.querySelector('textarea');
+    if (textareaEl) {
+      textareaEl.style.height = 'auto';
+    }
 
     // Upload attachments to storage if any
     let uploadedAttachments: Array<{ url: string; type: string; name: string }> = [];

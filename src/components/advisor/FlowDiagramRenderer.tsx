@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { ArrowDown } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 interface FlowStep {
   label: string;
@@ -78,57 +78,49 @@ export function containsFlowDiagram(text: string): boolean {
 }
 
 /**
- * Vertical arrow between flow steps
+ * Horizontal arrow between flow steps
  */
-function FlowArrowVertical() {
+function FlowArrowHorizontal() {
   return (
-    <div className="flex justify-center py-1">
-      <div className="flex flex-col items-center">
-        <div className="w-0.5 h-4 bg-primary/40" />
-        <ArrowDown className="w-4 h-4 text-primary/60 -mt-1" />
-      </div>
+    <div className="flex items-center px-1 flex-shrink-0">
+      <ArrowRight className="w-4 h-4 text-primary/50" />
     </div>
   );
 }
 
 /**
- * Individual flow step box - professional card style
+ * Individual flow step chip - compact horizontal style
  */
-function FlowStepBox({ step, index }: { step: FlowStep; index: number }) {
+function FlowChip({ step, index }: { step: FlowStep; index: number }) {
   return (
     <div 
       className={cn(
-        "relative flex items-start gap-3 px-4 py-3 rounded-lg",
-        "border border-border bg-card",
-        "shadow-sm hover:shadow-md transition-shadow duration-200",
-        "w-full"
+        "flex-shrink-0 px-3 py-2 rounded-lg",
+        "bg-primary/5 border border-primary/20",
+        "hover:bg-primary/10 transition-colors duration-150"
       )}
     >
-      {step.isNumbered && step.number ? (
-        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0 mt-0.5">
-          {step.number}
-        </span>
-      ) : (
-        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex-shrink-0 mt-0.5">
-          {index + 1}
-        </span>
-      )}
-      <div className="flex-1 min-w-0">
-        <span className="text-sm font-semibold text-foreground leading-relaxed">
+      <div className="flex items-center gap-2">
+        {step.isNumbered && step.number ? (
+          <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">
+            {step.number}
+          </span>
+        ) : null}
+        <span className="text-sm font-medium text-foreground whitespace-nowrap">
           {step.label}
         </span>
-        {step.detail && (
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-            {step.detail}
-          </p>
-        )}
       </div>
+      {step.detail && (
+        <p className="text-xs text-muted-foreground mt-0.5 whitespace-nowrap">
+          {step.detail}
+        </p>
+      )}
     </div>
   );
 }
 
 /**
- * Renders a flow diagram as styled vertical cards
+ * Renders a flow diagram as horizontal pipeline
  */
 export function FlowDiagramRenderer({ content, className }: FlowDiagramRendererProps) {
   const steps = parseFlowSteps(content);
@@ -138,12 +130,12 @@ export function FlowDiagramRenderer({ content, className }: FlowDiagramRendererP
   }
   
   return (
-    <div className={cn("my-6", className)}>
-      <div className="flex flex-col gap-0 p-5 rounded-xl bg-muted/20 border border-border/50">
+    <div className={cn("my-4 overflow-x-auto", className)}>
+      <div className="flex items-center gap-0 p-3 bg-muted/30 rounded-lg min-w-max border border-border/50">
         {steps.map((step, index) => (
           <React.Fragment key={index}>
-            <FlowStepBox step={step} index={index} />
-            {index < steps.length - 1 && <FlowArrowVertical />}
+            <FlowChip step={step} index={index} />
+            {index < steps.length - 1 && <FlowArrowHorizontal />}
           </React.Fragment>
         ))}
       </div>
