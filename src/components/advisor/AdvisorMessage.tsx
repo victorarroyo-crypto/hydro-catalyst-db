@@ -5,7 +5,7 @@ import { ExternalLink, Wrench, FileText, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
-import { FlowDiagramRenderer, extractFlowDiagrams } from './FlowDiagramRenderer';
+import { FlowDiagramRenderer, MultiLineFlowRenderer, extractFlowDiagrams } from './FlowDiagramRenderer';
 
 interface AdvisorMessageProps {
   content: string;
@@ -76,6 +76,10 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
       {segments.map((segment, idx) => {
         if (segment.type === 'flow') {
           return <FlowDiagramRenderer key={idx} content={segment.content} />;
+        }
+        
+        if (segment.type === 'multiflow' && segment.lines) {
+          return <MultiLineFlowRenderer key={idx} lines={segment.lines} />;
         }
         
         return (
