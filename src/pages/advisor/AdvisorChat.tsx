@@ -565,8 +565,8 @@ export default function AdvisorChat() {
             <span className="text-amber-600">⚠️</span>
           </div>
           <div className="flex-1">
-            <p className="font-medium text-amber-800">Servicio temporalmente no disponible</p>
-            <p className="text-amber-600 text-xs">El servidor está reiniciándose. Por favor, intenta de nuevo en 1-2 minutos.</p>
+            <p className="font-medium text-amber-800">Servidor de configuración no disponible</p>
+            <p className="text-amber-600 text-xs">Puedes seguir usando el Advisor con la configuración por defecto.</p>
           </div>
           <Button 
             variant="outline" 
