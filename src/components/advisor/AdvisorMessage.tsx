@@ -5,7 +5,7 @@ import { ExternalLink, Wrench, FileText, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
-import { FlowDiagramRenderer, MultiLineFlowRenderer, extractFlowDiagrams } from './FlowDiagramRenderer';
+import { FlowDiagramRenderer } from './FlowDiagramRenderer';
 
 interface AdvisorMessageProps {
   content: string;
@@ -34,6 +34,19 @@ function getSourceLabel(type: string) {
     default:
       return 'Web';
   }
+}
+
+/**
+ * Chemical equation renderer - styled for reactions
+ */
+function ChemEquation({ content }: { content: string }) {
+  return (
+    <div className="my-4 p-4 bg-muted/30 rounded-lg border border-border/50">
+      <pre className="font-mono text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+        {content}
+      </pre>
+    </div>
+  );
 }
 
 export function AdvisorMessage({ content, sources, isStreaming = false }: AdvisorMessageProps) {
@@ -68,25 +81,11 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
     return () => clearInterval(interval);
   }, [cleanedContent, isStreaming]);
 
-  // Extract flow diagrams from the content
-  const { segments } = extractFlowDiagrams(displayedText);
-
   return (
     <div className="advisor-message prose prose-sm dark:prose-invert max-w-none leading-relaxed">
-      {segments.map((segment, idx) => {
-        if (segment.type === 'flow') {
-          return <FlowDiagramRenderer key={idx} content={segment.content} />;
-        }
-        
-        if (segment.type === 'multiflow' && segment.lines) {
-          return <MultiLineFlowRenderer key={idx} lines={segment.lines} />;
-        }
-        
-        return (
-          <ReactMarkdown
-            key={idx}
-            remarkPlugins={[remarkGfm]}
-            components={{
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
           // Subtle headers - more spacing for professional look
           h1: ({ children }) => (
             <h1 className="text-xl font-bold text-foreground mt-8 mb-4 first:mt-0 pb-2 border-b border-border/50">
@@ -160,12 +159,35 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               </code>
             );
           },
-          // Pre blocks
-          pre: ({ children }) => (
-            <pre className="bg-muted rounded-lg overflow-x-auto my-2">
-              {children}
-            </pre>
-          ),
+          // Pre blocks - detect flow and chem types
+          pre: ({ children }) => {
+            // Extract the code element
+            const codeElement = React.Children.toArray(children).find(
+              (child): child is React.ReactElement => 
+                React.isValidElement(child) && child.type === 'code'
+            );
+            
+            if (codeElement) {
+              const codeClassName = codeElement.props?.className || '';
+              const codeContent = String(codeElement.props?.children || '').trim();
+              
+              // Handle ```flow blocks
+              if (codeClassName.includes('language-flow')) {
+                return <FlowDiagramRenderer content={codeContent} />;
+              }
+              
+              // Handle ```chem blocks
+              if (codeClassName.includes('language-chem')) {
+                return <ChemEquation content={codeContent} />;
+              }
+            }
+            
+            return (
+              <pre className="bg-muted rounded-lg overflow-x-auto my-2 p-3">
+                {children}
+              </pre>
+            );
+          },
           // Blockquotes
           blockquote: ({ children }) => (
             <blockquote className="border-l-2 border-primary/30 pl-3 my-3 text-muted-foreground italic">
@@ -205,12 +227,10 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               {children}
             </td>
           ),
-            }}
-          >
-            {segment.content}
-          </ReactMarkdown>
-        );
-      })}
+        }}
+      >
+        {displayedText}
+      </ReactMarkdown>
       
       {/* Typing cursor */}
       {isTyping && (
