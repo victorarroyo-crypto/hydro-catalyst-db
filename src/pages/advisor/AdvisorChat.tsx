@@ -656,7 +656,7 @@ export default function AdvisorChat() {
                   'flex-1 rounded-2xl',
                   message.role === 'user'
                     ? 'max-w-[80%] text-white rounded-tr-none p-4'
-                    : 'bg-card border border-border/50 rounded-tl-none shadow-sm px-6 py-5'
+                    : 'bg-card border border-border/50 rounded-tl-none shadow-sm px-8 py-6 mr-4'
                 )}
                 style={message.role === 'user' ? { background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)' } : undefined}
               >
