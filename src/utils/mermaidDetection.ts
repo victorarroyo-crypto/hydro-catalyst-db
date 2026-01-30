@@ -26,7 +26,7 @@ const MERMAID_KEYWORDS = [
 
 // Regex pattern to match Mermaid diagram starts
 const MERMAID_START_PATTERN = new RegExp(
-  `^\\s*(${MERMAID_KEYWORDS.join('|')})\\s*(LR|RL|TD|TB|BT)?\\s*$`,
+  `^\\s*(${MERMAID_KEYWORDS.join('|')})\\s*(LR|RL|TD|TB|BT)?`,
   'im'
 );
 
@@ -44,15 +44,20 @@ export function isMermaidContent(text: string): boolean {
   const firstLine = trimmed.split('\n')[0].trim();
   
   for (const keyword of MERMAID_KEYWORDS) {
+    const lowerLine = firstLine.toLowerCase();
+    const lowerKeyword = keyword.toLowerCase();
+    
     // Match exact keyword or keyword with direction (LR, TD, etc.)
-    if (
-      firstLine.toLowerCase().startsWith(keyword.toLowerCase()) &&
-      (firstLine.length === keyword.length || 
-       /^[A-Z]{2}\s*$/.test(firstLine.slice(keyword.length).trim()) ||
-       firstLine[keyword.length] === ' ' ||
-       firstLine[keyword.length] === '\n')
-    ) {
-      return true;
+    if (lowerLine.startsWith(lowerKeyword)) {
+      const remaining = firstLine.slice(keyword.length).trim();
+      // Valid if nothing after, or just a direction, or starts with subgraph/node
+      if (
+        remaining === '' ||
+        /^(LR|RL|TD|TB|BT)$/i.test(remaining) ||
+        /^(LR|RL|TD|TB|BT)\s/i.test(remaining)
+      ) {
+        return true;
+      }
     }
   }
   
@@ -71,9 +76,15 @@ export function extractTextFromChildren(children: React.ReactNode): string {
     return children.map(extractTextFromChildren).join('');
   }
   
-  // Handle React elements
-  if (typeof children === 'object' && 'props' in children) {
-    return extractTextFromChildren((children as any).props?.children);
+  // Handle React elements - preserve newlines in code/pre blocks
+  if (typeof children === 'object' && children !== null) {
+    if ('props' in children) {
+      const props = (children as any).props;
+      // If it's a code element, get its children
+      if (props?.children !== undefined) {
+        return extractTextFromChildren(props.children);
+      }
+    }
   }
   
   return '';
