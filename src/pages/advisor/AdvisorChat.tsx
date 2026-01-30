@@ -553,6 +553,8 @@ export default function AdvisorChat() {
           // Clear attachments and upload state when starting a new chat
           setAttachments([]);
           setUploadProgress({ status: 'idle', progress: 0, completedCount: 0, totalCount: 0 });
+          // Clear URL param and navigate to clean chat
+          navigate('/advisor/chat', { replace: true });
         }}
       />
 
