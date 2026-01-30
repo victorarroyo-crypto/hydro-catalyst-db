@@ -22,7 +22,7 @@ import { useAdvisorChat } from '@/hooks/useAdvisorChat';
 import { useDeepAdvisorJob } from '@/hooks/useDeepAdvisorJob';
 import { useAdvisorCredits } from '@/hooks/useAdvisorCredits';
 import { useAdvisorServices } from '@/hooks/useAdvisorServices';
-import { useDeepAdvisorConfig, getValidatedConfig } from '@/hooks/useDeepAdvisorConfig';
+import { useDeepAdvisorConfig, getConfigWithFallback } from '@/hooks/useDeepAdvisorConfig';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
@@ -284,11 +284,11 @@ export default function AdvisorChat() {
   const handleSend = async () => {
     if (!inputValue.trim() || isAnyLoading) return;
 
-    // Get validated config to ensure all models are valid
-    const validatedConfig = getValidatedConfig(deepConfig);
+    // Get config with fallback - always returns valid config even if backend is down
+    const validatedConfig = getConfigWithFallback(deepConfig);
     
-    // Use validated synthesis model with safe fallback
-    const synthesisModel = validatedConfig?.synthesis_model || 'deepseek';
+    // Synthesis model always available from fallback
+    const synthesisModel = validatedConfig.synthesis_model;
 
     // Check if user has credits (simplified - deep advisor handles model costs)
     if (freeRemaining <= 0 && balance <= 0) {
@@ -371,11 +371,11 @@ export default function AdvisorChat() {
           user_id: advisorUser.id,
           message,
           chat_id: currentDeepChatId || chatId, // Prioritize deepJob.chatId for session continuity
-          synthesis_model: validatedConfig?.synthesis_model,
-          analysis_model: validatedConfig?.analysis_model,
-          search_model: validatedConfig?.search_model,
-          enable_web_search: validatedConfig?.enable_web_search,
-          enable_rag: validatedConfig?.enable_rag,
+          synthesis_model: validatedConfig.synthesis_model,
+          analysis_model: validatedConfig.analysis_model,
+          search_model: validatedConfig.search_model,
+          enable_web_search: validatedConfig.enable_web_search,
+          enable_rag: validatedConfig.enable_rag,
           attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
         });
         
@@ -389,7 +389,7 @@ export default function AdvisorChat() {
           message, 
           synthesisModel, 
           deepMode,
-          deepMode && validatedConfig ? {
+          deepMode ? {
             synthesis_model: validatedConfig.synthesis_model,
             analysis_model: validatedConfig.analysis_model,
             search_model: validatedConfig.search_model,
