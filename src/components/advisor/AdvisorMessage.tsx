@@ -72,7 +72,7 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
   const { segments } = extractFlowDiagrams(displayedText);
 
   return (
-    <div className="advisor-message">
+    <div className="advisor-message prose prose-sm dark:prose-invert max-w-none">
       {segments.map((segment, idx) => {
         if (segment.type === 'flow') {
           return <FlowDiagramRenderer key={idx} content={segment.content} />;
@@ -83,48 +83,48 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
             key={idx}
             remarkPlugins={[remarkGfm]}
             components={{
-          // Subtle headers - no borders, just size increase
+          // Subtle headers - more spacing for professional look
           h1: ({ children }) => (
-            <h1 className="text-lg font-semibold text-foreground mt-4 mb-2 first:mt-0">
+            <h1 className="text-xl font-bold text-foreground mt-8 mb-4 first:mt-0 pb-2 border-b border-border/50">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-base font-semibold text-foreground mt-3 mb-2 first:mt-0">
+            <h2 className="text-lg font-semibold text-foreground mt-6 mb-3 first:mt-0">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-sm font-medium text-foreground mt-2 mb-1">
+            <h3 className="text-base font-semibold text-foreground mt-5 mb-2">
               {children}
             </h3>
           ),
           h4: ({ children }) => (
-            <h4 className="text-sm font-medium text-foreground mt-2 mb-1">
+            <h4 className="text-sm font-semibold text-foreground mt-4 mb-2">
               {children}
             </h4>
           ),
-          // Normal paragraphs
+          // Normal paragraphs with better spacing
           p: ({ children }) => (
-            <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>
+            <p className="mb-4 last:mb-0 leading-7 text-foreground/90">{children}</p>
           ),
           // Subtle bold
           strong: ({ children }) => (
-            <strong className="font-medium text-foreground">{children}</strong>
+            <strong className="font-semibold text-foreground">{children}</strong>
           ),
           // Italic
           em: ({ children }) => (
-            <em className="italic">{children}</em>
+            <em className="italic text-foreground/80">{children}</em>
           ),
-          // Subtle lists
+          // Better spaced lists
           ul: ({ children }) => (
-            <ul className="ml-4 mb-3 space-y-1 list-none">{children}</ul>
+            <ul className="my-4 ml-1 space-y-2">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="ml-4 mb-3 space-y-1 list-decimal list-inside">{children}</ol>
+            <ol className="my-4 ml-1 space-y-2 list-decimal list-inside">{children}</ol>
           ),
           li: ({ children }) => (
-            <li className="relative pl-4 before:content-['•'] before:absolute before:left-0 before:text-muted-foreground before:text-xs">
+            <li className="relative pl-6 leading-7 before:content-['•'] before:absolute before:left-0 before:text-primary before:font-bold">
               {children}
             </li>
           ),
@@ -170,34 +170,34 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
           ),
           // Tables with clean styling - visible borders for clarity
           table: ({ children }) => (
-            <div className="my-4 overflow-x-auto">
-              <table className="min-w-full border-collapse border border-border text-sm">
+            <div className="my-6 overflow-x-auto rounded-lg border border-border">
+              <table className="min-w-full border-collapse text-sm">
                 {children}
               </table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-muted border-b border-border">
+            <thead className="bg-muted/50">
               {children}
             </thead>
           ),
           tbody: ({ children }) => (
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-border bg-card">
               {children}
             </tbody>
           ),
           tr: ({ children }) => (
-            <tr className="hover:bg-muted/50 transition-colors">
+            <tr className="hover:bg-muted/30 transition-colors">
               {children}
             </tr>
           ),
           th: ({ children }) => (
-            <th className="border border-border bg-muted px-3 py-2 text-left font-semibold text-foreground text-xs">
+            <th className="px-4 py-3 text-left font-semibold text-foreground text-xs uppercase tracking-wide">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-border px-3 py-2 text-foreground">
+            <td className="px-4 py-3 text-foreground leading-relaxed">
               {children}
             </td>
           ),
