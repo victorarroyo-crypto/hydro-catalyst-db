@@ -419,14 +419,15 @@ export default function AdvisorChat() {
     }
   };
 
-  // Download PDF handler - uses blob-based download for better UX
+  // Download PDF handler - uses Edge Function proxy for CORS compatibility
   const handleDownloadPDF = async () => {
     if (!deepJob.jobId || isDownloadingPdf) return;
     
     setIsDownloadingPdf(true);
     try {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
       const response = await fetch(
-        `${API_URL}/api/advisor/deep/export/pdf/${deepJob.jobId}`
+        `${SUPABASE_URL}/functions/v1/deep-advisor/export/pdf/${deepJob.jobId}`
       );
       
       if (!response.ok) {

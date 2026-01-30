@@ -137,6 +137,65 @@ serve(async (req) => {
       return proxyToRailway(railwayApiUrl, `/api/advisor/deep/cancel/${jobId}`, { method: 'POST' });
     }
 
+    // GET /export/pdf/:job_id - Export PDF analysis report
+    if (path.startsWith('/export/pdf/') && method === 'GET') {
+      const jobId = path.split('/export/pdf/')[1];
+      
+      if (!jobId || !/^[\w-]+$/.test(jobId)) {
+        return new Response(JSON.stringify({ error: 'Invalid job_id' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      console.log(`[deep-advisor] Exporting PDF for job ${jobId}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      
+      try {
+        const response = await fetch(
+          `${railwayApiUrl}/api/advisor/deep/export/pdf/${jobId}`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[deep-advisor] PDF export failed: ${response.status}`, errorText);
+          return new Response(JSON.stringify({ 
+            error: 'PDF generation failed',
+            status: response.status 
+          }), {
+            status: response.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        const pdfBlob = await response.blob();
+        
+        return new Response(pdfBlob, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="vandarum_report_${jobId}.pdf"`,
+          },
+        });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        
+        if (error instanceof Error && error.name === 'AbortError') {
+          return new Response(JSON.stringify({ error: 'PDF generation timed out' }), {
+            status: 504,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        throw error;
+      }
+    }
+
     // 404 for unknown routes
     console.warn(`[deep-advisor] Unknown route: ${method} ${path}`);
     return new Response(JSON.stringify({ error: 'Not found', path }), {
