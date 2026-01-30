@@ -373,10 +373,42 @@ export default function AdvisorChat() {
           deepJob.reset();
         }
         
+        // Determine chat_id to use - prioritize deepJob.chatId for session continuity
+        let effectiveChatId = currentDeepChatId || chatId;
+        
+        // If no chat_id exists, create one first in the external DB
+        // This ensures chat history can be saved properly
+        if (!effectiveChatId) {
+          console.log('[AdvisorChat] No chat_id found, creating new chat in external DB...');
+          try {
+            const { externalSupabase } = await import('@/integrations/supabase/externalClient');
+            const { data: newChat, error: chatError } = await externalSupabase
+              .from('advisor_chats')
+              .insert({
+                user_id: advisorUser.id,
+                title: message.substring(0, 100), // First 100 chars as title
+                model_used: validatedConfig.synthesis_model,
+              })
+              .select('id')
+              .single();
+            
+            if (chatError) {
+              console.error('[AdvisorChat] Failed to create chat:', chatError);
+              // Continue without chat_id - backend will create one
+            } else if (newChat?.id) {
+              effectiveChatId = newChat.id;
+              console.log('[AdvisorChat] Created new chat:', effectiveChatId);
+            }
+          } catch (createError) {
+            console.error('[AdvisorChat] Error creating chat:', createError);
+            // Continue without chat_id - backend will create one
+          }
+        }
+        
         await deepJob.startJob({
           user_id: advisorUser.id,
           message,
-          chat_id: currentDeepChatId || chatId, // Prioritize deepJob.chatId for session continuity
+          chat_id: effectiveChatId, // Now always includes chat_id if possible
           synthesis_model: validatedConfig.synthesis_model,
           analysis_model: validatedConfig.analysis_model,
           search_model: validatedConfig.search_model,
