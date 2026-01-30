@@ -154,18 +154,18 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               <ExternalLink className="w-3 h-3 opacity-50" />
             </a>
           ),
-          // Code inline
+          // Code inline - render as normal text (no special styling)
           code: ({ children, className }) => {
             const isBlock = className?.includes('language-');
             if (isBlock) {
+              // Block code - render as normal paragraph text
               return (
-                <code className="block bg-muted p-3 rounded-lg text-xs overflow-x-auto my-2">
-                  {children}
-                </code>
+                <span className="whitespace-pre-wrap">{children}</span>
               );
             }
+            // Inline code - subtle styling
             return (
-              <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
+              <code className="px-1 py-0.5 text-foreground font-medium">
                 {children}
               </code>
             );
@@ -209,10 +209,11 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               return <MermaidRenderer content={textContent} />;
             }
             
+            // Regular pre block - render as normal text without background
             return (
-              <pre className="bg-muted rounded-lg overflow-x-auto my-2 p-3">
+              <div className="my-2 whitespace-pre-wrap leading-relaxed">
                 {children}
-              </pre>
+              </div>
             );
           },
           // Blockquotes
