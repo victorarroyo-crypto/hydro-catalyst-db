@@ -5,6 +5,7 @@ import { ExternalLink, Wrench, FileText, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
+import { isMermaidContent, extractTextFromChildren } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from './FlowDiagramRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
 interface AdvisorMessageProps {
@@ -108,9 +109,19 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
             </h4>
           ),
           // Normal paragraphs with better spacing and line-height
-          p: ({ children }) => (
-            <p className="mb-5 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
-          ),
+          // Also detect unformatted Mermaid diagrams
+          p: ({ children }) => {
+            const textContent = extractTextFromChildren(children);
+            
+            // Check if this paragraph contains a Mermaid diagram without code fences
+            if (isMermaidContent(textContent)) {
+              return <MermaidRenderer content={textContent} />;
+            }
+            
+            return (
+              <p className="mb-5 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
+            );
+          },
           // Subtle bold
           strong: ({ children }) => (
             <strong className="font-semibold text-foreground">{children}</strong>
