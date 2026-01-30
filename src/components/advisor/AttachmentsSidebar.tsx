@@ -49,26 +49,40 @@ export function AttachmentsSidebar({
   const isUploading = uploadProgress?.status === 'uploading';
   const isComplete = uploadProgress?.status === 'complete';
 
-  if (!isVisible) return null;
+  // Always show indicator when files exist, even if sidebar would be invisible
+  const hasFiles = attachments.length > 0;
+  
+  if (!isVisible && !hasFiles) return null;
 
   return (
     <div className={cn(
-      "border-r bg-muted/20 flex flex-col shrink-0 transition-all duration-300 relative",
-      isCollapsed ? "w-3" : "w-52"
+      "flex flex-col shrink-0 transition-all duration-300 relative",
+      isCollapsed ? "w-0" : "w-48 border-r bg-muted/10"
     )}>
-      {/* Toggle button - always visible on right edge */}
-      <button
-        type="button"
-        onClick={onToggleCollapse}
-        className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-background border shadow-sm flex items-center justify-center hover:bg-muted transition-colors"
-        title={isCollapsed ? 'Expandir adjuntos' : 'Colapsar adjuntos'}
-      >
-        {isCollapsed ? (
-          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-        ) : (
-          <ChevronLeft className="w-3.5 h-3.5 text-muted-foreground" />
-        )}
-      </button>
+      {/* Subtle badge indicator - always visible when collapsed and has files */}
+      {isCollapsed && hasFiles && (
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="absolute left-1 top-4 z-10 flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors"
+          title="Ver adjuntos"
+        >
+          <Paperclip className="w-3 h-3 text-primary" />
+          <span className="text-[10px] font-medium text-primary">{attachments.length}</span>
+        </button>
+      )}
+      
+      {/* Toggle button - visible when expanded */}
+      {!isCollapsed && (
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-5 h-5 rounded-full bg-background border shadow-sm flex items-center justify-center hover:bg-muted transition-colors"
+          title="Colapsar adjuntos"
+        >
+          <ChevronLeft className="w-3 h-3 text-muted-foreground" />
+        </button>
+      )}
 
       {/* Content - hidden when collapsed */}
       {!isCollapsed && (
