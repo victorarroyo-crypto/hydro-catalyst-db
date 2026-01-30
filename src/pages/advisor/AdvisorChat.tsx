@@ -570,8 +570,8 @@ export default function AdvisorChat() {
 
         {/* Messages Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          <ScrollArea className="flex-1 px-4" ref={scrollRef}>
-            <div className="max-w-3xl mx-auto py-6 space-y-5">
+          <ScrollArea className="flex-1 px-6" ref={scrollRef}>
+            <div className="max-w-4xl mx-auto py-8 space-y-6">
               {/* Welcome with example queries */}
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 space-y-6">
@@ -638,10 +638,10 @@ export default function AdvisorChat() {
               )}
               <div
                 className={cn(
-                  'flex-1 max-w-[85%] rounded-2xl p-4',
+                  'flex-1 rounded-2xl',
                   message.role === 'user'
-                    ? 'text-white rounded-tr-none'
-                    : 'bg-white/80 border border-slate-200/50 rounded-tl-none shadow-sm'
+                    ? 'max-w-[80%] text-white rounded-tr-none p-4'
+                    : 'bg-card border border-border/50 rounded-tl-none shadow-sm px-6 py-5'
                 )}
                 style={message.role === 'user' ? { background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)' } : undefined}
               >

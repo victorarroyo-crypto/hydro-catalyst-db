@@ -1,8 +1,10 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { ArrowDown } from 'lucide-react';
 
 interface FlowStep {
   label: string;
+  detail?: string;
   isNumbered?: boolean;
   number?: string;
 }
@@ -15,7 +17,7 @@ interface FlowDiagramRendererProps {
 /**
  * Parses flow diagram text and extracts steps.
  * Handles patterns like:
- * - [Step1] → [Step2] → [Step3]
+ * - [Step1] → Detail1
  * - [1. Step] → [2. Step]
  * - Step1 → Step2 → Step3
  */
@@ -30,18 +32,33 @@ function parseFlowSteps(text: string): FlowStep[] {
       
       // Remove brackets if present
       let label = trimmed.replace(/^\[|\]$/g, '').trim();
+      let detail: string | undefined;
+      
+      // Check if label contains a detail after colon or parenthesis
+      const colonMatch = label.match(/^([^:]+):\s*(.+)$/);
+      if (colonMatch) {
+        label = colonMatch[1].trim();
+        detail = colonMatch[2].trim();
+      }
+      
+      const parenMatch = label.match(/^([^(]+)\(([^)]+)\)$/);
+      if (parenMatch) {
+        label = parenMatch[1].trim();
+        detail = parenMatch[2].trim();
+      }
       
       // Check for numbered steps like "1. Step" or "1) Step"
       const numberedMatch = label.match(/^(\d+)[.\)]\s*(.+)$/);
       if (numberedMatch) {
         return {
           label: numberedMatch[2],
+          detail,
           isNumbered: true,
           number: numberedMatch[1]
         } as FlowStep;
       }
       
-      return { label, isNumbered: false } as FlowStep;
+      return { label, detail, isNumbered: false } as FlowStep;
     })
     .filter((step): step is FlowStep => step !== null && step.label.length > 0);
 }
@@ -61,62 +78,57 @@ export function containsFlowDiagram(text: string): boolean {
 }
 
 /**
- * Arrow component between flow steps
+ * Vertical arrow between flow steps
  */
-function FlowArrow() {
+function FlowArrowVertical() {
   return (
-    <div className="flex items-center px-1 flex-shrink-0">
-      <svg 
-        width="24" 
-        height="12" 
-        viewBox="0 0 24 12" 
-        className="text-primary"
-        fill="none"
-      >
-        <path 
-          d="M0 6h20m0 0l-4-4m4 4l-4 4" 
-          stroke="currentColor" 
-          strokeWidth="2" 
-          strokeLinecap="round" 
-          strokeLinejoin="round"
-        />
-      </svg>
+    <div className="flex justify-center py-1">
+      <div className="flex flex-col items-center">
+        <div className="w-0.5 h-4 bg-primary/40" />
+        <ArrowDown className="w-4 h-4 text-primary/60 -mt-1" />
+      </div>
     </div>
   );
 }
 
 /**
- * Individual flow step box
+ * Individual flow step box - professional card style
  */
 function FlowStepBox({ step, index }: { step: FlowStep; index: number }) {
-  // Alternate between teal shades for visual interest
-  const isEven = index % 2 === 0;
-  
   return (
     <div 
       className={cn(
-        "relative flex items-center gap-2 px-3 py-2 rounded-lg",
-        "border-2 border-primary/30",
-        "bg-gradient-to-br from-primary/10 to-primary/5",
-        "shadow-sm",
-        "transition-all duration-200 hover:shadow-md hover:border-primary/50",
-        "min-w-[80px] max-w-[200px]"
+        "relative flex items-start gap-3 px-4 py-3 rounded-lg",
+        "border border-border bg-card",
+        "shadow-sm hover:shadow-md transition-shadow duration-200",
+        "w-full"
       )}
     >
-      {step.isNumbered && step.number && (
-        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">
+      {step.isNumbered && step.number ? (
+        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0 mt-0.5">
           {step.number}
         </span>
+      ) : (
+        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex-shrink-0 mt-0.5">
+          {index + 1}
+        </span>
       )}
-      <span className="text-sm font-medium text-foreground truncate">
-        {step.label}
-      </span>
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-semibold text-foreground leading-relaxed">
+          {step.label}
+        </span>
+        {step.detail && (
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+            {step.detail}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
 
 /**
- * Renders a flow diagram as styled HTML boxes with arrows
+ * Renders a flow diagram as styled vertical cards
  */
 export function FlowDiagramRenderer({ content, className }: FlowDiagramRendererProps) {
   const steps = parseFlowSteps(content);
@@ -126,12 +138,12 @@ export function FlowDiagramRenderer({ content, className }: FlowDiagramRendererP
   }
   
   return (
-    <div className={cn("my-4", className)}>
-      <div className="flex flex-wrap items-center gap-y-3 p-4 rounded-xl bg-muted/30 border border-border/50">
+    <div className={cn("my-6", className)}>
+      <div className="flex flex-col gap-0 p-5 rounded-xl bg-muted/20 border border-border/50">
         {steps.map((step, index) => (
           <React.Fragment key={index}>
             <FlowStepBox step={step} index={index} />
-            {index < steps.length - 1 && <FlowArrow />}
+            {index < steps.length - 1 && <FlowArrowVertical />}
           </React.Fragment>
         ))}
       </div>
