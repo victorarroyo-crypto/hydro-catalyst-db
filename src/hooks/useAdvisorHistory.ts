@@ -21,7 +21,7 @@ export function useAdvisorHistory(userId: string | undefined) {
       // Fetch from BOTH databases and merge results
       // External DB has chats after ~18/01/2026, local has older ones
       
-      const [externalResult, localResult] = await Promise.all([
+      const [externalChatsResult, localResult] = await Promise.all([
         // External database (Railway/external Supabase) - recent chats
         externalSupabase
           .from('advisor_chats')
@@ -30,7 +30,6 @@ export function useAdvisorHistory(userId: string | undefined) {
             title,
             model_used,
             total_credits_used,
-            message_count,
             created_at,
             updated_at
           `)
@@ -50,13 +49,32 @@ export function useAdvisorHistory(userId: string | undefined) {
           .limit(50)
       ]);
 
-      // Process external chats
-      const externalChats: Chat[] = (externalResult.data || []).map(chat => ({
+      // Get message counts for external chats
+      const externalChatIds = (externalChatsResult.data || []).map(c => c.id);
+      let externalMessageCounts: Record<string, number> = {};
+      
+      if (externalChatIds.length > 0) {
+        // Query message counts from external DB
+        const { data: messagesData } = await externalSupabase
+          .from('advisor_messages')
+          .select('chat_id')
+          .in('chat_id', externalChatIds);
+        
+        // Count messages per chat
+        if (messagesData) {
+          messagesData.forEach(msg => {
+            externalMessageCounts[msg.chat_id] = (externalMessageCounts[msg.chat_id] || 0) + 1;
+          });
+        }
+      }
+
+      // Process external chats with real message counts
+      const externalChats: Chat[] = (externalChatsResult.data || []).map(chat => ({
         id: chat.id,
         title: chat.title || 'Conversación sin título',
         model_used: chat.model_used,
         total_credits_used: Number(chat.total_credits_used) || 0,
-        message_count: Number(chat.message_count) || 0,
+        message_count: externalMessageCounts[chat.id] || 0,
         created_at: chat.created_at,
         updated_at: chat.updated_at,
       }));
