@@ -166,9 +166,43 @@ function isArrowBullet(text: string): boolean {
 }
 
 /**
+ * Checks if a line is a calculation/mathematical expression
+ * Examples: "120 ton MS/año → 1.500 ton lodo líquido"
+ *           "72.000 × 1.20 €/m³ = 86.400 €/año"
+ *           "Coste: 1.500 × 100 €/ton = 150.000 €/año"
+ */
+function isCalculationLine(text: string): boolean {
+  const trimmed = text.trim();
+  
+  // Contains mathematical operators with numbers nearby
+  // Pattern: number followed by operator (×, =, +, -, /) followed by number
+  const hasMathOperation = /\d+[\s.,]*[×=+\-\/][\s.,]*\d+/.test(trimmed);
+  if (hasMathOperation) return true;
+  
+  // Contains currency amounts (€, $) with numbers
+  const hasCurrencyCalc = /\d+[\s.,]*[€$]|[€$][\s.,]*\d+/.test(trimmed) && /[×=\-+]/.test(trimmed);
+  if (hasCurrencyCalc) return true;
+  
+  // Pattern: "number unit → number unit" (e.g., "120 ton → 480 ton")
+  const hasUnitConversion = /\d+[\s.,]*[a-zA-Z³²]+\/?\w*\s*→\s*\d+[\s.,]*[a-zA-Z³²]+/.test(trimmed);
+  if (hasUnitConversion) return true;
+  
+  // Pattern: "Nombre: number × number = number" (calculation with label)
+  const hasLabeledCalc = /:\s*~?\d+[\s.,]*[×=]/.test(trimmed);
+  if (hasLabeledCalc) return true;
+  
+  // Pattern: lines with percentages AND arrows (likely scenario descriptions, not flows)
+  const hasPercentageContext = /\d+%.*→|→.*\d+%/.test(trimmed) && /\d+[\s.,]+\w+/.test(trimmed);
+  if (hasPercentageContext) return true;
+  
+  return false;
+}
+
+/**
  * Checks if text contains a flow diagram pattern
  * EXCLUDES markdown tables which use | for columns
  * EXCLUDES arrow bullets (→ text) which are just list items
+ * EXCLUDES calculation lines with mathematical notation
  */
 export function containsFlowDiagram(text: string): boolean {
   if (!text) return false;
@@ -180,6 +214,11 @@ export function containsFlowDiagram(text: string): boolean {
   
   // SECOND: Exclude arrow bullets - arrows at start of line are NOT flow diagrams
   if (isArrowBullet(text)) {
+    return false;
+  }
+  
+  // THIRD: Exclude calculation/mathematical lines
+  if (isCalculationLine(text)) {
     return false;
   }
   
