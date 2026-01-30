@@ -1,97 +1,144 @@
 
 
-## Diagnóstico: El trabajo no se lanza
+## Plan: Soporte para PDF Pre-Generado en Supabase Storage
 
-### Problema Identificado
+### Contexto
 
-Los logs confirman que el **backend de Railway no está respondiendo**:
+El backend de Railway ahora puede devolver dos tipos de respuesta para la exportación de PDF:
 
-```text
-[advisor-railway-proxy] Timeout after 180010ms  (GET /api/advisor/deep/config)
-[advisor-railway-proxy] Timeout after 180007ms  (GET /api/advisor/deep/config)
-[advisor-railway-proxy] Timeout after 180015ms  (GET /api/advisor/deep/config)
-```
-
-El flujo actual es:
-1. Al abrir el chat, se llama a `/api/advisor/deep/config` para obtener modelos disponibles
-2. Railway no responde → timeout de 3 minutos
-3. Sin configuración, el `getValidatedConfig()` retorna `null`
-4. El trabajo no puede iniciarse correctamente
-
-### Propuesta de Mejora: Fallback a valores por defecto
-
-Para que el Deep Advisor pueda funcionar **incluso cuando Railway está lento**, implementar fallbacks:
+| Content-Type | Contenido | Acción |
+|--------------|-----------|--------|
+| `application/json` | `{ pdf_url, expires_at, job_id }` | Abrir `pdf_url` directamente en nueva pestaña |
+| `application/pdf` | Binario PDF | Descargar el blob como antes (fallback) |
 
 ---
 
-#### 1. Hook `useDeepAdvisorConfig.ts`
+### Cambios a Implementar
 
-Añadir constantes de fallback y exportar función para obtener configuración con valores por defecto:
+#### 1. Edge Function `deep-advisor/index.ts`
+
+**Ruta afectada**: `GET /export/pdf/:job_id` (líneas 169-247)
+
+Modificar para:
+- Detectar el `Content-Type` de la respuesta de Railway
+- Si es `application/json`: pasar el JSON directamente al cliente
+- Si es `application/pdf` o cualquier otro: mantener el comportamiento actual (proxy del binario)
 
 ```typescript
-const FALLBACK_CONFIG: Omit<DeepAdvisorConfigUpdate, 'user_id'> = {
-  search_model: 'gpt-4o-mini',
-  analysis_model: 'gpt-4o-mini',
-  synthesis_model: 'deepseek',
-  enable_web_search: true,
-  enable_rag: true,
-};
+// Dentro del handler de /export/pdf/:job_id
+const contentType = response.headers.get('content-type') || '';
 
-export function getConfigWithFallback(
-  config: DeepAdvisorConfigResponse | undefined
-): Omit<DeepAdvisorConfigUpdate, 'user_id'> {
-  // Si tenemos config válida, la usamos
-  const validated = getValidatedConfig(config);
-  if (validated) return validated;
-  
-  // Si no, usamos fallback
-  return FALLBACK_CONFIG;
+if (contentType.includes('application/json')) {
+  // Railway devuelve JSON con pdf_url pre-generada
+  const data = await response.json();
+  return new Response(JSON.stringify(data), {
+    status: response.status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 }
+
+// Fallback: PDF binario (comportamiento actual)
+const pdfBuffer = await response.arrayBuffer();
+return new Response(pdfBuffer, {
+  status: 200,
+  headers: {
+    ...corsHeaders,
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="vandarum_report_${jobId}.pdf"`,
+  },
+});
 ```
 
 ---
 
-#### 2. Componente `AdvisorChat.tsx`
+#### 2. Frontend `AdvisorChat.tsx`
 
-En `handleSend()`, usar `getConfigWithFallback` en lugar de `getValidatedConfig`:
+**Función afectada**: `handleDownloadPDF` (líneas 422-454)
+
+Modificar para:
+- Verificar el `Content-Type` de la respuesta
+- Si es JSON: extraer `pdf_url` y abrir en nueva pestaña con `window.open()`
+- Si es blob/PDF: descargar como archivo (comportamiento actual)
 
 ```typescript
-// Antes (línea 288)
-const validatedConfig = getValidatedConfig(deepConfig);
-
-// Después
-import { getConfigWithFallback } from '@/hooks/useDeepAdvisorConfig';
-const validatedConfig = getConfigWithFallback(deepConfig);
+const handleDownloadPDF = async () => {
+  if (!deepJob.jobId || isDownloadingPdf) return;
+  
+  setIsDownloadingPdf(true);
+  try {
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/deep-advisor/export/pdf/${deepJob.jobId}`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    
+    if (contentType.includes('application/json')) {
+      // Nueva respuesta: PDF pre-generado en Storage
+      const data = await response.json();
+      if (data.pdf_url) {
+        window.open(data.pdf_url, '_blank');
+        toast.success('PDF abierto en nueva pestaña');
+        return;
+      }
+      throw new Error('pdf_url no encontrada en respuesta');
+    }
+    
+    // Fallback: PDF binario directo
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vandarum_advisor_${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    
+    toast.success('PDF descargado correctamente');
+  } catch (error) {
+    console.error('[AdvisorChat] PDF download error:', error);
+    toast.error('Error al descargar PDF. Inténtalo de nuevo.');
+  } finally {
+    setIsDownloadingPdf(false);
+  }
+};
 ```
-
-Esto garantiza que **siempre** tengamos valores válidos para enviar, incluso si Railway tarda en responder.
 
 ---
 
-#### 3. UI de estado del backend
-
-El componente ya tiene el banner de "Servicio temporalmente no disponible" (línea 543), pero solo se muestra si `isConfigError` es true. Añadir detección de timeout:
-
-```typescript
-// Mostrar banner si hay error O si la query lleva más de 30s cargando
-const showBackendWarning = isConfigError || 
-  (deepConfig === undefined && !authLoading && advisorUser?.id);
-```
-
----
-
-### Archivos a modificar
+### Archivos a Modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/hooks/useDeepAdvisorConfig.ts` | Añadir `FALLBACK_CONFIG` y `getConfigWithFallback()` |
-| `src/pages/advisor/AdvisorChat.tsx` | Usar `getConfigWithFallback()` en `handleSend()` |
+| `supabase/functions/deep-advisor/index.ts` | Detectar Content-Type y pasar JSON si corresponde |
+| `src/pages/advisor/AdvisorChat.tsx` | Manejar respuesta JSON con `pdf_url` o blob PDF |
 
 ---
 
-### Resultado esperado
+### Flujo Resultante
 
-- El trabajo podrá **iniciarse** aunque Railway esté lento
-- Se usarán modelos por defecto (económicos) mientras Railway no responde
-- El usuario verá progreso en lugar de bloqueo
+```text
+Usuario → "Descargar PDF"
+    ↓
+Frontend → GET /deep-advisor/export/pdf/{job_id}
+    ↓
+Edge Function → GET Railway /api/advisor/deep/export/pdf/{job_id}
+    ↓
+Railway responde:
+    ├── JSON { pdf_url, expires_at } → Edge pasa JSON → Frontend abre pdf_url
+    └── PDF binario                  → Edge pasa blob → Frontend descarga archivo
+```
+
+---
+
+### Beneficios
+
+- **Más rápido**: El PDF ya está pre-generado en Storage, sin esperar generación en tiempo real
+- **Más robusto**: Evita timeouts de Edge Functions (~60s) ya que solo devuelve una URL
+- **Retrocompatible**: Jobs antiguos siguen funcionando con el flujo de descarga binaria
 
