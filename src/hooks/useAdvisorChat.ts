@@ -54,22 +54,39 @@ export function useAdvisorChat(userId: string | undefined) {
       return { data, error: null };
     };
 
-    // Try Lovable Cloud first (older chats), then fallback to external DB (newer chats)
+    // Query both databases in parallel
     const [localResult, externalResult] = await Promise.all([
       fetchMessages(supabase),
       fetchMessages(externalSupabase as unknown as typeof supabase),
     ]);
 
-    const data = (localResult.data && localResult.data.length > 0)
-      ? localResult.data
-      : (externalResult.data || []);
+    // Log for debugging
+    console.log('[loadChat] Local messages:', localResult.data?.length || 0);
+    console.log('[loadChat] External messages:', externalResult.data?.length || 0);
 
-    const error = localResult.error && (!data || data.length === 0)
-      ? localResult.error
-      : null;
+    // Prioritize external DB for recent Deep Advisor chats (post 18/01/2026)
+    let data: typeof localResult.data;
+    let source: string;
 
-    if (error) {
-      console.error('[loadChat] Error fetching messages:', error);
+    if (externalResult.data && externalResult.data.length > 0) {
+      // Prefer external DB where Deep Advisor messages are stored
+      data = externalResult.data;
+      source = 'external';
+    } else if (localResult.data && localResult.data.length > 0) {
+      data = localResult.data;
+      source = 'local';
+    } else {
+      data = [];
+      source = 'none';
+    }
+
+    console.log('[loadChat] Using source:', source, 'with', data?.length || 0, 'messages');
+
+    if (!data || data.length === 0) {
+      const error = localResult.error || externalResult.error;
+      if (error) {
+        console.error('[loadChat] Error fetching messages:', error);
+      }
       return;
     }
 
