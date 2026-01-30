@@ -208,27 +208,27 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-muted/50">
+            <thead className="bg-[#307177]">
               {children}
             </thead>
           ),
           tbody: ({ children }) => (
-            <tbody className="divide-y divide-border bg-card">
+            <tbody className="[&>tr:nth-child(odd)]:bg-white [&>tr:nth-child(even)]:bg-[#f9fafb]">
               {children}
             </tbody>
           ),
           tr: ({ children }) => (
-            <tr className="hover:bg-muted/30 transition-colors">
+            <tr className="hover:bg-[#f0fdfa] transition-colors">
               {children}
             </tr>
           ),
           th: ({ children }) => (
-            <th className="px-4 py-3 text-left font-semibold text-foreground text-xs uppercase tracking-wide">
+            <th className="border border-[#e5e7eb] px-4 py-3 text-left font-semibold text-white text-xs uppercase tracking-wide">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-4 py-3 text-foreground leading-relaxed">
+            <td className="border border-[#e5e7eb] px-4 py-3 text-foreground leading-relaxed">
               {children}
             </td>
           ),
