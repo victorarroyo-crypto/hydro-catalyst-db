@@ -88,7 +88,7 @@ export default function AdvisorChat() {
   });
   
   const { balance, freeRemaining, refetch: refetchCredits } = useAdvisorCredits(advisorUser?.id);
-  const { config: deepConfig } = useDeepAdvisorConfig();
+  const { config: deepConfig, isError: isConfigError, error: configError } = useDeepAdvisorConfig(advisorUser?.id);
   const { deepMode, setDeepMode } = useDeepMode();
   const { streamingMode, setStreamingMode } = useStreamingMode();
   
@@ -476,6 +476,27 @@ export default function AdvisorChat() {
           setUploadProgress({ status: 'idle', progress: 0, completedCount: 0, totalCount: 0 });
         }}
       />
+
+      {/* Backend Unavailable Banner */}
+      {isConfigError && (
+        <div className="mx-4 mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3 text-sm">
+          <div className="flex-shrink-0 w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+            <span className="text-amber-600">⚠️</span>
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-amber-800">Servicio temporalmente no disponible</p>
+            <p className="text-amber-600 text-xs">El servidor está reiniciándose. Por favor, intenta de nuevo en 1-2 minutos.</p>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => window.location.reload()}
+            className="border-amber-300 text-amber-700 hover:bg-amber-100"
+          >
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       {/* Main Content Area with optional sidebar */}
       <div className="flex-1 flex overflow-hidden">
