@@ -106,6 +106,8 @@ export function useAdvisorChat(userId: string | undefined) {
           metadata: rawMsg.metadata ? (rawMsg.metadata as unknown as MessageMetadata) : undefined,
           attachments: rawMsg.attachments ? (rawMsg.attachments as unknown as AttachmentInfo[]) : undefined,
           agentAnalyses: rawMsg.agent_analyses ? (rawMsg.agent_analyses as unknown as AgentAnalysis[]) : undefined,
+          // Deep Mode PDF export URL
+          pdf_url: rawMsg.pdf_url ? String(rawMsg.pdf_url) : undefined,
         };
       }));
       setChatId(existingChatId);
