@@ -159,6 +159,7 @@ export type Database = {
           created_at: string | null
           credits_used: number | null
           id: string
+          pdf_url: string | null
           role: string
           sources: Json | null
           tokens_input: number | null
@@ -170,6 +171,7 @@ export type Database = {
           created_at?: string | null
           credits_used?: number | null
           id?: string
+          pdf_url?: string | null
           role: string
           sources?: Json | null
           tokens_input?: number | null
@@ -181,6 +183,7 @@ export type Database = {
           created_at?: string | null
           credits_used?: number | null
           id?: string
+          pdf_url?: string | null
           role?: string
           sources?: Json | null
           tokens_input?: number | null

@@ -742,6 +742,21 @@ export default function AdvisorChat() {
                     {message.credits_used.toFixed(3)} créditos
                   </div>
                 )}
+
+                {/* PDF Download button for historic Deep Mode messages */}
+                {message.role === 'assistant' && message.pdf_url && (
+                  <div className="mt-3 pt-2 border-t border-border/30 flex justify-end">
+                    <a
+                      href={message.pdf_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-[#307177] text-white hover:bg-[#265a5f] transition-colors"
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Descargar PDF
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           ))}
