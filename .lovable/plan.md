@@ -1,11 +1,19 @@
 
-# Plan: Agregar Soporte de Tablas Markdown al Generador de Documentos Word
+# Plan: Corregir Procesamiento de Negritas en Listas
 
 ## Problema Identificado
-La función `parseMarkdownToParagraphs` en `generateDeepAdvisorDocument.ts` no detecta ni convierte tablas Markdown a formato Word. Las líneas que contienen `| columna1 | columna2 |` se procesan como texto normal, resultando en el output que muestra la imagen.
+El generador de documentos Word no está procesando correctamente las negritas (`**texto**`) dentro de elementos de lista. La imagen muestra:
+- `**Para 40.000 m³/mes:**` apareciendo como texto literal en lugar de negrita
+- Afecta a listas de viñetas (`- item`) y posiblemente listas numeradas
 
-## Solución Propuesta
-Agregar lógica de detección y parsing de tablas Markdown dentro de `parseMarkdownToParagraphs`, creando objetos `Table` de docx cuando se detecte una tabla.
+## Causa Raíz
+En `parseMarkdownToParagraphs` hay un problema de lógica:
+- **Párrafos regulares** (líneas 689-718): Procesan negritas con el regex `**texto**` correctamente
+- **Listas de viñetas** (líneas 646-664): Pasan directamente a `createFormattedTextRuns` sin extraer negritas
+- **Listas numeradas** (líneas 668-687): Mismo problema
+
+## Solución
+Crear una función auxiliar `parseInlineFormatting` que extraiga y procese las negritas inline, y usarla en todos los contextos (párrafos, listas, tablas).
 
 ---
 
@@ -13,146 +21,76 @@ Agregar lógica de detección y parsing de tablas Markdown dentro de `parseMarkd
 
 ### Archivo: `src/lib/generateDeepAdvisorDocument.ts`
 
-**1. Nueva función auxiliar para detectar filas de tabla:**
+**1. Nueva función para procesar formateo inline:**
 ```typescript
-function isTableRow(line: string): boolean {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return false;
-  const pipeCount = (trimmed.match(/\|/g) || []).length;
-  return pipeCount >= 3;
-}
-
-function isSeparatorRow(line: string): boolean {
-  const trimmed = line.trim();
-  return /^\|[\s\-:|]+\|$/.test(trimmed) && trimmed.includes('-');
-}
-```
-
-**2. Nueva función para crear tablas Word desde Markdown:**
-```typescript
-function parseMarkdownTable(tableLines: string[]): Table {
-  // Filtrar líneas vacías y separadores
-  const dataLines = tableLines.filter(l => !isSeparatorRow(l.trim()));
+function parseInlineFormattedRuns(text: string, baseOptions: TextRunOptions = {}): TextRun[] {
+  const textRuns: TextRun[] = [];
+  const boldRegex = /\*\*([^*]+)\*\*/g;
+  let lastIndex = 0;
+  let match;
   
-  // Primera línea = headers
-  const headerCells = parseTableRowCells(dataLines[0]);
-  const bodyLines = dataLines.slice(1);
-  
-  // Crear fila de headers con estilo Vandarum
-  const headerRow = new TableRow({
-    children: headerCells.map(cell => 
-      new TableCell({
-        children: [new Paragraph({
-          children: createFormattedTextRuns(cell, { bold: true }),
-        })],
-        shading: { type: ShadingType.SOLID, color: VANDARUM_COLORS.verdeOscuro },
-      })
-    ),
-  });
-  
-  // Crear filas de datos con zebra striping
-  const dataRows = bodyLines.map((line, idx) => {
-    const cells = parseTableRowCells(line);
-    return new TableRow({
-      children: cells.map(cell =>
-        new TableCell({
-          children: [new Paragraph({
-            children: createFormattedTextRuns(cell),
-          })],
-          shading: { 
-            type: ShadingType.SOLID, 
-            color: idx % 2 === 0 ? 'FFFFFF' : 'F5F5F5' 
-          },
-        })
-      ),
-    });
-  });
-  
-  return new Table({
-    rows: [headerRow, ...dataRows],
-    width: { size: 100, type: WidthType.PERCENTAGE },
-  });
-}
-
-function parseTableRowCells(line: string): string[] {
-  return line.trim()
-    .slice(1, -1)  // Quitar | inicial y final
-    .split('|')
-    .map(cell => cell.trim());
-}
-```
-
-**3. Modificar `parseMarkdownToParagraphs` para detectar tablas:**
-
-Agregar tracking de estado para tablas dentro del bucle principal:
-```typescript
-let inTable = false;
-let tableLines: string[] = [];
-
-for (let i = 0; i < lines.length; i++) {
-  const line = lines[i];
-  const trimmedLine = line.trim();
-  
-  // Detectar inicio/continuación de tabla
-  if (isTableRow(trimmedLine) || isSeparatorRow(trimmedLine)) {
-    if (!inTable) {
-      inTable = true;
-      tableLines = [];
+  while ((match = boldRegex.exec(text)) !== null) {
+    // Texto antes de la negrita
+    if (match.index > lastIndex) {
+      textRuns.push(...createFormattedTextRuns(text.slice(lastIndex, match.index), baseOptions));
     }
-    tableLines.push(trimmedLine);
-    continue;
+    // Texto en negrita
+    textRuns.push(...createFormattedTextRuns(match[1], { ...baseOptions, bold: true }));
+    lastIndex = match.index + match[0].length;
   }
   
-  // Final de tabla - procesar y generar Table
-  if (inTable) {
-    const table = parseMarkdownTable(tableLines);
-    paragraphs.push(table); // Nota: cambiar tipo de retorno a (Paragraph | Table)[]
-    inTable = false;
-    tableLines = [];
+  // Texto restante
+  if (lastIndex < text.length) {
+    textRuns.push(...createFormattedTextRuns(text.slice(lastIndex), baseOptions));
   }
   
-  // ... resto del procesamiento normal
+  return textRuns.length > 0 ? textRuns : createFormattedTextRuns(text, baseOptions);
 }
 ```
 
-**4. Actualizar tipo de retorno:**
-- Cambiar `parseMarkdownToParagraphs` para retornar `(Paragraph | Table)[]`
-- Actualizar los lugares donde se llama esta función para aceptar el nuevo tipo
+**2. Actualizar listas de viñetas (líneas ~646-664):**
+```typescript
+// Antes:
+...createFormattedTextRuns(listContent),
+
+// Después:
+...parseInlineFormattedRuns(listContent),
+```
+
+**3. Actualizar listas numeradas (líneas ~668-687):**
+```typescript
+// Antes:
+...createFormattedTextRuns(numberedMatch[2]),
+
+// Después:
+...parseInlineFormattedRuns(numberedMatch[2]),
+```
+
+**4. Actualizar celdas de tabla (en `parseTableRowCells` y `parseMarkdownTable`):**
+Usar `parseInlineFormattedRuns` en lugar de `createFormattedTextRuns` para celdas de datos.
+
+---
+
+## Flujo Corregido
+```text
+Texto: "- **Para 40.000 m³/mes:** valor"
+         ↓
+parseInlineFormattedRuns()
+         ↓
+┌─────────────────────────────────────────┐
+│ 1. Detectar **...**                     │
+│ 2. Extraer "Para 40.000 m³/mes:"        │
+│ 3. Marcar como bold: true               │
+│ 4. Procesar superíndice ³ con superScript│
+│ 5. Resto del texto normal               │
+└─────────────────────────────────────────┘
+         ↓
+TextRuns formateados correctamente
+```
 
 ---
 
 ## Resultado Esperado
-Las tablas Markdown como:
-```
-| Horizonte | Enfoque | CAPEX | Ahorro | Payback |
-|-----------|---------|-------|--------|---------|
-| Quick Wins | Recuperación | 26-75k€ | 80-140k€ | 0.4-1.5 años |
-```
-
-Se convertirán a tablas Word formateadas con:
-- Headers en fondo verde oscuro (#307177) con texto blanco
-- Filas alternas con colores zebra
-- Bordes consistentes con el estilo Vandarum
-
----
-
-## Detalles Técnicos
-
-### Flujo de Detección
-```text
-Línea de texto
-    ↓
-¿Es fila de tabla? (empieza/termina con | y tiene ≥3 pipes)
-    ├── SÍ → Agregar a buffer de tabla
-    │        ↓
-    │   ¿Siguiente línea NO es tabla?
-    │        ├── SÍ → Generar Table y agregarlo a paragraphs
-    │        └── NO → Continuar acumulando
-    └── NO → Procesar como párrafo normal
-```
-
-### Consideraciones
-- Manejar tablas con diferentes números de columnas
-- Preservar negritas dentro de celdas (`**texto**`)
-- Mantener compatibilidad con subíndices químicos en celdas
-- No confundir separadores de tabla con pipes en texto normal
+- `**Para 40.000 m³/mes:**` → Texto en negrita con ³ en superíndice
+- `- Canon anual: ~110.000 €/año` → Viñeta con texto normal
+- Mantiene soporte para superíndices Unicode (m³) dentro de negritas
