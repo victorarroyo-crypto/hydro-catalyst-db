@@ -69,15 +69,25 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-muted">{children}</thead>
+            <thead className="bg-[#307177]">{children}</thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="[&>tr:nth-child(odd)]:bg-white [&>tr:nth-child(even)]:bg-[#f9fafb]">
+              {children}
+            </tbody>
+          ),
+          tr: ({ children }) => (
+            <tr className="hover:bg-[#f0fdfa] transition-colors">
+              {children}
+            </tr>
           ),
           th: ({ children }) => (
-            <th className="border border-border px-3 py-2 text-left font-medium text-foreground">
+            <th className="border border-[#e5e7eb] px-3 py-2 text-left font-medium text-white">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-border px-3 py-2">{children}</td>
+            <td className="border border-[#e5e7eb] px-3 py-2 text-foreground">{children}</td>
           ),
           // Custom link styling
           a: ({ href, children }) => (
