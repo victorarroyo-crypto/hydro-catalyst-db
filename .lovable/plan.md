@@ -1,142 +1,81 @@
 
 
-## Añadir Proxy de Exportación PDF en Deep Advisor
+## Diagnóstico: El trabajo no se lanza
 
-### Problema Actual
+### Problema Identificado
 
-El frontend llama directamente a Railway para descargar el PDF, lo cual causa problemas de CORS:
+Los logs confirman que el **backend de Railway no está respondiendo**:
 
-```typescript
-// Actual (línea 428-430) - FALLA por CORS
-const response = await fetch(
-  `${API_URL}/api/advisor/deep/export/pdf/${deepJob.jobId}`
-);
+```text
+[advisor-railway-proxy] Timeout after 180010ms  (GET /api/advisor/deep/config)
+[advisor-railway-proxy] Timeout after 180007ms  (GET /api/advisor/deep/config)
+[advisor-railway-proxy] Timeout after 180015ms  (GET /api/advisor/deep/config)
 ```
 
-### Solución
+El flujo actual es:
+1. Al abrir el chat, se llama a `/api/advisor/deep/config` para obtener modelos disponibles
+2. Railway no responde → timeout de 3 minutos
+3. Sin configuración, el `getValidatedConfig()` retorna `null`
+4. El trabajo no puede iniciarse correctamente
 
-Añadir una ruta en la Edge Function `deep-advisor` que actúe como proxy para la exportación PDF.
+### Propuesta de Mejora: Fallback a valores por defecto
+
+Para que el Deep Advisor pueda funcionar **incluso cuando Railway está lento**, implementar fallbacks:
 
 ---
 
-### Cambios a implementar
+#### 1. Hook `useDeepAdvisorConfig.ts`
 
-#### 1. Edge Function: `supabase/functions/deep-advisor/index.ts`
-
-Añadir nueva ruta `GET /export/pdf/:job_id` antes del bloque 404:
+Añadir constantes de fallback y exportar función para obtener configuración con valores por defecto:
 
 ```typescript
-// GET /export/pdf/:job_id - Exportar PDF del análisis
-if (path.startsWith('/export/pdf/') && method === 'GET') {
-  const jobId = path.split('/export/pdf/')[1];
+const FALLBACK_CONFIG: Omit<DeepAdvisorConfigUpdate, 'user_id'> = {
+  search_model: 'gpt-4o-mini',
+  analysis_model: 'gpt-4o-mini',
+  synthesis_model: 'deepseek',
+  enable_web_search: true,
+  enable_rag: true,
+};
+
+export function getConfigWithFallback(
+  config: DeepAdvisorConfigResponse | undefined
+): Omit<DeepAdvisorConfigUpdate, 'user_id'> {
+  // Si tenemos config válida, la usamos
+  const validated = getValidatedConfig(config);
+  if (validated) return validated;
   
-  if (!jobId || !/^[\w-]+$/.test(jobId)) {
-    return new Response(JSON.stringify({ error: 'Invalid job_id' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-  
-  console.log(`[deep-advisor] Exporting PDF for job ${jobId}`);
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  
-  try {
-    const response = await fetch(
-      `${railwayApiUrl}/api/advisor/deep/export/pdf/${jobId}`,
-      { signal: controller.signal }
-    );
-    clearTimeout(timeoutId);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[deep-advisor] PDF export failed: ${response.status}`, errorText);
-      return new Response(JSON.stringify({ 
-        error: 'PDF generation failed',
-        status: response.status 
-      }), {
-        status: response.status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    
-    const pdfBlob = await response.blob();
-    
-    return new Response(pdfBlob, {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="vandarum_report_${jobId}.pdf"`,
-      },
-    });
-  } catch (error) {
-    clearTimeout(timeoutId);
-    
-    if (error instanceof Error && error.name === 'AbortError') {
-      return new Response(JSON.stringify({ error: 'PDF generation timed out' }), {
-        status: 504,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    
-    throw error;
-  }
+  // Si no, usamos fallback
+  return FALLBACK_CONFIG;
 }
 ```
 
 ---
 
-#### 2. Frontend: `src/pages/advisor/AdvisorChat.tsx`
+#### 2. Componente `AdvisorChat.tsx`
 
-Cambiar la URL de descarga para usar la Edge Function (líneas 428-430):
+En `handleSend()`, usar `getConfigWithFallback` en lugar de `getValidatedConfig`:
 
-**Antes:**
 ```typescript
-const response = await fetch(
-  `${API_URL}/api/advisor/deep/export/pdf/${deepJob.jobId}`
-);
+// Antes (línea 288)
+const validatedConfig = getValidatedConfig(deepConfig);
+
+// Después
+import { getConfigWithFallback } from '@/hooks/useDeepAdvisorConfig';
+const validatedConfig = getConfigWithFallback(deepConfig);
 ```
 
-**Después:**
-```typescript
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const response = await fetch(
-  `${SUPABASE_URL}/functions/v1/deep-advisor/export/pdf/${deepJob.jobId}`
-);
-```
-
-También añadir el import de `VITE_SUPABASE_URL` al inicio del archivo (ya disponible en el entorno).
+Esto garantiza que **siempre** tengamos valores válidos para enviar, incluso si Railway tarda en responder.
 
 ---
 
-### Flujo de la solución
+#### 3. UI de estado del backend
 
-```text
-Usuario click "Descargar PDF"
-        │
-        ▼
-AdvisorChat.tsx
-fetch(`${SUPABASE_URL}/functions/v1/deep-advisor/export/pdf/${jobId}`)
-        │
-        ▼
-Edge Function deep-advisor
-GET /export/pdf/:job_id
-        │
-        ▼
-Railway Backend
-GET /api/advisor/deep/export/pdf/:job_id
-        │
-        ▼
-PDF binario retornado
-        │
-        ▼
-Edge Function (proxy passthrough)
-Content-Type: application/pdf
-        │
-        ▼
-Browser descarga el archivo
+El componente ya tiene el banner de "Servicio temporalmente no disponible" (línea 543), pero solo se muestra si `isConfigError` es true. Añadir detección de timeout:
+
+```typescript
+// Mostrar banner si hay error O si la query lleva más de 30s cargando
+const showBackendWarning = isConfigError || 
+  (deepConfig === undefined && !authLoading && advisorUser?.id);
 ```
 
 ---
@@ -145,14 +84,14 @@ Browser descarga el archivo
 
 | Archivo | Cambio |
 |---------|--------|
-| `supabase/functions/deep-advisor/index.ts` | Añadir ruta `/export/pdf/:job_id` |
-| `src/pages/advisor/AdvisorChat.tsx` | Cambiar URL a usar Edge Function |
+| `src/hooks/useDeepAdvisorConfig.ts` | Añadir `FALLBACK_CONFIG` y `getConfigWithFallback()` |
+| `src/pages/advisor/AdvisorChat.tsx` | Usar `getConfigWithFallback()` en `handleSend()` |
 
 ---
 
 ### Resultado esperado
 
-- El botón "Descargar PDF" funcionará correctamente sin problemas de CORS
-- El PDF se descargará con nombre `vandarum_report_{job_id}.pdf`
-- Los errores se manejarán con mensajes apropiados
+- El trabajo podrá **iniciarse** aunque Railway esté lento
+- Se usarán modelos por defecto (económicos) mientras Railway no responde
+- El usuario verá progreso en lugar de bloqueo
 
