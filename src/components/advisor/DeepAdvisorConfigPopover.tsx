@@ -179,13 +179,14 @@ export const DeepAdvisorConfigPopover: React.FC = () => {
             </div>
           )}
 
-          {isLoading ? (
+          {isLoading && !config ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
             </div>
-          ) : isError ? (
-            <div className="text-center py-4 text-red-400 text-xs">
-              Error al cargar configuración
+          ) : isError && !config ? (
+            <div className="text-center py-4 space-y-2">
+              <p className="text-amber-400 text-xs">Servidor no disponible</p>
+              <p className="text-slate-500 text-[10px]">Usando configuración por defecto</p>
             </div>
           ) : (
             <>

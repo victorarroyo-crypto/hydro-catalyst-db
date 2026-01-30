@@ -51,14 +51,17 @@ async function fetchDeepAdvisorConfig(userId?: string): Promise<DeepAdvisorConfi
   });
 
   // Backend unavailable - throw specific error for UI handling
-  if (status === 503 || status === 502) {
-    const err = new Error('El servidor no está disponible. Intenta de nuevo en unos minutos.');
+  // Handle 500, 502, 503, and connection errors (status 0)
+  if (status === 0 || status === 500 || status === 502 || status === 503) {
+    const err = new Error('El servidor no está disponible. Usando configuración por defecto.');
     (err as any).code = 'BACKEND_UNAVAILABLE';
     throw err;
   }
 
   if (error || !data) {
-    throw new Error(error || 'Error al cargar configuración');
+    const err = new Error(error || 'Error al cargar configuración');
+    (err as any).code = 'BACKEND_UNAVAILABLE';
+    throw err;
   }
 
   return data;
@@ -83,9 +86,13 @@ export function useDeepAdvisorConfig(userId?: string) {
     queryKey: ['deep-advisor-config', userId],
     queryFn: () => fetchDeepAdvisorConfig(userId),
     staleTime: 1000 * 60 * 5, // 5 minutes
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+    retry: 1, // Only 1 retry to avoid long waits when backend is down
+    retryDelay: 2000, // Fixed 2s delay
     enabled: !!userId,
+    // Return undefined on error so fallback can be used
+    throwOnError: false,
+    // Use previous data while refetching
+    placeholderData: (previousData) => previousData,
   });
 
   const mutation = useMutation({
