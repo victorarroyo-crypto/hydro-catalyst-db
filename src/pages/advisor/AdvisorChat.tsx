@@ -456,53 +456,96 @@ export default function AdvisorChat() {
       stopStreaming();
     }
   };
-
-  // Download PDF handler - uses Edge Function proxy for CORS compatibility
-  // Supports both pre-generated PDF URLs (JSON response) and binary PDF fallback
+  // Download PDF handler - generates DOCX locally for proper Unicode/subscript support
+  // Falls back to backend PDF when content is not available locally
   const handleDownloadPDF = async () => {
-    if (!deepJob.jobId || isDownloadingPdf) return;
+    if (isDownloadingPdf) return;
     
     setIsDownloadingPdf(true);
     try {
-      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(
-        `${SUPABASE_URL}/functions/v1/deep-advisor/export/pdf/${deepJob.jobId}`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      // First, try to generate locally using the current deepJob result
+      if (deepJob.status?.result?.content) {
+        const { generateDeepAdvisorDocument } = await import('@/lib/generateDeepAdvisorDocument');
+        
+        await generateDeepAdvisorDocument({
+          content: deepJob.status.result.content,
+          sources: deepJob.status.result.sources || [],
+          factsExtracted: deepJob.status.result.facts_extracted || [],
+          query: pendingUserMessage || undefined,
+          chatId: deepJob.chatId || undefined,
+        });
+        
+        toast.success('Documento generado correctamente');
+        return;
       }
       
-      const contentType = response.headers.get('content-type') || '';
-      
-      if (contentType.includes('application/json')) {
-        // New response: pre-generated PDF in Storage
-        const data = await response.json();
-        if (data.pdf_url) {
-          window.open(data.pdf_url, '_blank');
-          toast.success('PDF abierto en nueva pestaña');
-          return;
+      // Fallback: Try backend export if local content not available
+      if (deepJob.jobId) {
+        const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+        const response = await fetch(
+          `${SUPABASE_URL}/functions/v1/deep-advisor/export/pdf/${deepJob.jobId}`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
         }
-        throw new Error('pdf_url no encontrada en respuesta');
+        
+        const contentType = response.headers.get('content-type') || '';
+        
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          if (data.pdf_url) {
+            window.open(data.pdf_url, '_blank');
+            toast.success('PDF abierto en nueva pestaña');
+            return;
+          }
+          throw new Error('pdf_url no encontrada en respuesta');
+        }
+        
+        // Binary PDF fallback
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vandarum_advisor_${new Date().toISOString().split('T')[0]}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        toast.success('PDF descargado correctamente');
+        return;
       }
       
-      // Fallback: binary PDF (legacy jobs)
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `vandarum_advisor_${new Date().toISOString().split('T')[0]}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success('PDF descargado correctamente');
+      toast.error('No hay contenido disponible para exportar');
     } catch (error) {
-      console.error('[AdvisorChat] PDF download error:', error);
-      toast.error('Error al descargar PDF. Inténtalo de nuevo.');
+      console.error('[AdvisorChat] Document download error:', error);
+      toast.error('Error al generar documento. Inténtalo de nuevo.');
     } finally {
       setIsDownloadingPdf(false);
+    }
+  };
+  
+  // Download handler for historic messages with content
+  const handleDownloadHistoricMessage = async (message: Message) => {
+    try {
+      const { generateDeepAdvisorDocument } = await import('@/lib/generateDeepAdvisorDocument');
+      
+      await generateDeepAdvisorDocument({
+        content: message.content,
+        sources: message.sources?.map(s => ({
+          type: s.type,
+          name: s.name,
+          url: s.url || undefined,
+        })) || [],
+        query: undefined,
+        chatId: chatId || undefined,
+      });
+      
+      toast.success('Documento generado correctamente');
+    } catch (error) {
+      console.error('[AdvisorChat] Historic message download error:', error);
+      toast.error('Error al generar documento');
     }
   };
 
@@ -743,18 +786,18 @@ export default function AdvisorChat() {
                   </div>
                 )}
 
-                {/* PDF Download button for historic Deep Mode messages */}
-                {message.role === 'assistant' && message.pdf_url && (
+                {/* Download Document button for historic messages (generates locally with proper formatting) */}
+                {message.role === 'assistant' && message.content && message.content.length > 500 && (
                   <div className="mt-3 pt-2 border-t border-border/30 flex justify-end">
-                    <a
-                      href={message.pdf_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-[#307177] text-white hover:bg-[#265a5f] transition-colors"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadHistoricMessage(message)}
+                      className="gap-2 text-[#307177] border-[#307177]/30 hover:bg-[#307177]/5 hover:border-[#307177]/50"
                     >
                       <FileDown className="h-4 w-4" />
-                      Descargar PDF
-                    </a>
+                      Descargar informe
+                    </Button>
                   </div>
                 )}
               </div>
@@ -804,39 +847,23 @@ export default function AdvisorChat() {
                         <SourcesPanel sources={deepJob.status.result.sources} />
                       )}
                       
-                      {/* Download PDF Button - Use pdf_url from status when available */}
-                      {(deepJob.status?.result?.pdf_url || deepJob.jobId) && (
-                        <div className="mt-4 pt-3 border-t border-slate-200/50 flex justify-end">
-                          {deepJob.status?.result?.pdf_url ? (
-                            // Direct link when pdf_url is available from backend
-                            <a
-                              href={deepJob.status.result.pdf_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-[#307177] text-white hover:bg-[#265a5f] transition-colors"
-                            >
-                              <FileDown className="h-4 w-4" />
-                              Descargar PDF
-                            </a>
+                      {/* Download Document Button - Always generate locally for proper formatting */}
+                      <div className="mt-4 pt-3 border-t border-slate-200/50 flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadPDF}
+                          disabled={isDownloadingPdf}
+                          className="gap-2 text-[#307177] border-[#307177]/30 hover:bg-[#307177]/5 hover:border-[#307177]/50"
+                        >
+                          {isDownloadingPdf ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            // Fallback: call export endpoint
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={handleDownloadPDF}
-                              disabled={isDownloadingPdf}
-                              className="gap-2 text-[#307177] border-[#307177]/30 hover:bg-[#307177]/5 hover:border-[#307177]/50"
-                            >
-                              {isDownloadingPdf ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <FileDown className="h-4 w-4" />
-                              )}
-                              {isDownloadingPdf ? 'Generando PDF...' : 'Descargar PDF'}
-                            </Button>
+                            <FileDown className="h-4 w-4" />
                           )}
-                        </div>
-                      )}
+                          {isDownloadingPdf ? 'Generando...' : 'Descargar informe'}
+                        </Button>
+                      </div>
                     </div>
                   )}
 
