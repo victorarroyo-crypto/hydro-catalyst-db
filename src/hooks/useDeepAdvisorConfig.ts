@@ -140,6 +140,15 @@ function getValidModel(
   return phaseConfig.default;
 }
 
+// Fallback config when backend is unavailable
+const FALLBACK_CONFIG: Omit<DeepAdvisorConfigUpdate, 'user_id'> = {
+  search_model: 'gpt-4o-mini',
+  analysis_model: 'gpt-4o-mini',
+  synthesis_model: 'deepseek',
+  enable_web_search: true,
+  enable_rag: true,
+};
+
 // Get validated config with all models verified against backend options
 export function getValidatedConfig(config: DeepAdvisorConfigResponse | undefined, userId?: string): Omit<DeepAdvisorConfigUpdate, 'user_id'> | null {
   if (!config) return null;
@@ -151,6 +160,17 @@ export function getValidatedConfig(config: DeepAdvisorConfigResponse | undefined
     enable_web_search: config.current?.enable_web_search ?? true,
     enable_rag: config.current?.enable_rag ?? true,
   };
+}
+
+// Get config with fallback - always returns valid config even if backend is down
+export function getConfigWithFallback(
+  config: DeepAdvisorConfigResponse | undefined
+): Omit<DeepAdvisorConfigUpdate, 'user_id'> {
+  const validated = getValidatedConfig(config);
+  if (validated) return validated;
+  
+  // Use fallback when backend unavailable
+  return FALLBACK_CONFIG;
 }
 
 // Check if any configured model is invalid
