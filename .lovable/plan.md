@@ -1,150 +1,158 @@
 
-# Plan: Aplicar Estilos Vandarum a Tablas del Deep Advisor
+# Plan: Agregar Soporte de Tablas Markdown al Generador de Documentos Word
 
-## Resumen
-Actualizar los componentes de tabla en el markdown del Advisor para usar los colores corporativos de Vandarum, mejorando la identidad visual y legibilidad.
+## Problema Identificado
+La función `parseMarkdownToParagraphs` en `generateDeepAdvisorDocument.ts` no detecta ni convierte tablas Markdown a formato Word. Las líneas que contienen `| columna1 | columna2 |` se procesan como texto normal, resultando en el output que muestra la imagen.
+
+## Solución Propuesta
+Agregar lógica de detección y parsing de tablas Markdown dentro de `parseMarkdownToParagraphs`, creando objetos `Table` de docx cuando se detecte una tabla.
 
 ---
 
-## Especificaciones de Diseño
+## Cambios a Implementar
 
+### Archivo: `src/lib/generateDeepAdvisorDocument.ts`
+
+**1. Nueva función auxiliar para detectar filas de tabla:**
+```typescript
+function isTableRow(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return false;
+  const pipeCount = (trimmed.match(/\|/g) || []).length;
+  return pipeCount >= 3;
+}
+
+function isSeparatorRow(line: string): boolean {
+  const trimmed = line.trim();
+  return /^\|[\s\-:|]+\|$/.test(trimmed) && trimmed.includes('-');
+}
+```
+
+**2. Nueva función para crear tablas Word desde Markdown:**
+```typescript
+function parseMarkdownTable(tableLines: string[]): Table {
+  // Filtrar líneas vacías y separadores
+  const dataLines = tableLines.filter(l => !isSeparatorRow(l.trim()));
+  
+  // Primera línea = headers
+  const headerCells = parseTableRowCells(dataLines[0]);
+  const bodyLines = dataLines.slice(1);
+  
+  // Crear fila de headers con estilo Vandarum
+  const headerRow = new TableRow({
+    children: headerCells.map(cell => 
+      new TableCell({
+        children: [new Paragraph({
+          children: createFormattedTextRuns(cell, { bold: true }),
+        })],
+        shading: { type: ShadingType.SOLID, color: VANDARUM_COLORS.verdeOscuro },
+      })
+    ),
+  });
+  
+  // Crear filas de datos con zebra striping
+  const dataRows = bodyLines.map((line, idx) => {
+    const cells = parseTableRowCells(line);
+    return new TableRow({
+      children: cells.map(cell =>
+        new TableCell({
+          children: [new Paragraph({
+            children: createFormattedTextRuns(cell),
+          })],
+          shading: { 
+            type: ShadingType.SOLID, 
+            color: idx % 2 === 0 ? 'FFFFFF' : 'F5F5F5' 
+          },
+        })
+      ),
+    });
+  });
+  
+  return new Table({
+    rows: [headerRow, ...dataRows],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  });
+}
+
+function parseTableRowCells(line: string): string[] {
+  return line.trim()
+    .slice(1, -1)  // Quitar | inicial y final
+    .split('|')
+    .map(cell => cell.trim());
+}
+```
+
+**3. Modificar `parseMarkdownToParagraphs` para detectar tablas:**
+
+Agregar tracking de estado para tablas dentro del bucle principal:
+```typescript
+let inTable = false;
+let tableLines: string[] = [];
+
+for (let i = 0; i < lines.length; i++) {
+  const line = lines[i];
+  const trimmedLine = line.trim();
+  
+  // Detectar inicio/continuación de tabla
+  if (isTableRow(trimmedLine) || isSeparatorRow(trimmedLine)) {
+    if (!inTable) {
+      inTable = true;
+      tableLines = [];
+    }
+    tableLines.push(trimmedLine);
+    continue;
+  }
+  
+  // Final de tabla - procesar y generar Table
+  if (inTable) {
+    const table = parseMarkdownTable(tableLines);
+    paragraphs.push(table); // Nota: cambiar tipo de retorno a (Paragraph | Table)[]
+    inTable = false;
+    tableLines = [];
+  }
+  
+  // ... resto del procesamiento normal
+}
+```
+
+**4. Actualizar tipo de retorno:**
+- Cambiar `parseMarkdownToParagraphs` para retornar `(Paragraph | Table)[]`
+- Actualizar los lugares donde se llama esta función para aceptar el nuevo tipo
+
+---
+
+## Resultado Esperado
+Las tablas Markdown como:
+```
+| Horizonte | Enfoque | CAPEX | Ahorro | Payback |
+|-----------|---------|-------|--------|---------|
+| Quick Wins | Recuperación | 26-75k€ | 80-140k€ | 0.4-1.5 años |
+```
+
+Se convertirán a tablas Word formateadas con:
+- Headers en fondo verde oscuro (#307177) con texto blanco
+- Filas alternas con colores zebra
+- Bordes consistentes con el estilo Vandarum
+
+---
+
+## Detalles Técnicos
+
+### Flujo de Detección
 ```text
-┌─────────────────────────────────────────────────────────┐
-│  Parámetro  │   Valor   │   Unidad                     │  ← Header: bg-[#307177] text-white
-├─────────────────────────────────────────────────────────┤
-│  DQO        │   500     │   mg/L                       │  ← Fila impar: bg-white
-├─────────────────────────────────────────────────────────┤
-│  DBO        │   250     │   mg/L                       │  ← Fila par: bg-[#f9fafb]
-├─────────────────────────────────────────────────────────┤
-│  SS         │   300     │   mg/L                       │  ← Fila impar: bg-white
-└─────────────────────────────────────────────────────────┘
-          ↑ Bordes: border-[#e5e7eb]
+Línea de texto
+    ↓
+¿Es fila de tabla? (empieza/termina con | y tiene ≥3 pipes)
+    ├── SÍ → Agregar a buffer de tabla
+    │        ↓
+    │   ¿Siguiente línea NO es tabla?
+    │        ├── SÍ → Generar Table y agregarlo a paragraphs
+    │        └── NO → Continuar acumulando
+    └── NO → Procesar como párrafo normal
 ```
 
-| Elemento | Color/Estilo |
-|----------|--------------|
-| Header fondo | `#307177` (vandarum-dark-green) |
-| Header texto | `white` |
-| Filas impares | `white` (fondo base) |
-| Filas pares | `#f9fafb` (zebra striping) |
-| Bordes | `#e5e7eb` |
-| Hover en filas | `bg-[#f0fdfa]` (teal muy claro) |
-
----
-
-## Cambios a Realizar
-
-### 1. AdvisorMessage.tsx (líneas 203-234)
-
-**Antes:**
-```tsx
-thead: ({ children }) => (
-  <thead className="bg-muted/50">
-    {children}
-  </thead>
-),
-th: ({ children }) => (
-  <th className="px-4 py-3 text-left font-semibold text-foreground text-xs uppercase tracking-wide">
-    {children}
-  </th>
-),
-tbody: ({ children }) => (
-  <tbody className="divide-y divide-border bg-card">
-    {children}
-  </tbody>
-),
-```
-
-**Después:**
-```tsx
-thead: ({ children }) => (
-  <thead className="bg-[#307177]">
-    {children}
-  </thead>
-),
-th: ({ children }) => (
-  <th className="border border-[#e5e7eb] px-4 py-3 text-left font-semibold text-white text-xs uppercase tracking-wide">
-    {children}
-  </th>
-),
-tbody: ({ children }) => (
-  <tbody className="[&>tr:nth-child(odd)]:bg-white [&>tr:nth-child(even)]:bg-[#f9fafb]">
-    {children}
-  </tbody>
-),
-td: ({ children }) => (
-  <td className="border border-[#e5e7eb] px-4 py-3 text-foreground leading-relaxed">
-    {children}
-  </td>
-),
-tr: ({ children }) => (
-  <tr className="hover:bg-[#f0fdfa] transition-colors">
-    {children}
-  </tr>
-),
-```
-
-### 2. StreamingResponse.tsx (líneas 64-81)
-
-**Antes:**
-```tsx
-thead: ({ children }) => (
-  <thead className="bg-muted">{children}</thead>
-),
-th: ({ children }) => (
-  <th className="border border-border px-3 py-2 text-left font-medium text-foreground">
-    {children}
-  </th>
-),
-td: ({ children }) => (
-  <td className="border border-border px-3 py-2">{children}</td>
-),
-```
-
-**Después:**
-```tsx
-thead: ({ children }) => (
-  <thead className="bg-[#307177]">{children}</thead>
-),
-tbody: ({ children }) => (
-  <tbody className="[&>tr:nth-child(odd)]:bg-white [&>tr:nth-child(even)]:bg-[#f9fafb]">
-    {children}
-  </tbody>
-),
-tr: ({ children }) => (
-  <tr className="hover:bg-[#f0fdfa] transition-colors">
-    {children}
-  </tr>
-),
-th: ({ children }) => (
-  <th className="border border-[#e5e7eb] px-3 py-2 text-left font-medium text-white">
-    {children}
-  </th>
-),
-td: ({ children }) => (
-  <td className="border border-[#e5e7eb] px-3 py-2 text-foreground">
-    {children}
-  </td>
-),
-```
-
----
-
-## Archivos a Modificar
-
-| Archivo | Líneas | Cambio |
-|---------|--------|--------|
-| `src/components/advisor/AdvisorMessage.tsx` | 210-234 | Estilos Vandarum en thead, th, tbody, td, tr |
-| `src/components/advisor/streaming/StreamingResponse.tsx` | 71-81 | Estilos Vandarum en thead, tbody, tr, th, td |
-
----
-
-## Resultado Visual Esperado
-
-Las tablas del Deep Advisor mostrarán:
-- **Cabecera teal corporativa** (#307177) con texto blanco
-- **Alternancia de colores** en filas (zebra striping) para mejor legibilidad
-- **Bordes consistentes** grises claros (#e5e7eb)
-- **Hover sutil** en teal muy claro (#f0fdfa) para interactividad
-
-Esto alinea el estilo con la identidad visual de Vandarum y mejora la experiencia de lectura de datos tabulares.
+### Consideraciones
+- Manejar tablas con diferentes números de columnas
+- Preservar negritas dentro de celdas (`**texto**`)
+- Mantener compatibilidad con subíndices químicos en celdas
+- No confundir separadores de tabla con pipes en texto normal
