@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { streamAdvisorProxy, callAdvisorProxy } from '@/lib/advisorProxy';
 import type { Message, Source, MessageMetadata, AttachmentInfo } from '@/types/advisorChat';
 import type { AgentAnalysis } from '@/components/advisor/AgentAnalysesAccordion';
@@ -40,12 +41,32 @@ export function useAdvisorChat(userId: string | undefined) {
   const loadChat = useCallback(async (existingChatId: string) => {
     if (!userId) return;
 
-    // Use primary supabase client (Lovable Cloud) where advisor data is stored
-    const { data, error } = await supabase
-      .from('advisor_messages')
-      .select('*')
-      .eq('chat_id', existingChatId)
-      .order('created_at', { ascending: true });
+    const fetchMessages = async (client: typeof supabase) => {
+      const { data, error } = await client
+        .from('advisor_messages')
+        .select('*')
+        .eq('chat_id', existingChatId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        return { data: null as typeof data | null, error };
+      }
+      return { data, error: null };
+    };
+
+    // Try Lovable Cloud first (older chats), then fallback to external DB (newer chats)
+    const [localResult, externalResult] = await Promise.all([
+      fetchMessages(supabase),
+      fetchMessages(externalSupabase as unknown as typeof supabase),
+    ]);
+
+    const data = (localResult.data && localResult.data.length > 0)
+      ? localResult.data
+      : (externalResult.data || []);
+
+    const error = localResult.error && (!data || data.length === 0)
+      ? localResult.error
+      : null;
 
     if (error) {
       console.error('[loadChat] Error fetching messages:', error);
