@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -571,7 +571,7 @@ export default function AdvisorChat() {
         {/* Messages Area */}
         <div className="flex-1 flex flex-col min-w-0">
           <ScrollArea className="flex-1 px-6" ref={scrollRef}>
-            <div className="max-w-4xl mx-auto py-8 space-y-6">
+            <div className="max-w-5xl mx-auto py-8 space-y-6">
               {/* Welcome with example queries */}
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 space-y-6">
@@ -800,8 +800,8 @@ export default function AdvisorChat() {
             isDeepMode={deepMode}
           />
 
-          {/* Input row - fixed height */}
-          <div className="flex gap-3 bg-white rounded-2xl p-3 shadow-lg items-center" style={{ border: '2px solid rgba(48,113,119,0.2)' }}>
+          {/* Input row - expandable */}
+          <div className="flex gap-3 bg-white rounded-2xl p-3 shadow-lg items-end" style={{ border: '2px solid rgba(48,113,119,0.2)' }}>
             <FileAttachmentButton
               onAttach={(files) => {
                 const newAttachments: AttachmentInfo[] = files.map(f => ({
@@ -818,13 +818,20 @@ export default function AdvisorChat() {
               disabled={isAnyLoading}
               isUploading={uploadProgress.status === 'uploading'}
             />
-            <Input
+            <Textarea
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Escribe tu consulta sobre tratamiento de agua..."
               disabled={isAnyLoading}
-              className="flex-1 border-0 shadow-none focus-visible:ring-0 h-12 text-base px-4"
+              rows={1}
+              className="flex-1 border-0 shadow-none focus-visible:ring-0 min-h-[48px] max-h-[120px] text-base px-4 py-3 resize-none"
+              style={{ height: 'auto' }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+              }}
             />
             {isAnyStreaming ? (
               <Button 
