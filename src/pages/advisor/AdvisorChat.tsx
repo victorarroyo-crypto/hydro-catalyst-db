@@ -44,6 +44,9 @@ import { PresupuestoModal, type PresupuestoData } from '@/components/advisor/mod
 import { PromptExamples } from '@/components/advisor/PromptExamples';
 import { FileAttachmentButton, type UploadProgress } from '@/components/advisor/FileAttachmentButton';
 import { AttachmentsSidebar } from '@/components/advisor/AttachmentsSidebar';
+import { CompactUsageHint } from '@/components/advisor/CompactUsageHint';
+import { AdvisorUsageGuideSheet } from '@/components/advisor/AdvisorUsageGuideSheet';
+import { DeepModeActivatedBanner } from '@/components/advisor/DeepModeActivatedBanner';
 import type { Message, AttachmentInfo } from '@/types/advisorChat';
 
 
@@ -105,7 +108,10 @@ export default function AdvisorChat() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     return localStorage.getItem('advisor_sidebar_collapsed') === 'true';
   });
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [showDeepBanner, setShowDeepBanner] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevDeepModeRef = useRef(deepMode);
 
   const toggleSidebarCollapse = () => {
     setIsSidebarCollapsed(prev => {
@@ -220,6 +226,21 @@ export default function AdvisorChat() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Detect Deep Mode activation to show temporary banner
+  useEffect(() => {
+    if (!prevDeepModeRef.current && deepMode) {
+      // Deep mode just activated
+      const shown = localStorage.getItem('advisor_deep_banner_shown');
+      if (!shown) {
+        setShowDeepBanner(true);
+        localStorage.setItem('advisor_deep_banner_shown', 'true');
+        const timer = setTimeout(() => setShowDeepBanner(false), 5000);
+        return () => clearTimeout(timer);
+      }
+    }
+    prevDeepModeRef.current = deepMode;
+  }, [deepMode]);
 
   // Detect service redirect from backend and auto-open modal
   useEffect(() => {
@@ -710,7 +731,18 @@ export default function AdvisorChat() {
 
       {/* Input Area - inside the flex container */}
       <div className="border-t p-4 pb-6" style={{ background: 'linear-gradient(180deg, rgba(48,113,119,0.03) 0%, rgba(50,180,205,0.05) 100%)' }}>
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-3xl mx-auto space-y-3">
+          {/* Deep Mode Activated Banner */}
+          {showDeepBanner && (
+            <DeepModeActivatedBanner onDismiss={() => setShowDeepBanner(false)} />
+          )}
+
+          {/* Compact Usage Hint */}
+          <CompactUsageHint 
+            onOpenGuide={() => setIsGuideOpen(true)} 
+            isDeepMode={deepMode}
+          />
+
           {/* Input row - fixed height */}
           <div className="flex gap-3 bg-white rounded-2xl p-3 shadow-lg items-center" style={{ border: '2px solid rgba(48,113,119,0.2)' }}>
             <FileAttachmentButton
@@ -764,7 +796,7 @@ export default function AdvisorChat() {
           </div>
           
           {/* Cost indicator */}
-          <div className="flex items-center justify-center mt-2 text-xs text-muted-foreground gap-3">
+          <div className="flex items-center justify-center text-xs text-muted-foreground gap-3">
             <span>
               {canUseFree 
                 ? `Consulta gratuita (${freeRemaining} restantes)`
@@ -778,6 +810,13 @@ export default function AdvisorChat() {
       </div>
       </div>
       </div>
+
+      {/* Usage Guide Sheet/Modal */}
+      <AdvisorUsageGuideSheet 
+        open={isGuideOpen} 
+        onOpenChange={setIsGuideOpen}
+        isDeepMode={deepMode}
+      />
 
       {/* Service Modals */}
       <ComparadorModal
