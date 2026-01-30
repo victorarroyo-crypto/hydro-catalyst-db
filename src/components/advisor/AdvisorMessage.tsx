@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
 import { FlowDiagramRenderer } from './FlowDiagramRenderer';
-
+import { MermaidRenderer } from './MermaidRenderer';
 interface AdvisorMessageProps {
   content: string;
   sources?: Source[];
@@ -171,13 +171,18 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               const codeClassName = codeElement.props?.className || '';
               const codeContent = String(codeElement.props?.children || '').trim();
               
+              // Handle ```mermaid blocks
+              if (codeClassName.includes('language-mermaid')) {
+                return <MermaidRenderer content={codeContent} />;
+              }
+              
               // Handle ```flow blocks
               if (codeClassName.includes('language-flow')) {
                 return <FlowDiagramRenderer content={codeContent} />;
               }
               
-              // Handle ```chem blocks
-              if (codeClassName.includes('language-chem')) {
+              // Handle ```chem or ```equation blocks
+              if (codeClassName.includes('language-chem') || codeClassName.includes('language-equation')) {
                 return <ChemEquation content={codeContent} />;
               }
             }
