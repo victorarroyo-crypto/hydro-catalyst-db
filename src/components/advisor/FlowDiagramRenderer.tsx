@@ -126,31 +126,79 @@ function parseMultiLineFlow(lines: string[]): FlowLine[] {
 }
 
 /**
+ * Checks if a line looks like a markdown table row
+ * Tables have multiple | separators and typically have structured columns
+ */
+function isMarkdownTableRow(text: string): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+  
+  // Must start and end with | for valid table rows
+  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return false;
+  
+  // Count pipe characters - tables have multiple columns
+  const pipeCount = (trimmed.match(/\|/g) || []).length;
+  if (pipeCount < 3) return false; // At least |col1|col2|
+  
+  // Check if it's a separator row (---|---|---)
+  if (/^\|[\s\-:|]+\|$/.test(trimmed)) return true;
+  
+  // Table rows have relatively evenly spaced content between pipes
+  // Flow diagrams don't have this pattern
+  const cells = trimmed.split('|').filter(c => c.trim());
+  if (cells.length >= 2) {
+    // If most cells have content, it's likely a table
+    const nonEmptyCells = cells.filter(c => c.trim().length > 0);
+    return nonEmptyCells.length >= 2;
+  }
+  
+  return false;
+}
+
+/**
  * Checks if text contains a flow diagram pattern
+ * EXCLUDES markdown tables which use | for columns
  */
 export function containsFlowDiagram(text: string): boolean {
   if (!text) return false;
   
+  // FIRST: Exclude markdown table rows - they are NOT flow diagrams
+  if (isMarkdownTableRow(text)) {
+    return false;
+  }
+  
   // Normalize first to catch ASCII arrows
   const normalized = normalizeArrows(text);
   
-  // Must contain arrows and have multiple steps
+  // Must contain arrows to be a flow diagram
   const hasArrows = normalized.includes('→') || normalized.includes('←');
+  if (!hasArrows) return false;
+  
+  // Check for bracketed steps like [Step1] → [Step2]
   const hasBrackets = normalized.includes('[') && normalized.includes(']');
+  
+  // Count arrows - flow diagrams typically have sequence
   const arrowCount = (normalized.match(/[→←]/g) || []).length;
-  const hasMultipleArrows = arrowCount >= 1;
   
-  // Also check for branch patterns
-  const hasBranchPattern = /[└├┌┐│|┬┴┤├]/.test(text) || /L→|└→|├→/.test(text);
+  // Also check for branch patterns (but not if it looks like a table)
+  const hasBranchPattern = /[└├┌┐│┬┴┤]/.test(text) && !text.includes('|');
   
-  return (hasArrows && (hasBrackets || hasMultipleArrows)) || (hasBranchPattern && hasArrows);
+  // Flow diagram: has arrows AND (brackets OR multiple steps indicated by arrows)
+  return hasArrows && (hasBrackets || arrowCount >= 1 || hasBranchPattern);
 }
 
 /**
  * Checks if a block of lines forms a multi-line flow diagram
+ * Excludes blocks that look like markdown tables
  */
 export function isMultiLineFlowBlock(lines: string[]): boolean {
   if (lines.length < 2) return false;
+  
+  // If most lines look like table rows, it's a table not a flow diagram
+  const tableRowCount = lines.filter(l => isMarkdownTableRow(l)).length;
+  if (tableRowCount >= lines.length * 0.5) {
+    return false;
+  }
   
   let flowLineCount = 0;
   for (const line of lines) {
@@ -159,8 +207,8 @@ export function isMultiLineFlowBlock(lines: string[]): boolean {
     }
   }
   
-  // At least 2 flow lines or has branch patterns
-  const hasBranches = lines.some(l => /[└├┌┐│|]/.test(l) || /L→|└→|├→/.test(l));
+  // At least 2 flow lines or has branch patterns (excluding |)
+  const hasBranches = lines.some(l => /[└├┌┐│┬┴┤]/.test(l) && !isMarkdownTableRow(l));
   return flowLineCount >= 2 || hasBranches;
 }
 
@@ -187,7 +235,7 @@ function BranchIndicator({ symbol }: { symbol?: string }) {
 }
 
 /**
- * Individual flow step chip - compact horizontal style
+ * Individual flow step chip - clean, minimal style
  */
 function FlowChip({ step, index }: { step: FlowStep; index: number }) {
   // Determine if this is a highlight step (all caps or contains percentages)
@@ -198,11 +246,11 @@ function FlowChip({ step, index }: { step: FlowStep; index: number }) {
   return (
     <div 
       className={cn(
-        "flex-shrink-0 px-3 py-2 rounded-lg",
-        "border transition-colors duration-150",
+        "flex-shrink-0 px-2.5 py-1.5 rounded-md text-sm",
+        "border border-border/60",
         isHighlight 
-          ? "bg-primary/10 border-primary/30 hover:bg-primary/15"
-          : "bg-muted/50 border-border/50 hover:bg-muted/70"
+          ? "bg-primary/5 text-primary font-medium"
+          : "bg-background"
       )}
     >
       <div className="flex items-center gap-2">
@@ -258,8 +306,8 @@ export function FlowDiagramRenderer({ content, className }: FlowDiagramRendererP
   }
   
   return (
-    <div className={cn("my-4 overflow-x-auto", className)}>
-      <div className="flex items-center gap-0 p-3 bg-muted/30 rounded-lg min-w-max border border-border/50">
+    <div className={cn("my-3 overflow-x-auto max-w-full", className)}>
+      <div className="inline-flex items-center gap-0 p-2.5 rounded-lg min-w-0">
         {steps.map((step, index) => (
           <React.Fragment key={index}>
             <FlowChip step={step} index={index} />
@@ -286,8 +334,8 @@ export function MultiLineFlowRenderer({ lines, className }: { lines: string[]; c
   }
   
   return (
-    <div className={cn("my-4 overflow-x-auto", className)}>
-      <div className="flex flex-col gap-2 p-4 bg-muted/30 rounded-lg border border-border/50">
+    <div className={cn("my-3 overflow-x-auto max-w-full", className)}>
+      <div className="flex flex-col gap-2 p-3 rounded-lg">
         {flowLines.map((flowLine, index) => (
           <FlowLineRenderer key={index} flowLine={flowLine} index={index} />
         ))}
