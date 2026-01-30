@@ -75,7 +75,7 @@ serve(async (req) => {
   }
 
   try {
-    // POST /start - Iniciar nuevo job
+// POST /start - Iniciar nuevo job (longer timeout for processing attachments)
     if (path === '/start' && method === 'POST') {
       const body = await req.json();
       
@@ -87,12 +87,41 @@ serve(async (req) => {
         });
       }
       
-      console.log(`[deep-advisor] Starting job for user ${body.user_id}`);
+      console.log(`[deep-advisor] Starting job for user ${body.user_id}, attachments: ${body.attachments?.length || 0}`);
       
-      return proxyToRailway(railwayApiUrl, '/api/advisor/deep/start', { 
-        method: 'POST', 
-        body 
-      });
+      // Use longer timeout for /start (5 minutes) - processing attachments takes time
+      const startTimeoutMs = 300000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), startTimeoutMs);
+      
+      try {
+        const response = await fetch(`${railwayApiUrl}/api/advisor/deep/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        
+        const data = await response.json();
+        
+        return new Response(JSON.stringify(data), {
+          status: response.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error('[deep-advisor] Start job timed out after 5 minutes');
+          return new Response(JSON.stringify({ error: 'Timeout', message: 'Job start timed out - try with fewer attachments' }), {
+            status: 504,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        throw error;
+      }
     }
 
     // GET /status/:job_id - Consultar estado del job
