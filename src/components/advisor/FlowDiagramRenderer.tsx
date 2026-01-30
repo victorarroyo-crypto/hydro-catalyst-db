@@ -156,14 +156,30 @@ function isMarkdownTableRow(text: string): boolean {
 }
 
 /**
+ * Checks if a line starts with an arrow (used as bullet point, NOT a flow diagram)
+ * Examples: "→ Objetivo: >80%" or "← Resultado anterior"
+ */
+function isArrowBullet(text: string): boolean {
+  const trimmed = text.trim();
+  // Arrow at start of line followed by space = bullet point, not flow
+  return /^[→←]\s/.test(trimmed);
+}
+
+/**
  * Checks if text contains a flow diagram pattern
  * EXCLUDES markdown tables which use | for columns
+ * EXCLUDES arrow bullets (→ text) which are just list items
  */
 export function containsFlowDiagram(text: string): boolean {
   if (!text) return false;
   
   // FIRST: Exclude markdown table rows - they are NOT flow diagrams
   if (isMarkdownTableRow(text)) {
+    return false;
+  }
+  
+  // SECOND: Exclude arrow bullets - arrows at start of line are NOT flow diagrams
+  if (isArrowBullet(text)) {
     return false;
   }
   
@@ -177,14 +193,21 @@ export function containsFlowDiagram(text: string): boolean {
   // Check for bracketed steps like [Step1] → [Step2]
   const hasBrackets = normalized.includes('[') && normalized.includes(']');
   
+  // Flow diagrams need arrows BETWEEN elements, not just arrows present
+  // Pattern: "Word → Word" or "[Step] → [Step]" 
+  // NOT: "→ Objetivo: value" (arrow at start = bullet)
+  const hasFlowPattern = /\S\s*→\s*\S/.test(normalized) || /\S\s*←\s*\S/.test(normalized);
+  
+  if (!hasFlowPattern) return false;
+  
   // Count arrows - flow diagrams typically have sequence
   const arrowCount = (normalized.match(/[→←]/g) || []).length;
   
   // Also check for branch patterns (but not if it looks like a table)
   const hasBranchPattern = /[└├┌┐│┬┴┤]/.test(text) && !text.includes('|');
   
-  // Flow diagram: has arrows AND (brackets OR multiple steps indicated by arrows)
-  return hasArrows && (hasBrackets || arrowCount >= 1 || hasBranchPattern);
+  // Flow diagram: has flow pattern AND (brackets OR multiple arrows OR branch pattern)
+  return hasFlowPattern && (hasBrackets || arrowCount >= 2 || hasBranchPattern);
 }
 
 /**
