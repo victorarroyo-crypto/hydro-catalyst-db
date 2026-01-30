@@ -332,6 +332,152 @@ function parseMarkdownTable(tableLines: string[]): Table {
 }
 
 /**
+ * Check if content is Mermaid/flowchart syntax
+ */
+function isMermaidContent(text: string): boolean {
+  if (!text) return false;
+  const trimmed = text.trim().toLowerCase();
+  
+  // Check for mermaid keywords at the start
+  const mermaidKeywords = [
+    'flowchart', 'graph', 'sequencediagram', 'classDiagram', 
+    'statediagram', 'erdiagram', 'gantt', 'pie', 'gitgraph'
+  ];
+  
+  for (const keyword of mermaidKeywords) {
+    if (trimmed.startsWith(keyword.toLowerCase())) {
+      return true;
+    }
+  }
+  
+  // Check for arrow patterns typical of mermaid
+  if (trimmed.includes('-->') && (trimmed.includes('[') || trimmed.includes('{'))) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Check if a line continues a mermaid diagram
+ */
+function isMermaidContinuation(line: string): boolean {
+  if (!line) return false;
+  const trimmed = line.trim();
+  
+  // Empty lines end mermaid
+  if (!trimmed) return false;
+  
+  // Lines with arrows or node definitions continue mermaid
+  if (trimmed.includes('-->') || trimmed.includes('---') ||
+      /^[A-Za-z0-9_]+[\[\{(]/.test(trimmed) ||
+      /^[A-Za-z0-9_]+\s*-->/.test(trimmed)) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Parse Mermaid flowchart content and convert to readable Word paragraphs
+ */
+function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
+  const paragraphs: Paragraph[] = [];
+  
+  // Add a header indicating this is a diagram
+  paragraphs.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: '📊 Diagrama de Flujo',
+          bold: true,
+          size: VANDARUM_SIZES.texto,
+          font: VANDARUM_FONTS.titulo,
+          color: VANDARUM_COLORS.verdeOscuro,
+        }),
+      ],
+      spacing: { before: 150, after: 100 },
+      shading: { type: ShadingType.SOLID, color: 'F0F7F7' },
+    })
+  );
+  
+  // Parse the mermaid content to extract nodes and relationships
+  const lines = mermaidContent.split('\n');
+  const nodes: Map<string, string> = new Map();
+  const relationships: string[] = [];
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    // Skip header lines
+    if (trimmed.match(/^(flowchart|graph)\s+(TD|LR|TB|BT|RL)/i)) {
+      continue;
+    }
+    
+    // Extract node definitions: A[Label] or A{Label} or A(Label)
+    const nodeRegex = /([A-Za-z0-9_]+)[\[\{(]([^\]\})\n]+)[\]\})]/g;
+    const nodeMatches = trimmed.matchAll(nodeRegex);
+    for (const match of nodeMatches) {
+      nodes.set(match[1], match[2]);
+    }
+    
+    // Extract relationships: A --> B or A -->|label| B
+    const arrowMatch = trimmed.match(/([A-Za-z0-9_]+)\s*-->\s*\|?([^|]*)\|?\s*([A-Za-z0-9_]+)/);
+    if (arrowMatch) {
+      const from = nodes.get(arrowMatch[1]) || arrowMatch[1];
+      const label = arrowMatch[2]?.trim() || '';
+      const to = nodes.get(arrowMatch[3]) || arrowMatch[3];
+      
+      if (label) {
+        relationships.push(`${from} → [${label}] → ${to}`);
+      } else {
+        relationships.push(`${from} → ${to}`);
+      }
+    }
+  }
+  
+  // Output relationships as a list
+  for (const rel of relationships) {
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '  • ',
+            size: VANDARUM_SIZES.texto,
+            font: VANDARUM_FONTS.texto,
+            color: VANDARUM_COLORS.verdeOscuro,
+          }),
+          ...createFormattedTextRuns(rel),
+        ],
+        spacing: { before: 30, after: 30 },
+        indent: { left: 200 },
+      })
+    );
+  }
+  
+  // If no relationships were parsed, just note that a diagram exists
+  if (relationships.length === 0) {
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '(Ver diagrama visual en la aplicación)',
+            italics: true,
+            size: VANDARUM_SIZES.pequeno,
+            font: VANDARUM_FONTS.texto,
+            color: VANDARUM_COLORS.grisTexto,
+          }),
+        ],
+        spacing: { after: 100 },
+        indent: { left: 200 },
+      })
+    );
+  }
+  
+  return paragraphs;
+}
+
+/**
  * Parse markdown content and convert to docx elements (paragraphs and tables)
  */
 function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
@@ -357,21 +503,27 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
       }
       
       if (inCodeBlock) {
-        // End of code block - render as monospace
-        elements.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: codeBlockContent.join('\n'),
-                font: 'Courier New',
-                size: VANDARUM_SIZES.pequeno,
-                color: VANDARUM_COLORS.grisTexto,
-              }),
-            ],
-            spacing: { before: 100, after: 100 },
-            shading: { type: ShadingType.SOLID, color: 'F5F5F5' },
-          })
-        );
+        // Check if this is a flowchart/mermaid block - convert to readable format
+        const codeContent = codeBlockContent.join('\n');
+        if (isMermaidContent(codeContent)) {
+          elements.push(...parseMermaidToReadable(codeContent));
+        } else {
+          // Regular code block - render as monospace
+          elements.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: codeContent,
+                  font: 'Courier New',
+                  size: VANDARUM_SIZES.pequeno,
+                  color: VANDARUM_COLORS.grisTexto,
+                }),
+              ],
+              spacing: { before: 100, after: 100 },
+              shading: { type: ShadingType.SOLID, color: 'F5F5F5' },
+            })
+          );
+        }
         codeBlockContent = [];
         inCodeBlock = false;
       } else {
@@ -382,6 +534,18 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
     
     if (inCodeBlock) {
       codeBlockContent.push(line);
+      continue;
+    }
+    
+    // Check for inline flowchart/mermaid content (without code fences)
+    if (isMermaidContent(trimmedLine)) {
+      // Accumulate mermaid lines
+      let mermaidContent = trimmedLine;
+      while (i + 1 < lines.length && isMermaidContinuation(lines[i + 1].trim())) {
+        i++;
+        mermaidContent += '\n' + lines[i].trim();
+      }
+      elements.push(...parseMermaidToReadable(mermaidContent));
       continue;
     }
     
@@ -410,7 +574,25 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
       continue;
     }
     
-    // Handle headings
+    // Handle headings (from most specific to least)
+    if (trimmedLine.startsWith('#### ')) {
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: sanitizeEmojis(trimmedLine.slice(5)),
+              bold: true,
+              size: VANDARUM_SIZES.texto,
+              font: VANDARUM_FONTS.titulo,
+              color: VANDARUM_COLORS.verdeOscuro,
+            }),
+          ],
+          spacing: { before: 150, after: 80 },
+        })
+      );
+      continue;
+    }
+    
     if (trimmedLine.startsWith('### ')) {
       elements.push(
         new Paragraph({
