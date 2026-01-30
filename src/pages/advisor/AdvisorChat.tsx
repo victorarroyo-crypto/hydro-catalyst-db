@@ -14,7 +14,9 @@ import {
   LogOut,
   Square,
   Briefcase,
+  FileDown,
 } from 'lucide-react';
+import { API_URL } from '@/lib/api';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 import { useAdvisorChat } from '@/hooks/useAdvisorChat';
 import { useDeepAdvisorJob } from '@/hooks/useDeepAdvisorJob';
@@ -112,6 +114,7 @@ export default function AdvisorChat() {
   const [showDeepBanner, setShowDeepBanner] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevDeepModeRef = useRef(deepMode);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const toggleSidebarCollapse = () => {
     setIsSidebarCollapsed(prev => {
@@ -416,6 +419,39 @@ export default function AdvisorChat() {
     }
   };
 
+  // Download PDF handler - uses blob-based download for better UX
+  const handleDownloadPDF = async () => {
+    if (!deepJob.jobId || isDownloadingPdf) return;
+    
+    setIsDownloadingPdf(true);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/advisor/deep/export/pdf/${deepJob.jobId}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vandarum_advisor_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('PDF descargado correctamente');
+    } catch (error) {
+      console.error('[AdvisorChat] PDF download error:', error);
+      toast.error('Error al generar PDF. Inténtalo de nuevo.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
 
   if (authLoading) {
     return (
@@ -695,6 +731,26 @@ export default function AdvisorChat() {
                       {/* Sources Panel */}
                       {deepJob.status.result.sources && deepJob.status.result.sources.length > 0 && (
                         <SourcesPanel sources={deepJob.status.result.sources} />
+                      )}
+                      
+                      {/* Download PDF Button */}
+                      {deepJob.jobId && (
+                        <div className="mt-4 pt-3 border-t border-slate-200/50 flex justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDownloadPDF}
+                            disabled={isDownloadingPdf}
+                            className="gap-2 text-[#307177] border-[#307177]/30 hover:bg-[#307177]/5 hover:border-[#307177]/50"
+                          >
+                            {isDownloadingPdf ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <FileDown className="h-4 w-4" />
+                            )}
+                            {isDownloadingPdf ? 'Generando PDF...' : 'Descargar PDF'}
+                          </Button>
+                        </div>
                       )}
                     </div>
                   )}
