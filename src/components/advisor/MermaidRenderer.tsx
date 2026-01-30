@@ -68,8 +68,8 @@ export function MermaidRenderer({ content, className }: MermaidRendererProps) {
   return (
     <div
       className={cn(
-        "my-4 p-4 bg-card rounded-lg border border-border overflow-x-auto",
-        "[&_svg]:max-w-full [&_svg]:h-auto",
+        "my-4 pt-6 pb-4 px-4 bg-card rounded-lg border border-border overflow-x-auto",
+        "[&_svg]:max-w-full [&_svg]:h-auto [&_svg]:mx-auto",
         className
       )}
       dangerouslySetInnerHTML={{ __html: svg }}

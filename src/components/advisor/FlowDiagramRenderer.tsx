@@ -195,6 +195,37 @@ function isCalculationLine(text: string): boolean {
   const hasPercentageContext = /\d+%.*→|→.*\d+%/.test(trimmed) && /\d+[\s.,]+\w+/.test(trimmed);
   if (hasPercentageContext) return true;
   
+  // Pattern: contains "m³" or similar unit measurements with numbers
+  const hasUnitMeasurement = /\d+[\s.,]*m[³²]|m[³²][\s.,]*[\/×=]/.test(trimmed);
+  if (hasUnitMeasurement) return true;
+  
+  // Pattern: contains "€/año" or similar cost expressions
+  const hasCostExpression = /€\s*\/\s*(año|mes|día|hora|m[³²]|ton|kg|L)/i.test(trimmed);
+  if (hasCostExpression) return true;
+  
+  // Pattern: contains "ton/año", "kg/día" or similar rate expressions with numbers
+  const hasRateExpression = /\d+[\s.,]*(ton|kg|L|m[³²])\s*\/\s*(año|mes|día)/i.test(trimmed);
+  if (hasRateExpression) return true;
+  
+  return false;
+}
+
+/**
+ * Checks if a line is descriptive text with an arrow (not a process flow)
+ * Examples: "Recuperación de calor → uso en proceso"
+ *           "C1+C3 (baja carga) → tratamiento"
+ */
+function isDescriptiveWithArrow(text: string): boolean {
+  const trimmed = text.trim();
+  
+  // Contains parenthetical context explanations
+  if (/\([^)]{10,}\)/.test(trimmed)) return true;
+  
+  // Very long text segments between arrows (>50 chars) = likely prose, not diagram
+  const segments = normalizeArrows(trimmed).split(/\s*→\s*/);
+  const hasLongSegment = segments.some(seg => seg.trim().length > 50);
+  if (hasLongSegment) return true;
+  
   return false;
 }
 
@@ -203,6 +234,7 @@ function isCalculationLine(text: string): boolean {
  * EXCLUDES markdown tables which use | for columns
  * EXCLUDES arrow bullets (→ text) which are just list items
  * EXCLUDES calculation lines with mathematical notation
+ * EXCLUDES descriptive text that happens to have arrows
  */
 export function containsFlowDiagram(text: string): boolean {
   if (!text) return false;
@@ -219,6 +251,11 @@ export function containsFlowDiagram(text: string): boolean {
   
   // THIRD: Exclude calculation/mathematical lines
   if (isCalculationLine(text)) {
+    return false;
+  }
+  
+  // FOURTH: Exclude descriptive prose with arrows
+  if (isDescriptiveWithArrow(text)) {
     return false;
   }
   
