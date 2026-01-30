@@ -1,89 +1,61 @@
 
+## Plan: Corregir carga de mensajes desde BD externa
 
-## Plan: Mejorar Acceso al Historial de Conversaciones
+### Problema detectado
+Los chats recientes del Deep Advisor (posteriores al 18/01/2026) aparecen en el historial, pero al abrirlos, los mensajes aparecen vacíos. Según lo confirmado, **los mensajes SÍ existen** en la BD externa (`ktzhrlcvluaptixngrsh.supabase.co`).
 
-### Diagnóstico
+### Causa raíz
+El código actual en `useAdvisorChat.ts` consulta ambas BDs en paralelo pero:
+1. Prioriza los resultados locales si existen (aunque estén vacíos en la BD local)
+2. Solo usa la BD externa como fallback cuando la local devuelve error o está vacía
 
-He investigado la base de datos y el código, y encontré lo siguiente:
+### Solución propuesta
 
-| Aspecto | Estado |
-|---------|--------|
-| Los chats del Deep Mode se guardan | Correcto - Hay mensajes en la BD |
-| La página de historial existe | `/advisor/history` está configurada |
-| Los chats se pueden cargar | La función `loadChat` funciona |
-| Campo `message_count` | Siempre 0 (bug del backend Railway) |
-| Acceso al historial | Solo desde Dashboard, difícil de encontrar |
+**Archivo: `src/hooks/useAdvisorChat.ts`**
 
-### Problema Principal
+Modificar la función `loadChat` para:
 
-El historial existe y funciona, pero:
-1. No hay acceso directo desde la pantalla del chat
-2. El contador de mensajes siempre muestra 0 (dato incorrecto del backend)
+1. **Priorizar BD externa para chats recientes**: Si el chat no tiene mensajes en la BD local, usar automáticamente los de la BD externa
 
-### Solución
+2. **Añadir logging mejorado** para debugging:
+   - Log de cuántos mensajes se encontraron en cada BD
+   - Log de qué fuente se usó finalmente
 
-Agregar un botón de "Historial" visible en la barra superior del chat, junto a los otros iconos de navegación, para acceso directo a conversaciones pasadas.
+3. **Combinar resultados inteligentemente**: Si la BD externa tiene mensajes y la local no, usar la externa sin importar el orden de llegada
 
----
-
-### Cambios a Implementar
-
-#### 1. Agregar botón de Historial en la barra del chat
-
-**Archivo**: `src/pages/advisor/AdvisorChat.tsx`
-
-En la sección del header (donde están los iconos de Dashboard y Logout), agregar un botón para ir al historial:
+### Cambios técnicos
 
 ```typescript
-// En el header, junto a los otros botones
-<Button 
-  variant="ghost" 
-  size="icon"
-  onClick={() => navigate('/advisor/history')}
-  title="Historial de conversaciones"
->
-  <History className="w-5 h-5" />
-</Button>
+// En loadChat función
+const [localResult, externalResult] = await Promise.all([
+  fetchMessages(supabase),
+  fetchMessages(externalSupabase)
+]);
+
+// Log para debugging
+console.log('[loadChat] Local messages:', localResult.data?.length || 0);
+console.log('[loadChat] External messages:', externalResult.data?.length || 0);
+
+// Priorizar fuente con datos
+let data: typeof localResult.data;
+let source: string;
+
+if (externalResult.data && externalResult.data.length > 0) {
+  // Preferir BD externa para chats recientes (donde están los datos del Deep Advisor)
+  data = externalResult.data;
+  source = 'external';
+} else if (localResult.data && localResult.data.length > 0) {
+  data = localResult.data;
+  source = 'local';
+} else {
+  data = [];
+  source = 'none';
+}
+
+console.log('[loadChat] Using source:', source, 'with', data.length, 'messages');
 ```
 
-#### 2. Calcular `message_count` en el cliente (workaround)
-
-Dado que el backend no actualiza correctamente `message_count`, se puede hacer una subconsulta para contar mensajes reales:
-
-**Archivo**: `src/hooks/useAdvisorHistory.ts`
-
-Modificar la consulta para obtener el conteo real de mensajes:
-
-```typescript
-// Opción A: Agregar join con conteo
-const { data, error } = await supabase
-  .from('advisor_chats')
-  .select(`
-    *,
-    advisor_messages(count)
-  `)
-  .eq('user_id', userId)
-  .order('updated_at', { ascending: false })
-  .limit(50);
-
-// Luego mapear:
-message_count: data[0]?.advisor_messages?.[0]?.count || 0
-```
-
----
-
-### Resumen de Archivos a Modificar
-
-| Archivo | Cambio |
-|---------|--------|
-| `src/pages/advisor/AdvisorChat.tsx` | Agregar botón de History en el header |
-| `src/hooks/useAdvisorHistory.ts` | Consulta con conteo real de mensajes |
-
----
-
-### Beneficios
-
-- Acceso directo al historial desde cualquier pantalla del chat
-- Contador de mensajes preciso en la lista de conversaciones
-- No requiere cambios en el backend de Railway
-
+### Resultado esperado
+- Los chats del Deep Advisor (post 18/01) cargarán sus mensajes desde la BD externa
+- Los chats antiguos (pre 18/01) seguirán cargando desde la BD local
+- Logs mejorados facilitarán debugging futuro
