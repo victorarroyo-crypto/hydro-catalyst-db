@@ -1,75 +1,70 @@
 
-# Plan: Añadir botón de editar título para documentos individuales
 
-## Problema identificado
+# Plan: Corregir error de caracteres especiales en subida de documentos
 
-En la sección de **Documentos Técnicos** (Knowledge Base), los documentos **individuales** (no multi-parte) no muestran el botón de lápiz ni la indicación para editar el título. Actualmente solo se muestra el nombre como texto estático:
+## Problema Identificado
 
-```tsx
-<p className="font-medium line-clamp-2 break-all">{doc.name}</p>
+Al intentar subir el documento **CASTROLEBRERO_MARÍA_parte3de5.pdf**, Supabase Storage rechaza el archivo con:
+
+```
+Error: Invalid key: f4db4dc5-1e2a-4a4a-8592-ee719c0a81af/1769845318476-CASTROLEBRERO_MARÍA_parte3de5.pdf
 ```
 
-Mientras que los grupos multi-parte SÍ tienen:
-- Texto clickeable con `cursor-pointer hover:text-primary`
-- Tooltip "Clic para editar"  
-- Botón de lápiz visible (icono Pencil)
-- Handler onClick para activar modo edición
+**Causa**: El carácter **"Í"** (I con tilde) no está permitido en las claves de Storage.
+
+**Evidencia**: Las 5 partes del documento fallaron con el mismo error.
+
+## Análisis Técnico
+
+En `src/pages/KnowledgeBase.tsx` (línea 723):
+```typescript
+// PROBLEMA: No sanitiza caracteres especiales
+const filePath = `${authData.user.id}/${Date.now()}-${file.name}`;
+```
+
+Comparado con `uploadAdvisorAttachment.ts` (línea 21):
+```typescript
+// CORRECTO: Reemplaza caracteres no ASCII
+const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+```
 
 ## Solución
 
-Actualizar el renderizado del título en documentos individuales para que tenga la misma funcionalidad de edición que los grupos multi-parte:
+Aplicar la misma sanitización del nombre de archivo antes de construir el `filePath`:
 
-1. Hacer el título clickeable para editar
-2. Añadir el botón de lápiz (Pencil) visible junto al título
-3. Condicionar ambos a `canManage` (permisos de usuario)
+```typescript
+// Sanitizar nombre para evitar caracteres no permitidos en Storage
+const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+const filePath = `${authData.user.id}/${Date.now()}-${sanitizedFileName}`;
+```
 
-## Cambios técnicos
+## Cambios Necesarios
 
 ### Archivo: `src/pages/KnowledgeBase.tsx`
 
-**Líneas ~2827-2829** - Reemplazar el párrafo estático del título:
+**Línea ~723** - Añadir sanitización:
 
-```tsx
-// ANTES (línea 2828)
-<p className="font-medium line-clamp-2 break-all">{doc.name}</p>
+```typescript
+// ANTES
+const filePath = `${authData.user.id}/${Date.now()}-${file.name}`;
 
 // DESPUÉS
-<div className="flex items-center gap-2">
-  <p 
-    className={`font-medium line-clamp-2 break-all ${canManage ? 'cursor-pointer hover:text-primary' : ''}`}
-    onClick={canManage ? () => { setEditingDocId(doc.id); setEditingName(doc.name); } : undefined}
-    title={canManage ? "Clic para editar" : undefined}
-  >
-    {doc.name}
-  </p>
-  {canManage && (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button 
-            size="sm" 
-            variant="ghost" 
-            className="h-6 w-6 p-0 shrink-0"
-            onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}
-          >
-            <Pencil className="h-3 w-3" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Renombrar documento</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  )}
-</div>
+const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+const filePath = `${authData.user.id}/${Date.now()}-${sanitizedFileName}`;
 ```
 
-## Comportamiento esperado
+> **Nota**: El nombre original (`file.name`) se seguirá guardando en la base de datos (línea 742: `name: file.name`) para mostrarlo correctamente en la UI. Solo el path de Storage usa el nombre sanitizado.
 
-| Usuario | Antes | Después |
-|---------|-------|---------|
-| Admin/Supervisor/Analyst | No podían ver el botón de editar | Ven el lápiz y pueden hacer clic en el título |
-| Viewer | No veían nada | Sin cambios (sin botón, sin hover) |
+## Resultado Esperado
+
+| Nombre Original | Path en Storage |
+|-----------------|-----------------|
+| `CASTROLEBRERO_MARÍA_parte3de5.pdf` | `userId/timestamp-CASTROLEBRERO_MAR_A_parte3de5.pdf` |
+| `Análisis Técnico (v2).pdf` | `userId/timestamp-An_lisis_T_cnico__v2_.pdf` |
 
 ## Impacto
-- Solo afecta la vista de lista de documentos individuales
-- No modifica la lógica de guardado (ya funciona con `renameMutation`)
-- Mantiene consistencia visual con grupos multi-parte
+
+- **Mínimo**: Solo afecta la construcción del path de Storage
+- **UI sin cambios**: El nombre visible sigue siendo el original
+- **Compatibilidad**: Documentos existentes no se ven afectados
+
