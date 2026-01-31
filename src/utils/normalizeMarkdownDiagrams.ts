@@ -123,23 +123,32 @@ function isInsideCodeBlock(lines: string[]): boolean {
 }
 
 /**
- * Fixes malformed fence closures where LLM wrote "```###" instead of "```\n###"
+ * Fixes malformed fence closures where LLM wrote "```###" or "``### " instead of "```\n###"
  * This is a common LLM error where the closing fence and next heading are merged.
+ * Also handles cases where LLM uses `` (double backtick) instead of ``` (triple).
  */
 function fixMalformedFenceClosures(text: string): string {
-  // Pattern: ```mermaid block where the closing ``` is merged with markdown (e.g. ```### or ```* or ```)
-  // We need to insert a newline before the markdown content
-  return text
-    // Fix: ```### -> ```\n###
-    .replace(/```(#{1,6}\s)/g, '```\n$1')
-    // Fix: ```* (bullet) -> ```\n*
-    .replace(/```(\*\s)/g, '```\n$1')
-    // Fix: ```- (bullet) -> ```\n-
-    .replace(/```(-\s)/g, '```\n$1')
-    // Fix: ```1. (numbered list) -> ```\n1.
-    .replace(/```(\d+\.\s)/g, '```\n$1')
-    // Fix: ``` followed by uppercase letter (paragraph start) -> ```\n
-    .replace(/```([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '```\n$1');
+  let result = text;
+  
+  // First: normalize malformed backtick counts (`` -> ```) before content
+  // Pattern: `` followed immediately by # (header), * (bullet), - (bullet), digit (list), or uppercase letter
+  result = result.replace(/``(#{1,6}\s)/g, '```\n$1');
+  result = result.replace(/``(\*\s)/g, '```\n$1');
+  result = result.replace(/``(-\s)/g, '```\n$1');
+  result = result.replace(/``(\d+\.\s)/g, '```\n$1');
+  result = result.replace(/``([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '```\n$1');
+  
+  // Then: fix triple backticks merged with content
+  result = result.replace(/```(#{1,6}\s)/g, '```\n$1');
+  result = result.replace(/```(\*\s)/g, '```\n$1');
+  result = result.replace(/```(-\s)/g, '```\n$1');
+  result = result.replace(/```(\d+\.\s)/g, '```\n$1');
+  result = result.replace(/```([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '```\n$1');
+  
+  // Also handle single backtick edge cases (` followed by ##)
+  result = result.replace(/`(#{2,6}\s)/g, '```\n$1');
+  
+  return result;
 }
 
 /**
