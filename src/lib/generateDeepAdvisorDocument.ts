@@ -19,6 +19,7 @@ import {
   PageBreak,
   Header,
   Footer,
+  ImageRun,
 } from 'docx';
 import { saveAs } from 'file-saver';
 import {
@@ -51,11 +52,28 @@ function generateFullTitle(query?: string, content?: string): string {
 /**
  * Create cover page elements
  */
-function createCoverPage(studyTitle?: string): Paragraph[] {
+async function createCoverPage(studyTitle?: string): Promise<Paragraph[]> {
   const currentYear = new Date().getFullYear();
   const title = studyTitle || 'Análisis Técnico Especializado';
   
-  return [
+  // Fetch logo image
+  let logoImageRun: ImageRun | null = null;
+  try {
+    const response = await fetch('/vandarum-logo-principal.png');
+    const arrayBuffer = await response.arrayBuffer();
+    logoImageRun = new ImageRun({
+      data: arrayBuffer,
+      transformation: {
+        width: 80, // Small and discrete
+        height: 80,
+      },
+      type: 'png',
+    });
+  } catch (e) {
+    console.warn('Could not load logo for Word document:', e);
+  }
+  
+  const paragraphs: Paragraph[] = [
     // Large spacer at top
     new Paragraph({ children: [], spacing: { before: 3000 } }),
     
@@ -109,23 +127,21 @@ function createCoverPage(studyTitle?: string): Paragraph[] {
     
     // Push content to bottom with large spacer
     new Paragraph({ children: [], spacing: { before: 4000 } }),
-    
-    // Vandarum branding - small at bottom
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: 'VANDARUM',
-          bold: true,
-          size: 24, // 12pt - much smaller
-          color: VANDARUM_COLORS.verdeOscuro,
-          font: VANDARUM_FONTS.titulo,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 80 },
-    }),
-    
-    // Vandarum description
+  ];
+  
+  // Add logo if available - discrete at bottom
+  if (logoImageRun) {
+    paragraphs.push(
+      new Paragraph({
+        children: [logoImageRun],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 100 },
+      })
+    );
+  }
+  
+  // Vandarum description (no text title since we have logo)
+  paragraphs.push(
     new Paragraph({
       children: [
         new TextRun({
@@ -163,8 +179,10 @@ function createCoverPage(studyTitle?: string): Paragraph[] {
       ],
       alignment: AlignmentType.CENTER,
       spacing: { after: 200 },
-    }),
-  ];
+    })
+  );
+  
+  return paragraphs;
 }
 
 /**
@@ -1289,7 +1307,7 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
   const fullTitle = generateFullTitle(query, content);
   
   // Create cover page with study title as protagonist
-  const coverPageElements = createCoverPage(fullTitle);
+  const coverPageElements = await createCoverPage(fullTitle);
   
   const doc = new Document({
     sections: [
