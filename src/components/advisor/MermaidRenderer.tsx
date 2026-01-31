@@ -1,4 +1,4 @@
-import { useEffect, useState, useId, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { cn } from '@/lib/utils';
 import { useTheme } from 'next-themes';
@@ -21,59 +21,82 @@ function initializeMermaid(theme: string | undefined) {
       htmlLabels: true,
       curve: 'basis',
     },
-    // Suppress console errors for invalid diagrams
     suppressErrorRendering: true,
   });
   mermaidInitialized = true;
 }
 
-export function MermaidRenderer({ content, className }: MermaidRendererProps) {
-  const [svg, setSvg] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const { theme } = useTheme();
-  const uniqueId = useId().replace(/:/g, '-');
+// Counter for unique IDs across all instances
+let renderCounter = 0;
 
-  // Initialize/reinitialize mermaid when theme changes
+export function MermaidRenderer({ content, className }: MermaidRendererProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const { theme } = useTheme();
+  const renderIdRef = useRef<number>(0);
+
+  // Initialize mermaid when theme changes
   useEffect(() => {
     initializeMermaid(theme);
   }, [theme]);
 
   const renderDiagram = useCallback(async () => {
-    if (!content.trim()) return;
+    if (!content.trim() || !containerRef.current) return;
+
+    // Track this render to avoid race conditions
+    renderIdRef.current += 1;
+    const currentRenderId = renderIdRef.current;
 
     // Ensure mermaid is initialized
     if (!mermaidInitialized) {
       initializeMermaid(theme);
     }
 
+    setIsLoading(true);
+    setError(null);
+
     try {
-      // Generate unique ID for this render
-      const id = `mermaid${uniqueId}${Math.random().toString(36).substr(2, 9)}`;
+      // Generate truly unique ID for this render
+      renderCounter += 1;
+      const id = `mermaid-${renderCounter}-${Date.now()}`;
       
-      // Clean up content - remove any stray backticks or fence markers
+      // Clean up content
       let cleanContent = content.trim();
       if (cleanContent.startsWith('```')) {
         cleanContent = cleanContent.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
       }
       
+      // Render to SVG string
       const { svg: renderedSvg } = await mermaid.render(id, cleanContent);
-      setSvg(renderedSvg);
-      setError(null);
+      
+      // Only update if this is still the latest render request
+      if (currentRenderId === renderIdRef.current && containerRef.current) {
+        // Safely clear and update the container
+        containerRef.current.innerHTML = renderedSvg;
+        setIsLoading(false);
+      }
     } catch (err) {
       console.warn('Mermaid render error:', err);
       
-      // Retry up to 2 times with a small delay (helps with race conditions)
-      if (retryCount < 2) {
-        setTimeout(() => setRetryCount(prev => prev + 1), 100);
-      } else {
+      // Only update if this is still the latest render request
+      if (currentRenderId === renderIdRef.current) {
         setError('Error al renderizar diagrama');
+        setIsLoading(false);
       }
     }
-  }, [content, uniqueId, theme, retryCount]);
+  }, [content, theme]);
 
+  // Render diagram when content changes
   useEffect(() => {
     renderDiagram();
+    
+    // Cleanup function - clear container when unmounting
+    return () => {
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
+      }
+    };
   }, [renderDiagram]);
 
   if (error) {
@@ -87,22 +110,15 @@ export function MermaidRenderer({ content, className }: MermaidRendererProps) {
     );
   }
 
-  if (!svg) {
-    return (
-      <div className="my-4 p-4 bg-muted/30 rounded-lg border border-border animate-pulse">
-        <div className="h-32 bg-muted rounded" />
-      </div>
-    );
-  }
-
   return (
     <div
+      ref={containerRef}
       className={cn(
         "my-4 pt-6 pb-4 px-4 bg-card rounded-lg border border-border overflow-x-auto",
         "[&_svg]:max-w-full [&_svg]:h-auto [&_svg]:mx-auto",
+        isLoading && "min-h-32 animate-pulse bg-muted/30",
         className
       )}
-      dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
 }
