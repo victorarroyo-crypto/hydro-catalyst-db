@@ -161,7 +161,7 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               <ExternalLink className="w-3 h-3 opacity-50" />
             </a>
           ),
-          // Code inline - render as normal text (no special styling)
+          // Code inline - render as completely normal text (no special styling at all)
           code: ({ children, className }) => {
             const isBlock = className?.includes('language-');
             if (isBlock) {
@@ -170,12 +170,8 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
                 <span className="whitespace-pre-wrap">{children}</span>
               );
             }
-            // Inline code - subtle styling
-            return (
-              <code className="px-1 py-0.5 text-foreground font-medium">
-                {children}
-              </code>
-            );
+            // Inline code - render as completely normal text, no styling
+            return <span>{children}</span>;
           },
           // Pre blocks - detect flow, chem, and mermaid types
           pre: ({ children }) => {
@@ -216,11 +212,9 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
               return <MermaidRenderer content={textContent} />;
             }
             
-            // Regular pre block - render as completely normal paragraph text
+            // Regular pre block - render as completely normal paragraph text (no special formatting)
             return (
-              <div className="my-4 leading-[1.8] text-foreground/90">
-                {children}
-              </div>
+              <p className="mb-5 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
             );
           },
           // Blockquotes
