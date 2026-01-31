@@ -67,6 +67,13 @@ export function MermaidRenderer({ content, className, onError }: MermaidRenderer
       if (cleanContent.startsWith('```')) {
         cleanContent = cleanContent.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
       }
+
+      // If the block accidentally contains stray fences (e.g. "```### ..."),
+      // keep only the Mermaid part before the first fence.
+      const strayFenceIdx = cleanContent.indexOf('```');
+      if (strayFenceIdx !== -1) {
+        cleanContent = cleanContent.slice(0, strayFenceIdx).trim();
+      }
       
       // Eliminar backticks sueltos y texto no-mermaid al final
       cleanContent = cleanContent.replace(/`{1,3}\s*$/, '').trim();
