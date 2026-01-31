@@ -613,8 +613,9 @@ function parseMarkdownTable(tableLines: string[]): Table {
 /**
  * Parse inline formatting (bold **text**) within any text content
  * Returns properly formatted TextRuns with bold and subscript/superscript handling
+ * Supports full TextRunOptions including font and color for headings
  */
-function parseInlineFormattedRuns(text: string, baseOptions: { bold?: boolean; size?: number } = {}): TextRun[] {
+function parseInlineFormattedRuns(text: string, baseOptions: TextRunOptions = {}): TextRun[] {
   const textRuns: TextRun[] = [];
   const boldRegex = /\*\*([^*]+)\*\*/g;
   let lastIndex = 0;
@@ -1011,18 +1012,14 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
     }
     
     // Handle headings (from most specific to least) - all at 12pt (size 24) as requested
+    // Use parseInlineFormattedRuns to handle **bold** markers within heading text
+    const headingOptions = { bold: true, size: 24, font: VANDARUM_FONTS.titulo, color: VANDARUM_COLORS.verdeOscuro };
+    
     if (trimmedLine.startsWith('#### ')) {
+      const headingText = sanitizeEmojis(trimmedLine.slice(5));
       elements.push(
         new Paragraph({
-          children: [
-            new TextRun({
-              text: sanitizeEmojis(trimmedLine.slice(5)),
-              bold: true,
-              size: 24, // 12pt as requested
-              font: VANDARUM_FONTS.titulo,
-              color: VANDARUM_COLORS.verdeOscuro,
-            }),
-          ],
+          children: parseInlineFormattedRuns(headingText, headingOptions),
           spacing: { before: 150, after: 80 },
         })
       );
@@ -1030,17 +1027,10 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
     }
     
     if (trimmedLine.startsWith('### ')) {
+      const headingText = sanitizeEmojis(trimmedLine.slice(4));
       elements.push(
         new Paragraph({
-          children: [
-            new TextRun({
-              text: sanitizeEmojis(trimmedLine.slice(4)),
-              bold: true,
-              size: 24, // 12pt as requested
-              font: VANDARUM_FONTS.titulo,
-              color: VANDARUM_COLORS.verdeOscuro,
-            }),
-          ],
+          children: parseInlineFormattedRuns(headingText, headingOptions),
           heading: HeadingLevel.HEADING_3,
           spacing: { before: 200, after: 100 },
         })
@@ -1049,17 +1039,10 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
     }
     
     if (trimmedLine.startsWith('## ')) {
+      const headingText = sanitizeEmojis(trimmedLine.slice(3));
       elements.push(
         new Paragraph({
-          children: [
-            new TextRun({
-              text: sanitizeEmojis(trimmedLine.slice(3)),
-              bold: true,
-              size: 24, // 12pt as requested
-              font: VANDARUM_FONTS.titulo,
-              color: VANDARUM_COLORS.verdeOscuro,
-            }),
-          ],
+          children: parseInlineFormattedRuns(headingText, headingOptions),
           heading: HeadingLevel.HEADING_2,
           spacing: { before: 300, after: 150 },
         })
@@ -1068,17 +1051,10 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
     }
     
     if (trimmedLine.startsWith('# ')) {
+      const headingText = sanitizeEmojis(trimmedLine.slice(2));
       elements.push(
         new Paragraph({
-          children: [
-            new TextRun({
-              text: sanitizeEmojis(trimmedLine.slice(2)),
-              bold: true,
-              size: 24, // 12pt as requested
-              font: VANDARUM_FONTS.titulo,
-              color: VANDARUM_COLORS.verdeOscuro,
-            }),
-          ],
+          children: parseInlineFormattedRuns(headingText, headingOptions),
           heading: HeadingLevel.HEADING_1,
           spacing: { before: 400, after: 200 },
         })
