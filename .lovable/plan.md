@@ -1,132 +1,123 @@
 
-# Plan: Control de Calidad del Formato en el Chat del Advisor
+# Plan: Arreglar la Detección de Fin de Diagramas Mermaid
 
-## Resumen
+## Problema Identificado
 
-Implementar una capa de **post-procesamiento centralizado** que limpie y normalice todo el contenido que llega desde Railway antes de renderizarlo en el chat. Esto se hará completamente en el frontend, sin necesidad de modificar el backend de Railway.
-
-## Contexto Actual
-
-El flujo actual es:
-1. Railway envía la respuesta (streaming o JSON)
-2. `useAdvisorChat.ts` actualiza el estado `messages`
-3. `AdvisorMessage.tsx` aplica `cleanMarkdownContent()` 
-4. ReactMarkdown renderiza con componentes personalizados
-
-El problema es que la limpieza actual está dispersa entre varios archivos y algunos patrones problemáticos (ecuaciones, checklists, tablas anchas) no se detectan correctamente.
-
-## Solución: Pipeline de Control de Calidad
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                    RAILWAY RESPONSE                             │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│            src/utils/contentQualityControl.ts                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │ 1. Normalizar diagramas Mermaid                          │   │
-│  │ 2. Detectar y marcar Balance Hídrico                     │   │
-│  │ 3. Normalizar ecuaciones químicas (texto plano)          │   │
-│  │ 4. Limpiar tablas para evitar scroll horizontal          │   │
-│  │ 5. Normalizar checklists como listas normales            │   │
-│  │ 6. Sanitizar caracteres especiales problemáticos         │   │
-│  │ 7. Aplicar formateo de títulos                           │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    AdvisorMessage.tsx                           │
-│                 (renderizado final limpio)                      │
-└─────────────────────────────────────────────────────────────────┘
+El error en consola muestra exactamente qué pasa:
+```
+Parse error on line 15:
+...rriente 4| G``* *C1: Pre-lavado**
 ```
 
-## Archivos a Crear/Modificar
+El preprocesador de Mermaid (`normalizeMarkdownDiagrams.ts`) **no cierra el bloque** cuando termina el diagrama real y empieza texto markdown normal. Esto causa que líneas como `` ` ` * *C1: Pre-lavado**`` se incluyan dentro del bloque Mermaid, rompiendo el parser.
 
-### 1. Nuevo: `src/utils/contentQualityControl.ts`
-Pipeline centralizado que:
-- Detecta patrones problemáticos conocidos
-- Normaliza ecuaciones químicas: `CO₂ + H₂O → H₂CO₃` como texto normal (no código)
-- Convierte checklists con boxes ASCII (`[ ]`, `[x]`) a listas normales
-- Detecta tablas excesivamente anchas y las simplifica o marca para renderizado especial
-- Sanitiza HTML inline problemático (`<br>`, etc.)
-- Retorna contenido limpio + metadata de bloques especiales detectados
+## Causa Raíz
 
-### 2. Modificar: `src/utils/fixMarkdownTables.ts`
-- Añadir función para detectar tablas que excederían el ancho del contenedor
-- Opción para truncar columnas o marcar para renderizado responsive
+La función `looksLikeMermaidContinuation()` es demasiado permisiva y no detecta correctamente:
+1. Líneas que empiezan con backticks sueltos (`` ` ` ``)
+2. Líneas que son claramente bullets markdown (`* *Texto**`)  
+3. Patrones de lista con asteriscos (`* -`, `- `)
 
-### 3. Modificar: `src/components/advisor/AdvisorMessage.tsx`
-- Usar el nuevo pipeline de calidad en lugar de llamadas dispersas
-- Manejar los bloques especiales detectados (balance hídrico, ecuaciones, etc.)
+## Solución
 
-## Detalle Técnico
+Modificar `src/utils/normalizeMarkdownDiagrams.ts` para:
 
-### Detección de Patrones Problemáticos
+1. **Detectar explícitamente el FIN del diagrama**
+   - Si una línea empieza con backticks sueltos → FIN
+   - Si una línea es un bullet markdown (`* texto`, `- texto`) → FIN
+   - Si una línea es texto narrativo sin sintaxis Mermaid → FIN
+
+2. **Añadir patrones de "no es Mermaid"**
+   - Bullets: `/^[\*\-]\s+\*?\*?[A-Z]/` 
+   - Backticks: `/^`{1,3}[^`]/`
+   - Texto normal: líneas que empiezan con mayúscula sin corchetes
+
+3. **Limpiar el código extraído antes de pasar a Mermaid**
+   - En `MermaidRenderer.tsx`: añadir limpieza adicional para eliminar backticks residuales al final del bloque
+
+## Cambios Específicos
+
+### Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
+
+Añadir función para detectar patrones que definitivamente NO son Mermaid:
 
 ```typescript
-// src/utils/contentQualityControl.ts
-
-interface QualityResult {
-  content: string;
-  specialBlocks: {
-    type: 'water-balance' | 'equation' | 'wide-table' | 'checklist';
-    startIndex: number;
-    endIndex: number;
-    originalContent: string;
-  }[];
-}
-
-export function applyContentQualityControl(rawContent: string): QualityResult {
-  // 1. Pre-procesar diagramas (ya existe)
-  // 2. Detectar ecuaciones químicas y convertir a texto normal
-  // 3. Normalizar checklists ASCII a listas markdown
-  // 4. Detectar tablas anchas y marcarlas
-  // 5. Limpiar HTML problemático
-  // 6. Retornar contenido limpio + metadata
+function definitelyNotMermaid(line: string): boolean {
+  const trimmed = line.trim();
+  
+  // Backticks sueltos (fin de código o errores)
+  if (/^`{1,3}$/.test(trimmed)) return true;
+  if (/^`{1,3}[^`\n]/.test(trimmed) && !trimmed.includes('mermaid')) return true;
+  
+  // Bullets markdown: "* texto", "- texto"  
+  if (/^[\*\-]\s+[^\[\(\{]/.test(trimmed)) return true;
+  
+  // Texto narrativo que empieza con mayúscula sin sintaxis Mermaid
+  if (/^[A-ZÁÉÍÓÚ][a-záéíóú]+\s+[a-záéíóú]/.test(trimmed) && 
+      !/[\[\]\(\)\{\}]|-->|---/.test(trimmed)) return true;
+  
+  return false;
 }
 ```
 
-### Normalización de Ecuaciones
-Detectar patrones como:
-- `CO₂`, `H₂O`, `NH₃`, etc.
-- Flechas de reacción: `→`, `⇌`, `↔`
-- Coeficientes: `2H₂ + O₂ → 2H₂O`
+En la función `wrapUnfencedMermaid()`, añadir check al inicio del loop:
 
-Estos se mantienen como texto normal, no código.
-
-### Normalización de Checklists
-Convertir:
+```typescript
+if (inMermaidBlock) {
+  // NUEVO: Detectar fin explícito del diagrama
+  if (definitelyNotMermaid(trimmed)) {
+    // Cerrar bloque Mermaid
+    processedLines.push('```mermaid');
+    processedLines.push(...mermaidBuffer);
+    processedLines.push('```');
+    // Añadir la línea actual como texto normal
+    processedLines.push(line);
+    inMermaidBlock = false;
+    mermaidBuffer = [];
+    continue;
+  }
+  // ... resto de la lógica existente
+}
 ```
-[ ] Verificar pH
-[x] Analizar conductividad
+
+### Archivo: `src/components/advisor/MermaidRenderer.tsx`
+
+Limpiar contenido antes de renderizar - eliminar backticks residuales y líneas no-Mermaid al final:
+
+```typescript
+// Dentro de renderDiagram()
+let cleanContent = content.trim();
+if (cleanContent.startsWith('```')) {
+  cleanContent = cleanContent.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
+}
+
+// NUEVO: Eliminar backticks sueltos y texto no-mermaid al final
+cleanContent = cleanContent.replace(/`{1,3}\s*$/, '').trim();
+
+// NUEVO: Si hay líneas que claramente no son Mermaid al final, removerlas
+const lines = cleanContent.split('\n');
+while (lines.length > 0) {
+  const lastLine = lines[lines.length - 1].trim();
+  // Remover líneas vacías o que son claramente markdown
+  if (!lastLine || /^[\*\-]\s/.test(lastLine) || /^[A-Z][a-z]+\s/.test(lastLine)) {
+    lines.pop();
+  } else {
+    break;
+  }
+}
+cleanContent = lines.join('\n');
 ```
-A:
-```
-- ☐ Verificar pH
-- ☑ Analizar conductividad
-```
-
-### Tablas Anchas
-Si una tabla tiene más de 5-6 columnas o contenido muy largo, marcarla para:
-- Renderizado con scroll controlado (dentro del contenedor)
-- O conversión a lista de items
-
-## Respuesta a tu Pregunta
-
-**No necesitas pedirle a Railway ningún código especial.** Todo el control de calidad se puede hacer en el frontend porque:
-
-1. Railway ya envía el contenido en texto plano/markdown
-2. Los patrones problemáticos (ecuaciones, checklists, tablas) se pueden detectar con regex
-3. La normalización es una transformación de texto que no requiere metadata adicional del backend
-
-El único caso donde sería útil tener metadata de Railway sería si quisieras que el LLM explícitamente etiquetara sus bloques (ej: `:::water-balance ... :::`) - pero esto añadiría complejidad al prompt y no es necesario ya que los patrones son detectables.
 
 ## Beneficios
 
-- **Centralizado**: Un solo punto de control para toda la limpieza
-- **Extensible**: Fácil añadir nuevos patrones problemáticos
-- **Sin dependencia de Railway**: Funciona con el contenido actual
-- **Testeable**: Funciones puras que se pueden testear fácilmente
+1. **Solución robusta**: Detecta correctamente dónde termina el diagrama
+2. **Doble protección**: Limpieza tanto en extracción como en renderizado
+3. **No afecta diagramas válidos**: Solo corta cuando detecta contenido claramente no-Mermaid
+4. **Sin cambios en Railway**: Todo se maneja en frontend
+
+## Verificación
+
+Después de implementar:
+1. El diagrama de flujo se renderizará correctamente (sin el texto `* *C1:...`)
+2. El contenido markdown debajo (`* *C1: Pre-lavado**`) se mostrará como texto normal
+3. No habrá error "Parse error" en consola
