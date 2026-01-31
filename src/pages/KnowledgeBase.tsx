@@ -1693,6 +1693,11 @@ export default function KnowledgeBase() {
       toast.warning("El documento aún se está procesando. Espera a que termine.");
       return;
     }
+    // Check if document has chunks - Railway returns 400 if no chunks exist
+    if (!doc.chunk_count || doc.chunk_count === 0) {
+      toast.error("Este documento no tiene contenido extraíble (0 chunks). Puede ser un PDF escaneado o con imágenes. Intenta reprocesarlo.");
+      return;
+    }
     
     setGeneratingDescId(doc.id);
     try {
