@@ -1,181 +1,96 @@
 
+# Plan: Persistencia de Descarga de PDFs entre Sesiones
 
-# Plan: Solución Integral para Renderizado de Diagramas Flow y Mermaid
+## Problema Identificado
 
-## Problema Diagnosticado
+Cuando completas un análisis con Deep Advisor:
+- El botón "Descargar informe" funciona correctamente **durante la sesión actual**
+- Si inicias un nuevo chat o vuelves al día siguiente, **ya no puedes descargar el PDF** fácilmente
 
-Después de un análisis profundo del código, he identificado **múltiples puntos de falla** en el sistema de renderizado de diagramas:
-
-### 1. Problema Principal: ReactMarkdown no procesa correctamente los code fences
-
-El flujo actual depende de que ReactMarkdown detecte `className.includes('language-mermaid')` en el componente `pre`, pero hay casos donde:
-- El parser de remark/rehype no propaga correctamente el `className` al elemento `code` interno
-- El LLM envía los fences con variaciones (espacios, mayúsculas, etc.)
-- El contenido llega como texto plano sin los backticks
-
-### 2. La detección de fallback `isMermaidContent()` solo busca en párrafos
-
-El detector en `p` solo actúa cuando el diagrama llega como texto dentro de un párrafo, pero no cuando viene en otros contextos (listas, blockquotes, etc.)
-
-### 3. El `FlowDiagramRenderer` tiene filtros muy estrictos
-
-Las funciones `isCalculationLine`, `isDescriptiveWithArrow`, etc. excluyen demasiados casos legítimos de flujos simples tipo `A → B → C`.
+La funcionalidad de descarga para mensajes históricos **SÍ existe**, pero tiene limitaciones que hacen que no sea tan visible o útil como la original.
 
 ---
 
-## Solución Propuesta (Multi-capa)
+## Situación Actual
 
-### Estrategia 1: Pre-procesamiento de Markdown antes de ReactMarkdown
+| Escenario | ¿Funciona? | Cómo |
+|-----------|-----------|------|
+| Descargar justo después de análisis | ✅ | Usa datos en memoria (`deepJob.result`) |
+| Descargar mismo chat, recargado | ⚠️ | Usa `message.content` si mensaje > 500 chars |
+| Descargar desde historial días después | ⚠️ | Mismo mecanismo, pero botón poco visible |
 
-Crear una función que normalice el contenido ANTES de pasarlo a ReactMarkdown:
+El botón de descarga para mensajes históricos existe (línea 793-806 del código), pero:
+1. Solo aparece si `message.content.length > 500`
+2. No tiene acceso a las fuentes/sources originales del análisis profundo
+3. El PDF pre-generado por Railway (`pdf_url`) **nunca se guarda** en la base de datos
+
+---
+
+## Solución Propuesta
+
+### Estrategia 1: Guardar `pdf_url` al completar el job
+
+Cuando el backend Railway completa un análisis profundo, devuelve una URL del PDF pre-generado que se almacena en Supabase Storage. Esta URL **debería guardarse** en `advisor_messages.pdf_url`.
+
+**Cambios:**
+1. Modificar el callback `onComplete` de `useDeepAdvisorJob` para guardar el `pdf_url` en la DB
+2. Mostrar un botón dedicado "Descargar PDF" cuando el mensaje tenga `pdf_url`
+
+### Estrategia 2: Mejorar la descarga local desde historial
+
+Asegurar que todos los datos necesarios (sources, facts) se guarden junto con el mensaje y estén disponibles para regenerar el documento completo.
+
+**Cambios:**
+1. Guardar `sources` y otros metadatos en el mensaje cuando se complete
+2. Pasar estos datos a `generateDeepAdvisorDocument` desde el historial
+
+---
+
+## Implementación Recomendada (Combinada)
+
+### Paso 1: Guardar `pdf_url` en la base de datos
+
+Cuando el job termina, guardar la URL del PDF:
 
 ```typescript
-// src/utils/normalizeMarkdownDiagrams.ts
-
-export function normalizeMarkdownDiagrams(text: string): string {
-  let result = text;
-  
-  // 1. Normalizar variaciones de fences de mermaid
-  // Detectar: ```mermaid, ```Mermaid, ``` mermaid, etc.
-  result = result.replace(
-    /```\s*[Mm]ermaid\s*\n([\s\S]*?)```/g,
-    (_, content) => `\`\`\`mermaid\n${content.trim()}\n\`\`\``
-  );
-  
-  // 2. Detectar diagramas mermaid SIN fences y añadirlas
-  // Buscar patrones: flowchart, graph TD, sequenceDiagram al inicio de línea
-  const mermaidKeywords = [
-    'flowchart', 'graph', 'sequenceDiagram', 'classDiagram',
-    'stateDiagram', 'erDiagram', 'gantt', 'pie', 'journey'
-  ];
-  
-  const lines = result.split('\n');
-  const processedLines: string[] = [];
-  let inMermaidBlock = false;
-  let mermaidBuffer: string[] = [];
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    
-    // Detectar inicio de mermaid sin fences
-    const startsWithKeyword = mermaidKeywords.some(kw => 
-      trimmed.toLowerCase().startsWith(kw.toLowerCase())
-    );
-    
-    if (startsWithKeyword && !inMermaidBlock && !isInsideCodeBlock(processedLines)) {
-      inMermaidBlock = true;
-      mermaidBuffer = [line];
-      continue;
-    }
-    
-    if (inMermaidBlock) {
-      // Continuar hasta línea vacía o fin de estructura mermaid
-      if (trimmed === '' || !looksLikeMermaidContinuation(trimmed)) {
-        // Cerrar bloque mermaid
-        processedLines.push('```mermaid');
-        processedLines.push(...mermaidBuffer);
-        processedLines.push('```');
-        processedLines.push(line);
-        inMermaidBlock = false;
-        mermaidBuffer = [];
-      } else {
-        mermaidBuffer.push(line);
-      }
-    } else {
-      processedLines.push(line);
-    }
-  }
-  
-  // Cerrar bloque pendiente
-  if (inMermaidBlock && mermaidBuffer.length > 0) {
-    processedLines.push('```mermaid');
-    processedLines.push(...mermaidBuffer);
-    processedLines.push('```');
-  }
-  
-  return processedLines.join('\n');
-}
+// En useAdvisorChat.ts o en el callback onComplete de AdvisorChat
+const updateMessageWithPdfUrl = async (chatId: string, pdfUrl: string) => {
+  await externalSupabase
+    .from('advisor_messages')
+    .update({ pdf_url: pdfUrl })
+    .eq('chat_id', chatId)
+    .eq('role', 'assistant')
+    .order('created_at', { ascending: false })
+    .limit(1);
+};
 ```
 
-### Estrategia 2: Renderizador de fallback usando `useEffect` post-render
+### Paso 2: Mostrar botón de PDF persistente
 
-Crear un componente que escanee el DOM después del render y convierta cualquier texto Mermaid no procesado:
+En los mensajes del historial, mostrar un botón específico cuando exista `pdf_url`:
 
 ```typescript
-// src/components/advisor/MermaidPostProcessor.tsx
-
-export function useMermaidPostProcessor(containerRef: RefObject<HTMLElement>) {
-  useEffect(() => {
-    if (!containerRef.current) return;
-    
-    // Buscar todos los <pre> y <code> que contengan sintaxis mermaid no renderizada
-    const codeBlocks = containerRef.current.querySelectorAll('pre code');
-    
-    codeBlocks.forEach(async (block) => {
-      const text = block.textContent || '';
-      if (isMermaidContent(text)) {
-        try {
-          const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-          const { svg } = await mermaid.render(id, text);
-          
-          // Reemplazar el bloque de código con el SVG
-          const container = document.createElement('div');
-          container.className = 'mermaid-diagram my-4';
-          container.innerHTML = svg;
-          block.parentElement?.replaceWith(container);
-        } catch (err) {
-          console.warn('Mermaid post-process failed:', err);
-        }
-      }
-    });
-  }, [containerRef]);
-}
+{message.pdf_url && (
+  <Button onClick={() => window.open(message.pdf_url, '_blank')}>
+    <FileDown /> Abrir PDF original
+  </Button>
+)}
 ```
 
-### Estrategia 3: Simplificar detección de FlowDiagramRenderer
+### Paso 3: Mejorar descarga local como fallback
 
-Reescribir `containsFlowDiagram` con reglas más claras y menos falsos negativos:
+Si no hay `pdf_url`, usar la generación local pero con todos los metadatos:
 
 ```typescript
-// Nuevo enfoque: lista blanca en lugar de lista negra
-export function containsFlowDiagram(text: string): boolean {
-  if (!text || text.length < 5) return false;
-  
-  const normalized = normalizeArrows(text);
-  
-  // DEBE tener patrón A → B (texto, flecha, texto)
-  const arrowPattern = /\S+\s*→\s*\S+/;
-  if (!arrowPattern.test(normalized)) return false;
-  
-  // DEBE tener al menos 2 flechas O corchetes
-  const arrowCount = (normalized.match(/→/g) || []).length;
-  const hasBrackets = /\[[^\]]+\]/.test(normalized);
-  
-  // Excluir SOLO casos muy claros de NO-flujos
-  // 1. Tablas markdown (múltiples |)
-  if ((normalized.match(/\|/g) || []).length >= 3) return false;
-  
-  // 2. Fórmulas matemáticas con = y números
-  if (/\d+\s*[×=]\s*\d+/.test(normalized)) return false;
-  
-  return arrowCount >= 2 || hasBrackets;
+// Ya existe pero mejorar para incluir sources
+handleDownloadHistoricMessage(message) {
+  generateDeepAdvisorDocument({
+    content: message.content,
+    sources: message.sources,  // ← Ya se pasan
+    factsExtracted: message.metadata?.facts_extracted, // ← Añadir
+    query: undefined,
+  });
 }
-```
-
-### Estrategia 4: Usar rehype-raw para mejor parsing de HTML en Markdown
-
-Añadir `rehype-raw` para permitir que HTML embebido (como `<div class="mermaid">`) sea procesado:
-
-```typescript
-// En AdvisorMessage.tsx y StreamingResponse.tsx
-import rehypeRaw from 'rehype-raw';
-
-<ReactMarkdown
-  remarkPlugins={[remarkGfm]}
-  rehypePlugins={[rehypeRaw]}
-  // ...
->
 ```
 
 ---
@@ -184,73 +99,38 @@ import rehypeRaw from 'rehype-raw';
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/utils/normalizeMarkdownDiagrams.ts` | **NUEVO** - Pre-procesador de markdown |
-| `src/utils/fixMarkdownTables.ts` | Integrar pre-procesador en `cleanMarkdownContent` |
-| `src/components/advisor/AdvisorMessage.tsx` | Añadir rehype-raw, usar pre-procesador |
-| `src/components/advisor/streaming/StreamingResponse.tsx` | Ídem |
-| `src/components/advisor/FlowDiagramRenderer.tsx` | Simplificar `containsFlowDiagram` |
-| `src/components/advisor/MermaidRenderer.tsx` | Añadir reintentos y mejor manejo de errores |
+| `src/pages/advisor/AdvisorChat.tsx` | Guardar `pdf_url` en callback `onComplete`, mejorar UI del botón de descarga histórica |
+| `src/hooks/useAdvisorChat.ts` | Cargar `pdf_url` al recuperar mensajes (ya lo hace) |
+| `src/types/advisorChat.ts` | Ya tiene `pdf_url` - no requiere cambios |
 
 ---
 
-## Flujo de Renderizado Propuesto
+## Flujo Después de los Cambios
 
 ```text
-Contenido del LLM
-       │
-       ▼
-┌──────────────────────────────────┐
-│ 1. normalizeMarkdownDiagrams()   │  ← Normaliza fences, detecta mermaid sin fences
-└──────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────┐
-│ 2. cleanMarkdownContent()        │  ← Limpieza existente + nuevo normalizador
-└──────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────┐
-│ 3. ReactMarkdown + rehype-raw    │  ← Parser mejorado
-│    ├── pre[language-mermaid]     │  → MermaidRenderer
-│    ├── pre[language-flow]        │  → FlowDiagramRenderer
-│    └── p (fallback detection)    │  → MermaidRenderer si isMermaidContent()
-└──────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────┐
-│ 4. Post-render check (useEffect) │  ← Captura casos que escaparon
-└──────────────────────────────────┘
+1. Usuario hace análisis con Deep Advisor
+         │
+         ▼
+2. Backend Railway genera PDF → devuelve pdf_url
+         │
+         ▼
+3. Frontend guarda pdf_url en advisor_messages
+         │
+         ▼
+4. Días después: Usuario abre historial
+         │
+         ▼
+5. Mensaje cargado con pdf_url intacto
+         │
+         ▼
+6. Botón "Abrir PDF" → window.open(pdf_url)
 ```
 
 ---
 
-## Dependencias Nuevas
+## Beneficios
 
-```bash
-npm install rehype-raw
-```
-
----
-
-## Sección Técnica: Detalles de Implementación
-
-### Por qué falla el sistema actual
-
-1. **ReactMarkdown + remark-gfm** procesa código fenced correctamente, pero el `className` solo aparece cuando hay un lenguaje explícito (`\`\`\`mermaid`)
-
-2. El modelo LLM a veces devuelve:
-   - `\`\`\`Mermaid` (mayúscula)
-   - `\`\`\` mermaid` (espacio)
-   - Diagrama sin fences (solo el texto plano)
-
-3. El `FlowDiagramRenderer` actual tiene ~100 líneas de exclusiones que bloquean casos legítimos
-
-### Orden de implementación recomendado
-
-1. Crear `normalizeMarkdownDiagrams.ts`
-2. Integrar en `cleanMarkdownContent()`
-3. Simplificar `containsFlowDiagram()`
-4. Añadir `rehype-raw` a los componentes
-5. Probar con ejemplos reales del chat
-6. Añadir post-processor como fallback final
-
+- **Persistencia garantizada**: El PDF está en Supabase Storage, la URL se guarda en la DB
+- **Acceso instantáneo**: No hay que regenerar el documento, solo abrir la URL
+- **Fallback robusto**: Si no hay URL, la generación local sigue funcionando
+- **Sin dependencia de sesión**: Funciona igual al día siguiente o meses después
