@@ -559,13 +559,31 @@ export default function AdvisorChat() {
     try {
       const { generateDeepAdvisorDocument } = await import('@/lib/generateDeepAdvisorDocument');
       
+      // Parse sources - may come as JSON string from DB or as array
+      let parsedSources: Array<{ type: string; name: string; url?: string }> = [];
+      if (message.sources) {
+        try {
+          // If it's a string, parse it
+          const sourcesData = typeof message.sources === 'string' 
+            ? JSON.parse(message.sources) 
+            : message.sources;
+          
+          // Ensure it's an array
+          if (Array.isArray(sourcesData)) {
+            parsedSources = sourcesData.map((s: any) => ({
+              type: s.type || 'web',
+              name: s.name || 'Fuente',
+              url: s.url || undefined,
+            }));
+          }
+        } catch (parseError) {
+          console.warn('[AdvisorChat] Could not parse sources:', parseError);
+        }
+      }
+      
       await generateDeepAdvisorDocument({
         content: message.content,
-        sources: message.sources?.map(s => ({
-          type: s.type,
-          name: s.name,
-          url: s.url || undefined,
-        })) || [],
+        sources: parsedSources,
         query: undefined,
         chatId: chatId || undefined,
       });
