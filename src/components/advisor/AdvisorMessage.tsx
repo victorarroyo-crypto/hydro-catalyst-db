@@ -10,6 +10,7 @@ import { isMermaidContent, extractTextFromChildren } from '@/utils/mermaidDetect
 import { FlowDiagramRenderer } from './FlowDiagramRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
 import { useMermaidPostProcessor } from '@/hooks/useMermaidPostProcessor';
+import { WaterBalanceBlockDiagram, isWaterBalanceContent } from './WaterBalanceBlockDiagram';
 interface AdvisorMessageProps {
   content: string;
   sources?: Source[];
@@ -51,6 +52,109 @@ function ChemEquation({ content }: { content: string }) {
     </div>
   );
 }
+/**
+ * Extracts water balance table sections from content and returns
+ * the content split into parts with water balance sections marked
+ */
+function extractWaterBalanceSections(text: string): Array<{ type: 'text' | 'water-balance'; content: string }> {
+  const segments: Array<{ type: 'text' | 'water-balance'; content: string }> = [];
+  
+  // Look for water balance tables by finding the header and related table
+  const lines = text.split('\n');
+  let currentText: string[] = [];
+  let waterBalanceBuffer: string[] = [];
+  let inWaterBalanceSection = false;
+  let tableLineCount = 0;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lowerLine = line.toLowerCase();
+    
+    // Detect water balance section start
+    const isWaterBalanceHeader = 
+      (lowerLine.includes('balance hídrico') || lowerLine.includes('balance hidrico')) ||
+      (lowerLine.includes('balance') && lowerLine.includes('agua'));
+    
+    // Detect if we're starting a table that might be water balance
+    const isTableStart = line.trim().startsWith('|') && !inWaterBalanceSection;
+    const isPreviousLineWaterBalance = i > 0 && 
+      (lines[i-1].toLowerCase().includes('balance') || 
+       lines[i-2]?.toLowerCase().includes('balance'));
+    
+    if (isWaterBalanceHeader) {
+      // Flush current text
+      if (currentText.length > 0) {
+        segments.push({ type: 'text', content: currentText.join('\n') });
+        currentText = [];
+      }
+      inWaterBalanceSection = true;
+      waterBalanceBuffer = [line];
+      tableLineCount = 0;
+      continue;
+    }
+    
+    if (inWaterBalanceSection) {
+      // Check if line is part of table
+      if (line.trim().startsWith('|') || line.trim() === '' || line.trim().startsWith('-')) {
+        waterBalanceBuffer.push(line);
+        if (line.trim().startsWith('|')) tableLineCount++;
+        continue;
+      }
+      
+      // If we've collected a table with enough rows, end the section
+      if (tableLineCount >= 3) {
+        // Check if accumulated buffer is actually water balance content
+        const bufferText = waterBalanceBuffer.join('\n');
+        if (isWaterBalanceContent(bufferText)) {
+          segments.push({ type: 'water-balance', content: bufferText });
+        } else {
+          // Not water balance, add as regular text
+          currentText.push(...waterBalanceBuffer);
+        }
+        waterBalanceBuffer = [];
+        inWaterBalanceSection = false;
+        tableLineCount = 0;
+      }
+      
+      currentText.push(line);
+      continue;
+    }
+    
+    // Check for inline water balance table (table with water balance keywords)
+    if (isTableStart && isPreviousLineWaterBalance) {
+      // Start collecting potential water balance table
+      inWaterBalanceSection = true;
+      // Include the previous header line(s)
+      const headerLines: string[] = [];
+      for (let j = Math.max(0, i - 3); j < i; j++) {
+        if (lines[j].toLowerCase().includes('balance') || lines[j].trim() === '') {
+          headerLines.push(lines[j]);
+        }
+      }
+      waterBalanceBuffer = [...headerLines, line];
+      tableLineCount = 1;
+      continue;
+    }
+    
+    currentText.push(line);
+  }
+  
+  // Flush remaining content
+  if (waterBalanceBuffer.length > 0) {
+    const bufferText = waterBalanceBuffer.join('\n');
+    if (isWaterBalanceContent(bufferText)) {
+      segments.push({ type: 'water-balance', content: bufferText });
+    } else {
+      currentText.push(...waterBalanceBuffer);
+    }
+  }
+  
+  if (currentText.length > 0) {
+    segments.push({ type: 'text', content: currentText.join('\n') });
+  }
+  
+  return segments;
+}
 
 export function AdvisorMessage({ content, sources, isStreaming = false }: AdvisorMessageProps) {
   const [displayedText, setDisplayedText] = useState('');
@@ -61,6 +165,11 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
   
   // Post-processor to catch any missed Mermaid diagrams after render
   useMermaidPostProcessor(containerRef, displayedText, isTyping);
+  
+  // Extract water balance sections for special rendering
+  const contentSegments = React.useMemo(() => {
+    return extractWaterBalanceSections(displayedText);
+  }, [displayedText]);
   
   // Simulated typing effect
   useEffect(() => {
@@ -87,179 +196,192 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
     
     return () => clearInterval(interval);
   }, [cleanedContent, isStreaming]);
+  
+  // Render function for markdown content (used for non-water-balance segments)
+  const renderMarkdownContent = (text: string, key?: string) => (
+    <ReactMarkdown
+      key={key}
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw]}
+      components={{
+        // Subtle headers - more spacing for professional look
+        h1: ({ children }) => (
+          <h1 className="text-xl font-bold text-foreground mt-8 mb-4 first:mt-0 pb-2 border-b border-border/50">
+            {children}
+          </h1>
+        ),
+        h2: ({ children }) => (
+          <h2 className="text-lg font-semibold text-foreground mt-6 mb-3 first:mt-0">
+            {children}
+          </h2>
+        ),
+        h3: ({ children }) => (
+          <h3 className="text-base font-semibold text-foreground mt-5 mb-2">
+            {children}
+          </h3>
+        ),
+        h4: ({ children }) => (
+          <h4 className="text-sm font-semibold text-foreground mt-4 mb-2">
+            {children}
+          </h4>
+        ),
+        // Normal paragraphs with better spacing and line-height
+        // Also detect unformatted Mermaid diagrams
+        p: ({ children }) => {
+          const textContent = extractTextFromChildren(children);
+          
+          // Check if this paragraph contains a Mermaid diagram without code fences
+          if (isMermaidContent(textContent)) {
+            return <MermaidRenderer content={textContent} />;
+          }
+          
+          return (
+            <p className="mb-5 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
+          );
+        },
+        // Subtle bold
+        strong: ({ children }) => (
+          <strong className="font-semibold text-foreground">{children}</strong>
+        ),
+        // Italic
+        em: ({ children }) => (
+          <em className="italic text-foreground/80">{children}</em>
+        ),
+        // Better spaced lists
+        ul: ({ children }) => (
+          <ul className="my-4 ml-1 space-y-2">{children}</ul>
+        ),
+        ol: ({ children }) => (
+          <ol className="my-4 ml-1 space-y-2 list-decimal list-inside">{children}</ol>
+        ),
+        li: ({ children }) => (
+          <li className="relative pl-6 leading-[1.8] before:content-['•'] before:absolute before:left-0 before:text-primary before:font-bold">
+            {children}
+          </li>
+        ),
+        // Clickable links
+        a: ({ href, children }) => (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline inline-flex items-center gap-1"
+          >
+            {children}
+            <ExternalLink className="w-3 h-3 opacity-50" />
+          </a>
+        ),
+        // Code inline - render as completely normal text (no special styling at all)
+        code: ({ children, className }) => {
+          const isBlock = className?.includes('language-');
+          if (isBlock) {
+            // Block code - render as normal paragraph text
+            return (
+              <span className="whitespace-pre-wrap">{children}</span>
+            );
+          }
+          // Inline code - render as completely normal text, no styling
+          return <span>{children}</span>;
+        },
+        // Pre blocks - detect flow, chem, and mermaid types
+        pre: ({ children }) => {
+          // Extract the code element
+          const codeElement = React.Children.toArray(children).find(
+            (child): child is React.ReactElement => 
+              React.isValidElement(child) && child.type === 'code'
+          );
+          
+          if (codeElement) {
+            const codeClassName = codeElement.props?.className || '';
+            const codeContent = String(codeElement.props?.children || '').trim();
+            
+            // Handle ```mermaid blocks
+            if (codeClassName.includes('language-mermaid')) {
+              return <MermaidRenderer content={codeContent} />;
+            }
+            
+            // Handle ```flow blocks
+            if (codeClassName.includes('language-flow')) {
+              return <FlowDiagramRenderer content={codeContent} />;
+            }
+            
+            // Handle ```chem or ```equation blocks
+            if (codeClassName.includes('language-chem') || codeClassName.includes('language-equation')) {
+              return <ChemEquation content={codeContent} />;
+            }
+            
+            // FALLBACK: Check if unlabeled code block contains Mermaid syntax
+            if (isMermaidContent(codeContent)) {
+              return <MermaidRenderer content={codeContent} />;
+            }
+          }
+          
+          // Also check raw pre content for Mermaid (when no code element)
+          const textContent = extractTextFromChildren(children);
+          if (isMermaidContent(textContent)) {
+            return <MermaidRenderer content={textContent} />;
+          }
+          
+          // Regular pre block - render as completely normal paragraph text (no special formatting)
+          return (
+            <p className="mb-5 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
+          );
+        },
+        // Blockquotes
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 border-primary/30 pl-3 my-3 text-muted-foreground italic">
+            {children}
+          </blockquote>
+        ),
+        // Tables with clean styling - visible borders for clarity
+        table: ({ children }) => (
+          <div className="my-6 overflow-x-auto rounded-lg border border-border max-w-full">
+            <table className="w-full border-collapse text-sm">
+              {children}
+            </table>
+          </div>
+        ),
+        thead: ({ children }) => (
+          <thead className="bg-[#307177]">
+            {children}
+          </thead>
+        ),
+        tbody: ({ children }) => (
+          <tbody className="[&>tr:nth-child(odd)]:bg-white [&>tr:nth-child(even)]:bg-[#f9fafb]">
+            {children}
+          </tbody>
+        ),
+        tr: ({ children }) => (
+          <tr className="hover:bg-[#f0fdfa] transition-colors">
+            {children}
+          </tr>
+        ),
+        th: ({ children }) => (
+          <th className="border border-[#e5e7eb] px-3 py-2 text-left font-semibold text-white text-xs uppercase tracking-wide">
+            {children}
+          </th>
+        ),
+        td: ({ children }) => (
+          <td className="border border-[#e5e7eb] px-3 py-2 text-foreground leading-relaxed text-sm">
+            {children}
+          </td>
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
 
   return (
-    <div ref={containerRef} className="advisor-message prose prose-sm dark:prose-invert max-w-none leading-relaxed">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
-        components={{
-          // Subtle headers - more spacing for professional look
-          h1: ({ children }) => (
-            <h1 className="text-xl font-bold text-foreground mt-8 mb-4 first:mt-0 pb-2 border-b border-border/50">
-              {children}
-            </h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="text-lg font-semibold text-foreground mt-6 mb-3 first:mt-0">
-              {children}
-            </h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="text-base font-semibold text-foreground mt-5 mb-2">
-              {children}
-            </h3>
-          ),
-          h4: ({ children }) => (
-            <h4 className="text-sm font-semibold text-foreground mt-4 mb-2">
-              {children}
-            </h4>
-          ),
-          // Normal paragraphs with better spacing and line-height
-          // Also detect unformatted Mermaid diagrams
-          p: ({ children }) => {
-            const textContent = extractTextFromChildren(children);
-            
-            // Check if this paragraph contains a Mermaid diagram without code fences
-            if (isMermaidContent(textContent)) {
-              return <MermaidRenderer content={textContent} />;
-            }
-            
-            return (
-              <p className="mb-5 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
-            );
-          },
-          // Subtle bold
-          strong: ({ children }) => (
-            <strong className="font-semibold text-foreground">{children}</strong>
-          ),
-          // Italic
-          em: ({ children }) => (
-            <em className="italic text-foreground/80">{children}</em>
-          ),
-          // Better spaced lists
-          ul: ({ children }) => (
-            <ul className="my-4 ml-1 space-y-2">{children}</ul>
-          ),
-          ol: ({ children }) => (
-            <ol className="my-4 ml-1 space-y-2 list-decimal list-inside">{children}</ol>
-          ),
-          li: ({ children }) => (
-            <li className="relative pl-6 leading-[1.8] before:content-['•'] before:absolute before:left-0 before:text-primary before:font-bold">
-              {children}
-            </li>
-          ),
-          // Clickable links
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline inline-flex items-center gap-1"
-            >
-              {children}
-              <ExternalLink className="w-3 h-3 opacity-50" />
-            </a>
-          ),
-          // Code inline - render as completely normal text (no special styling at all)
-          code: ({ children, className }) => {
-            const isBlock = className?.includes('language-');
-            if (isBlock) {
-              // Block code - render as normal paragraph text
-              return (
-                <span className="whitespace-pre-wrap">{children}</span>
-              );
-            }
-            // Inline code - render as completely normal text, no styling
-            return <span>{children}</span>;
-          },
-          // Pre blocks - detect flow, chem, and mermaid types
-          pre: ({ children }) => {
-            // Extract the code element
-            const codeElement = React.Children.toArray(children).find(
-              (child): child is React.ReactElement => 
-                React.isValidElement(child) && child.type === 'code'
-            );
-            
-            if (codeElement) {
-              const codeClassName = codeElement.props?.className || '';
-              const codeContent = String(codeElement.props?.children || '').trim();
-              
-              // Handle ```mermaid blocks
-              if (codeClassName.includes('language-mermaid')) {
-                return <MermaidRenderer content={codeContent} />;
-              }
-              
-              // Handle ```flow blocks
-              if (codeClassName.includes('language-flow')) {
-                return <FlowDiagramRenderer content={codeContent} />;
-              }
-              
-              // Handle ```chem or ```equation blocks
-              if (codeClassName.includes('language-chem') || codeClassName.includes('language-equation')) {
-                return <ChemEquation content={codeContent} />;
-              }
-              
-              // FALLBACK: Check if unlabeled code block contains Mermaid syntax
-              if (isMermaidContent(codeContent)) {
-                return <MermaidRenderer content={codeContent} />;
-              }
-            }
-            
-            // Also check raw pre content for Mermaid (when no code element)
-            const textContent = extractTextFromChildren(children);
-            if (isMermaidContent(textContent)) {
-              return <MermaidRenderer content={textContent} />;
-            }
-            
-            // Regular pre block - render as completely normal paragraph text (no special formatting)
-            return (
-              <p className="mb-5 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
-            );
-          },
-          // Blockquotes
-          blockquote: ({ children }) => (
-            <blockquote className="border-l-2 border-primary/30 pl-3 my-3 text-muted-foreground italic">
-              {children}
-            </blockquote>
-          ),
-          // Tables with clean styling - visible borders for clarity
-          table: ({ children }) => (
-            <div className="my-6 overflow-x-auto rounded-lg border border-border">
-              <table className="min-w-full border-collapse text-sm">
-                {children}
-              </table>
-            </div>
-          ),
-          thead: ({ children }) => (
-            <thead className="bg-[#307177]">
-              {children}
-            </thead>
-          ),
-          tbody: ({ children }) => (
-            <tbody className="[&>tr:nth-child(odd)]:bg-white [&>tr:nth-child(even)]:bg-[#f9fafb]">
-              {children}
-            </tbody>
-          ),
-          tr: ({ children }) => (
-            <tr className="hover:bg-[#f0fdfa] transition-colors">
-              {children}
-            </tr>
-          ),
-          th: ({ children }) => (
-            <th className="border border-[#e5e7eb] px-4 py-3 text-left font-semibold text-white text-xs uppercase tracking-wide">
-              {children}
-            </th>
-          ),
-          td: ({ children }) => (
-            <td className="border border-[#e5e7eb] px-4 py-3 text-foreground leading-relaxed">
-              {children}
-            </td>
-          ),
-        }}
-      >
-        {displayedText}
-      </ReactMarkdown>
+    <div ref={containerRef} className="advisor-message prose prose-sm dark:prose-invert max-w-none leading-relaxed overflow-hidden">
+      {/* Render content segments - water balance as block diagrams, rest as markdown */}
+      {contentSegments.map((segment, idx) => 
+        segment.type === 'water-balance' ? (
+          <WaterBalanceBlockDiagram key={`wb-${idx}`} content={segment.content} />
+        ) : (
+          renderMarkdownContent(segment.content, `md-${idx}`)
+        )
+      )}
       
       {/* Typing cursor */}
       {isTyping && (
