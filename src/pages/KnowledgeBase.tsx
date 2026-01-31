@@ -2825,7 +2825,32 @@ export default function KnowledgeBase() {
                                 </Button>
                               </div>
                             ) : (
-                              <p className="font-medium line-clamp-2 break-all">{doc.name}</p>
+                              <div className="flex items-center gap-2">
+                                <p 
+                                  className={`font-medium line-clamp-2 break-all ${canManage ? 'cursor-pointer hover:text-primary' : ''}`}
+                                  onClick={canManage ? () => { setEditingDocId(doc.id); setEditingName(doc.name); } : undefined}
+                                  title={canManage ? "Clic para editar" : undefined}
+                                >
+                                  {doc.name}
+                                </p>
+                                {canManage && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button 
+                                          size="sm" 
+                                          variant="ghost" 
+                                          className="h-6 w-6 p-0 shrink-0"
+                                          onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}
+                                        >
+                                          <Pencil className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Renombrar documento</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                              </div>
                             )}
                             
                             {/* Editable description */}
