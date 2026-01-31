@@ -4,9 +4,10 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { cn } from '@/lib/utils';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
-import { isMermaidContent, extractTextFromChildren } from '@/utils/mermaidDetection';
+import { normalizeMarkdownDiagrams, extractMermaidBlocks } from '@/utils/normalizeMarkdownDiagrams';
+import { isMermaidPlaceholder } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from '../FlowDiagramRenderer';
-import { MermaidRenderer } from '../MermaidRenderer';
+import { MermaidBlock } from './MermaidBlock';
 
 interface StreamingResponseProps {
   content: string;
@@ -31,14 +32,25 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
   const [displayedContent, setDisplayedContent] = useState('');
   const [showCursor, setShowCursor] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const mermaidBlocksRef = useRef<string[]>([]);
 
-  // Clean and enhance the markdown content
-  const cleanedContent = useMemo(() => cleanMarkdownContent(content), [content]);
+  // Pre-process: clean markdown, normalize diagrams, then extract mermaid blocks
+  const processedData = useMemo(() => {
+    const cleaned = cleanMarkdownContent(content);
+    const normalized = normalizeMarkdownDiagrams(cleaned);
+    const { processedContent, mermaidBlocks } = extractMermaidBlocks(normalized);
+    return { processedContent, mermaidBlocks };
+  }, [content]);
 
-  // Typing effect - update displayed content as new content arrives
+  // Store mermaid blocks in ref for access in render
   useEffect(() => {
-    setDisplayedContent(cleanedContent);
-  }, [cleanedContent]);
+    mermaidBlocksRef.current = processedData.mermaidBlocks;
+  }, [processedData.mermaidBlocks]);
+
+  // Update displayed content
+  useEffect(() => {
+    setDisplayedContent(processedData.processedContent);
+  }, [processedData.processedContent]);
 
   // Blinking cursor effect
   useEffect(() => {
@@ -58,150 +70,158 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
     return null;
   }
 
+  // Create components that have access to mermaid blocks
+  const components = {
+    // Custom table styling
+    table: ({ children }: { children?: React.ReactNode }) => (
+      <div className="overflow-x-auto my-4">
+        <table className="min-w-full border-collapse border border-border text-sm">
+          {children}
+        </table>
+      </div>
+    ),
+    thead: ({ children }: { children?: React.ReactNode }) => (
+      <thead className="bg-[#307177]">{children}</thead>
+    ),
+    tbody: ({ children }: { children?: React.ReactNode }) => (
+      <tbody className="[&>tr:nth-child(odd)]:bg-white [&>tr:nth-child(even)]:bg-[#f9fafb]">
+        {children}
+      </tbody>
+    ),
+    tr: ({ children }: { children?: React.ReactNode }) => (
+      <tr className="hover:bg-[#f0fdfa] transition-colors">
+        {children}
+      </tr>
+    ),
+    th: ({ children }: { children?: React.ReactNode }) => (
+      <th className="border border-[#e5e7eb] px-3 py-2 text-left font-medium text-white">
+        {children}
+      </th>
+    ),
+    td: ({ children }: { children?: React.ReactNode }) => (
+      <td className="border border-[#e5e7eb] px-3 py-2 text-foreground">{children}</td>
+    ),
+    // Custom link styling
+    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:text-primary/80 underline"
+      >
+        {children}
+      </a>
+    ),
+    // Custom code block styling - detect flow and chem types
+    pre: ({ children }: { children?: React.ReactNode }) => {
+      // Extract the code element
+      const codeElement = React.Children.toArray(children).find(
+        (child): child is React.ReactElement => 
+          React.isValidElement(child) && child.type === 'code'
+      );
+      
+      if (codeElement) {
+        const codeClassName = codeElement.props?.className || '';
+        const codeContent = String(codeElement.props?.children || '').trim();
+        
+        // Handle ```mermaid blocks (shouldn't reach here due to extraction, but just in case)
+        if (codeClassName.includes('language-mermaid')) {
+          return <MermaidBlock content={codeContent} />;
+        }
+        
+        // Handle ```flow blocks
+        if (codeClassName.includes('language-flow')) {
+          return <FlowDiagramRenderer content={codeContent} />;
+        }
+        
+        // Handle ```chem or ```equation blocks
+        if (codeClassName.includes('language-chem') || codeClassName.includes('language-equation')) {
+          return <ChemEquation content={codeContent} />;
+        }
+      }
+      
+      // Default pre styling
+      return (
+        <pre className="bg-card text-card-foreground p-4 rounded-lg overflow-x-auto my-4 text-sm">
+          {children}
+        </pre>
+      );
+    },
+    code: ({ className: codeClassName, children, ...props }: { className?: string; children?: React.ReactNode; node?: any }) => {
+      // Check if this is an inline code (no className usually means inline)
+      const isInline = !codeClassName && !props.node?.position;
+      
+      if (isInline) {
+        return (
+          <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground" {...props}>
+            {children}
+          </code>
+        );
+      }
+      
+      // Block code (will be wrapped by pre)
+      return (
+        <code className={cn('font-mono', codeClassName)} {...props}>
+          {children}
+        </code>
+      );
+    },
+    // Strong/bold styling
+    strong: ({ children }: { children?: React.ReactNode }) => (
+      <strong className="font-semibold text-foreground">{children}</strong>
+    ),
+    // Headers with better styling
+    h1: ({ children }: { children?: React.ReactNode }) => (
+      <h1 className="text-xl font-bold text-foreground mt-6 mb-3 first:mt-0">{children}</h1>
+    ),
+    h2: ({ children }: { children?: React.ReactNode }) => (
+      <h2 className="text-lg font-semibold text-foreground mt-5 mb-2">{children}</h2>
+    ),
+    h3: ({ children }: { children?: React.ReactNode }) => (
+      <h3 className="text-base font-semibold text-foreground mt-4 mb-2">{children}</h3>
+    ),
+    // Paragraph - check for mermaid placeholders
+    p: ({ children }: { children?: React.ReactNode }) => {
+      // Extract text to check for placeholder
+      const textContent = React.Children.toArray(children)
+        .map(child => (typeof child === 'string' ? child : ''))
+        .join('')
+        .trim();
+      
+      // Check if this is a mermaid placeholder
+      const { isPlaceholder, index } = isMermaidPlaceholder(textContent);
+      if (isPlaceholder && mermaidBlocksRef.current[index]) {
+        return <MermaidBlock content={mermaidBlocksRef.current[index]} />;
+      }
+      
+      return (
+        <p className="mb-4 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
+      );
+    },
+    // List styling
+    ul: ({ children }: { children?: React.ReactNode }) => (
+      <ul className="list-disc list-inside space-y-1.5 my-3">{children}</ul>
+    ),
+    ol: ({ children }: { children?: React.ReactNode }) => (
+      <ol className="list-decimal list-inside space-y-1.5 my-3">{children}</ol>
+    ),
+    li: ({ children }: { children?: React.ReactNode }) => (
+      <li className="leading-relaxed">{children}</li>
+    ),
+    // Blockquote styling
+    blockquote: ({ children }: { children?: React.ReactNode }) => (
+      <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground my-3">
+        {children}
+      </blockquote>
+    ),
+  };
+
   return (
     <div ref={containerRef} className={cn('prose prose-sm max-w-none', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw]}
-        components={{
-          // Custom table styling
-          table: ({ children }) => (
-            <div className="overflow-x-auto my-4">
-              <table className="min-w-full border-collapse border border-border text-sm">
-                {children}
-              </table>
-            </div>
-          ),
-          thead: ({ children }) => (
-            <thead className="bg-[#307177]">{children}</thead>
-          ),
-          tbody: ({ children }) => (
-            <tbody className="[&>tr:nth-child(odd)]:bg-white [&>tr:nth-child(even)]:bg-[#f9fafb]">
-              {children}
-            </tbody>
-          ),
-          tr: ({ children }) => (
-            <tr className="hover:bg-[#f0fdfa] transition-colors">
-              {children}
-            </tr>
-          ),
-          th: ({ children }) => (
-            <th className="border border-[#e5e7eb] px-3 py-2 text-left font-medium text-white">
-              {children}
-            </th>
-          ),
-          td: ({ children }) => (
-            <td className="border border-[#e5e7eb] px-3 py-2 text-foreground">{children}</td>
-          ),
-          // Custom link styling
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:text-primary/80 underline"
-            >
-              {children}
-            </a>
-          ),
-          // Custom code block styling - detect flow and chem types
-          pre: ({ children }) => {
-            // Extract the code element
-            const codeElement = React.Children.toArray(children).find(
-              (child): child is React.ReactElement => 
-                React.isValidElement(child) && child.type === 'code'
-            );
-            
-            if (codeElement) {
-              const codeClassName = codeElement.props?.className || '';
-              const codeContent = String(codeElement.props?.children || '').trim();
-              
-              // Handle ```mermaid blocks
-              if (codeClassName.includes('language-mermaid')) {
-                return <MermaidRenderer content={codeContent} />;
-              }
-              
-              // Handle ```flow blocks
-              if (codeClassName.includes('language-flow')) {
-                return <FlowDiagramRenderer content={codeContent} />;
-              }
-              
-              // Handle ```chem or ```equation blocks
-              if (codeClassName.includes('language-chem') || codeClassName.includes('language-equation')) {
-                return <ChemEquation content={codeContent} />;
-              }
-            }
-            
-            // Default pre styling
-            return (
-              <pre className="bg-card text-card-foreground p-4 rounded-lg overflow-x-auto my-4 text-sm">
-                {children}
-              </pre>
-            );
-          },
-          code: ({ className: codeClassName, children, ...props }) => {
-            // Check if this is an inline code (no className usually means inline)
-            const isInline = !codeClassName && !props.node?.position;
-            
-            if (isInline) {
-              return (
-                <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground" {...props}>
-                  {children}
-                </code>
-              );
-            }
-            
-            // Block code (will be wrapped by pre)
-            return (
-              <code className={cn('font-mono', codeClassName)} {...props}>
-                {children}
-              </code>
-            );
-          },
-          // Strong/bold styling
-          strong: ({ children }) => (
-            <strong className="font-semibold text-foreground">{children}</strong>
-          ),
-          // Headers with better styling
-          h1: ({ children }) => (
-            <h1 className="text-xl font-bold text-foreground mt-6 mb-3 first:mt-0">{children}</h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="text-lg font-semibold text-foreground mt-5 mb-2">{children}</h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="text-base font-semibold text-foreground mt-4 mb-2">{children}</h3>
-          ),
-          // Paragraph with relaxed spacing - also detect unformatted Mermaid diagrams
-          p: ({ children }) => {
-            const textContent = extractTextFromChildren(children);
-            
-            // Check if this paragraph contains a Mermaid diagram without code fences
-            if (isMermaidContent(textContent)) {
-              return <MermaidRenderer content={textContent} />;
-            }
-            
-            return (
-              <p className="mb-4 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
-            );
-          },
-          // List styling
-          ul: ({ children }) => (
-            <ul className="list-disc list-inside space-y-1.5 my-3">{children}</ul>
-          ),
-          ol: ({ children }) => (
-            <ol className="list-decimal list-inside space-y-1.5 my-3">{children}</ol>
-          ),
-          li: ({ children }) => (
-            <li className="leading-relaxed">{children}</li>
-          ),
-          // Blockquote styling
-          blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground my-3">
-              {children}
-            </blockquote>
-          ),
-        }}
+        components={components}
       >
         {displayedContent}
       </ReactMarkdown>

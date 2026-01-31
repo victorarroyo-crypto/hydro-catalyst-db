@@ -6,6 +6,7 @@ import { useTheme } from 'next-themes';
 interface MermaidRendererProps {
   content: string;
   className?: string;
+  onError?: () => void;
 }
 
 // Initialize mermaid once at module level
@@ -29,7 +30,7 @@ function initializeMermaid(theme: string | undefined) {
 // Counter for unique IDs across all instances
 let renderCounter = 0;
 
-export function MermaidRenderer({ content, className }: MermaidRendererProps) {
+export function MermaidRenderer({ content, className, onError }: MermaidRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -83,6 +84,7 @@ export function MermaidRenderer({ content, className }: MermaidRendererProps) {
       if (currentRenderId === renderIdRef.current) {
         setError('Error al renderizar diagrama');
         setIsLoading(false);
+        onError?.();
       }
     }
   }, [content, theme]);

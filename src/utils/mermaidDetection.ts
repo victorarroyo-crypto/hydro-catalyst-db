@@ -24,15 +24,13 @@ const MERMAID_KEYWORDS = [
   'block',
 ];
 
-// Regex pattern to match Mermaid diagram starts
-const MERMAID_START_PATTERN = new RegExp(
-  `^\\s*(${MERMAID_KEYWORDS.join('|')})\\s*(LR|RL|TD|TB|BT)?`,
-  'im'
-);
+// Mermaid directions
+const MERMAID_DIRECTIONS = ['LR', 'RL', 'TD', 'TB', 'BT'];
 
 /**
  * Checks if a string looks like a Mermaid diagram definition.
  * Detects patterns like "flowchart LR", "graph TD", "sequenceDiagram", etc.
+ * Enhanced to handle HTML tags, edge labels, and complex syntax.
  */
 export function isMermaidContent(text: string): boolean {
   if (!text || typeof text !== 'string') return false;
@@ -40,9 +38,11 @@ export function isMermaidContent(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length < 10) return false; // Too short to be a diagram
   
-  // Check if first line matches a Mermaid diagram type
-  const firstLine = trimmed.split('\n')[0].trim();
+  // Get the first line
+  const lines = trimmed.split('\n');
+  const firstLine = lines[0].trim();
   
+  // Check if first line matches a Mermaid diagram type
   for (const keyword of MERMAID_KEYWORDS) {
     const lowerLine = firstLine.toLowerCase();
     const lowerKeyword = keyword.toLowerCase();
@@ -50,18 +50,37 @@ export function isMermaidContent(text: string): boolean {
     // Match exact keyword or keyword with direction (LR, TD, etc.)
     if (lowerLine.startsWith(lowerKeyword)) {
       const remaining = firstLine.slice(keyword.length).trim();
-      // Valid if nothing after, or just a direction, or starts with subgraph/node
+      
+      // Valid if nothing after, or just a direction, or direction with content
       if (
         remaining === '' ||
-        /^(LR|RL|TD|TB|BT)$/i.test(remaining) ||
-        /^(LR|RL|TD|TB|BT)\s/i.test(remaining)
+        MERMAID_DIRECTIONS.some(d => remaining.toUpperCase() === d) ||
+        MERMAID_DIRECTIONS.some(d => remaining.toUpperCase().startsWith(d + ' ')) ||
+        MERMAID_DIRECTIONS.some(d => remaining.toUpperCase().startsWith(d + '\n'))
       ) {
+        // Additional check: must have diagram content (nodes/edges)
+        if (lines.length >= 2) {
+          const hasNodes = /[\[\(\{].*[\]\)\}]/.test(trimmed);
+          const hasEdges = /-->|---|\.->|==>/.test(trimmed);
+          return hasNodes || hasEdges;
+        }
         return true;
       }
     }
   }
   
-  return MERMAID_START_PATTERN.test(trimmed);
+  return false;
+}
+
+/**
+ * Checks if text is a mermaid placeholder (:::mermaid-placeholder-N:::)
+ */
+export function isMermaidPlaceholder(text: string): { isPlaceholder: boolean; index: number } {
+  const match = text.trim().match(/^:::mermaid-placeholder-(\d+):::$/);
+  if (match) {
+    return { isPlaceholder: true, index: parseInt(match[1], 10) };
+  }
+  return { isPlaceholder: false, index: -1 };
 }
 
 /**
