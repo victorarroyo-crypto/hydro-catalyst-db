@@ -17,6 +17,8 @@ import {
   HeadingLevel,
   ShadingType,
   PageBreak,
+  Header,
+  Footer,
 } from 'docx';
 import { saveAs } from 'file-saver';
 import {
@@ -25,6 +27,222 @@ import {
   VANDARUM_SIZES,
 } from './vandarumDocStyles';
 import type { DeepJobSource, DeepJobFact } from './advisorProxy';
+
+/**
+ * Generate a short title (max 10 words) from query or content
+ */
+function generateShortTitle(query?: string, content?: string): string {
+  const source = query || content || 'Análisis Técnico';
+  
+  // Clean up the text
+  const cleanText = source
+    .replace(/[#*_`]/g, '')
+    .replace(/\n/g, ' ')
+    .trim();
+  
+  // Get first meaningful sentence or phrase
+  const words = cleanText.split(/\s+/).slice(0, 10);
+  let title = words.join(' ');
+  
+  // Truncate if too long and add ellipsis
+  if (title.length > 60) {
+    title = title.substring(0, 57) + '...';
+  }
+  
+  return title || 'Análisis Técnico';
+}
+
+/**
+ * Create cover page elements
+ */
+function createCoverPage(): Paragraph[] {
+  const currentYear = new Date().getFullYear();
+  
+  return [
+    // Spacer
+    new Paragraph({ children: [], spacing: { before: 2000 } }),
+    
+    // Main title - VANDARUM
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'VANDARUM',
+          bold: true,
+          size: 96, // 48pt
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    }),
+    
+    // Subtitle
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'Soluciones Inteligentes para el Agua',
+          size: 32, // 16pt
+          color: VANDARUM_COLORS.grisClaro,
+          font: VANDARUM_FONTS.texto,
+          italics: true,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 800 },
+    }),
+    
+    // Decorative line
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: '━━━━━━━━━━━━━━━━━━━━',
+          size: 24,
+          color: VANDARUM_COLORS.verdeOscuro,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 800 },
+    }),
+    
+    // Report type
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'INFORME TÉCNICO',
+          bold: true,
+          size: 44, // 22pt
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    }),
+    
+    // AI Advisor badge
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'Generado por AI Advisor',
+          size: 28, // 14pt
+          color: VANDARUM_COLORS.grisTexto,
+          font: VANDARUM_FONTS.texto,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 2000 },
+    }),
+    
+    // Date
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: new Date().toLocaleDateString('es-ES', { 
+            day: 'numeric', 
+            month: 'long', 
+            year: 'numeric' 
+          }),
+          size: 24, // 12pt
+          color: VANDARUM_COLORS.grisClaro,
+          font: VANDARUM_FONTS.texto,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    }),
+    
+    // Copyright at bottom of cover
+    new Paragraph({ children: [], spacing: { before: 2000 } }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `© ${currentYear} Vandarum. Todos los derechos reservados.`,
+          size: 20, // 10pt
+          color: VANDARUM_COLORS.grisClaro,
+          font: VANDARUM_FONTS.texto,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'www.vandarum.es',
+          size: 20,
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.texto,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    }),
+  ];
+}
+
+/**
+ * Create header with study title
+ */
+function createHeader(title: string): Header {
+  return new Header({
+    children: [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: title,
+            size: 18, // 9pt
+            color: VANDARUM_COLORS.grisClaro,
+            font: VANDARUM_FONTS.texto,
+            italics: true,
+          }),
+        ],
+        alignment: AlignmentType.RIGHT,
+        border: {
+          bottom: { style: BorderStyle.SINGLE, size: 4, color: VANDARUM_COLORS.verdeOscuro },
+        },
+        spacing: { after: 200 },
+      }),
+    ],
+  });
+}
+
+/**
+ * Create footer with copyright
+ */
+function createFooter(): Footer {
+  const currentYear = new Date().getFullYear();
+  
+  return new Footer({
+    children: [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `© ${currentYear} Vandarum`,
+            size: 18, // 9pt
+            color: VANDARUM_COLORS.grisClaro,
+            font: VANDARUM_FONTS.texto,
+          }),
+          new TextRun({
+            text: '  |  ',
+            size: 18,
+            color: VANDARUM_COLORS.grisClaro,
+          }),
+          new TextRun({
+            text: 'www.vandarum.es',
+            size: 18,
+            color: VANDARUM_COLORS.verdeOscuro,
+            font: VANDARUM_FONTS.texto,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        border: {
+          top: { style: BorderStyle.SINGLE, size: 4, color: VANDARUM_COLORS.verdeOscuro },
+        },
+        spacing: { before: 200 },
+      }),
+    ],
+  });
+}
 
 // Mapping of problematic emojis to safe Unicode alternatives
 const EMOJI_REPLACEMENTS: Record<string, string> = {
@@ -1015,45 +1233,7 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
   
   const sections: (Paragraph | Table)[] = [];
   
-  // Title
-  sections.push(
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: 'Informe Deep Advisor',
-          bold: true,
-          size: 56,
-          color: VANDARUM_COLORS.verdeOscuro,
-          font: VANDARUM_FONTS.titulo,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-    })
-  );
-  
-  // Subtitle with date
-  sections.push(
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: `Vandarum AI Advisor • ${new Date().toLocaleDateString('es-ES', { 
-            day: 'numeric', 
-            month: 'long', 
-            year: 'numeric' 
-          })}`,
-          size: VANDARUM_SIZES.subtitulo,
-          color: VANDARUM_COLORS.grisClaro,
-          font: VANDARUM_FONTS.texto,
-          italics: true,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
-    })
-  );
-  
-  // Query section if available
+  // Query section if available (no more title/subtitle - those are on the cover page)
   if (query) {
     sections.push(
       new Paragraph({
@@ -1134,51 +1314,17 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
     sections.push(createFactsTable(factsExtracted));
   }
   
-  // Footer
-  sections.push(new Paragraph({ children: [], spacing: { before: 600 } }));
-  sections.push(
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: '─────────────────────────────────────────────────────────',
-          size: VANDARUM_SIZES.pequeno,
-          color: VANDARUM_COLORS.grisClaro,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-    })
-  );
-  sections.push(
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: 'Generado por Vandarum AI Advisor',
-          size: VANDARUM_SIZES.pequeno,
-          color: VANDARUM_COLORS.grisClaro,
-          font: VANDARUM_FONTS.texto,
-          italics: true,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 100 },
-    })
-  );
-  sections.push(
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: 'www.vandarum.es',
-          size: VANDARUM_SIZES.pequeno,
-          color: VANDARUM_COLORS.verdeOscuro,
-          font: VANDARUM_FONTS.texto,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-    })
-  );
+  // Note: Footer is now handled via proper Word footer (appears on every page)
+  
+  // Generate short title for header
+  const shortTitle = generateShortTitle(query, content);
+  
+  // Create cover page
+  const coverPageElements = createCoverPage();
   
   const doc = new Document({
     sections: [
+      // Cover page section (no header/footer)
       {
         properties: {
           page: {
@@ -1189,6 +1335,26 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
               left: 1440,
             },
           },
+        },
+        children: coverPageElements,
+      },
+      // Main content section with header and footer
+      {
+        properties: {
+          page: {
+            margin: {
+              top: 1440,
+              right: 1440,
+              bottom: 1440,
+              left: 1440,
+            },
+          },
+        },
+        headers: {
+          default: createHeader(shortTitle),
+        },
+        footers: {
+          default: createFooter(),
         },
         children: sections,
       },
