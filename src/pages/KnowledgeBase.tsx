@@ -719,8 +719,9 @@ export default function KnowledgeBase() {
         }
       }
 
-      // Store under user folder so paths are unique and consistent
-      const filePath = `${authData.user.id}/${Date.now()}-${file.name}`;
+      // Sanitize filename for Storage (special chars like accents are not allowed)
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${authData.user.id}/${Date.now()}-${sanitizedFileName}`;
       console.log("[KB-UPLOAD] Uploading to path:", filePath, "Size:", (finalSize / 1024 / 1024).toFixed(2), "MB");
 
       // Upload to Lovable Cloud storage (where edge function reads from)
