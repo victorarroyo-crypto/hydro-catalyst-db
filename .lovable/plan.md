@@ -1,58 +1,96 @@
 
-# Plan: Simplificar Zona de Entrada del Chat
+# Plan: Mantener Aspect Ratio del Logo en Word
 
-## Objetivo
-Eliminar la banda horizontal inferior que divide visualmente la pantalla y resta espacio al chat, dejando solo el campo de entrada limpio.
+## Problema Identificado
+El logo se inserta con dimensiones fijas de **80x80 píxeles**, lo cual deforma la imagen si el logo original no es cuadrado. El código actual fuerza estas dimensiones sin considerar las proporciones reales.
+
+```typescript
+// Código actual - líneas 64-70
+logoImageRun = new ImageRun({
+  data: arrayBuffer,
+  transformation: {
+    width: 80,  // Forzado
+    height: 80, // Forzado - deforma si no es cuadrado
+  },
+  type: 'png',
+});
+```
 
 ---
 
-## Cambios Propuestos
+## Solución Propuesta
 
-### Archivo: `src/pages/advisor/AdvisorChat.tsx`
+Calcular las dimensiones reales del logo desde el ArrayBuffer y aplicar el aspect ratio correcto, limitando solo uno de los ejes (altura máxima de 60px para mantenerlo discreto).
 
-**1. Eliminar el fondo con gradiente oscuro del contenedor de input**
+### Archivo: `src/lib/generateDeepAdvisorDocument.ts`
 
-Línea 961 actual:
-```tsx
-<div className="border-t p-4 pb-6" style={{ background: 'linear-gradient(180deg, rgba(48,113,119,0.03) 0%, rgba(50,180,205,0.05) 100%)' }}>
+**Cambio 1: Función auxiliar para obtener dimensiones de PNG**
+
+Agregar una función que lea las dimensiones de una imagen PNG desde su ArrayBuffer:
+
+```typescript
+/**
+ * Get image dimensions from PNG ArrayBuffer
+ * PNG stores width/height in bytes 16-23 of the file
+ */
+function getPngDimensions(arrayBuffer: ArrayBuffer): { width: number; height: number } | null {
+  try {
+    const view = new DataView(arrayBuffer);
+    // PNG signature check (first 8 bytes)
+    // Width is at bytes 16-19, Height at bytes 20-23 (big-endian)
+    const width = view.getUint32(16, false);
+    const height = view.getUint32(20, false);
+    return { width, height };
+  } catch {
+    return null;
+  }
+}
 ```
 
-Cambiar a:
-```tsx
-<div className="p-4">
+**Cambio 2: Modificar la creación del ImageRun**
+
+Actualizar `createCoverPage` para calcular dimensiones proporcionales:
+
+```typescript
+// Fetch logo image
+let logoImageRun: ImageRun | null = null;
+try {
+  const response = await fetch('/vandarum-logo-principal.png');
+  const arrayBuffer = await response.arrayBuffer();
+  
+  // Calculate proportional dimensions
+  const dimensions = getPngDimensions(arrayBuffer);
+  let targetWidth = 120; // Default width
+  let targetHeight = 60; // Default max height
+  
+  if (dimensions) {
+    const aspectRatio = dimensions.width / dimensions.height;
+    // Fix height to 60px and calculate width proportionally
+    targetHeight = 60;
+    targetWidth = Math.round(targetHeight * aspectRatio);
+  }
+  
+  logoImageRun = new ImageRun({
+    data: arrayBuffer,
+    transformation: {
+      width: targetWidth,
+      height: targetHeight,
+    },
+    type: 'png',
+  });
+} catch (e) {
+  console.warn('Could not load logo for Word document:', e);
+}
 ```
-
-Esto elimina:
-- El `border-t` que crea la línea divisoria
-- El fondo con gradiente oscuro
-- El padding inferior extra (`pb-6`)
-
-**2. Eliminar el `CompactUsageHint`**
-
-Líneas 969-972 - Eliminar completamente:
-```tsx
-<CompactUsageHint 
-  onOpenGuide={() => setIsGuideOpen(true)} 
-  isDeepMode={deepMode}
-/>
-```
-
-Este componente muestra una barra con tips que ocupa espacio horizontal.
-
-**3. Simplificar el indicador de créditos**
-
-Líneas 1034-1043 - Reducir a una línea más compacta o eliminarlo si el usuario lo prefiere. Propuesta: mantenerlo pero más discreto, centrado y sin el separador.
 
 ---
 
-## Resultado Visual
+## Resultado
 
 | Antes | Después |
 |-------|---------|
-| Banda con gradiente oscuro | Fondo transparente |
-| Borde superior visible | Sin borde divisorio |
-| CompactUsageHint (barra de tips) | Eliminado |
-| Padding generoso | Padding compacto |
+| Logo deformado (80x80 forzado) | Logo proporcional (altura 60px, ancho calculado) |
+| Aspect ratio ignorado | Aspect ratio preservado |
 
 ---
 
@@ -60,6 +98,6 @@ Líneas 1034-1043 - Reducir a una línea más compacta o eliminarlo si el usuari
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/pages/advisor/AdvisorChat.tsx` | Eliminar estilos de fondo, border-t, y CompactUsageHint |
+| `src/lib/generateDeepAdvisorDocument.ts` | Agregar función `getPngDimensions` y calcular dimensiones proporcionales |
 
-El chat ocupará más espacio vertical y la transición al área de entrada será más fluida y sin interrupciones visuales.
+El logo mantendrá sus proporciones originales, apareciendo discreto pero sin deformación.
