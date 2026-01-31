@@ -494,13 +494,26 @@ export default function AdvisorChat() {
       // First, try to generate locally using the current deepJob result
       if (deepJob.status?.result?.content) {
         const { generateDeepAdvisorDocument } = await import('@/lib/generateDeepAdvisorDocument');
+        const { renderAllMermaidDiagrams } = await import('@/lib/mermaidToImage');
+        
+        // Render Mermaid diagrams to images before generating the document
+        const content = deepJob.status.result.content;
+        let diagramImages: Map<string, ArrayBuffer> | undefined;
+        
+        try {
+          diagramImages = await renderAllMermaidDiagrams(content);
+          console.log(`[AdvisorChat] Rendered ${diagramImages.size} diagram(s) for Word export`);
+        } catch (diagramError) {
+          console.warn('[AdvisorChat] Failed to render diagrams, will use text fallback:', diagramError);
+        }
         
         await generateDeepAdvisorDocument({
-          content: deepJob.status.result.content,
+          content,
           sources: deepJob.status.result.sources || [],
           factsExtracted: deepJob.status.result.facts_extracted || [],
           query: pendingUserMessage || undefined,
           chatId: deepJob.chatId || undefined,
+          diagramImages,
         });
         
         toast.success('Documento generado correctamente');
@@ -558,6 +571,7 @@ export default function AdvisorChat() {
   const handleDownloadHistoricMessage = async (message: Message) => {
     try {
       const { generateDeepAdvisorDocument } = await import('@/lib/generateDeepAdvisorDocument');
+      const { renderAllMermaidDiagrams } = await import('@/lib/mermaidToImage');
       
       // Parse sources - may come as JSON string from DB or as array
       let parsedSources: Array<{ type: string; name: string; url?: string }> = [];
@@ -581,11 +595,21 @@ export default function AdvisorChat() {
         }
       }
       
+      // Render Mermaid diagrams to images
+      let diagramImages: Map<string, ArrayBuffer> | undefined;
+      try {
+        diagramImages = await renderAllMermaidDiagrams(message.content);
+        console.log(`[AdvisorChat] Rendered ${diagramImages.size} diagram(s) for historic message export`);
+      } catch (diagramError) {
+        console.warn('[AdvisorChat] Failed to render diagrams for historic message:', diagramError);
+      }
+      
       await generateDeepAdvisorDocument({
         content: message.content,
         sources: parsedSources,
         query: undefined,
         chatId: chatId || undefined,
+        diagramImages,
       });
       
       toast.success('Documento generado correctamente');

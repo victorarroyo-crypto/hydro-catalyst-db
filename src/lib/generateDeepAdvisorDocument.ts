@@ -687,6 +687,67 @@ function isMermaidContinuation(line: string): boolean {
 }
 
 /**
+ * Create a paragraph with an embedded diagram image
+ */
+function createDiagramImageParagraph(imageBuffer: ArrayBuffer, title: string): Paragraph[] {
+  const paragraphs: Paragraph[] = [];
+  
+  // Add title
+  paragraphs.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: title,
+          bold: true,
+          size: 24, // 12pt
+          font: VANDARUM_FONTS.titulo,
+          color: VANDARUM_COLORS.verdeOscuro,
+        }),
+      ],
+      spacing: { before: 150, after: 100 },
+    })
+  );
+  
+  // Get image dimensions for proper aspect ratio
+  const dimensions = getPngDimensions(imageBuffer);
+  let targetWidth = 500; // Default width in points
+  let targetHeight = 300; // Default height
+  
+  if (dimensions && dimensions.width > 0 && dimensions.height > 0) {
+    const aspectRatio = dimensions.width / dimensions.height;
+    // Max width of ~500 points (about 6.9 inches) to fit page
+    targetWidth = Math.min(500, dimensions.width / 2); // Scale down 2x renders
+    targetHeight = Math.round(targetWidth / aspectRatio);
+    
+    // Cap height to reasonable size
+    if (targetHeight > 600) {
+      targetHeight = 600;
+      targetWidth = Math.round(targetHeight * aspectRatio);
+    }
+  }
+  
+  // Add the image
+  paragraphs.push(
+    new Paragraph({
+      children: [
+        new ImageRun({
+          data: imageBuffer,
+          transformation: {
+            width: targetWidth,
+            height: targetHeight,
+          },
+          type: 'png',
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 100, after: 200 },
+    })
+  );
+  
+  return paragraphs;
+}
+
+/**
  * Parse Mermaid flowchart content and convert to readable Word paragraphs
  * Enhanced to build complete paths through the graph and identify decision branches
  */
@@ -950,8 +1011,13 @@ function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
 
 /**
  * Parse markdown content and convert to docx elements (paragraphs and tables)
+ * @param markdown - The markdown content to parse
+ * @param diagramImages - Optional map of Mermaid code to rendered PNG images
  */
-function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
+function parseMarkdownToParagraphs(
+  markdown: string,
+  diagramImages?: Map<string, ArrayBuffer>
+): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
   const lines = markdown.split('\n');
   
@@ -974,10 +1040,17 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
       }
       
       if (inCodeBlock) {
-        // Check if this is a flowchart/mermaid block - convert to readable format
+        // Check if this is a flowchart/mermaid block
         const codeContent = codeBlockContent.join('\n');
         if (isMermaidContent(codeContent)) {
-          elements.push(...parseMermaidToReadable(codeContent));
+          // Try to use pre-rendered image if available
+          const diagramImage = diagramImages?.get(codeContent.trim());
+          if (diagramImage) {
+            elements.push(...createDiagramImageParagraph(diagramImage, 'Diagrama de Flujo'));
+          } else {
+            // Fallback to readable text format
+            elements.push(...parseMermaidToReadable(codeContent));
+          }
         } else {
           // Regular code block - render as monospace
           elements.push(
@@ -1016,7 +1089,15 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
         i++;
         mermaidContent += '\n' + lines[i].trim();
       }
-      elements.push(...parseMermaidToReadable(mermaidContent));
+      
+      // Try to use pre-rendered image if available
+      const diagramImage = diagramImages?.get(mermaidContent.trim());
+      if (diagramImage) {
+        elements.push(...createDiagramImageParagraph(diagramImage, 'Diagrama de Flujo'));
+      } else {
+        // Fallback to readable text format
+        elements.push(...parseMermaidToReadable(mermaidContent));
+      }
       continue;
     }
     
@@ -1423,13 +1504,14 @@ export interface DeepAdvisorReportData {
   query?: string;
   chatId?: string;
   companyName?: string; // Name of the company being studied
+  diagramImages?: Map<string, ArrayBuffer>; // Rendered Mermaid diagrams as PNG images
 }
 
 /**
  * Generate and download a Word document from Deep Advisor report data
  */
 export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): Promise<void> {
-  const { content, query, companyName } = data;
+  const { content, query, companyName, diagramImages } = data;
   
   const sections: (Paragraph | Table)[] = [];
   
@@ -1467,8 +1549,8 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
     })
   );
   
-  // Main content
-  const contentParagraphs = parseMarkdownToParagraphs(content);
+  // Main content - pass diagram images for embedding
+  const contentParagraphs = parseMarkdownToParagraphs(content, diagramImages);
   sections.push(...contentParagraphs);
   
   // Generate full title for header (no truncation)
