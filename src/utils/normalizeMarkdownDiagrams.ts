@@ -123,33 +123,12 @@ function isInsideCodeBlock(lines: string[]): boolean {
  * Handles: ```Mermaid, ``` mermaid, ```  mermaid, etc.
  */
 function normalizeMermaidFences(text: string): string {
-  let result = text;
-  
   // Match: ``` followed by optional spaces, then mermaid (case-insensitive)
-  result = result.replace(
+  // Capture the content and normalize
+  return text.replace(
     /```\s*[Mm][Ee][Rr][Mm][Aa][Ii][Dd]\s*\n([\s\S]*?)```/g,
     (_, content) => `\`\`\`mermaid\n${content.trim()}\n\`\`\``
   );
-  
-  // Handle inline single/double backtick mermaid: `mermaid flowchart TD...` or ``mermaid flowchart...``
-  // Convert to proper fenced block
-  result = result.replace(
-    /`{1,2}mermaid\s+((?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|quadrantChart|requirementDiagram|gitGraph|mindmap|timeline|sankey|xychart|block)\s*(?:LR|RL|TD|TB|BT)?[^`]*)`{1,2}/gi,
-    (_, content) => {
-      // Convert inline format to multi-line with proper structure
-      const cleanContent = content.trim()
-        // Add newlines after 'end' keywords for subgraphs
-        .replace(/\bend\b\s*/g, 'end\n')
-        // Add newlines before 'subgraph' keywords
-        .replace(/\bsubgraph\b/g, '\nsubgraph')
-        // Clean up multiple newlines
-        .replace(/\n{2,}/g, '\n')
-        .trim();
-      return `\`\`\`mermaid\n${cleanContent}\n\`\`\``;
-    }
-  );
-  
-  return result;
 }
 
 /**
@@ -285,7 +264,7 @@ export function extractMermaidBlocks(text: string): {
   
   // Match properly fenced mermaid blocks
   const processedContent = text.replace(
-    /```mermaid\n([\s\S]*?)```/g,
+    /```mermaid\s*\n([\s\S]*?)\n```/g,
     (_, content) => {
       const index = mermaidBlocks.length;
       mermaidBlocks.push(content.trim());
