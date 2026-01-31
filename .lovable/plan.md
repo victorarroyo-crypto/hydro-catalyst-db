@@ -1,96 +1,75 @@
 
-# Plan: Corregir Procesamiento de Negritas en Listas
+# Plan: Añadir botón de editar título para documentos individuales
 
-## Problema Identificado
-El generador de documentos Word no está procesando correctamente las negritas (`**texto**`) dentro de elementos de lista. La imagen muestra:
-- `**Para 40.000 m³/mes:**` apareciendo como texto literal en lugar de negrita
-- Afecta a listas de viñetas (`- item`) y posiblemente listas numeradas
+## Problema identificado
 
-## Causa Raíz
-En `parseMarkdownToParagraphs` hay un problema de lógica:
-- **Párrafos regulares** (líneas 689-718): Procesan negritas con el regex `**texto**` correctamente
-- **Listas de viñetas** (líneas 646-664): Pasan directamente a `createFormattedTextRuns` sin extraer negritas
-- **Listas numeradas** (líneas 668-687): Mismo problema
+En la sección de **Documentos Técnicos** (Knowledge Base), los documentos **individuales** (no multi-parte) no muestran el botón de lápiz ni la indicación para editar el título. Actualmente solo se muestra el nombre como texto estático:
+
+```tsx
+<p className="font-medium line-clamp-2 break-all">{doc.name}</p>
+```
+
+Mientras que los grupos multi-parte SÍ tienen:
+- Texto clickeable con `cursor-pointer hover:text-primary`
+- Tooltip "Clic para editar"  
+- Botón de lápiz visible (icono Pencil)
+- Handler onClick para activar modo edición
 
 ## Solución
-Crear una función auxiliar `parseInlineFormatting` que extraiga y procese las negritas inline, y usarla en todos los contextos (párrafos, listas, tablas).
 
----
+Actualizar el renderizado del título en documentos individuales para que tenga la misma funcionalidad de edición que los grupos multi-parte:
 
-## Cambios a Implementar
+1. Hacer el título clickeable para editar
+2. Añadir el botón de lápiz (Pencil) visible junto al título
+3. Condicionar ambos a `canManage` (permisos de usuario)
 
-### Archivo: `src/lib/generateDeepAdvisorDocument.ts`
+## Cambios técnicos
 
-**1. Nueva función para procesar formateo inline:**
-```typescript
-function parseInlineFormattedRuns(text: string, baseOptions: TextRunOptions = {}): TextRun[] {
-  const textRuns: TextRun[] = [];
-  const boldRegex = /\*\*([^*]+)\*\*/g;
-  let lastIndex = 0;
-  let match;
-  
-  while ((match = boldRegex.exec(text)) !== null) {
-    // Texto antes de la negrita
-    if (match.index > lastIndex) {
-      textRuns.push(...createFormattedTextRuns(text.slice(lastIndex, match.index), baseOptions));
-    }
-    // Texto en negrita
-    textRuns.push(...createFormattedTextRuns(match[1], { ...baseOptions, bold: true }));
-    lastIndex = match.index + match[0].length;
-  }
-  
-  // Texto restante
-  if (lastIndex < text.length) {
-    textRuns.push(...createFormattedTextRuns(text.slice(lastIndex), baseOptions));
-  }
-  
-  return textRuns.length > 0 ? textRuns : createFormattedTextRuns(text, baseOptions);
-}
+### Archivo: `src/pages/KnowledgeBase.tsx`
+
+**Líneas ~2827-2829** - Reemplazar el párrafo estático del título:
+
+```tsx
+// ANTES (línea 2828)
+<p className="font-medium line-clamp-2 break-all">{doc.name}</p>
+
+// DESPUÉS
+<div className="flex items-center gap-2">
+  <p 
+    className={`font-medium line-clamp-2 break-all ${canManage ? 'cursor-pointer hover:text-primary' : ''}`}
+    onClick={canManage ? () => { setEditingDocId(doc.id); setEditingName(doc.name); } : undefined}
+    title={canManage ? "Clic para editar" : undefined}
+  >
+    {doc.name}
+  </p>
+  {canManage && (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-6 w-6 p-0 shrink-0"
+            onClick={() => { setEditingDocId(doc.id); setEditingName(doc.name); }}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Renombrar documento</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )}
+</div>
 ```
 
-**2. Actualizar listas de viñetas (líneas ~646-664):**
-```typescript
-// Antes:
-...createFormattedTextRuns(listContent),
+## Comportamiento esperado
 
-// Después:
-...parseInlineFormattedRuns(listContent),
-```
+| Usuario | Antes | Después |
+|---------|-------|---------|
+| Admin/Supervisor/Analyst | No podían ver el botón de editar | Ven el lápiz y pueden hacer clic en el título |
+| Viewer | No veían nada | Sin cambios (sin botón, sin hover) |
 
-**3. Actualizar listas numeradas (líneas ~668-687):**
-```typescript
-// Antes:
-...createFormattedTextRuns(numberedMatch[2]),
-
-// Después:
-...parseInlineFormattedRuns(numberedMatch[2]),
-```
-
-**4. Actualizar celdas de tabla (en `parseTableRowCells` y `parseMarkdownTable`):**
-Usar `parseInlineFormattedRuns` en lugar de `createFormattedTextRuns` para celdas de datos.
-
----
-
-## Flujo Corregido
-```text
-Texto: "- **Para 40.000 m³/mes:** valor"
-         ↓
-parseInlineFormattedRuns()
-         ↓
-┌─────────────────────────────────────────┐
-│ 1. Detectar **...**                     │
-│ 2. Extraer "Para 40.000 m³/mes:"        │
-│ 3. Marcar como bold: true               │
-│ 4. Procesar superíndice ³ con superScript│
-│ 5. Resto del texto normal               │
-└─────────────────────────────────────────┘
-         ↓
-TextRuns formateados correctamente
-```
-
----
-
-## Resultado Esperado
-- `**Para 40.000 m³/mes:**` → Texto en negrita con ³ en superíndice
-- `- Canon anual: ~110.000 €/año` → Viñeta con texto normal
-- Mantiene soporte para superíndices Unicode (m³) dentro de negritas
+## Impacto
+- Solo afecta la vista de lista de documentos individuales
+- No modifica la lógica de guardado (ya funciona con `renameMutation`)
+- Mantiene consistencia visual con grupos multi-parte
