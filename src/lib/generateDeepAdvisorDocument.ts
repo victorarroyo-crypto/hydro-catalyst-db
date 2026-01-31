@@ -1274,45 +1274,8 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
   const contentParagraphs = parseMarkdownToParagraphs(content);
   sections.push(...contentParagraphs);
   
-  // Sources section
-  if (sources.length > 0) {
-    sections.push(new Paragraph({ children: [], spacing: { before: 400 } }));
-    sections.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: 'Fuentes consultadas',
-            bold: true,
-            size: VANDARUM_SIZES.subtitulo,
-            font: VANDARUM_FONTS.titulo,
-            color: VANDARUM_COLORS.verdeOscuro,
-          }),
-        ],
-        spacing: { before: 300, after: 150 },
-      })
-    );
-    sections.push(createSourcesTable(sources));
-  }
-  
-  // Facts section
-  if (factsExtracted.length > 0) {
-    sections.push(new Paragraph({ children: [], spacing: { before: 400 } }));
-    sections.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: 'Datos extraídos',
-            bold: true,
-            size: VANDARUM_SIZES.subtitulo,
-            font: VANDARUM_FONTS.titulo,
-            color: VANDARUM_COLORS.verdeOscuro,
-          }),
-        ],
-        spacing: { before: 300, after: 150 },
-      })
-    );
-    sections.push(createFactsTable(factsExtracted));
-  }
+  // Note: Sources and Facts tables removed per user request
+  // The main content already contains all relevant information
   
   // Note: Footer is now handled via proper Word footer (appears on every page)
   
