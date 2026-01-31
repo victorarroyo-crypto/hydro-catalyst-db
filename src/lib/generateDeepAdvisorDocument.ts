@@ -107,19 +107,33 @@ async function createCoverPage(studyTitle?: string): Promise<Paragraph[]> {
     // Large spacer at top
     new Paragraph({ children: [], spacing: { before: 3000 } }),
     
-    // Main study title - PROTAGONIST
+    // Main study title
     new Paragraph({
       children: [
         new TextRun({
           text: title,
           bold: true,
-          size: 56, // 28pt - large and prominent
+          size: 44, // 22pt
           color: VANDARUM_COLORS.verdeOscuro,
           font: VANDARUM_FONTS.titulo,
         }),
       ],
       alignment: AlignmentType.CENTER,
-      spacing: { after: 600 },
+      spacing: { after: 200 },
+    }),
+    
+    // Company name below title
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'Vandarum',
+          size: 36, // 18pt
+          color: VANDARUM_COLORS.grisClaro,
+          font: VANDARUM_FONTS.titulo,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
     }),
     
     // Date
