@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { ExternalLink, Wrench, FileText, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
@@ -8,6 +9,7 @@ import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
 import { isMermaidContent, extractTextFromChildren } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from './FlowDiagramRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
+import { useMermaidPostProcessor } from '@/hooks/useMermaidPostProcessor';
 interface AdvisorMessageProps {
   content: string;
   sources?: Source[];
@@ -53,8 +55,12 @@ function ChemEquation({ content }: { content: string }) {
 export function AdvisorMessage({ content, sources, isStreaming = false }: AdvisorMessageProps) {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(isStreaming);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   const cleanedContent = cleanMarkdownContent(content);
+  
+  // Post-processor to catch any missed Mermaid diagrams after render
+  useMermaidPostProcessor(containerRef, displayedText, isTyping);
   
   // Simulated typing effect
   useEffect(() => {
@@ -83,9 +89,10 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
   }, [cleanedContent, isStreaming]);
 
   return (
-    <div className="advisor-message prose prose-sm dark:prose-invert max-w-none leading-relaxed">
+    <div ref={containerRef} className="advisor-message prose prose-sm dark:prose-invert max-w-none leading-relaxed">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           // Subtle headers - more spacing for professional look
           h1: ({ children }) => (

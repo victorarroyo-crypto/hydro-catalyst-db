@@ -230,60 +230,62 @@ function isDescriptiveWithArrow(text: string): boolean {
 }
 
 /**
- * Checks if text contains a flow diagram pattern
- * EXCLUDES markdown tables which use | for columns
- * EXCLUDES arrow bullets (→ text) which are just list items
- * EXCLUDES calculation lines with mathematical notation
- * EXCLUDES descriptive text that happens to have arrows
+ * Checks if text contains a flow diagram pattern.
+ * Uses a WHITELIST approach for precision: only renders as diagram if clearly a flow.
+ * 
+ * REQUIRED: Text → Text pattern (something, arrow, something)
+ * REQUIRED: Multiple arrows (2+) OR bracketed steps [Step]
+ * EXCLUDED: Tables, calculations, bullets
  */
 export function containsFlowDiagram(text: string): boolean {
-  if (!text) return false;
+  if (!text || text.length < 5) return false;
   
-  // FIRST: Exclude markdown table rows - they are NOT flow diagrams
-  if (isMarkdownTableRow(text)) {
-    return false;
-  }
-  
-  // SECOND: Exclude arrow bullets - arrows at start of line are NOT flow diagrams
-  if (isArrowBullet(text)) {
-    return false;
-  }
-  
-  // THIRD: Exclude calculation/mathematical lines
-  if (isCalculationLine(text)) {
-    return false;
-  }
-  
-  // FOURTH: Exclude descriptive prose with arrows
-  if (isDescriptiveWithArrow(text)) {
-    return false;
-  }
-  
-  // Normalize first to catch ASCII arrows
+  // Normalize arrows first
   const normalized = normalizeArrows(text);
   
-  // Must contain arrows to be a flow diagram
-  const hasArrows = normalized.includes('→') || normalized.includes('←');
-  if (!hasArrows) return false;
+  // MUST have arrows
+  if (!normalized.includes('→') && !normalized.includes('←')) {
+    return false;
+  }
   
-  // Check for bracketed steps like [Step1] → [Step2]
-  const hasBrackets = normalized.includes('[') && normalized.includes(']');
-  
-  // Flow diagrams need arrows BETWEEN elements, not just arrows present
-  // Pattern: "Word → Word" or "[Step] → [Step]" 
-  // NOT: "→ Objetivo: value" (arrow at start = bullet)
-  const hasFlowPattern = /\S\s*→\s*\S/.test(normalized) || /\S\s*←\s*\S/.test(normalized);
-  
+  // MUST have flow pattern: text → text (not arrow at start/end only)
+  const hasFlowPattern = /\S\s*→\s*\S/.test(normalized);
   if (!hasFlowPattern) return false;
   
-  // Count arrows - flow diagrams typically have sequence
-  const arrowCount = (normalized.match(/[→←]/g) || []).length;
+  // Count arrows
+  const arrowCount = (normalized.match(/→/g) || []).length;
   
-  // Also check for branch patterns (but not if it looks like a table)
+  // Check for brackets [Step]
+  const hasBrackets = /\[[^\]]+\]/.test(normalized);
+  
+  // Check for branch patterns (but not tables)
   const hasBranchPattern = /[└├┌┐│┬┴┤]/.test(text) && !text.includes('|');
   
-  // Flow diagram: has flow pattern AND (brackets OR multiple arrows OR branch pattern)
-  return hasFlowPattern && (hasBrackets || arrowCount >= 2 || hasBranchPattern);
+  // === EXCLUSIONS (precision focus) ===
+  
+  // Exclude markdown table rows (multiple |)
+  if ((normalized.match(/\|/g) || []).length >= 3) return false;
+  
+  // Exclude arrow bullets (→ at start of line)
+  if (/^\s*[→←]\s/.test(normalized)) return false;
+  
+  // Exclude calculations: "number × number", "number = number", currency
+  if (/\d+[\s.,]*[×=+\-\/][\s.,]*\d+/.test(normalized)) return false;
+  if (/\d+[\s.,]*[€$]|[€$][\s.,]*\d+/.test(normalized)) return false;
+  
+  // Exclude unit conversions: "120 ton → 480 ton" (number unit → number unit)
+  if (/\d+[\s.,]*[a-zA-Z³²]+\s*→\s*\d+[\s.,]*[a-zA-Z³²]+/.test(normalized)) return false;
+  
+  // Exclude cost expressions: "€/año", "€/m³"
+  if (/€\s*\/\s*(año|mes|día|hora|m[³²]|ton|kg|L)/i.test(normalized)) return false;
+  
+  // Exclude very long segments (>60 chars between arrows = prose, not diagram)
+  const segments = normalized.split(/\s*→\s*/);
+  if (segments.some(seg => seg.trim().length > 60)) return false;
+  
+  // === POSITIVE MATCH ===
+  // Flow diagram: has brackets OR multiple arrows OR branch pattern
+  return hasBrackets || arrowCount >= 2 || hasBranchPattern;
 }
 
 /**
