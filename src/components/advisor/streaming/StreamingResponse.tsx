@@ -7,7 +7,6 @@ import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
 import { isMermaidContent, extractTextFromChildren } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from '../FlowDiagramRenderer';
 import { MermaidRenderer } from '../MermaidRenderer';
-import { useMermaidPostProcessor } from '@/hooks/useMermaidPostProcessor';
 
 interface StreamingResponseProps {
   content: string;
@@ -35,9 +34,6 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
 
   // Clean and enhance the markdown content
   const cleanedContent = useMemo(() => cleanMarkdownContent(content), [content]);
-  
-  // Post-processor to catch any missed Mermaid diagrams after render
-  useMermaidPostProcessor(containerRef, displayedContent, isStreaming);
 
   // Typing effect - update displayed content as new content arrives
   useEffect(() => {
