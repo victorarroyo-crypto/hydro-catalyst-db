@@ -48,22 +48,43 @@ function getPngDimensions(arrayBuffer: ArrayBuffer): { width: number; height: nu
 
 /**
  * Generate a clean title from query or content (no truncation for header)
+ * Returns { title: string, companyExtracted: string | null }
  */
-function generateFullTitle(query?: string, content?: string): string {
+function generateFullTitle(query?: string, content?: string): { title: string; companyExtracted: string | null } {
   const source = query || content || 'Análisis Técnico';
   
   // Clean up the text - remove markdown and newlines
-  const cleanText = source
+  let cleanText = source
     .replace(/[#*_`]/g, '')
     .replace(/\n/g, ' ')
     .trim();
   
-  // Get first sentence or meaningful phrase (up to 100 chars)
+  // Remove "INFORME TÉCNICO:" prefix if present
+  cleanText = cleanText.replace(/^INFORME\s+T[EÉ]CNICO\s*:\s*/i, '');
+  
+  // Try to extract company name after common patterns like "en [Company]" or "de [Company]"
+  // Pattern: Look for company name followed by location indicator like " - Ciudad" or ", Ciudad"
+  let companyExtracted: string | null = null;
+  const companyMatch = cleanText.match(/\s+(?:en|de|para)\s+(.+?)(?:\s*[-–]\s*[A-ZÁÉÍÓÚ][a-záéíóú]+(?:,\s*[A-ZÁÉÍÓÚ][a-záéíóú]+)?)?$/i);
+  
+  if (companyMatch) {
+    const potentialCompany = companyMatch[1].trim();
+    // Only extract if it looks like a company name (contains capital letters, reasonable length)
+    if (potentialCompany.length > 3 && potentialCompany.length < 100) {
+      companyExtracted = potentialCompany;
+      // Remove the company part from the title
+      cleanText = cleanText.replace(companyMatch[0], '').trim();
+    }
+  }
+  
+  // Get first sentence or meaningful phrase (up to 15 words)
   const words = cleanText.split(/\s+/).slice(0, 15);
   let title = words.join(' ');
   
-  // No truncation - use full title
-  return title || 'Análisis Técnico';
+  return { 
+    title: title || 'Análisis Técnico',
+    companyExtracted 
+  };
 }
 
 /**
@@ -1554,10 +1575,13 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
   sections.push(...contentParagraphs);
   
   // Generate full title for header (no truncation)
-  const fullTitle = generateFullTitle(query, content);
+  const { title: studyTitle, companyExtracted } = generateFullTitle(query, content);
+  
+  // Use extracted company if no explicit companyName provided
+  const finalCompanyName = companyName || companyExtracted;
   
   // Create cover page with study title and company name
-  const coverPageElements = await createCoverPage(fullTitle, companyName);
+  const coverPageElements = await createCoverPage(studyTitle, finalCompanyName);
   
   const doc = new Document({
     sections: [
@@ -1588,7 +1612,7 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
           },
         },
         headers: {
-          default: createHeader(fullTitle),
+          default: createHeader(studyTitle),
         },
         footers: {
           default: createFooter(),
