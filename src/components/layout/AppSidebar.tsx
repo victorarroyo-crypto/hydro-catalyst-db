@@ -18,6 +18,8 @@ import {
   ChevronDown,
   BarChart3,
   FileText,
+  Building2,
+  Calculator,
   Globe,
   Radio,
   Lightbulb,
@@ -79,6 +81,12 @@ const projectsSubItems = [
 const consultoriaSubItems = [
   { title: 'Mis Proyectos', url: '/consultoria', icon: FolderOpen },
   { title: 'Nuevo Proyecto', url: '/consultoria/nuevo', icon: Rocket },
+];
+
+const costConsultingSubItems = [
+  { title: 'Mis Análisis', url: '/cost-consulting', icon: FileText },
+  { title: 'Nuevo Análisis', url: '/cost-consulting/new', icon: Rocket },
+  { title: 'Proveedores', url: '/cost-consulting/suppliers', icon: Building2 },
 ];
 
 const scoutingSubItems = [
@@ -155,6 +163,9 @@ export function AppSidebar() {
   const [consultoriaOpen, setConsultoriaOpen] = useState(
     consultoriaSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/consultoria'))
   );
+  const [costConsultingOpen, setCostConsultingOpen] = useState(
+    costConsultingSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/cost-consulting'))
+  );
   const [taxonomyOpen, setTaxonomyOpen] = useState(
     location.pathname === '/taxonomy-admin'
   );
@@ -177,6 +188,7 @@ export function AppSidebar() {
   const isAdvisorActive = advisorSubItems.some((item) => location.pathname === item.url);
   const isProjectsActive = projectsSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/studies/'));
   const isConsultoriaActive = consultoriaSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/consultoria'));
+  const isCostConsultingActive = costConsultingSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/cost-consulting'));
   const isTaxonomyActive = location.pathname === '/taxonomy-admin';
   const isBdTechActive = location.pathname === '/technologies';
 
@@ -382,6 +394,80 @@ export function AppSidebar() {
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+
+              {/* Consultoría de Costes Submenu */}
+              <Collapsible
+                open={costConsultingOpen}
+                onOpenChange={setCostConsultingOpen}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      className={cn(
+                        'transition-all duration-200 w-full',
+                        isCostConsultingActive
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                      )}
+                    >
+                      <Calculator className="w-5 h-5" />
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 text-left">Consultoría de Costes</span>
+                          <ChevronDown className={cn(
+                            "w-4 h-4 transition-transform duration-200",
+                            costConsultingOpen && "rotate-180"
+                          )} />
+                        </>
+                      )}
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {costConsultingSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isActive(item.url) || location.pathname.startsWith(item.url + '/')}
+                            className={cn(
+                              'transition-all duration-200',
+                              (isActive(item.url) || location.pathname.startsWith(item.url + '/'))
+                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                            )}
+                          >
+                            <Link to={item.url} className="flex items-center gap-2">
+                              <item.icon className="w-4 h-4" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                      {/* Benchmarks - Solo Admin */}
+                      {profile?.role === 'admin' && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isActive('/cost-consulting/benchmarks')}
+                            className={cn(
+                              'transition-all duration-200',
+                              isActive('/cost-consulting/benchmarks')
+                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                            )}
+                          >
+                            <Link to="/cost-consulting/benchmarks" className="flex items-center gap-2">
+                              <BarChart3 className="w-4 h-4" />
+                              <span>Benchmarks</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      )}
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>
