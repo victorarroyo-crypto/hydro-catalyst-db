@@ -1,0 +1,9 @@
+export { default as CostConsultingList } from './CostConsultingList';
+export { default as CostConsultingNew } from './CostConsultingNew';
+export { default as CostConsultingDetail } from './CostConsultingDetail';
+export { default as CostConsultingContracts } from './CostConsultingContracts';
+export { default as CostConsultingInvoices } from './CostConsultingInvoices';
+export { default as CostConsultingOpportunities } from './CostConsultingOpportunities';
+export { default as CostConsultingSimulator } from './CostConsultingSimulator';
+export { default as CostConsultingSuppliers } from './CostConsultingSuppliers';
+export { default as CostConsultingBenchmarks } from './CostConsultingBenchmarks';

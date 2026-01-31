@@ -45,6 +45,17 @@ import ConsultoriaDetalle from "./pages/consultoria/ConsultoriaDetalle";
 import ConsultoriaDiagnostico from "./pages/consultoria/ConsultoriaDiagnostico";
 import ConsultoriaDocumentos from "./pages/consultoria/ConsultoriaDocumentos";
 import ScenarioDesignerPage from "./pages/consultoria/ScenarioDesignerPage";
+import {
+  CostConsultingList,
+  CostConsultingNew,
+  CostConsultingDetail,
+  CostConsultingContracts,
+  CostConsultingInvoices,
+  CostConsultingOpportunities,
+  CostConsultingSimulator,
+  CostConsultingSuppliers,
+  CostConsultingBenchmarks,
+} from "./pages/cost-consulting";
 
 import ProjectBriefingPage from "./pages/consultoria/ProjectBriefingPage";
 import ProjectResearchPage from "./pages/consultoria/ProjectResearchPage";
@@ -99,6 +110,18 @@ const App = () => (
               <Route path="/consultoria/:id/diagnostico" element={<ConsultoriaDiagnostico />} />
               <Route path="/consultoria/:id/documentos" element={<ConsultoriaDocumentos />} />
               <Route path="/consultoria/:id/scenarios/designer" element={<ScenarioDesignerPage />} />
+              
+              {/* Cost Consulting Routes */}
+              <Route path="/cost-consulting" element={<CostConsultingList />} />
+              <Route path="/cost-consulting/new" element={<CostConsultingNew />} />
+              <Route path="/cost-consulting/suppliers" element={<CostConsultingSuppliers />} />
+              <Route path="/cost-consulting/benchmarks" element={<CostConsultingBenchmarks />} />
+              <Route path="/cost-consulting/:id" element={<CostConsultingDetail />} />
+              <Route path="/cost-consulting/:id/contracts" element={<CostConsultingContracts />} />
+              <Route path="/cost-consulting/:id/invoices" element={<CostConsultingInvoices />} />
+              <Route path="/cost-consulting/:id/opportunities" element={<CostConsultingOpportunities />} />
+              <Route path="/cost-consulting/:id/simulator" element={<CostConsultingSimulator />} />
+              
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/data-quality" element={<DataQualityControl />} />
               <Route path="/reviews" element={<QualityControl />} />
