@@ -74,8 +74,32 @@ export default function AdvisorChat() {
   // Polling-based hook for Deep Mode (replaces SSE streaming)
   const deepJob = useDeepAdvisorJob({
     pollingInterval: 5000,
-    onComplete: (result) => {
+    onComplete: async (result) => {
       console.log('[AdvisorChat] Deep job complete:', result?.chat_id);
+      
+      // Save pdf_url to database if present for persistent access
+      if (result?.chat_id && result?.pdf_url) {
+        try {
+          const { externalSupabase } = await import('@/integrations/supabase/externalClient');
+          
+          // Update the latest assistant message with the pdf_url
+          const { error: updateError } = await externalSupabase
+            .from('advisor_messages')
+            .update({ pdf_url: result.pdf_url })
+            .eq('chat_id', result.chat_id)
+            .eq('role', 'assistant')
+            .order('created_at', { ascending: false })
+            .limit(1);
+          
+          if (updateError) {
+            console.warn('[AdvisorChat] Failed to save pdf_url:', updateError);
+          } else {
+            console.log('[AdvisorChat] Saved pdf_url to DB:', result.pdf_url);
+          }
+        } catch (err) {
+          console.warn('[AdvisorChat] Error saving pdf_url:', err);
+        }
+      }
       
       // Sync messages from DB - backend already saved user + assistant messages
       if (result?.chat_id) {
@@ -790,9 +814,23 @@ export default function AdvisorChat() {
                   </div>
                 )}
 
-                {/* Download Document button for historic messages (generates locally with proper formatting) */}
+                {/* Download Document button for historic messages */}
                 {message.role === 'assistant' && message.content && message.content.length > 500 && (
-                  <div className="mt-3 pt-2 border-t border-border/30 flex justify-end">
+                  <div className="mt-3 pt-2 border-t border-border/30 flex justify-end gap-2">
+                    {/* Primary button: Open original PDF if available */}
+                    {message.pdf_url && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => window.open(message.pdf_url, '_blank')}
+                        className="gap-2 text-white"
+                        style={{ background: 'linear-gradient(135deg, #307177 0%, #32b4cd 100%)' }}
+                      >
+                        <FileDown className="h-4 w-4" />
+                        Abrir PDF original
+                      </Button>
+                    )}
+                    {/* Fallback: Generate document locally */}
                     <Button
                       variant="outline"
                       size="sm"
@@ -800,7 +838,7 @@ export default function AdvisorChat() {
                       className="gap-2 text-[#307177] border-[#307177]/30 hover:bg-[#307177]/5 hover:border-[#307177]/50"
                     >
                       <FileDown className="h-4 w-4" />
-                      Descargar informe
+                      {message.pdf_url ? 'Regenerar documento' : 'Descargar informe'}
                     </Button>
                   </div>
                 )}
