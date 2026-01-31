@@ -30,6 +30,23 @@ import {
 import type { DeepJobSource, DeepJobFact } from './advisorProxy';
 
 /**
+ * Get image dimensions from PNG ArrayBuffer
+ * PNG stores width/height in bytes 16-23 of the file (IHDR chunk)
+ */
+function getPngDimensions(arrayBuffer: ArrayBuffer): { width: number; height: number } | null {
+  try {
+    const view = new DataView(arrayBuffer);
+    // PNG signature is first 8 bytes, then IHDR chunk
+    // Width is at bytes 16-19, Height at bytes 20-23 (big-endian)
+    const width = view.getUint32(16, false);
+    const height = view.getUint32(20, false);
+    return { width, height };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Generate a clean title from query or content (no truncation for header)
  */
 function generateFullTitle(query?: string, content?: string): string {
@@ -56,16 +73,29 @@ async function createCoverPage(studyTitle?: string): Promise<Paragraph[]> {
   const currentYear = new Date().getFullYear();
   const title = studyTitle || 'Análisis Técnico Especializado';
   
-  // Fetch logo image
+  // Fetch logo image with aspect ratio preservation
   let logoImageRun: ImageRun | null = null;
   try {
     const response = await fetch('/vandarum-logo-principal.png');
     const arrayBuffer = await response.arrayBuffer();
+    
+    // Calculate proportional dimensions based on original aspect ratio
+    const dimensions = getPngDimensions(arrayBuffer);
+    let targetWidth = 120; // Default width
+    let targetHeight = 60; // Default max height
+    
+    if (dimensions && dimensions.height > 0) {
+      const aspectRatio = dimensions.width / dimensions.height;
+      // Fix height to 60px and calculate width proportionally
+      targetHeight = 60;
+      targetWidth = Math.round(targetHeight * aspectRatio);
+    }
+    
     logoImageRun = new ImageRun({
       data: arrayBuffer,
       transformation: {
-        width: 80, // Small and discrete
-        height: 80,
+        width: targetWidth,
+        height: targetHeight,
       },
       type: 'png',
     });
