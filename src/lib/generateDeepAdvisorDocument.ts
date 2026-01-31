@@ -69,7 +69,7 @@ function generateFullTitle(query?: string, content?: string): string {
 /**
  * Create cover page elements
  */
-async function createCoverPage(studyTitle?: string): Promise<Paragraph[]> {
+async function createCoverPage(studyTitle?: string, companyName?: string): Promise<Paragraph[]> {
   const currentYear = new Date().getFullYear();
   const title = studyTitle || 'Análisis Técnico Especializado';
   
@@ -122,11 +122,11 @@ async function createCoverPage(studyTitle?: string): Promise<Paragraph[]> {
       spacing: { after: 200 },
     }),
     
-    // Company name below title
-    new Paragraph({
+    // Company name below title (the company being studied)
+    ...(companyName ? [new Paragraph({
       children: [
         new TextRun({
-          text: 'Vandarum',
+          text: companyName,
           size: 36, // 18pt
           color: VANDARUM_COLORS.grisClaro,
           font: VANDARUM_FONTS.titulo,
@@ -134,7 +134,7 @@ async function createCoverPage(studyTitle?: string): Promise<Paragraph[]> {
       ],
       alignment: AlignmentType.CENTER,
       spacing: { after: 400 },
-    }),
+    })] : []),
     
     // Date
     new Paragraph({
@@ -1407,13 +1407,14 @@ export interface DeepAdvisorReportData {
   factsExtracted?: DeepJobFact[];
   query?: string;
   chatId?: string;
+  companyName?: string; // Name of the company being studied
 }
 
 /**
  * Generate and download a Word document from Deep Advisor report data
  */
 export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): Promise<void> {
-  const { content, query } = data;
+  const { content, query, companyName } = data;
   
   const sections: (Paragraph | Table)[] = [];
   
@@ -1458,8 +1459,8 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
   // Generate full title for header (no truncation)
   const fullTitle = generateFullTitle(query, content);
   
-  // Create cover page with study title as protagonist
-  const coverPageElements = await createCoverPage(fullTitle);
+  // Create cover page with study title and company name
+  const coverPageElements = await createCoverPage(fullTitle, companyName);
   
   const doc = new Document({
     sections: [
