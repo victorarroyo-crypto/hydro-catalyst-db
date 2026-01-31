@@ -229,6 +229,8 @@ export function formatFlowDiagrams(text: string): string {
   return text;
 }
 
+import { normalizeMarkdownDiagrams } from './normalizeMarkdownDiagrams';
+
 /**
  * Clean and normalize markdown content for better rendering.
  */
@@ -237,18 +239,21 @@ export function cleanMarkdownContent(text: string): string {
   
   let cleaned = text;
   
-  // First enhance title formatting
+  // Step 0: Pre-process diagrams (normalize Mermaid fences, detect unfenced diagrams)
+  cleaned = normalizeMarkdownDiagrams(cleaned);
+  
+  // Step 1: Enhance title formatting
   cleaned = enhanceTitleFormatting(cleaned);
   
   // Note: Flow diagrams are handled by FlowDiagramRenderer component
   
-  // Then fix tables
+  // Step 2: Fix tables
   cleaned = fixMarkdownTables(cleaned);
   
-  // Remove ASCII diagrams (but preserve tables)
+  // Step 3: Remove ASCII diagrams (but preserve tables)
   cleaned = removeAsciiDiagrams(cleaned);
   
-  // Clean up common issues - but DON'T modify list markers as ReactMarkdown handles them
+  // Step 4: Clean up common issues - but DON'T modify list markers as ReactMarkdown handles them
   cleaned = cleaned
     // *** or more → **
     .replace(/\*{3,}/g, '**')

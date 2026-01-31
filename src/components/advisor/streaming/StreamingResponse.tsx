@@ -1,11 +1,13 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { cn } from '@/lib/utils';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
 import { isMermaidContent, extractTextFromChildren } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from '../FlowDiagramRenderer';
 import { MermaidRenderer } from '../MermaidRenderer';
+import { useMermaidPostProcessor } from '@/hooks/useMermaidPostProcessor';
 
 interface StreamingResponseProps {
   content: string;
@@ -29,9 +31,13 @@ function ChemEquation({ content }: { content: string }) {
 export function StreamingResponse({ content, isStreaming, className }: StreamingResponseProps) {
   const [displayedContent, setDisplayedContent] = useState('');
   const [showCursor, setShowCursor] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Clean and enhance the markdown content
   const cleanedContent = useMemo(() => cleanMarkdownContent(content), [content]);
+  
+  // Post-processor to catch any missed Mermaid diagrams after render
+  useMermaidPostProcessor(containerRef, displayedContent, isStreaming);
 
   // Typing effect - update displayed content as new content arrives
   useEffect(() => {
@@ -57,9 +63,10 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
   }
 
   return (
-    <div className={cn('prose prose-sm max-w-none', className)}>
+    <div ref={containerRef} className={cn('prose prose-sm max-w-none', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           // Custom table styling
           table: ({ children }) => (
