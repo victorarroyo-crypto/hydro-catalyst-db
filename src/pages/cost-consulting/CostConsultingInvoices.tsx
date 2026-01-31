@@ -1,15 +1,261 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Plus, Receipt } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Calendar } from '@/components/ui/calendar';
+import type { DateRange } from 'react-day-picker';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { Separator } from '@/components/ui/separator';
+import { 
+  ArrowLeft,
+  Receipt,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  ChevronRight,
+  Eye,
+  Download,
+  Flag,
+  CalendarIcon,
+  TrendingUp,
+  Euro,
+  FileWarning,
+  RefreshCw
+} from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart } from 'recharts';
+
+// Mock data
+const mockInvoices = [
+  {
+    id: '1',
+    invoiceNumber: 'F-2024-123',
+    date: '2024-03-15',
+    supplier: 'Química Industrial SL',
+    category: 'Químicos',
+    total: 3450,
+    compliance: 'error',
+    issuesCount: 2,
+    linkedContract: 'CTR-2024-089',
+    issues: [
+      {
+        type: 'price_deviation',
+        severity: 'error',
+        title: 'Desviación de precio',
+        product: 'PAC 18%',
+        contracted: 0.35,
+        invoiced: 0.38,
+        unit: '€/kg',
+        deviation: 8.6,
+        impact: 125,
+      },
+      {
+        type: 'service_not_contracted',
+        severity: 'error',
+        title: 'Servicio no contratado',
+        description: '"Gestión urgente": 45€',
+        note: 'Este servicio no aparece en el contrato',
+        impact: 45,
+      },
+    ],
+    recoverableAmount: 170,
+  },
+  {
+    id: '2',
+    invoiceNumber: 'F-2024-124',
+    date: '2024-03-18',
+    supplier: 'Mantenimientos Técnicos SA',
+    category: 'O&M',
+    total: 3000,
+    compliance: 'ok',
+    issuesCount: 0,
+    linkedContract: 'CTR-2023-045',
+    issues: [],
+    recoverableAmount: 0,
+  },
+  {
+    id: '3',
+    invoiceNumber: 'F-2024-125',
+    date: '2024-03-20',
+    supplier: 'Residuos Mediterráneo',
+    category: 'Residuos',
+    total: 1200,
+    compliance: 'warning',
+    issuesCount: 1,
+    linkedContract: 'CTR-2023-078',
+    issues: [
+      {
+        type: 'quantity_deviation',
+        severity: 'warning',
+        title: 'Cantidad fuera de rango',
+        product: 'Transporte lodos',
+        expected: '50-80 t/mes',
+        invoiced: '95 t',
+        note: 'Verificar si hubo incidencia puntual',
+        impact: 0,
+      },
+    ],
+    recoverableAmount: 0,
+  },
+  {
+    id: '4',
+    invoiceNumber: 'F-2024-126',
+    date: '2024-03-22',
+    supplier: 'Química Industrial SL',
+    category: 'Químicos',
+    total: 2800,
+    compliance: 'error',
+    issuesCount: 1,
+    linkedContract: 'CTR-2024-089',
+    issues: [
+      {
+        type: 'duplicate',
+        severity: 'error',
+        title: 'Posible factura duplicada',
+        description: 'Coincide con F-2024-119 (mismo importe y fecha similar)',
+        note: 'Verificar si es una refacturación o duplicado',
+        impact: 2800,
+      },
+    ],
+    recoverableAmount: 2800,
+  },
+  {
+    id: '5',
+    invoiceNumber: 'F-2024-127',
+    date: '2024-03-25',
+    supplier: 'Limpiezas Industriales',
+    category: 'Limpieza',
+    total: 1000,
+    compliance: 'ok',
+    issuesCount: 0,
+    linkedContract: 'CTR-2023-112',
+    issues: [],
+    recoverableAmount: 0,
+  },
+];
+
+const mockTrendData = [
+  { month: 'Ene 23', quimicos: 0.34, contratado_min: 0.32, contratado_max: 0.36 },
+  { month: 'Feb 23', quimicos: 0.35, contratado_min: 0.32, contratado_max: 0.36 },
+  { month: 'Mar 23', quimicos: 0.33, contratado_min: 0.32, contratado_max: 0.36 },
+  { month: 'Abr 23', quimicos: 0.35, contratado_min: 0.32, contratado_max: 0.36 },
+  { month: 'May 23', quimicos: 0.34, contratado_min: 0.32, contratado_max: 0.36 },
+  { month: 'Jun 23', quimicos: 0.36, contratado_min: 0.32, contratado_max: 0.36 },
+  { month: 'Jul 23', quimicos: 0.35, contratado_min: 0.32, contratado_max: 0.36 },
+  { month: 'Ago 23', quimicos: 0.37, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
+  { month: 'Sep 23', quimicos: 0.36, contratado_min: 0.32, contratado_max: 0.36 },
+  { month: 'Oct 23', quimicos: 0.35, contratado_min: 0.32, contratado_max: 0.36 },
+  { month: 'Nov 23', quimicos: 0.38, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
+  { month: 'Dic 23', quimicos: 0.37, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
+  { month: 'Ene 24', quimicos: 0.38, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
+  { month: 'Feb 24', quimicos: 0.38, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
+  { month: 'Mar 24', quimicos: 0.38, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
+];
+
+const suppliers = ['Química Industrial SL', 'Mantenimientos Técnicos SA', 'Residuos Mediterráneo', 'Limpiezas Industriales'];
+const categories = ['Químicos', 'O&M', 'Residuos', 'Limpieza', 'Canon y tasas'];
+
+const getComplianceBadge = (compliance: string, issuesCount: number) => {
+  switch (compliance) {
+    case 'ok':
+      return (
+        <div className="flex items-center gap-1.5">
+          <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <span className="text-green-600 text-sm">OK</span>
+        </div>
+      );
+    case 'warning':
+      return (
+        <div className="flex items-center gap-1.5">
+          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+          <span className="text-yellow-600 text-sm">{issuesCount} issue</span>
+        </div>
+      );
+    case 'error':
+      return (
+        <div className="flex items-center gap-1.5">
+          <XCircle className="h-4 w-4 text-red-500" />
+          <span className="text-red-600 text-sm">{issuesCount} issues</span>
+        </div>
+      );
+    default:
+      return null;
+  }
+};
 
 const CostConsultingInvoices = () => {
   const { id } = useParams();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [supplierFilter, setSupplierFilter] = useState<string>('all');
+  const [complianceFilter, setComplianceFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [selectedInvoice, setSelectedInvoice] = useState<typeof mockInvoices[0] | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const filteredInvoices = mockInvoices.filter(invoice => {
+    const matchesSupplier = supplierFilter === 'all' || invoice.supplier === supplierFilter;
+    const matchesCompliance = complianceFilter === 'all' || 
+      (complianceFilter === 'ok' && invoice.compliance === 'ok') ||
+      (complianceFilter === 'issues' && invoice.compliance !== 'ok');
+    const matchesCategory = categoryFilter === 'all' || invoice.category === categoryFilter;
+    return matchesSupplier && matchesCompliance && matchesCategory;
+  });
+
+  const totalInvoices = filteredInvoices.length;
+  const totalAmount = filteredInvoices.reduce((sum, inv) => sum + inv.total, 0);
+  const invoicesWithIssues = filteredInvoices.filter(inv => inv.issuesCount > 0).length;
+  const recoverableAmount = filteredInvoices.reduce((sum, inv) => sum + inv.recoverableAmount, 0);
+
+  const handleViewInvoice = (invoice: typeof mockInvoices[0]) => {
+    setSelectedInvoice(invoice);
+    setSheetOpen(true);
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="space-y-4">
+        <nav className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link to="/cost-consulting" className="hover:text-foreground transition-colors">
+            Consultoría de Costes
+          </Link>
+          <ChevronRight className="h-4 w-4" />
+          <Link to={`/cost-consulting/${id}`} className="hover:text-foreground transition-colors">
+            Análisis
+          </Link>
+          <ChevronRight className="h-4 w-4" />
+          <span className="text-foreground font-medium">Facturas</span>
+        </nav>
+        
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
             <Link to={`/cost-consulting/${id}`}>
@@ -18,28 +264,405 @@ const CostConsultingInvoices = () => {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-foreground">Facturas</h1>
-            <p className="text-muted-foreground mt-1">Análisis #{id}</p>
+            <p className="text-muted-foreground mt-1">Análisis de compliance y detección de anomalías</p>
           </div>
         </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Subir Facturas
-        </Button>
       </div>
 
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-16">
-          <Receipt className="h-12 w-12 text-muted-foreground mb-4" />
-          <CardTitle className="mb-2">No hay facturas</CardTitle>
-          <CardDescription className="text-center mb-4">
-            Sube facturas para analizar gastos y detectar anomalías
-          </CardDescription>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Subir Facturas
-          </Button>
+      {/* KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Facturas Analizadas</CardTitle>
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalInvoices}</div>
+            <p className="text-xs text-muted-foreground">En el período</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Facturado</CardTitle>
+            <Euro className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalAmount.toLocaleString('es-ES')}€</div>
+            <p className="text-xs text-muted-foreground">Suma de facturas</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Con Issues</CardTitle>
+            <FileWarning className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-destructive">{invoicesWithIssues}</div>
+            <p className="text-xs text-muted-foreground">Requieren revisión</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Recuperable</CardTitle>
+            <RefreshCw className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">{recoverableAmount.toLocaleString('es-ES')}€</div>
+            <p className="text-xs text-muted-foreground">Importe cuestionable</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap gap-4">
+            {/* Date Range */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="min-w-[240px] justify-start">
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateRange?.from ? (
+                    dateRange.to ? (
+                      <>
+                        {format(dateRange.from, 'dd/MM/yy', { locale: es })} -{' '}
+                        {format(dateRange.to, 'dd/MM/yy', { locale: es })}
+                      </>
+                    ) : (
+                      format(dateRange.from, 'dd/MM/yyyy', { locale: es })
+                    )
+                  ) : (
+                    <span className="text-muted-foreground">Período</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  numberOfMonths={2}
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+            
+            <div className="w-[200px]">
+              <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Proveedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los proveedores</SelectItem>
+                  {suppliers.map(s => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="w-[180px]">
+              <Select value={complianceFilter} onValueChange={setComplianceFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Compliance" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="ok">OK</SelectItem>
+                  <SelectItem value="issues">Con issues</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="w-[160px]">
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {categories.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Price Trends Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Tendencia de Precios - Químicos (PAC 18%)
+          </CardTitle>
+          <CardDescription>Evolución del precio facturado vs contratado (€/kg)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={mockTrendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                <YAxis domain={[0.30, 0.42]} tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px'
+                  }}
+                  formatter={(value: number) => [`${value.toFixed(2)}€/kg`]}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="contratado_max" 
+                  stackId="1"
+                  stroke="none" 
+                  fill="hsl(var(--primary))" 
+                  fillOpacity={0.1}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="contratado_min" 
+                  stackId="2"
+                  stroke="none" 
+                  fill="hsl(var(--background))" 
+                  fillOpacity={1}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="quimicos" 
+                  stroke="hsl(var(--primary))" 
+                  strokeWidth={2}
+                  dot={(props) => {
+                    const { cx, cy, payload } = props;
+                    if (payload.anomaly) {
+                      return (
+                        <circle cx={cx} cy={cy} r={6} fill="hsl(var(--destructive))" stroke="white" strokeWidth={2} />
+                      );
+                    }
+                    return <circle cx={cx} cy={cy} r={3} fill="hsl(var(--primary))" />;
+                  }}
+                />
+                <ReferenceLine y={0.36} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" label={{ value: 'Máx contrato', position: 'right', fontSize: 10 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex gap-4 mt-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-primary" />
+              <span className="text-muted-foreground">Precio facturado</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-3 rounded bg-primary/10" />
+              <span className="text-muted-foreground">Rango contratado</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-destructive" />
+              <span className="text-muted-foreground">Anomalía detectada</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Invoices Table */}
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nº Factura</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead>Proveedor</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead>Compliance</TableHead>
+                <TableHead className="w-[80px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredInvoices.map((invoice) => (
+                <TableRow 
+                  key={invoice.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleViewInvoice(invoice)}
+                >
+                  <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
+                  <TableCell>
+                    {format(new Date(invoice.date), 'dd/MM', { locale: es })}
+                  </TableCell>
+                  <TableCell>{invoice.supplier}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{invoice.category}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    {invoice.total.toLocaleString('es-ES')}€
+                  </TableCell>
+                  <TableCell>
+                    {getComplianceBadge(invoice.compliance, invoice.issuesCount)}
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="sm">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Invoice Detail Sheet */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+          {selectedInvoice && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <Receipt className="h-5 w-5" />
+                  {selectedInvoice.invoiceNumber}
+                </SheetTitle>
+                <SheetDescription>
+                  Detalle de factura y compliance check
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="space-y-6 mt-6">
+                {/* Invoice Data */}
+                <div className="space-y-3">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Receipt className="h-4 w-4" />
+                    Datos Factura
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Proveedor</span>
+                      <p className="font-medium">{selectedInvoice.supplier}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Fecha</span>
+                      <p className="font-medium">
+                        {format(new Date(selectedInvoice.date), 'dd/MM/yyyy', { locale: es })}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total</span>
+                      <p className="font-medium text-lg">{selectedInvoice.total.toLocaleString('es-ES')}€</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Contrato vinculado</span>
+                      <p className="font-medium text-primary">{selectedInvoice.linkedContract}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Compliance Check */}
+                <div className="space-y-3">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    {selectedInvoice.compliance === 'ok' ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                    )}
+                    Compliance Check
+                  </h4>
+                  
+                  {selectedInvoice.issues.length === 0 ? (
+                    <div className="p-4 rounded-lg bg-green-500/10 text-green-700 flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5" />
+                      <span>Factura sin incidencias - todos los datos coinciden con el contrato</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedInvoice.issues.map((issue, idx) => (
+                        <div 
+                          key={idx}
+                          className={`p-4 rounded-lg ${
+                            issue.severity === 'error' 
+                              ? 'bg-red-500/10 border border-red-200' 
+                              : 'bg-yellow-500/10 border border-yellow-200'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2 mb-2">
+                            {issue.severity === 'error' ? (
+                              <XCircle className="h-5 w-5 text-red-500 shrink-0" />
+                            ) : (
+                              <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0" />
+                            )}
+                            <span className={`font-semibold ${
+                              issue.severity === 'error' ? 'text-red-700' : 'text-yellow-700'
+                            }`}>
+                              {issue.title.toUpperCase()}
+                            </span>
+                          </div>
+                          
+                          <div className="ml-7 space-y-1 text-sm">
+                            {'product' in issue && (
+                              <>
+                                <p><span className="text-muted-foreground">Producto:</span> {issue.product}</p>
+                                <p><span className="text-muted-foreground">Contratado:</span> {issue.contracted}{issue.unit}</p>
+                                <p><span className="text-muted-foreground">Facturado:</span> {issue.invoiced}{issue.unit}</p>
+                                <p className="font-medium text-red-600">
+                                  Diferencia: +{issue.deviation}% ({issue.impact}€ sobrecargo)
+                                </p>
+                              </>
+                            )}
+                            {'description' in issue && (
+                              <p>{issue.description}</p>
+                            )}
+                            {'expected' in issue && (
+                              <>
+                                <p><span className="text-muted-foreground">Esperado:</span> {issue.expected}</p>
+                                <p><span className="text-muted-foreground">Facturado:</span> {issue.invoiced}</p>
+                              </>
+                            )}
+                            {'note' in issue && (
+                              <p className="text-muted-foreground italic mt-2">{issue.note}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Summary */}
+                {selectedInvoice.recoverableAmount > 0 && (
+                  <>
+                    <Separator />
+                    <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                      <h4 className="font-semibold mb-2">Resumen</h4>
+                      <p className="text-lg font-bold text-primary">
+                        Importe cuestionable: {selectedInvoice.recoverableAmount.toLocaleString('es-ES')}€
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" className="flex-1">
+                    <Download className="h-4 w-4 mr-2" />
+                    Exportar detalle
+                  </Button>
+                  <Button className="flex-1" disabled={selectedInvoice.compliance === 'ok'}>
+                    <Flag className="h-4 w-4 mr-2" />
+                    Marcar como reclamada
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
