@@ -29,90 +29,44 @@ import {
 import type { DeepJobSource, DeepJobFact } from './advisorProxy';
 
 /**
- * Generate a short title (max 10 words) from query or content
+ * Generate a clean title from query or content (no truncation for header)
  */
-function generateShortTitle(query?: string, content?: string): string {
+function generateFullTitle(query?: string, content?: string): string {
   const source = query || content || 'Análisis Técnico';
   
-  // Clean up the text
+  // Clean up the text - remove markdown and newlines
   const cleanText = source
     .replace(/[#*_`]/g, '')
     .replace(/\n/g, ' ')
     .trim();
   
-  // Get first meaningful sentence or phrase
-  const words = cleanText.split(/\s+/).slice(0, 10);
+  // Get first sentence or meaningful phrase (up to 100 chars)
+  const words = cleanText.split(/\s+/).slice(0, 15);
   let title = words.join(' ');
   
-  // Truncate if too long and add ellipsis
-  if (title.length > 60) {
-    title = title.substring(0, 57) + '...';
-  }
-  
+  // No truncation - use full title
   return title || 'Análisis Técnico';
 }
 
 /**
  * Create cover page elements
  */
-function createCoverPage(): Paragraph[] {
+function createCoverPage(studyTitle?: string): Paragraph[] {
   const currentYear = new Date().getFullYear();
+  const title = studyTitle || 'Análisis Técnico Especializado';
   
   return [
-    // Spacer
-    new Paragraph({ children: [], spacing: { before: 2000 } }),
+    // Large spacer at top
+    new Paragraph({ children: [], spacing: { before: 3000 } }),
     
-    // Main title - VANDARUM
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: 'VANDARUM',
-          bold: true,
-          size: 96, // 48pt
-          color: VANDARUM_COLORS.verdeOscuro,
-          font: VANDARUM_FONTS.titulo,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
-    }),
-    
-    // Subtitle
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: 'Soluciones Inteligentes para el Agua',
-          size: 32, // 16pt
-          color: VANDARUM_COLORS.grisClaro,
-          font: VANDARUM_FONTS.texto,
-          italics: true,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 800 },
-    }),
-    
-    // Decorative line
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: '━━━━━━━━━━━━━━━━━━━━',
-          size: 24,
-          color: VANDARUM_COLORS.verdeOscuro,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 800 },
-    }),
-    
-    // Report type
+    // Report type label
     new Paragraph({
       children: [
         new TextRun({
           text: 'INFORME TÉCNICO',
           bold: true,
-          size: 44, // 22pt
-          color: VANDARUM_COLORS.verdeOscuro,
+          size: 28, // 14pt
+          color: VANDARUM_COLORS.grisClaro,
           font: VANDARUM_FONTS.titulo,
         }),
       ],
@@ -120,18 +74,19 @@ function createCoverPage(): Paragraph[] {
       spacing: { after: 400 },
     }),
     
-    // AI Advisor badge
+    // Main study title - PROTAGONIST
     new Paragraph({
       children: [
         new TextRun({
-          text: 'Generado por AI Advisor',
-          size: 28, // 14pt
-          color: VANDARUM_COLORS.grisTexto,
-          font: VANDARUM_FONTS.texto,
+          text: title,
+          bold: true,
+          size: 56, // 28pt - large and prominent
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
         }),
       ],
       alignment: AlignmentType.CENTER,
-      spacing: { after: 2000 },
+      spacing: { after: 600 },
     }),
     
     // Date
@@ -143,22 +98,54 @@ function createCoverPage(): Paragraph[] {
             month: 'long', 
             year: 'numeric' 
           }),
-          size: 24, // 12pt
+          size: 22, // 11pt
           color: VANDARUM_COLORS.grisClaro,
           font: VANDARUM_FONTS.texto,
         }),
       ],
       alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
+      spacing: { after: 200 },
+    }),
+    
+    // Push content to bottom with large spacer
+    new Paragraph({ children: [], spacing: { before: 4000 } }),
+    
+    // Vandarum branding - small at bottom
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'VANDARUM',
+          bold: true,
+          size: 24, // 12pt - much smaller
+          color: VANDARUM_COLORS.verdeOscuro,
+          font: VANDARUM_FONTS.titulo,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 80 },
+    }),
+    
+    // Vandarum description
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'Consultoría especializada en tratamiento y gestión del agua',
+          size: 18, // 9pt
+          color: VANDARUM_COLORS.grisClaro,
+          font: VANDARUM_FONTS.texto,
+          italics: true,
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
     }),
     
     // Copyright at bottom of cover
-    new Paragraph({ children: [], spacing: { before: 2000 } }),
     new Paragraph({
       children: [
         new TextRun({
           text: `© ${currentYear} Vandarum. Todos los derechos reservados.`,
-          size: 20, // 10pt
+          size: 16, // 8pt
           color: VANDARUM_COLORS.grisClaro,
           font: VANDARUM_FONTS.texto,
         }),
@@ -169,7 +156,7 @@ function createCoverPage(): Paragraph[] {
       children: [
         new TextRun({
           text: 'www.vandarum.es',
-          size: 20,
+          size: 16,
           color: VANDARUM_COLORS.verdeOscuro,
           font: VANDARUM_FONTS.texto,
         }),
@@ -189,8 +176,8 @@ function createHeader(title: string): Header {
       new Paragraph({
         children: [
           new TextRun({
-            text: title,
-            size: 18, // 9pt
+            text: title, // Full title, no truncation
+            size: 12, // 6pt - small as requested
             color: VANDARUM_COLORS.grisClaro,
             font: VANDARUM_FONTS.texto,
             italics: true,
@@ -198,7 +185,7 @@ function createHeader(title: string): Header {
         ],
         alignment: AlignmentType.RIGHT,
         border: {
-          bottom: { style: BorderStyle.SINGLE, size: 4, color: VANDARUM_COLORS.verdeOscuro },
+          bottom: { style: BorderStyle.SINGLE, size: 2, color: VANDARUM_COLORS.grisClaro },
         },
         spacing: { after: 200 },
       }),
@@ -345,10 +332,13 @@ interface TextRunOptions {
 
 /**
  * Parse text and create TextRuns with proper subscript/superscript formatting
+ * Now supports custom size via baseOptions.size
  */
 function createFormattedTextRuns(text: string, baseOptions: TextRunOptions = {}): TextRun[] {
   const runs: TextRun[] = [];
   const sanitized = sanitizeEmojis(text);
+  const textSize = baseOptions.size || VANDARUM_SIZES.texto;
+  const subscriptSize = Math.round(textSize * 0.75); // 75% of base size
   
   let currentText = '';
   let i = 0;
@@ -362,7 +352,7 @@ function createFormattedTextRuns(text: string, baseOptions: TextRunOptions = {})
       if (currentText) {
         runs.push(new TextRun({
           text: currentText,
-          size: VANDARUM_SIZES.texto,
+          size: textSize,
           font: VANDARUM_FONTS.texto,
           color: VANDARUM_COLORS.grisTexto,
           ...baseOptions,
@@ -377,7 +367,7 @@ function createFormattedTextRuns(text: string, baseOptions: TextRunOptions = {})
       }
       runs.push(new TextRun({
         text: subscriptText,
-        size: VANDARUM_SIZES.pequeno,
+        size: subscriptSize,
         font: VANDARUM_FONTS.texto,
         color: VANDARUM_COLORS.grisTexto,
         subScript: true,
@@ -392,7 +382,7 @@ function createFormattedTextRuns(text: string, baseOptions: TextRunOptions = {})
       if (currentText) {
         runs.push(new TextRun({
           text: currentText,
-          size: VANDARUM_SIZES.texto,
+          size: textSize,
           font: VANDARUM_FONTS.texto,
           color: VANDARUM_COLORS.grisTexto,
           ...baseOptions,
@@ -407,7 +397,7 @@ function createFormattedTextRuns(text: string, baseOptions: TextRunOptions = {})
       }
       runs.push(new TextRun({
         text: superscriptText,
-        size: VANDARUM_SIZES.pequeno,
+        size: subscriptSize,
         font: VANDARUM_FONTS.texto,
         color: VANDARUM_COLORS.grisTexto,
         superScript: true,
@@ -424,14 +414,14 @@ function createFormattedTextRuns(text: string, baseOptions: TextRunOptions = {})
   if (currentText) {
     runs.push(new TextRun({
       text: currentText,
-      size: VANDARUM_SIZES.texto,
+      size: textSize,
       font: VANDARUM_FONTS.texto,
       color: VANDARUM_COLORS.grisTexto,
       ...baseOptions,
     }));
   }
   
-  return runs.length > 0 ? runs : [new TextRun({ text: '', size: VANDARUM_SIZES.texto })];
+  return runs.length > 0 ? runs : [new TextRun({ text: '', size: textSize })];
 }
 
 /**
@@ -510,6 +500,14 @@ function parseMarkdownTable(tableLines: string[]): Table {
   const headerCells = parseTableRowCells(dataLines[0]);
   const bodyLines = dataLines.slice(1);
   
+  // Cell margins for better spacing (in twips: 1440 twips = 1 inch, ~57 twips = 1mm)
+  const cellMargins = {
+    top: 80,
+    bottom: 80,
+    left: 100,
+    right: 100,
+  };
+  
   // Create header row with Vandarum styling
   const headerRow = new TableRow({
     children: headerCells.map(cell => 
@@ -520,7 +518,7 @@ function parseMarkdownTable(tableLines: string[]): Table {
               new TextRun({
                 text: sanitizeEmojis(cell),
                 bold: true,
-                size: VANDARUM_SIZES.texto,
+                size: 18, // 9pt as requested
                 color: 'FFFFFF',
                 font: VANDARUM_FONTS.texto,
               }),
@@ -528,6 +526,7 @@ function parseMarkdownTable(tableLines: string[]): Table {
           }),
         ],
         shading: { type: ShadingType.SOLID, color: VANDARUM_COLORS.verdeOscuro },
+        margins: cellMargins,
       })
     ),
   });
@@ -545,13 +544,14 @@ function parseMarkdownTable(tableLines: string[]): Table {
         new TableCell({
           children: [
             new Paragraph({
-              children: parseInlineFormattedRuns(cell),
+              children: parseInlineFormattedRuns(cell, { size: 18 }), // 9pt
             }),
           ],
           shading: { 
             type: ShadingType.SOLID, 
-            color: idx % 2 === 0 ? 'FFFFFF' : 'F5F5F5' 
+            color: idx % 2 === 0 ? 'FFFFFF' : 'F8F8F8' 
           },
+          margins: cellMargins,
         })
       ),
     });
@@ -567,7 +567,7 @@ function parseMarkdownTable(tableLines: string[]): Table {
  * Parse inline formatting (bold **text**) within any text content
  * Returns properly formatted TextRuns with bold and subscript/superscript handling
  */
-function parseInlineFormattedRuns(text: string, baseOptions: { bold?: boolean } = {}): TextRun[] {
+function parseInlineFormattedRuns(text: string, baseOptions: { bold?: boolean; size?: number } = {}): TextRun[] {
   const textRuns: TextRun[] = [];
   const boldRegex = /\*\*([^*]+)\*\*/g;
   let lastIndex = 0;
@@ -640,18 +640,19 @@ function isMermaidContinuation(line: string): boolean {
 
 /**
  * Parse Mermaid flowchart content and convert to readable Word paragraphs
+ * No icons/emojis as requested
  */
 function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
   const paragraphs: Paragraph[] = [];
   
-  // Add a header indicating this is a diagram
+  // Add a header indicating this is a diagram (no emoji)
   paragraphs.push(
     new Paragraph({
       children: [
         new TextRun({
-          text: '📊 Diagrama de Flujo',
+          text: 'Diagrama de Flujo',
           bold: true,
-          size: VANDARUM_SIZES.texto,
+          size: 24, // 12pt as requested for headings
           font: VANDARUM_FONTS.titulo,
           color: VANDARUM_COLORS.verdeOscuro,
         }),
@@ -702,12 +703,12 @@ function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
       new Paragraph({
         children: [
           new TextRun({
-            text: '  • ',
-            size: VANDARUM_SIZES.texto,
+            text: '• ',
+            size: 18, // 9pt
             font: VANDARUM_FONTS.texto,
             color: VANDARUM_COLORS.verdeOscuro,
           }),
-          ...createFormattedTextRuns(rel),
+          ...createFormattedTextRuns(rel, { size: 18 }),
         ],
         spacing: { before: 30, after: 30 },
         indent: { left: 200 },
@@ -723,7 +724,7 @@ function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
           new TextRun({
             text: '(Ver diagrama visual en la aplicación)',
             italics: true,
-            size: VANDARUM_SIZES.pequeno,
+            size: 18, // 9pt
             font: VANDARUM_FONTS.texto,
             color: VANDARUM_COLORS.grisTexto,
           }),
@@ -834,7 +835,12 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
       continue;
     }
     
-    // Handle headings (from most specific to least)
+    // Skip separator lines (--- or ___)
+    if (/^[-_]{3,}$/.test(trimmedLine)) {
+      continue;
+    }
+    
+    // Handle headings (from most specific to least) - all at 12pt (size 24) as requested
     if (trimmedLine.startsWith('#### ')) {
       elements.push(
         new Paragraph({
@@ -842,7 +848,7 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
             new TextRun({
               text: sanitizeEmojis(trimmedLine.slice(5)),
               bold: true,
-              size: VANDARUM_SIZES.texto,
+              size: 24, // 12pt as requested
               font: VANDARUM_FONTS.titulo,
               color: VANDARUM_COLORS.verdeOscuro,
             }),
@@ -856,7 +862,15 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
     if (trimmedLine.startsWith('### ')) {
       elements.push(
         new Paragraph({
-          children: createFormattedTextRuns(trimmedLine.slice(4), { bold: true }),
+          children: [
+            new TextRun({
+              text: sanitizeEmojis(trimmedLine.slice(4)),
+              bold: true,
+              size: 24, // 12pt as requested
+              font: VANDARUM_FONTS.titulo,
+              color: VANDARUM_COLORS.verdeOscuro,
+            }),
+          ],
           heading: HeadingLevel.HEADING_3,
           spacing: { before: 200, after: 100 },
         })
@@ -871,7 +885,7 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
             new TextRun({
               text: sanitizeEmojis(trimmedLine.slice(3)),
               bold: true,
-              size: VANDARUM_SIZES.subtitulo,
+              size: 24, // 12pt as requested
               font: VANDARUM_FONTS.titulo,
               color: VANDARUM_COLORS.verdeOscuro,
             }),
@@ -890,7 +904,7 @@ function parseMarkdownToParagraphs(markdown: string): (Paragraph | Table)[] {
             new TextRun({
               text: sanitizeEmojis(trimmedLine.slice(2)),
               bold: true,
-              size: VANDARUM_SIZES.titulo,
+              size: 24, // 12pt as requested
               font: VANDARUM_FONTS.titulo,
               color: VANDARUM_COLORS.verdeOscuro,
             }),
@@ -1229,11 +1243,11 @@ export interface DeepAdvisorReportData {
  * Generate and download a Word document from Deep Advisor report data
  */
 export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): Promise<void> {
-  const { content, sources = [], factsExtracted = [], query } = data;
+  const { content, query } = data;
   
   const sections: (Paragraph | Table)[] = [];
   
-  // Query section if available (no more title/subtitle - those are on the cover page)
+  // Query section if available - 12pt heading as requested
   if (query) {
     sections.push(
       new Paragraph({
@@ -1241,7 +1255,7 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
           new TextRun({
             text: 'Consulta analizada',
             bold: true,
-            size: VANDARUM_SIZES.subtitulo,
+            size: 24, // 12pt as requested
             font: VANDARUM_FONTS.titulo,
             color: VANDARUM_COLORS.verdeOscuro,
           }),
@@ -1252,21 +1266,18 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
     
     sections.push(
       new Paragraph({
-        children: createFormattedTextRuns(query),
+        children: createFormattedTextRuns(query, { size: 18 }), // 9pt for query text
         shading: { type: ShadingType.SOLID, color: 'F5F5F5' },
         spacing: { after: 300 },
       })
     );
   }
   
-  // Separator
+  // No separator line as requested (removed ---)
   sections.push(
     new Paragraph({
       children: [],
-      border: {
-        bottom: { style: BorderStyle.SINGLE, size: 6, color: VANDARUM_COLORS.verdeOscuro },
-      },
-      spacing: { after: 300 },
+      spacing: { after: 200 },
     })
   );
   
@@ -1274,16 +1285,11 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
   const contentParagraphs = parseMarkdownToParagraphs(content);
   sections.push(...contentParagraphs);
   
-  // Note: Sources and Facts tables removed per user request
-  // The main content already contains all relevant information
+  // Generate full title for header (no truncation)
+  const fullTitle = generateFullTitle(query, content);
   
-  // Note: Footer is now handled via proper Word footer (appears on every page)
-  
-  // Generate short title for header
-  const shortTitle = generateShortTitle(query, content);
-  
-  // Create cover page
-  const coverPageElements = createCoverPage();
+  // Create cover page with study title as protagonist
+  const coverPageElements = createCoverPage(fullTitle);
   
   const doc = new Document({
     sections: [
@@ -1314,7 +1320,7 @@ export async function generateDeepAdvisorDocument(data: DeepAdvisorReportData): 
           },
         },
         headers: {
-          default: createHeader(shortTitle),
+          default: createHeader(fullTitle),
         },
         footers: {
           default: createFooter(),
