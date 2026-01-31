@@ -230,9 +230,11 @@ export function formatFlowDiagrams(text: string): string {
 }
 
 import { normalizeMarkdownDiagrams } from './normalizeMarkdownDiagrams';
+import { applyContentQualityControl } from './contentQualityControl';
 
 /**
  * Clean and normalize markdown content for better rendering.
+ * Uses the centralized quality control pipeline.
  */
 export function cleanMarkdownContent(text: string): string {
   if (!text) return text;
@@ -242,28 +244,19 @@ export function cleanMarkdownContent(text: string): string {
   // Step 0: Pre-process diagrams (normalize Mermaid fences, detect unfenced diagrams)
   cleaned = normalizeMarkdownDiagrams(cleaned);
   
-  // Step 1: Enhance title formatting
+  // Step 1: Apply centralized quality control pipeline
+  // This handles: equations, checklists, wide tables, HTML sanitization
+  const qualityResult = applyContentQualityControl(cleaned);
+  cleaned = qualityResult.content;
+  
+  // Step 2: Enhance title formatting
   cleaned = enhanceTitleFormatting(cleaned);
   
-  // Note: Flow diagrams are handled by FlowDiagramRenderer component
-  
-  // Step 2: Fix tables
+  // Step 3: Fix tables structure
   cleaned = fixMarkdownTables(cleaned);
   
-  // Step 3: Remove ASCII diagrams (but preserve tables)
+  // Step 4: Remove ASCII diagrams (but preserve tables)
   cleaned = removeAsciiDiagrams(cleaned);
-  
-  // Step 4: Clean up common issues - but DON'T modify list markers as ReactMarkdown handles them
-  cleaned = cleaned
-    // *** or more → **
-    .replace(/\*{3,}/g, '**')
-    // Multiple empty lines → 2
-    .replace(/\n{4,}/g, '\n\n\n')
-    // Empty bullet points
-    .replace(/^\s*[-*]\s*$/gm, '')
-    // Remove excessive whitespace at end of lines
-    .replace(/[ \t]+$/gm, '')
-    .trim();
   
   return cleaned;
 }
