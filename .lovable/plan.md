@@ -1,96 +1,119 @@
 
-# Plan: Persistencia de Descarga de PDFs entre Sesiones
+# Plan: Renderizado Robusto de Diagramas Mermaid
 
-## Problema Identificado
-
-Cuando completas un análisis con Deep Advisor:
-- El botón "Descargar informe" funciona correctamente **durante la sesión actual**
-- Si inicias un nuevo chat o vuelves al día siguiente, **ya no puedes descargar el PDF** fácilmente
-
-La funcionalidad de descarga para mensajes históricos **SÍ existe**, pero tiene limitaciones que hacen que no sea tan visible o útil como la original.
+## Objetivo
+Garantizar que los diagramas Mermaid se rendericen correctamente el 100% del tiempo, independientemente de cómo llegue el formato del LLM.
 
 ---
 
-## Situación Actual
-
-| Escenario | ¿Funciona? | Cómo |
-|-----------|-----------|------|
-| Descargar justo después de análisis | ✅ | Usa datos en memoria (`deepJob.result`) |
-| Descargar mismo chat, recargado | ⚠️ | Usa `message.content` si mensaje > 500 chars |
-| Descargar desde historial días después | ⚠️ | Mismo mecanismo, pero botón poco visible |
-
-El botón de descarga para mensajes históricos existe (línea 793-806 del código), pero:
-1. Solo aparece si `message.content.length > 500`
-2. No tiene acceso a las fuentes/sources originales del análisis profundo
-3. El PDF pre-generado por Railway (`pdf_url`) **nunca se guarda** en la base de datos
+## Problema Raíz
+El diagrama llega sin code fences y contiene caracteres HTML (`<br>`). El pre-procesador no detecta correctamente las líneas de continuación cuando tienen sintaxis HTML, y ReactMarkdown fragmenta el contenido en múltiples párrafos antes de que el detector pueda reconocerlo como diagrama.
 
 ---
 
-## Solución Propuesta
+## Solución: Pre-detección Temprana con Buffer Completo
 
-### Estrategia 1: Guardar `pdf_url` al completar el job
+La estrategia es **detectar diagramas Mermaid ANTES de pasarlos a ReactMarkdown**, en lugar de intentar detectarlos después del parseo.
 
-Cuando el backend Railway completa un análisis profundo, devuelve una URL del PDF pre-generado que se almacena en Supabase Storage. Esta URL **debería guardarse** en `advisor_messages.pdf_url`.
+### Cambios Propuestos
 
-**Cambios:**
-1. Modificar el callback `onComplete` de `useDeepAdvisorJob` para guardar el `pdf_url` en la DB
-2. Mostrar un botón dedicado "Descargar PDF" cuando el mensaje tenga `pdf_url`
+### 1. Mejorar `normalizeMarkdownDiagrams.ts`
+**Archivo:** `src/utils/normalizeMarkdownDiagrams.ts`
 
-### Estrategia 2: Mejorar la descarga local desde historial
+- Actualizar `looksLikeMermaidContinuation` para soportar:
+  - Etiquetas HTML dentro de nodos: `A[Label<br>Text]`
+  - Etiquetas con pipes: `A -->|Label| B`
+  - Más patrones de edges: `-->`, `-.->`
+  
+- Hacer la detección más permisiva cuando ya se confirmó que estamos dentro de un bloque Mermaid (después de detectar `flowchart LR`)
 
-Asegurar que todos los datos necesarios (sources, facts) se guarden junto con el mensaje y estén disponibles para regenerar el documento completo.
-
-**Cambios:**
-1. Guardar `sources` y otros metadatos en el mensaje cuando se complete
-2. Pasar estos datos a `generateDeepAdvisorDocument` desde el historial
-
----
-
-## Implementación Recomendada (Combinada)
-
-### Paso 1: Guardar `pdf_url` en la base de datos
-
-Cuando el job termina, guardar la URL del PDF:
-
-```typescript
-// En useAdvisorChat.ts o en el callback onComplete de AdvisorChat
-const updateMessageWithPdfUrl = async (chatId: string, pdfUrl: string) => {
-  await externalSupabase
-    .from('advisor_messages')
-    .update({ pdf_url: pdfUrl })
-    .eq('chat_id', chatId)
-    .eq('role', 'assistant')
-    .order('created_at', { ascending: false })
-    .limit(1);
-};
+```text
+Lógica actual:
+  hasEdge = /-->|---|\.->/ detecta edges
+  hasNode = /\[.*\]/ detecta nodos
+  
+Mejora propuesta:
+  - Añadir soporte para <br> dentro de brackets
+  - Si estamos en bloque mermaid, cualquier línea con indentación o ID válido es continuación
+  - No terminar bloque hasta línea vacía seguida de texto normal
 ```
 
-### Paso 2: Mostrar botón de PDF persistente
+### 2. Mejorar `mermaidDetection.ts`  
+**Archivo:** `src/utils/mermaidDetection.ts`
 
-En los mensajes del historial, mostrar un botón específico cuando exista `pdf_url`:
+- Añadir detección de patrones con HTML embebido
+- Hacer la regex más robusta para caracteres especiales
 
+### 3. Actualizar `StreamingResponse.tsx`
+**Archivo:** `src/components/advisor/streaming/StreamingResponse.tsx`
+
+- **Eliminar la detección en el componente `p`** (demasiado tarde, el contenido ya está fragmentado)
+- **Pre-procesar el contenido completo** antes de pasarlo a ReactMarkdown
+- Añadir un paso de "extracción de diagramas" que:
+  1. Detecte bloques Mermaid en el texto raw
+  2. Los reemplace por placeholders
+  3. Renderice los placeholders como `<MermaidRenderer>`
+
+### 4. Añadir Componente Wrapper Seguro
+**Archivo:** `src/components/advisor/streaming/MermaidBlock.tsx` (nuevo)
+
+- Componente que encapsula la lógica de renderizado
+- Maneja errores de forma aislada sin crashear el resto del chat
+- Muestra el código fuente como fallback si falla el render
+
+---
+
+## Detalles Técnicos
+
+### Mejora en `looksLikeMermaidContinuation`
 ```typescript
-{message.pdf_url && (
-  <Button onClick={() => window.open(message.pdf_url, '_blank')}>
-    <FileDown /> Abrir PDF original
-  </Button>
-)}
-```
-
-### Paso 3: Mejorar descarga local como fallback
-
-Si no hay `pdf_url`, usar la generación local pero con todos los metadatos:
-
-```typescript
-// Ya existe pero mejorar para incluir sources
-handleDownloadHistoricMessage(message) {
-  generateDeepAdvisorDocument({
-    content: message.content,
-    sources: message.sources,  // ← Ya se pasan
-    factsExtracted: message.metadata?.facts_extracted, // ← Añadir
-    query: undefined,
-  });
+function looksLikeMermaidContinuation(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  
+  // Lines with indentation (2+ spaces) inside a diagram
+  if (line.startsWith('  ') || line.startsWith('\t')) return true;
+  
+  // Standard patterns
+  const hasEdge = /-->|---|\.->|-\.->|==>|~~~|-.->/.test(trimmed);
+  const hasNode = /\[[^\]]*\]|\(\([^)]*\)\)|{[^}]*}|>\s*[^\]]*\]/.test(trimmed);
+  // Lines with pipes (edge labels): A -->|text| B
+  const hasEdgeLabel = /-->\|[^|]*\|/.test(trimmed);
+  // HTML inside brackets is valid Mermaid
+  const hasHtmlNode = /<br>|<br\/>|<br \/>/.test(trimmed) && /\[/.test(trimmed);
+  
+  const isKeyword = /^(subgraph|end|style|class|classDef|click|linkStyle|direction)\b/i.test(trimmed);
+  const isComment = trimmed.startsWith('%%');
+  const startsWithId = /^[A-Za-z0-9_]/.test(trimmed);
+  
+  return hasEdge || hasNode || hasEdgeLabel || hasHtmlNode || 
+         isKeyword || isComment || (startsWithId && (hasEdge || trimmed.includes('[')));
 }
+```
+
+### Nueva Estrategia de Renderizado
+```typescript
+// En StreamingResponse, ANTES de ReactMarkdown:
+const { processedContent, mermaidBlocks } = extractMermaidBlocks(cleanedContent);
+
+// ReactMarkdown recibe texto sin diagramas (reemplazados por :::mermaid-0:::)
+// Un componente custom renderiza los placeholders como MermaidRenderer
+```
+
+---
+
+## Flujo Corregido
+
+```text
+Texto LLM
+    ↓
+normalizeMarkdownDiagrams() ← MEJORADO: detecta HTML, más permisivo
+    ↓
+extractMermaidBlocks() ← NUEVO: extrae diagramas a array
+    ↓
+ReactMarkdown(textoSinDiagramas)
+    ↓
+MermaidBlock renderiza placeholders
 ```
 
 ---
@@ -99,38 +122,15 @@ handleDownloadHistoricMessage(message) {
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/pages/advisor/AdvisorChat.tsx` | Guardar `pdf_url` en callback `onComplete`, mejorar UI del botón de descarga histórica |
-| `src/hooks/useAdvisorChat.ts` | Cargar `pdf_url` al recuperar mensajes (ya lo hace) |
-| `src/types/advisorChat.ts` | Ya tiene `pdf_url` - no requiere cambios |
-
----
-
-## Flujo Después de los Cambios
-
-```text
-1. Usuario hace análisis con Deep Advisor
-         │
-         ▼
-2. Backend Railway genera PDF → devuelve pdf_url
-         │
-         ▼
-3. Frontend guarda pdf_url en advisor_messages
-         │
-         ▼
-4. Días después: Usuario abre historial
-         │
-         ▼
-5. Mensaje cargado con pdf_url intacto
-         │
-         ▼
-6. Botón "Abrir PDF" → window.open(pdf_url)
-```
+| `src/utils/normalizeMarkdownDiagrams.ts` | Mejorar detección de continuación con HTML |
+| `src/utils/mermaidDetection.ts` | Patrones más robustos |
+| `src/components/advisor/streaming/StreamingResponse.tsx` | Extraer diagramas antes de ReactMarkdown, eliminar detección en `<p>` |
 
 ---
 
 ## Beneficios
 
-- **Persistencia garantizada**: El PDF está en Supabase Storage, la URL se guarda en la DB
-- **Acceso instantáneo**: No hay que regenerar el documento, solo abrir la URL
-- **Fallback robusto**: Si no hay URL, la generación local sigue funcionando
-- **Sin dependencia de sesión**: Funciona igual al día siguiente o meses después
+1. **Detección temprana**: Los diagramas se identifican antes del parseo de Markdown
+2. **Sin conflictos DOM**: No hay manipulación directa del DOM después de React
+3. **100% consistente**: El pre-procesador ve el texto completo, no fragmentado
+4. **Fallback visual**: Si Mermaid falla, se muestra el código fuente formateado
