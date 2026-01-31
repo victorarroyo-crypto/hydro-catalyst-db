@@ -114,6 +114,7 @@ export default function AdvisorChat() {
   const [showDeepBanner, setShowDeepBanner] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevDeepModeRef = useRef(deepMode);
+  const resumeToastShownForJobRef = useRef<string | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const toggleSidebarCollapse = () => {
@@ -204,7 +205,7 @@ export default function AdvisorChat() {
 
   // Auto-activate Deep + Streaming when a job is restored from storage
   useEffect(() => {
-    if (deepJob.restoredFromStorage && deepJob.isPolling) {
+    if (deepJob.restoredFromStorage && deepJob.isPolling && deepJob.jobId) {
       console.log('[AdvisorChat] Detected restored job, auto-activating Deep + Streaming modes');
       
       // Force enable both modes to show the progress UI
@@ -215,11 +216,14 @@ export default function AdvisorChat() {
         setStreamingMode(true);
       }
       
-      // Show toast to inform user
-      toast.info('Reanudando trabajo en curso...', {
-        description: `Job ${deepJob.jobId?.substring(0, 8)}...`,
-        duration: 3000,
-      });
+      // Show toast only once per restored job (avoid repeats during polling/rerenders)
+      if (resumeToastShownForJobRef.current !== deepJob.jobId) {
+        resumeToastShownForJobRef.current = deepJob.jobId;
+        toast.info('Reanudando trabajo en curso...', {
+          description: `Job ${deepJob.jobId.substring(0, 8)}...`,
+          duration: 3000,
+        });
+      }
     }
   }, [deepJob.restoredFromStorage, deepJob.isPolling, deepJob.jobId, deepMode, streamingMode, setDeepMode, setStreamingMode]);
 
