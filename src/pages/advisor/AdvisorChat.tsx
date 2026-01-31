@@ -958,18 +958,12 @@ export default function AdvisorChat() {
       </ScrollArea>
 
       {/* Input Area - inside the flex container */}
-      <div className="border-t p-4 pb-6" style={{ background: 'linear-gradient(180deg, rgba(48,113,119,0.03) 0%, rgba(50,180,205,0.05) 100%)' }}>
+      <div className="p-4">
         <div className="max-w-3xl mx-auto space-y-3">
           {/* Deep Mode Activated Banner */}
           {showDeepBanner && (
             <DeepModeActivatedBanner onDismiss={() => setShowDeepBanner(false)} />
           )}
-
-          {/* Compact Usage Hint */}
-          <CompactUsageHint 
-            onOpenGuide={() => setIsGuideOpen(true)} 
-            isDeepMode={deepMode}
-          />
 
           {/* Input row - expandable */}
           <div className="flex gap-3 bg-white rounded-2xl p-3 shadow-lg items-end" style={{ border: '2px solid rgba(48,113,119,0.2)' }}>
@@ -1030,16 +1024,12 @@ export default function AdvisorChat() {
             )}
           </div>
           
-          {/* Cost indicator */}
-          <div className="flex items-center justify-center text-xs text-muted-foreground gap-3">
-            <span>
-              {canUseFree 
-                ? `Consulta gratuita (${freeRemaining} restantes)`
-                : `Créditos: ${balance.toFixed(2)}`
-              }
-            </span>
-            <span className="text-border">•</span>
-            <span>Las recomendaciones son orientativas</span>
+          {/* Compact credit indicator */}
+          <div className="text-center text-xs text-muted-foreground">
+            {canUseFree 
+              ? `${freeRemaining} consultas gratuitas restantes`
+              : `${balance.toFixed(2)} créditos`
+            }
           </div>
         </div>
       </div>
