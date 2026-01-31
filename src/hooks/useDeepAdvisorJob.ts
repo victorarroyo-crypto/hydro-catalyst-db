@@ -161,7 +161,7 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
     };
   }, [isPolling, jobId, pollStatus, pollingInterval]);
 
-  // Resume from localStorage on mount
+  // Resume from localStorage on mount - immediately fetch current status
   useEffect(() => {
     const savedData = localStorage.getItem(STORAGE_KEY);
     if (savedData) {
@@ -174,8 +174,51 @@ export function useDeepAdvisorJob(options: UseDeepAdvisorJobOptions = {}) {
           console.log('[useDeepAdvisorJob] Resuming job from storage:', savedJobId);
           setJobId(savedJobId);
           setChatId(savedChatId);
-          setIsPolling(true);
           setRestoredFromStorage(true);
+          
+          // Immediately fetch current status to show result if already complete
+          (async () => {
+            try {
+              const { data, error } = await getDeepJobStatus(savedJobId);
+              
+              if (error || !data) {
+                console.warn('[useDeepAdvisorJob] Failed to restore status:', error);
+                setIsPolling(true); // Resume polling anyway
+                return;
+              }
+              
+              // Update status immediately
+              setStatus(data);
+              onProgressRef.current?.(data);
+              
+              if (data.status === 'complete') {
+                // Job already finished - show result, no need to poll
+                console.log('[useDeepAdvisorJob] Job already complete, showing result');
+                localStorage.removeItem(STORAGE_KEY);
+                
+                if (data.result?.chat_id) {
+                  setChatId(data.result.chat_id);
+                }
+                if (data.result?.has_context) {
+                  setHasContext(true);
+                }
+                
+                onCompleteRef.current?.(data.result);
+              } else if (data.status === 'failed') {
+                // Job failed - show error, no need to poll
+                console.log('[useDeepAdvisorJob] Job failed:', data.error);
+                localStorage.removeItem(STORAGE_KEY);
+                onErrorRef.current?.(data.error || 'El trabajo falló sin mensaje de error');
+              } else {
+                // Job still running - continue polling
+                console.log('[useDeepAdvisorJob] Job still running, resuming polling');
+                setIsPolling(true);
+              }
+            } catch (err) {
+              console.warn('[useDeepAdvisorJob] Error restoring status:', err);
+              setIsPolling(true); // Resume polling on error
+            }
+          })();
         } else {
           // Job is too old, clean up
           localStorage.removeItem(STORAGE_KEY);
