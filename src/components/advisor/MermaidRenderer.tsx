@@ -68,6 +68,25 @@ export function MermaidRenderer({ content, className, onError }: MermaidRenderer
         cleanContent = cleanContent.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
       }
       
+      // Eliminar backticks sueltos y texto no-mermaid al final
+      cleanContent = cleanContent.replace(/`{1,3}\s*$/, '').trim();
+      
+      // Si hay líneas que claramente no son Mermaid al final, removerlas
+      const lines = cleanContent.split('\n');
+      while (lines.length > 0) {
+        const lastLine = lines[lines.length - 1].trim();
+        // Remover líneas vacías o que son claramente markdown (bullets, texto narrativo)
+        if (!lastLine || 
+            /^[\*\-]\s/.test(lastLine) || 
+            /^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[a-záéíóúñ]/.test(lastLine) ||
+            /^\d+\.\s+/.test(lastLine)) {
+          lines.pop();
+        } else {
+          break;
+        }
+      }
+      cleanContent = lines.join('\n');
+      
       // Render to SVG string
       const { svg: renderedSvg } = await mermaid.render(id, cleanContent);
       

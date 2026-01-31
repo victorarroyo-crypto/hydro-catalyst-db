@@ -3,6 +3,34 @@
  * Ensures Mermaid diagrams render correctly regardless of LLM formatting.
  */
 
+/**
+ * Detects patterns that are DEFINITELY NOT Mermaid syntax.
+ * Used to identify when a Mermaid block has ended and normal markdown begins.
+ */
+function definitelyNotMermaid(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  
+  // Backticks sueltos (fin de código o errores) - pero no ```mermaid
+  if (/^`{1,3}$/.test(trimmed)) return true;
+  if (/^`{1,3}[^`\n]/.test(trimmed) && !trimmed.toLowerCase().includes('mermaid')) return true;
+  
+  // Bullets markdown: "* texto", "- texto" (pero no nodos Mermaid con corchetes)
+  if (/^[\*\-]\s+[^\[\(\{]/.test(trimmed) && !/-->|---/.test(trimmed)) return true;
+  
+  // Bullets con negrita markdown: "* *Texto**" o "* **Texto**"
+  if (/^[\*\-]\s+\*+[A-Za-záéíóúÁÉÍÓÚ]/.test(trimmed)) return true;
+  
+  // Texto narrativo que empieza con mayúscula sin sintaxis Mermaid
+  if (/^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[a-záéíóúñ]/.test(trimmed) && 
+      !/[\[\]\(\)\{\}]|-->|---|\.->|==>/.test(trimmed)) return true;
+  
+  // Líneas que empiezan con números seguidos de punto (listas numeradas markdown)
+  if (/^\d+\.\s+/.test(trimmed) && !/[\[\]\(\)\{\}]/.test(trimmed)) return true;
+  
+  return false;
+}
+
 // Mermaid diagram type keywords
 const MERMAID_KEYWORDS = [
   'flowchart',
@@ -147,6 +175,20 @@ function wrapUnfencedMermaid(text: string): string {
     }
     
     if (inMermaidBlock) {
+      // NUEVO: Detectar fin explícito del diagrama antes de cualquier otra cosa
+      if (definitelyNotMermaid(trimmed)) {
+        // Cerrar bloque Mermaid
+        processedLines.push('```mermaid');
+        processedLines.push(...mermaidBuffer);
+        processedLines.push('```');
+        // Añadir la línea actual como texto normal
+        processedLines.push(line);
+        inMermaidBlock = false;
+        mermaidBuffer = [];
+        consecutiveEmptyLines = 0;
+        continue;
+      }
+      
       const isEmpty = trimmed === '';
       
       if (isEmpty) {
