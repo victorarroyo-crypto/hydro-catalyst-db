@@ -1,176 +1,158 @@
 /**
- * Pre-processor for Markdown content to normalize diagram syntax.
- * Ensures Mermaid diagrams render correctly regardless of LLM formatting.
+ * Comprehensive pre-processor for Markdown content with Mermaid diagrams.
+ * 
+ * This module handles ALL known LLM formatting issues:
+ * - Malformed backtick fences (1-4 backticks instead of exactly 3)
+ * - Missing newlines between fences and content  
+ * - Mixed backtick counts in opening/closing fences
+ * - Mermaid blocks that "swallow" subsequent markdown
+ * - Unfenced Mermaid diagrams that need wrapping
  */
+
+import { sanitizeMermaidContent } from './mermaidSanitizer';
+
+// Mermaid diagram type keywords
+const MERMAID_KEYWORDS = [
+  'flowchart', 'graph', 'sequenceDiagram', 'classDiagram',
+  'stateDiagram', 'stateDiagram-v2', 'erDiagram', 'journey',
+  'gantt', 'pie', 'quadrantChart', 'requirementDiagram',
+  'gitGraph', 'mindmap', 'timeline', 'sankey', 'xychart', 'block'
+];
+
+// Mermaid direction keywords
+const MERMAID_DIRECTIONS = ['LR', 'RL', 'TD', 'TB', 'BT'];
 
 /**
- * Detects patterns that are DEFINITELY NOT Mermaid syntax.
- * Used to identify when a Mermaid block has ended and normal markdown begins.
+ * Patterns that indicate end of Mermaid content and start of markdown.
+ * Used to detect where LLM failed to properly close a fence.
  */
-function definitelyNotMermaid(line: string): boolean {
+const MARKDOWN_START_PATTERNS = [
+  /^#{1,6}\s/,           // Headers: # Title, ## Title, etc.
+  /^[\*\-]\s+[^\[\(\{]/,  // Bullets: * text, - text (not Mermaid nodes)
+  /^[\*\-]\s+\*+[A-Za-z]/, // Bold bullets: * **text**
+  /^\d+\.\s+[A-Za-z]/,   // Numbered lists: 1. Text
+  /^>\s/,                // Blockquotes: > text
+  /^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[a-záéíóúñ]+\s+[a-záéíóúñ]/, // Narrative: "El sistema permite..."
+];
+
+/**
+ * Checks if a line looks like the start of regular markdown content.
+ */
+function looksLikeMarkdownStart(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
+  
+  // Any backticks at start = fence attempt
+  if (/^`{1,4}/.test(trimmed)) return true;
+  
+  return MARKDOWN_START_PATTERNS.some(p => p.test(trimmed));
+}
 
-  // Any stray triple-fence start (e.g. "```###" or "```json") inside an unfenced mermaid
-  // means the diagram ended and markdown resumed.
-  if (trimmed.startsWith('```') && !trimmed.toLowerCase().startsWith('```mermaid')) return true;
+/**
+ * Checks if a line is a Mermaid continuation (valid inside a diagram).
+ */
+function isMermaidContent(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return true; // Empty lines OK
   
-  // Backticks sueltos (fin de código o errores) - pero no ```mermaid
-  if (/^`{1,3}$/.test(trimmed)) return true;
-  if (/^`{1,3}[^`\n]/.test(trimmed) && !trimmed.toLowerCase().includes('mermaid')) return true;
+  // Comments
+  if (trimmed.startsWith('%%')) return true;
   
-  // Bullets markdown: "* texto", "- texto" (pero no nodos Mermaid con corchetes)
-  if (/^[\*\-]\s+[^\[\(\{]/.test(trimmed) && !/-->|---/.test(trimmed)) return true;
+  // Keywords
+  const lowerTrimmed = trimmed.toLowerCase();
+  if (['subgraph', 'end', 'style', 'class', 'classDef', 'click', 'linkStyle', 'direction',
+       'participant', 'actor', 'note', 'loop', 'alt', 'else', 'opt', 'par', 'rect',
+       'activate', 'deactivate', 'title', 'section'].some(kw => lowerTrimmed.startsWith(kw))) {
+    return true;
+  }
   
-  // Bullets con negrita markdown: "* *Texto**" o "* **Texto**"
-  if (/^[\*\-]\s+\*+[A-Za-záéíóúÁÉÍÓÚ]/.test(trimmed)) return true;
+  // Edges
+  if (/-->|---|\.->|-\.->|==>|~~~|-.->|-->>|--x|--o|<-->/.test(trimmed)) return true;
   
-  // Texto narrativo que empieza con mayúscula sin sintaxis Mermaid
-  if (/^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[a-záéíóúñ]/.test(trimmed) && 
-      !/[\[\]\(\)\{\}]|-->|---|\.->|==>/.test(trimmed)) return true;
+  // Nodes (ID with brackets)
+  if (/^[A-Za-z0-9_]+\s*[\[\(\{>]/.test(trimmed)) return true;
   
-  // Líneas que empiezan con números seguidos de punto (listas numeradas markdown)
-  if (/^\d+\.\s+/.test(trimmed) && !/[\[\]\(\)\{\}]/.test(trimmed)) return true;
+  // Brackets somewhere
+  if (/[\[\(\{].*[\]\)\}]/.test(trimmed)) return true;
+  
+  // Just an ID
+  if (/^[A-Za-z0-9_]+$/.test(trimmed)) return true;
   
   return false;
 }
 
-// Mermaid diagram type keywords
-const MERMAID_KEYWORDS = [
-  'flowchart',
-  'graph',
-  'sequenceDiagram',
-  'classDiagram',
-  'stateDiagram',
-  'erDiagram',
-  'journey',
-  'gantt',
-  'pie',
-  'quadrantChart',
-  'requirementDiagram',
-  'gitGraph',
-  'mindmap',
-  'timeline',
-  'sankey',
-  'xychart',
-  'block',
-];
-
-// Mermaid direction keywords that may follow the diagram type
-const MERMAID_DIRECTIONS = ['LR', 'RL', 'TD', 'TB', 'BT'];
-
 /**
- * Checks if a line looks like a Mermaid continuation (node, edge, subgraph, etc.)
- * Enhanced to support HTML tags, edge labels, and more patterns.
+ * AGGRESSIVE fence fixer - handles ALL malformed backtick patterns.
+ * This is the first line of defense.
  */
-function looksLikeMermaidContinuation(line: string, insideMermaidBlock: boolean = false): boolean {
-  const trimmed = line.trim();
-  if (!trimmed) return false;
-  
-  // If we're inside a mermaid block, be more permissive
-  // Lines with indentation are likely continuations
-  if (insideMermaidBlock && (line.startsWith('  ') || line.startsWith('\t'))) {
-    return true;
-  }
-  
-  // Standard Mermaid patterns:
-  
-  // Edge patterns: -->, ---, -.>, -.->, ==>, ~~~, -.->
-  const hasEdge = /-->|---|\.->|-\.->|==>|~~~|-.->|-->>|--x|--o/.test(trimmed);
-  
-  // Node patterns: A[Label], A((Label)), A{Label}, A>Label], A([Label])
-  // Enhanced to support HTML inside brackets like <br>
-  const hasNode = /\[[^\]]*\]|\(\([^)]*\)\)|{[^}]*}|>\s*[^\]]*\]|\(\[[^\]]*\]\)/.test(trimmed);
-  
-  // Edge labels with pipes: A -->|text| B
-  const hasEdgeLabel = /-->\|[^|]*\|/.test(trimmed);
-  
-  // HTML inside brackets is valid Mermaid: A[Label<br>More text]
-  const hasHtmlInNode = /<br\s*\/?>/.test(trimmed) && /[\[\(\{]/.test(trimmed);
-  
-  // Mermaid keywords
-  const isKeyword = /^(subgraph|end|style|class|classDef|click|linkStyle|direction)\b/i.test(trimmed);
-  
-  // Comments
-  const isComment = trimmed.startsWith('%%');
-  
-  // Node ID at start (alphanumeric) with brackets or edges
-  const startsWithId = /^[A-Za-z0-9_]/.test(trimmed);
-  const hasIdWithNode = startsWithId && /[\[\(\{]/.test(trimmed);
-  const hasIdWithEdge = startsWithId && hasEdge;
-  
-  // Inside a block, also accept lines that start with valid node IDs
-  // even if they don't have brackets (could be edge definitions)
-  if (insideMermaidBlock && startsWithId && /^[A-Za-z0-9_]+\s*(-->|---|\.->)/.test(trimmed)) {
-    return true;
-  }
-  
-  return hasEdge || hasNode || hasEdgeLabel || hasHtmlInNode || 
-         isKeyword || isComment || hasIdWithNode || hasIdWithEdge;
-}
-
-/**
- * Checks if the current processed lines indicate we're inside a code block
- */
-function isInsideCodeBlock(lines: string[]): boolean {
-  let count = 0;
-  for (const line of lines) {
-    if (line.trim().startsWith('```')) {
-      count++;
-    }
-  }
-  return count % 2 === 1; // Odd number means inside a code block
-}
-
-/**
- * Fixes malformed fence closures where LLM wrote "```###" or "``### " instead of "```\n###"
- * This is a common LLM error where the closing fence and next heading are merged.
- * Also handles cases where LLM uses `` (double backtick) instead of ``` (triple).
- */
-function fixMalformedFenceClosures(text: string): string {
+function aggressiveFenceFixer(text: string): string {
   let result = text;
   
-  // First: normalize malformed backtick counts (`` -> ```) before content
-  // Pattern: `` followed immediately by # (header), * (bullet), - (bullet), digit (list), or uppercase letter
-  result = result.replace(/``(#{1,6}\s)/g, '```\n$1');
-  result = result.replace(/``(\*\s)/g, '```\n$1');
-  result = result.replace(/``(-\s)/g, '```\n$1');
-  result = result.replace(/``(\d+\.\s)/g, '```\n$1');
-  result = result.replace(/``([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '```\n$1');
+  // Pattern: Any 1-4 backticks followed immediately by markdown content
+  // (headers, bullets, narrative text, etc.)
   
-  // Then: fix triple backticks merged with content
+  // Handle 4 backticks (````###, ````* )
+  result = result.replace(/````(#{1,6}\s)/g, '```\n$1');
+  result = result.replace(/````([\*\-]\s)/g, '```\n$1');
+  result = result.replace(/````(\d+\.\s)/g, '```\n$1');
+  result = result.replace(/````([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '```\n$1');
+  
+  // Handle 3 backticks (```###, ```* )
   result = result.replace(/```(#{1,6}\s)/g, '```\n$1');
-  result = result.replace(/```(\*\s)/g, '```\n$1');
-  result = result.replace(/```(-\s)/g, '```\n$1');
+  result = result.replace(/```([\*\-]\s)/g, '```\n$1');
   result = result.replace(/```(\d+\.\s)/g, '```\n$1');
   result = result.replace(/```([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '```\n$1');
   
-  // Also handle single backtick edge cases (` followed by ##)
+  // Handle 2 backticks (``###, ``* )
+  result = result.replace(/``(#{1,6}\s)/g, '```\n$1');
+  result = result.replace(/``([\*\-]\s)/g, '```\n$1');
+  result = result.replace(/``(\d+\.\s)/g, '```\n$1');
+  result = result.replace(/``([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '```\n$1');
+  
+  // Handle 1 backtick followed by header (`### - common LLM error)
   result = result.replace(/`(#{2,6}\s)/g, '```\n$1');
+  
+  // Clean up any resulting multiple newlines
+  result = result.replace(/\n{3,}/g, '\n\n');
   
   return result;
 }
 
 /**
  * Normalizes Mermaid code fence variations to standard format.
- * Handles: ```Mermaid, ``` mermaid, ```  mermaid, etc.
+ * Handles: ```Mermaid, ``` mermaid, ```  mermaid, MERMAID, etc.
  */
 function normalizeMermaidFences(text: string): string {
-  // First fix malformed fence closures
-  let result = fixMalformedFenceClosures(text);
+  // First apply aggressive fence fixing
+  let result = aggressiveFenceFixer(text);
   
-  // Then normalize mermaid fence variations
+  // Normalize case and spacing variations of mermaid fences
   result = result.replace(
     /```\s*[Mm][Ee][Rr][Mm][Aa][Ii][Dd]\s*\n([\s\S]*?)```/g,
-    (_, content) => `\`\`\`mermaid\n${content.trim()}\n\`\`\``
+    (match, content) => {
+      // Clean the content using the sanitizer
+      const cleanedContent = sanitizeMermaidContent(content);
+      return `\`\`\`mermaid\n${cleanedContent}\n\`\`\``;
+    }
   );
   
   return result;
 }
 
 /**
+ * Checks if we're currently inside a code block based on processed lines.
+ */
+function isInsideCodeBlock(lines: string[]): boolean {
+  let count = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('```')) count++;
+  }
+  return count % 2 === 1;
+}
+
+/**
  * Detects unfenced Mermaid diagrams and wraps them in proper code fences.
- * Only triggers when a line starts with a Mermaid keyword.
  */
 function wrapUnfencedMermaid(text: string): string {
   const lines = text.split('\n');
@@ -189,18 +171,16 @@ function wrapUnfencedMermaid(text: string): string {
       continue;
     }
     
-    // Check if this line starts a Mermaid diagram (keyword at start)
+    // Check if this line starts a Mermaid diagram
     const startsWithKeyword = MERMAID_KEYWORDS.some(kw => {
       const lowerLine = trimmed.toLowerCase();
       const lowerKw = kw.toLowerCase();
       
       if (!lowerLine.startsWith(lowerKw)) return false;
       
-      // Must be followed by nothing, whitespace, or direction
       const after = trimmed.slice(kw.length).trim();
       if (after === '') return true;
       if (MERMAID_DIRECTIONS.some(d => after.toUpperCase().startsWith(d))) return true;
-      // Also allow continuing on same line
       return /^(LR|RL|TD|TB|BT)?\s*$/i.test(after) || /^(LR|RL|TD|TB|BT)\s+\w/.test(after);
     });
     
@@ -212,13 +192,16 @@ function wrapUnfencedMermaid(text: string): string {
     }
     
     if (inMermaidBlock) {
-      // NUEVO: Detectar fin explícito del diagrama antes de cualquier otra cosa
-      if (definitelyNotMermaid(trimmed)) {
-        // Cerrar bloque Mermaid
-        processedLines.push('```mermaid');
-        processedLines.push(...mermaidBuffer);
-        processedLines.push('```');
-        // Añadir la línea actual como texto normal
+      // Check if this line definitely ends the Mermaid block
+      if (looksLikeMarkdownStart(trimmed)) {
+        // Close the Mermaid block
+        const cleanedBuffer = sanitizeMermaidContent(mermaidBuffer.join('\n'));
+        if (cleanedBuffer) {
+          processedLines.push('```mermaid');
+          processedLines.push(cleanedBuffer);
+          processedLines.push('```');
+        }
+        // Add this line as regular content
         processedLines.push(line);
         inMermaidBlock = false;
         mermaidBuffer = [];
@@ -233,23 +216,24 @@ function wrapUnfencedMermaid(text: string): string {
         
         // Allow up to 1 empty line inside a diagram
         if (consecutiveEmptyLines <= 1) {
-          // Check if next non-empty line continues the diagram
-          let nextNonEmptyIdx = i + 1;
-          while (nextNonEmptyIdx < lines.length && lines[nextNonEmptyIdx].trim() === '') {
-            nextNonEmptyIdx++;
-          }
+          // Peek ahead to see if diagram continues
+          let nextIdx = i + 1;
+          while (nextIdx < lines.length && !lines[nextIdx].trim()) nextIdx++;
           
-          const nextLine = lines[nextNonEmptyIdx]?.trim() || '';
-          if (looksLikeMermaidContinuation(nextLine, true)) {
+          const nextLine = lines[nextIdx]?.trim() || '';
+          if (isMermaidContent(nextLine)) {
             mermaidBuffer.push(line);
             continue;
           }
         }
         
         // End of diagram - flush buffer
-        processedLines.push('```mermaid');
-        processedLines.push(...mermaidBuffer);
-        processedLines.push('```');
+        const cleanedBuffer = sanitizeMermaidContent(mermaidBuffer.join('\n'));
+        if (cleanedBuffer) {
+          processedLines.push('```mermaid');
+          processedLines.push(cleanedBuffer);
+          processedLines.push('```');
+        }
         processedLines.push(line);
         inMermaidBlock = false;
         mermaidBuffer = [];
@@ -257,19 +241,19 @@ function wrapUnfencedMermaid(text: string): string {
         continue;
       }
       
-      // Reset empty line counter when we see content
       consecutiveEmptyLines = 0;
       
-      // Check if this line continues the diagram
-      const isContinuation = looksLikeMermaidContinuation(trimmed, true);
-      
-      if (isContinuation) {
+      // Check if line continues the diagram
+      if (isMermaidContent(trimmed)) {
         mermaidBuffer.push(line);
       } else {
         // Not a continuation - end the block
-        processedLines.push('```mermaid');
-        processedLines.push(...mermaidBuffer);
-        processedLines.push('```');
+        const cleanedBuffer = sanitizeMermaidContent(mermaidBuffer.join('\n'));
+        if (cleanedBuffer) {
+          processedLines.push('```mermaid');
+          processedLines.push(cleanedBuffer);
+          processedLines.push('```');
+        }
         processedLines.push(line);
         inMermaidBlock = false;
         mermaidBuffer = [];
@@ -281,9 +265,12 @@ function wrapUnfencedMermaid(text: string): string {
   
   // Handle unclosed block at end
   if (inMermaidBlock && mermaidBuffer.length > 0) {
-    processedLines.push('```mermaid');
-    processedLines.push(...mermaidBuffer);
-    processedLines.push('```');
+    const cleanedBuffer = sanitizeMermaidContent(mermaidBuffer.join('\n'));
+    if (cleanedBuffer) {
+      processedLines.push('```mermaid');
+      processedLines.push(cleanedBuffer);
+      processedLines.push('```');
+    }
   }
   
   return processedLines.join('\n');
@@ -304,13 +291,14 @@ export function extractMermaidBlocks(text: string): {
     /```mermaid\s*\n([\s\S]*?)\n```/g,
     (_, content) => {
       const index = mermaidBlocks.length;
-      // Defensive: if something injected a stray fence inside the mermaid body (e.g. "```###"),
-      // keep only the mermaid part before that fence.
-      const raw = String(content ?? '').trim();
-      const cutAt = raw.indexOf('```');
-      const safe = (cutAt === -1 ? raw : raw.slice(0, cutAt)).trim();
-      mermaidBlocks.push(safe);
-      return `\n\n:::mermaid-placeholder-${index}:::\n\n`;
+      // Use the sanitizer to clean the content
+      const cleanContent = sanitizeMermaidContent(content);
+      if (cleanContent) {
+        mermaidBlocks.push(cleanContent);
+        return `\n\n:::mermaid-placeholder-${index}:::\n\n`;
+      }
+      // If nothing valid, don't create a placeholder
+      return '';
     }
   );
   
@@ -326,10 +314,13 @@ export function normalizeMarkdownDiagrams(text: string): string {
   
   let result = text;
   
-  // Step 1: Normalize existing Mermaid fences (case variations, spacing)
+  // Step 1: Aggressive fence fixing (handles ALL malformed backtick patterns)
+  result = aggressiveFenceFixer(result);
+  
+  // Step 2: Normalize existing Mermaid fences (case variations, spacing)
   result = normalizeMermaidFences(result);
   
-  // Step 2: Detect and wrap unfenced Mermaid diagrams
+  // Step 3: Detect and wrap unfenced Mermaid diagrams
   result = wrapUnfencedMermaid(result);
   
   return result;
