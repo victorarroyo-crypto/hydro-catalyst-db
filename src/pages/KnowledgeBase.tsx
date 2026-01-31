@@ -547,7 +547,7 @@ export default function KnowledgeBase() {
             const docName = processingDocsRef.current.get(oldDoc.id);
             toast.warning(
               `Documento duplicado: "${docName}" ya existe en la base de conocimiento`,
-              { duration: 6000 }
+              { duration: Infinity }
             );
             processingDocsRef.current.delete(oldDoc.id);
           }
