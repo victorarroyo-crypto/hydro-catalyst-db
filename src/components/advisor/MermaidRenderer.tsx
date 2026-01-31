@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { cn } from '@/lib/utils';
 import { useTheme } from 'next-themes';
+import { sanitizeMermaidContent, isLikelyValidMermaid } from '@/utils/mermaidSanitizer';
 
 interface MermaidRendererProps {
   content: string;
@@ -34,6 +35,7 @@ export function MermaidRenderer({ content, className, onError }: MermaidRenderer
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSource, setShowSource] = useState(false);
   const { theme } = useTheme();
   const renderIdRef = useRef<number>(0);
 
@@ -58,41 +60,17 @@ export function MermaidRenderer({ content, className, onError }: MermaidRenderer
     setError(null);
 
     try {
+      // Use the comprehensive sanitizer
+      const cleanContent = sanitizeMermaidContent(content);
+      
+      // Pre-validate before attempting render
+      if (!cleanContent || !isLikelyValidMermaid(cleanContent)) {
+        throw new Error('Contenido no parece ser Mermaid válido');
+      }
+
       // Generate truly unique ID for this render
       renderCounter += 1;
       const id = `mermaid-${renderCounter}-${Date.now()}`;
-      
-      // Clean up content
-      let cleanContent = content.trim();
-      if (cleanContent.startsWith('```')) {
-        cleanContent = cleanContent.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
-      }
-
-      // If the block accidentally contains stray fences (e.g. "```### ..."),
-      // keep only the Mermaid part before the first fence.
-      const strayFenceIdx = cleanContent.indexOf('```');
-      if (strayFenceIdx !== -1) {
-        cleanContent = cleanContent.slice(0, strayFenceIdx).trim();
-      }
-      
-      // Eliminar backticks sueltos y texto no-mermaid al final
-      cleanContent = cleanContent.replace(/`{1,3}\s*$/, '').trim();
-      
-      // Si hay líneas que claramente no son Mermaid al final, removerlas
-      const lines = cleanContent.split('\n');
-      while (lines.length > 0) {
-        const lastLine = lines[lines.length - 1].trim();
-        // Remover líneas vacías o que son claramente markdown (bullets, texto narrativo)
-        if (!lastLine || 
-            /^[\*\-]\s/.test(lastLine) || 
-            /^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[a-záéíóúñ]/.test(lastLine) ||
-            /^\d+\.\s+/.test(lastLine)) {
-          lines.pop();
-        } else {
-          break;
-        }
-      }
-      cleanContent = lines.join('\n');
       
       // Render to SVG string
       const { svg: renderedSvg } = await mermaid.render(id, cleanContent);
@@ -108,12 +86,19 @@ export function MermaidRenderer({ content, className, onError }: MermaidRenderer
       
       // Only update if this is still the latest render request
       if (currentRenderId === renderIdRef.current) {
-        setError('Error al renderizar diagrama');
+        const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
+        // Extract useful info from Mermaid parse errors
+        const parseMatch = errorMessage.match(/Parse error on line (\d+)/);
+        if (parseMatch) {
+          setError(`Error de sintaxis en línea ${parseMatch[1]}`);
+        } else {
+          setError('Error al renderizar diagrama');
+        }
         setIsLoading(false);
         onError?.();
       }
     }
-  }, [content, theme]);
+  }, [content, theme, onError]);
 
   // Render diagram when content changes
   useEffect(() => {
@@ -127,13 +112,52 @@ export function MermaidRenderer({ content, className, onError }: MermaidRenderer
     };
   }, [renderDiagram]);
 
+  // Retry handler
+  const handleRetry = useCallback(() => {
+    setError(null);
+    setShowSource(false);
+    renderDiagram();
+  }, [renderDiagram]);
+
   if (error) {
+    const sanitizedContent = sanitizeMermaidContent(content);
+    
     return (
       <div className="my-4 p-4 bg-destructive/10 rounded-lg border border-destructive/30">
-        <p className="text-sm text-destructive">{error}</p>
-        <pre className="mt-2 text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap">
-          {content}
-        </pre>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm text-destructive font-medium">{error}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowSource(!showSource)}
+              className="text-xs px-2 py-1 rounded bg-muted hover:bg-muted/80 transition-colors"
+            >
+              {showSource ? 'Ocultar código' : 'Ver código'}
+            </button>
+            <button
+              onClick={handleRetry}
+              className="text-xs px-2 py-1 rounded bg-primary/20 hover:bg-primary/30 text-primary transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+        
+        {showSource && (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-muted-foreground">Contenido original:</p>
+            <pre className="text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap bg-muted/30 p-2 rounded max-h-40 overflow-y-auto">
+              {content}
+            </pre>
+            {sanitizedContent !== content && (
+              <>
+                <p className="text-xs text-muted-foreground mt-2">Contenido limpio:</p>
+                <pre className="text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap bg-muted/30 p-2 rounded max-h-40 overflow-y-auto">
+                  {sanitizedContent}
+                </pre>
+              </>
+            )}
+          </div>
+        )}
       </div>
     );
   }
