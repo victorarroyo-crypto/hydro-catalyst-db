@@ -29,30 +29,52 @@ const MERMAID_DIRECTIONS = ['LR', 'RL', 'TD', 'TB', 'BT'];
 
 /**
  * Checks if a line looks like a Mermaid continuation (node, edge, subgraph, etc.)
+ * Enhanced to support HTML tags, edge labels, and more patterns.
  */
-function looksLikeMermaidContinuation(line: string): boolean {
+function looksLikeMermaidContinuation(line: string, insideMermaidBlock: boolean = false): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
   
-  // Common Mermaid patterns:
-  // - Node definitions: A[Label] or A((Label)) or A{Label}
-  // - Edge definitions: A --> B or A --- B or A -.-> B
-  // - Subgraph: subgraph title
-  // - End: end
-  // - Style: style A fill:#fff
-  // - Class definitions: class A,B className
-  // - Click handlers: click A callback
+  // If we're inside a mermaid block, be more permissive
+  // Lines with indentation are likely continuations
+  if (insideMermaidBlock && (line.startsWith('  ') || line.startsWith('\t'))) {
+    return true;
+  }
   
-  // Check for node/edge patterns
-  const hasEdge = /-->|---|\.->|\-\.->|==>|~~~|-.->/.test(trimmed);
-  const hasNode = /\[.*\]|\(\(.*\)\)|{.*}|>.*]/.test(trimmed);
+  // Standard Mermaid patterns:
+  
+  // Edge patterns: -->, ---, -.>, -.->, ==>, ~~~, -.->
+  const hasEdge = /-->|---|\.->|-\.->|==>|~~~|-.->|-->>|--x|--o/.test(trimmed);
+  
+  // Node patterns: A[Label], A((Label)), A{Label}, A>Label], A([Label])
+  // Enhanced to support HTML inside brackets like <br>
+  const hasNode = /\[[^\]]*\]|\(\([^)]*\)\)|{[^}]*}|>\s*[^\]]*\]|\(\[[^\]]*\]\)/.test(trimmed);
+  
+  // Edge labels with pipes: A -->|text| B
+  const hasEdgeLabel = /-->\|[^|]*\|/.test(trimmed);
+  
+  // HTML inside brackets is valid Mermaid: A[Label<br>More text]
+  const hasHtmlInNode = /<br\s*\/?>/.test(trimmed) && /[\[\(\{]/.test(trimmed);
+  
+  // Mermaid keywords
   const isKeyword = /^(subgraph|end|style|class|classDef|click|linkStyle|direction)\b/i.test(trimmed);
+  
+  // Comments
   const isComment = trimmed.startsWith('%%');
   
-  // Node ID pattern: starts with letter/number, may have brackets
+  // Node ID at start (alphanumeric) with brackets or edges
   const startsWithId = /^[A-Za-z0-9_]/.test(trimmed);
+  const hasIdWithNode = startsWithId && /[\[\(\{]/.test(trimmed);
+  const hasIdWithEdge = startsWithId && hasEdge;
   
-  return hasEdge || hasNode || isKeyword || isComment || (startsWithId && (hasEdge || trimmed.includes('[')));
+  // Inside a block, also accept lines that start with valid node IDs
+  // even if they don't have brackets (could be edge definitions)
+  if (insideMermaidBlock && startsWithId && /^[A-Za-z0-9_]+\s*(-->|---|\.->)/.test(trimmed)) {
+    return true;
+  }
+  
+  return hasEdge || hasNode || hasEdgeLabel || hasHtmlInNode || 
+         isKeyword || isComment || hasIdWithNode || hasIdWithEdge;
 }
 
 /**
@@ -90,6 +112,7 @@ function wrapUnfencedMermaid(text: string): string {
   const processedLines: string[] = [];
   let inMermaidBlock = false;
   let mermaidBuffer: string[] = [];
+  let consecutiveEmptyLines = 0;
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -112,41 +135,54 @@ function wrapUnfencedMermaid(text: string): string {
       const after = trimmed.slice(kw.length).trim();
       if (after === '') return true;
       if (MERMAID_DIRECTIONS.some(d => after.toUpperCase().startsWith(d))) return true;
-      // Also allow continuing on same line: "graph TD\n  A --> B" style isn't common but valid
+      // Also allow continuing on same line
       return /^(LR|RL|TD|TB|BT)?\s*$/i.test(after) || /^(LR|RL|TD|TB|BT)\s+\w/.test(after);
     });
     
     if (startsWithKeyword && !inMermaidBlock) {
       inMermaidBlock = true;
       mermaidBuffer = [line];
+      consecutiveEmptyLines = 0;
       continue;
     }
     
     if (inMermaidBlock) {
-      // Check if we should continue or end the block
-      const isContinuation = looksLikeMermaidContinuation(trimmed);
       const isEmpty = trimmed === '';
       
-      // If empty line, check if next line continues the diagram
       if (isEmpty) {
-        const nextLine = lines[i + 1]?.trim() || '';
-        const nextIsContinuation = looksLikeMermaidContinuation(nextLine);
+        consecutiveEmptyLines++;
         
-        if (nextIsContinuation) {
-          // Keep empty line in buffer
-          mermaidBuffer.push(line);
-          continue;
-        } else {
-          // End of diagram
-          processedLines.push('```mermaid');
-          processedLines.push(...mermaidBuffer);
-          processedLines.push('```');
-          processedLines.push(line); // the empty line
-          inMermaidBlock = false;
-          mermaidBuffer = [];
-          continue;
+        // Allow up to 1 empty line inside a diagram
+        if (consecutiveEmptyLines <= 1) {
+          // Check if next non-empty line continues the diagram
+          let nextNonEmptyIdx = i + 1;
+          while (nextNonEmptyIdx < lines.length && lines[nextNonEmptyIdx].trim() === '') {
+            nextNonEmptyIdx++;
+          }
+          
+          const nextLine = lines[nextNonEmptyIdx]?.trim() || '';
+          if (looksLikeMermaidContinuation(nextLine, true)) {
+            mermaidBuffer.push(line);
+            continue;
+          }
         }
+        
+        // End of diagram - flush buffer
+        processedLines.push('```mermaid');
+        processedLines.push(...mermaidBuffer);
+        processedLines.push('```');
+        processedLines.push(line);
+        inMermaidBlock = false;
+        mermaidBuffer = [];
+        consecutiveEmptyLines = 0;
+        continue;
       }
+      
+      // Reset empty line counter when we see content
+      consecutiveEmptyLines = 0;
+      
+      // Check if this line continues the diagram
+      const isContinuation = looksLikeMermaidContinuation(trimmed, true);
       
       if (isContinuation) {
         mermaidBuffer.push(line);
@@ -172,6 +208,29 @@ function wrapUnfencedMermaid(text: string): string {
   }
   
   return processedLines.join('\n');
+}
+
+/**
+ * Extracts Mermaid blocks from content and returns placeholders.
+ * This allows ReactMarkdown to process text without fragmenting diagrams.
+ */
+export function extractMermaidBlocks(text: string): { 
+  processedContent: string; 
+  mermaidBlocks: string[] 
+} {
+  const mermaidBlocks: string[] = [];
+  
+  // Match properly fenced mermaid blocks
+  const processedContent = text.replace(
+    /```mermaid\n([\s\S]*?)```/g,
+    (_, content) => {
+      const index = mermaidBlocks.length;
+      mermaidBlocks.push(content.trim());
+      return `\n\n:::mermaid-placeholder-${index}:::\n\n`;
+    }
+  );
+  
+  return { processedContent, mermaidBlocks };
 }
 
 /**
