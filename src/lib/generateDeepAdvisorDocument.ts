@@ -688,7 +688,7 @@ function isMermaidContinuation(line: string): boolean {
 
 /**
  * Parse Mermaid flowchart content and convert to readable Word paragraphs
- * Enhanced to handle complex diagrams with HTML tags, edge labels, and various patterns
+ * Enhanced to build complete paths through the graph and identify decision branches
  */
 function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
   const paragraphs: Paragraph[] = [];
@@ -727,134 +727,179 @@ function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
     })
   );
   
-  // Parse the mermaid content
+  // Parse the mermaid content to build a graph
   const lines = mermaidContent.split('\n');
-  const nodes: Map<string, string> = new Map();
-  const steps: string[] = [];
-  const processedEdges = new Set<string>();
+  const nodes: Map<string, { label: string; type: 'decision' | 'process' | 'terminal' }> = new Map();
+  const edges: Array<{ from: string; to: string; label?: string }> = [];
   
   for (const line of lines) {
     const trimmed = line.trim();
     
-    // Skip header lines and empty lines
-    if (trimmed.match(/^(flowchart|graph)\s+(TD|LR|TB|BT|RL)/i) || !trimmed) {
-      continue;
-    }
+    // Skip header lines, empty lines, and style definitions
+    if (trimmed.match(/^(flowchart|graph)\s+(TD|LR|TB|BT|RL)/i) || !trimmed) continue;
+    if (trimmed.match(/^(subgraph|end|style|classDef|class|click|linkStyle|direction)\b/i)) continue;
+    if (trimmed.startsWith('%%')) continue;
     
-    // Skip subgraph declarations and end keywords
-    if (trimmed.match(/^(subgraph|end|style|classDef|class|click|linkStyle|direction)\b/i)) {
-      continue;
-    }
+    // Extract node definitions - detect type based on bracket style
+    // {Label} = decision (diamond), [Label] = process (rectangle), ((Label)) = terminal (circle)
+    const nodePatterns = [
+      { regex: /([A-Za-z0-9_]+)\{([^}]*)\}/g, type: 'decision' as const },
+      { regex: /([A-Za-z0-9_]+)\[\[([^\]]*)\]\]/g, type: 'process' as const },
+      { regex: /([A-Za-z0-9_]+)\(\(([^)]*)\)\)/g, type: 'terminal' as const },
+      { regex: /([A-Za-z0-9_]+)\(\[([^\]]*)\]\)/g, type: 'terminal' as const },
+      { regex: /([A-Za-z0-9_]+)\[([^\]]*)\]/g, type: 'process' as const },
+    ];
     
-    // Skip comment lines
-    if (trimmed.startsWith('%%')) {
-      continue;
-    }
-    
-    // Extract node definitions with various bracket types
-    // Handles: A[Label], A((Label)), A{Label}, A([Label]), A>Label], A[Label<br>More text]
-    const nodeDefRegex = /([A-Za-z0-9_]+)(?:\[([^\]]*)\]|\(\(([^)]*)\)\)|\{([^}]*)\}|\(\[([^\]]*)\]\)|>([^\]]*)\])/g;
-    let nodeMatch;
-    while ((nodeMatch = nodeDefRegex.exec(trimmed)) !== null) {
-      const nodeId = nodeMatch[1];
-      // Get the first non-undefined capture group for the label
-      const label = nodeMatch[2] || nodeMatch[3] || nodeMatch[4] || nodeMatch[5] || nodeMatch[6] || '';
-      // Clean HTML tags like <br> and normalize
-      const cleanLabel = label
-        .replace(/<br\s*\/?>/gi, ' / ')
-        .replace(/<[^>]*>/g, '')
-        .trim();
-      if (cleanLabel) {
-        nodes.set(nodeId, cleanLabel);
+    for (const { regex, type } of nodePatterns) {
+      let match;
+      while ((match = regex.exec(trimmed)) !== null) {
+        const nodeId = match[1];
+        const label = match[2]
+          .replace(/<br\s*\/?>/gi, ' ')
+          .replace(/<[^>]*>/g, '')
+          .trim();
+        if (label && !nodes.has(nodeId)) {
+          nodes.set(nodeId, { label, type });
+        }
       }
     }
     
-    // Extract relationships with edge labels
-    // Handles: A --> B, A -->|label| B, A -- text --> B, A -.-> B
-    const edgeRegex = /([A-Za-z0-9_]+)\s*(-->|---|-\.->|==>|~~>|-->\||--\s)/;
-    const edgeMatch = trimmed.match(edgeRegex);
+    // Extract edges with optional labels
+    const edgeRegex = /([A-Za-z0-9_]+)\s*(?:-->|---|-\.->|==>)\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)/g;
+    let edgeMatch;
+    while ((edgeMatch = edgeRegex.exec(trimmed)) !== null) {
+      edges.push({
+        from: edgeMatch[1],
+        to: edgeMatch[3],
+        label: edgeMatch[2]?.trim(),
+      });
+    }
+  }
+  
+  // Build adjacency list for path finding
+  const adjacency: Map<string, Array<{ to: string; label?: string }>> = new Map();
+  const inDegree: Map<string, number> = new Map();
+  
+  for (const edge of edges) {
+    if (!adjacency.has(edge.from)) adjacency.set(edge.from, []);
+    adjacency.get(edge.from)!.push({ to: edge.to, label: edge.label });
+    inDegree.set(edge.to, (inDegree.get(edge.to) || 0) + 1);
+    if (!inDegree.has(edge.from)) inDegree.set(edge.from, 0);
+  }
+  
+  // Find start nodes (nodes with in-degree 0)
+  const startNodes = Array.from(inDegree.entries())
+    .filter(([_, deg]) => deg === 0)
+    .map(([id]) => id);
+  
+  // Find all complete paths through the graph
+  const allPaths: Array<{ path: string[]; labels: (string | undefined)[] }> = [];
+  
+  function findPaths(nodeId: string, currentPath: string[], currentLabels: (string | undefined)[], visited: Set<string>) {
+    if (visited.has(nodeId)) return; // Prevent cycles
     
-    if (edgeMatch) {
-      // Full pattern to capture edge with optional label and target
-      const fullEdgeRegex = /([A-Za-z0-9_]+)\s*(?:-->|---|-\.->|==>|~~>)\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)?/;
-      const fullMatch = trimmed.match(fullEdgeRegex);
-      
-      if (fullMatch) {
-        const fromId = fullMatch[1];
-        const edgeLabel = fullMatch[2]?.trim() || '';
-        const toId = fullMatch[3];
-        
-        // Create unique key to avoid duplicate edges
-        const edgeKey = `${fromId}->${toId || 'unknown'}-${edgeLabel}`;
-        if (!processedEdges.has(edgeKey)) {
-          processedEdges.add(edgeKey);
-          
-          const fromLabel = nodes.get(fromId) || fromId;
-          const toLabel = toId ? (nodes.get(toId) || toId) : null;
-          
-          if (toLabel) {
-            if (edgeLabel) {
-              steps.push(`${fromLabel} → [${edgeLabel}] → ${toLabel}`);
-            } else {
-              steps.push(`${fromLabel} → ${toLabel}`);
-            }
-          }
-        }
+    const newPath = [...currentPath, nodeId];
+    const neighbors = adjacency.get(nodeId) || [];
+    
+    if (neighbors.length === 0) {
+      // End of path
+      allPaths.push({ path: newPath, labels: currentLabels });
+    } else {
+      visited.add(nodeId);
+      for (const neighbor of neighbors) {
+        findPaths(neighbor.to, newPath, [...currentLabels, neighbor.label], new Set(visited));
       }
     }
   }
   
-  // If we extracted meaningful steps, render them
-  if (steps.length > 0) {
-    // Add subtitle
-    paragraphs.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: 'Flujo del proceso:',
-            bold: true,
-            italics: true,
-            size: 18, // 9pt
-            font: VANDARUM_FONTS.texto,
-            color: VANDARUM_COLORS.grisTexto,
-          }),
-        ],
-        spacing: { before: 80, after: 50 },
-        indent: { left: 100 },
-      })
-    );
+  // Find paths from each start node
+  for (const start of startNodes) {
+    findPaths(start, [], [], new Set());
+  }
+  
+  // If we have paths, render them grouped by decision branches
+  if (allPaths.length > 0) {
+    // Group paths by their first decision point
+    const decisionBranches: Map<string, typeof allPaths> = new Map();
     
-    // Output steps as numbered list
-    steps.forEach((step, index) => {
-      paragraphs.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: `${index + 1}. `,
-              bold: true,
-              size: 18, // 9pt
-              font: VANDARUM_FONTS.texto,
-              color: VANDARUM_COLORS.verdeOscuro,
-            }),
-            ...createFormattedTextRuns(step, { size: 18 }),
-          ],
-          spacing: { before: 30, after: 30 },
-          indent: { left: 200 },
-        })
-      );
-    });
+    for (const pathInfo of allPaths) {
+      // Find the first decision node and its edge label
+      let branchKey = 'General';
+      for (let i = 0; i < pathInfo.path.length; i++) {
+        const nodeId = pathInfo.path[i];
+        const node = nodes.get(nodeId);
+        if (node?.type === 'decision' && pathInfo.labels[i]) {
+          branchKey = `${node.label}: ${pathInfo.labels[i]}`;
+          break;
+        }
+      }
+      
+      if (!decisionBranches.has(branchKey)) {
+        decisionBranches.set(branchKey, []);
+      }
+      decisionBranches.get(branchKey)!.push(pathInfo);
+    }
+    
+    // Render each branch
+    for (const [branchName, paths] of decisionBranches) {
+      // Add branch header if there are multiple branches
+      if (decisionBranches.size > 1 && branchName !== 'General') {
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `▸ ${branchName}`,
+                bold: true,
+                size: 20,
+                font: VANDARUM_FONTS.texto,
+                color: VANDARUM_COLORS.verdeOscuro,
+              }),
+            ],
+            spacing: { before: 120, after: 60 },
+            indent: { left: 100 },
+          })
+        );
+      }
+      
+      // Render each path as a treatment train
+      for (const pathInfo of paths) {
+        // Build path string with node labels
+        const pathLabels = pathInfo.path
+          .map(nodeId => nodes.get(nodeId)?.label || nodeId)
+          .filter(label => label && !label.includes('?')); // Skip decision nodes in the path display
+        
+        if (pathLabels.length > 1) {
+          const pathString = pathLabels.join(' → ');
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: '• ',
+                  size: 18,
+                  font: VANDARUM_FONTS.texto,
+                  color: VANDARUM_COLORS.verdeOscuro,
+                }),
+                ...createFormattedTextRuns(pathString, { size: 18 }),
+              ],
+              spacing: { before: 30, after: 30 },
+              indent: { left: decisionBranches.size > 1 ? 300 : 200 },
+            })
+          );
+        }
+      }
+    }
   } else {
-    // Fallback: show available node labels as components
-    const nodeLabels = Array.from(nodes.values());
+    // Fallback: show nodes as components if no paths found
+    const nodeLabels = Array.from(nodes.values()).map(n => n.label);
     if (nodeLabels.length > 0) {
       paragraphs.push(
         new Paragraph({
           children: [
             new TextRun({
-              text: 'Componentes del diagrama:',
+              text: 'Componentes del proceso:',
               bold: true,
               italics: true,
-              size: 18, // 9pt
+              size: 18,
               font: VANDARUM_FONTS.texto,
               color: VANDARUM_COLORS.grisTexto,
             }),
@@ -882,14 +927,13 @@ function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
         );
       });
     } else {
-      // If nothing could be parsed, add a note
       paragraphs.push(
         new Paragraph({
           children: [
             new TextRun({
               text: '(Ver diagrama visual en la aplicación)',
               italics: true,
-              size: 18, // 9pt
+              size: 18,
               font: VANDARUM_FONTS.texto,
               color: VANDARUM_COLORS.grisTexto,
             }),
@@ -900,11 +944,6 @@ function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
       );
     }
   }
-  
-  // Add spacing after diagram section
-  paragraphs.push(
-    new Paragraph({ children: [], spacing: { after: 100 } })
-  );
   
   return paragraphs;
 }
