@@ -22,9 +22,11 @@ import {
   Star,
   Users,
   Zap,
-  ChevronRight
+  ChevronRight,
+  FileDown
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { ReportGeneratorModal } from '@/components/cost-consulting/ReportGeneratorModal';
 
 // Mock data - in real implementation this would come from Supabase
 const mockProject = {
@@ -274,6 +276,7 @@ const AlertsSection = ({ alerts }: { alerts: typeof mockProject.alerts }) => {
 const CostConsultingDetail = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('overview');
+  const [reportModalOpen, setReportModalOpen] = useState(false);
   
   // In real implementation, fetch project data from Supabase
   const project = mockProject;
@@ -310,8 +313,12 @@ const CostConsultingDetail = () => {
           </div>
           
           <div className="flex gap-2">
-            <Button variant="outline" disabled={isProcessing}>
-              <Download className="h-4 w-4 mr-2" />
+            <Button 
+              variant="outline" 
+              disabled={isProcessing}
+              onClick={() => setReportModalOpen(true)}
+            >
+              <FileDown className="h-4 w-4 mr-2" />
               Descargar PDF
             </Button>
             <Button variant="outline" disabled={isProcessing}>
@@ -320,6 +327,14 @@ const CostConsultingDetail = () => {
             </Button>
           </div>
         </div>
+
+        {/* Report Generator Modal */}
+        <ReportGeneratorModal
+          open={reportModalOpen}
+          onOpenChange={setReportModalOpen}
+          projectId={id || '1'}
+          projectName={project.name}
+        />
       </div>
 
       {/* Processing State */}
