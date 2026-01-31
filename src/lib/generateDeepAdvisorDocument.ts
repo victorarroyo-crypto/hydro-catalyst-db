@@ -77,21 +77,6 @@ async function createCoverPage(studyTitle?: string): Promise<Paragraph[]> {
     // Large spacer at top
     new Paragraph({ children: [], spacing: { before: 3000 } }),
     
-    // Report type label
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: 'INFORME TÉCNICO',
-          bold: true,
-          size: 28, // 14pt
-          color: VANDARUM_COLORS.grisClaro,
-          font: VANDARUM_FONTS.titulo,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
-    }),
-    
     // Main study title - PROTAGONIST
     new Paragraph({
       children: [
