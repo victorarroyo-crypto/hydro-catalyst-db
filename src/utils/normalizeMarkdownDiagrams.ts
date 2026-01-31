@@ -123,16 +123,40 @@ function isInsideCodeBlock(lines: string[]): boolean {
 }
 
 /**
+ * Fixes malformed fence closures where LLM wrote "```###" instead of "```\n###"
+ * This is a common LLM error where the closing fence and next heading are merged.
+ */
+function fixMalformedFenceClosures(text: string): string {
+  // Pattern: ```mermaid block where the closing ``` is merged with markdown (e.g. ```### or ```* or ```)
+  // We need to insert a newline before the markdown content
+  return text
+    // Fix: ```### -> ```\n###
+    .replace(/```(#{1,6}\s)/g, '```\n$1')
+    // Fix: ```* (bullet) -> ```\n*
+    .replace(/```(\*\s)/g, '```\n$1')
+    // Fix: ```- (bullet) -> ```\n-
+    .replace(/```(-\s)/g, '```\n$1')
+    // Fix: ```1. (numbered list) -> ```\n1.
+    .replace(/```(\d+\.\s)/g, '```\n$1')
+    // Fix: ``` followed by uppercase letter (paragraph start) -> ```\n
+    .replace(/```([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '```\n$1');
+}
+
+/**
  * Normalizes Mermaid code fence variations to standard format.
  * Handles: ```Mermaid, ``` mermaid, ```  mermaid, etc.
  */
 function normalizeMermaidFences(text: string): string {
-  // Match: ``` followed by optional spaces, then mermaid (case-insensitive)
-  // Capture the content and normalize
-  return text.replace(
+  // First fix malformed fence closures
+  let result = fixMalformedFenceClosures(text);
+  
+  // Then normalize mermaid fence variations
+  result = result.replace(
     /```\s*[Mm][Ee][Rr][Mm][Aa][Ii][Dd]\s*\n([\s\S]*?)```/g,
     (_, content) => `\`\`\`mermaid\n${content.trim()}\n\`\`\``
   );
+  
+  return result;
 }
 
 /**
