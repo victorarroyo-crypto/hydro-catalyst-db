@@ -10,6 +10,10 @@
 function definitelyNotMermaid(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
+
+  // Any stray triple-fence start (e.g. "```###" or "```json") inside an unfenced mermaid
+  // means the diagram ended and markdown resumed.
+  if (trimmed.startsWith('```') && !trimmed.toLowerCase().startsWith('```mermaid')) return true;
   
   // Backticks sueltos (fin de código o errores) - pero no ```mermaid
   if (/^`{1,3}$/.test(trimmed)) return true;
@@ -267,7 +271,12 @@ export function extractMermaidBlocks(text: string): {
     /```mermaid\s*\n([\s\S]*?)\n```/g,
     (_, content) => {
       const index = mermaidBlocks.length;
-      mermaidBlocks.push(content.trim());
+      // Defensive: if something injected a stray fence inside the mermaid body (e.g. "```###"),
+      // keep only the mermaid part before that fence.
+      const raw = String(content ?? '').trim();
+      const cutAt = raw.indexOf('```');
+      const safe = (cutAt === -1 ? raw : raw.slice(0, cutAt)).trim();
+      mermaidBlocks.push(safe);
       return `\n\n:::mermaid-placeholder-${index}:::\n\n`;
     }
   );
