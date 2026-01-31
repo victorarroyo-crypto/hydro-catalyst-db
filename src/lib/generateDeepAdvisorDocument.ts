@@ -643,19 +643,36 @@ function isMermaidContinuation(line: string): boolean {
 
 /**
  * Parse Mermaid flowchart content and convert to readable Word paragraphs
- * No icons/emojis as requested
+ * Enhanced to handle complex diagrams with HTML tags, edge labels, and various patterns
  */
 function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
   const paragraphs: Paragraph[] = [];
   
-  // Add a header indicating this is a diagram (no emoji)
+  // Determine diagram type for the header
+  const trimmedContent = mermaidContent.trim().toLowerCase();
+  let diagramTitle = 'Diagrama de Flujo';
+  if (trimmedContent.startsWith('sequencediagram')) {
+    diagramTitle = 'Diagrama de Secuencia';
+  } else if (trimmedContent.startsWith('classdiagram')) {
+    diagramTitle = 'Diagrama de Clases';
+  } else if (trimmedContent.startsWith('erdiagram')) {
+    diagramTitle = 'Diagrama Entidad-Relación';
+  } else if (trimmedContent.startsWith('gantt')) {
+    diagramTitle = 'Diagrama de Gantt';
+  } else if (trimmedContent.startsWith('pie')) {
+    diagramTitle = 'Diagrama Circular';
+  } else if (trimmedContent.startsWith('statediagram')) {
+    diagramTitle = 'Diagrama de Estados';
+  }
+  
+  // Add header with subtle background
   paragraphs.push(
     new Paragraph({
       children: [
         new TextRun({
-          text: 'Diagrama de Flujo',
+          text: diagramTitle,
           bold: true,
-          size: 24, // 12pt as requested for headings
+          size: 24, // 12pt
           font: VANDARUM_FONTS.titulo,
           color: VANDARUM_COLORS.verdeOscuro,
         }),
@@ -665,78 +682,184 @@ function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
     })
   );
   
-  // Parse the mermaid content to extract nodes and relationships
+  // Parse the mermaid content
   const lines = mermaidContent.split('\n');
   const nodes: Map<string, string> = new Map();
-  const relationships: string[] = [];
+  const steps: string[] = [];
+  const processedEdges = new Set<string>();
   
   for (const line of lines) {
     const trimmed = line.trim();
     
-    // Skip header lines
-    if (trimmed.match(/^(flowchart|graph)\s+(TD|LR|TB|BT|RL)/i)) {
+    // Skip header lines and empty lines
+    if (trimmed.match(/^(flowchart|graph)\s+(TD|LR|TB|BT|RL)/i) || !trimmed) {
       continue;
     }
     
-    // Extract node definitions: A[Label] or A{Label} or A(Label)
-    const nodeRegex = /([A-Za-z0-9_]+)[\[\{(]([^\]\})\n]+)[\]\})]/g;
-    const nodeMatches = trimmed.matchAll(nodeRegex);
-    for (const match of nodeMatches) {
-      nodes.set(match[1], match[2]);
+    // Skip subgraph declarations and end keywords
+    if (trimmed.match(/^(subgraph|end|style|classDef|class|click|linkStyle|direction)\b/i)) {
+      continue;
     }
     
-    // Extract relationships: A --> B or A -->|label| B
-    const arrowMatch = trimmed.match(/([A-Za-z0-9_]+)\s*-->\s*\|?([^|]*)\|?\s*([A-Za-z0-9_]+)/);
-    if (arrowMatch) {
-      const from = nodes.get(arrowMatch[1]) || arrowMatch[1];
-      const label = arrowMatch[2]?.trim() || '';
-      const to = nodes.get(arrowMatch[3]) || arrowMatch[3];
+    // Skip comment lines
+    if (trimmed.startsWith('%%')) {
+      continue;
+    }
+    
+    // Extract node definitions with various bracket types
+    // Handles: A[Label], A((Label)), A{Label}, A([Label]), A>Label], A[Label<br>More text]
+    const nodeDefRegex = /([A-Za-z0-9_]+)(?:\[([^\]]*)\]|\(\(([^)]*)\)\)|\{([^}]*)\}|\(\[([^\]]*)\]\)|>([^\]]*)\])/g;
+    let nodeMatch;
+    while ((nodeMatch = nodeDefRegex.exec(trimmed)) !== null) {
+      const nodeId = nodeMatch[1];
+      // Get the first non-undefined capture group for the label
+      const label = nodeMatch[2] || nodeMatch[3] || nodeMatch[4] || nodeMatch[5] || nodeMatch[6] || '';
+      // Clean HTML tags like <br> and normalize
+      const cleanLabel = label
+        .replace(/<br\s*\/?>/gi, ' / ')
+        .replace(/<[^>]*>/g, '')
+        .trim();
+      if (cleanLabel) {
+        nodes.set(nodeId, cleanLabel);
+      }
+    }
+    
+    // Extract relationships with edge labels
+    // Handles: A --> B, A -->|label| B, A -- text --> B, A -.-> B
+    const edgeRegex = /([A-Za-z0-9_]+)\s*(-->|---|-\.->|==>|~~>|-->\||--\s)/;
+    const edgeMatch = trimmed.match(edgeRegex);
+    
+    if (edgeMatch) {
+      // Full pattern to capture edge with optional label and target
+      const fullEdgeRegex = /([A-Za-z0-9_]+)\s*(?:-->|---|-\.->|==>|~~>)\s*(?:\|([^|]*)\|)?\s*([A-Za-z0-9_]+)?/;
+      const fullMatch = trimmed.match(fullEdgeRegex);
       
-      if (label) {
-        relationships.push(`${from} → [${label}] → ${to}`);
-      } else {
-        relationships.push(`${from} → ${to}`);
+      if (fullMatch) {
+        const fromId = fullMatch[1];
+        const edgeLabel = fullMatch[2]?.trim() || '';
+        const toId = fullMatch[3];
+        
+        // Create unique key to avoid duplicate edges
+        const edgeKey = `${fromId}->${toId || 'unknown'}-${edgeLabel}`;
+        if (!processedEdges.has(edgeKey)) {
+          processedEdges.add(edgeKey);
+          
+          const fromLabel = nodes.get(fromId) || fromId;
+          const toLabel = toId ? (nodes.get(toId) || toId) : null;
+          
+          if (toLabel) {
+            if (edgeLabel) {
+              steps.push(`${fromLabel} → [${edgeLabel}] → ${toLabel}`);
+            } else {
+              steps.push(`${fromLabel} → ${toLabel}`);
+            }
+          }
+        }
       }
     }
   }
   
-  // Output relationships as a list
-  for (const rel of relationships) {
+  // If we extracted meaningful steps, render them
+  if (steps.length > 0) {
+    // Add subtitle
     paragraphs.push(
       new Paragraph({
         children: [
           new TextRun({
-            text: '• ',
-            size: 18, // 9pt
-            font: VANDARUM_FONTS.texto,
-            color: VANDARUM_COLORS.verdeOscuro,
-          }),
-          ...createFormattedTextRuns(rel, { size: 18 }),
-        ],
-        spacing: { before: 30, after: 30 },
-        indent: { left: 200 },
-      })
-    );
-  }
-  
-  // If no relationships were parsed, just note that a diagram exists
-  if (relationships.length === 0) {
-    paragraphs.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: '(Ver diagrama visual en la aplicación)',
+            text: 'Flujo del proceso:',
+            bold: true,
             italics: true,
             size: 18, // 9pt
             font: VANDARUM_FONTS.texto,
             color: VANDARUM_COLORS.grisTexto,
           }),
         ],
-        spacing: { after: 100 },
-        indent: { left: 200 },
+        spacing: { before: 80, after: 50 },
+        indent: { left: 100 },
       })
     );
+    
+    // Output steps as numbered list
+    steps.forEach((step, index) => {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `${index + 1}. `,
+              bold: true,
+              size: 18, // 9pt
+              font: VANDARUM_FONTS.texto,
+              color: VANDARUM_COLORS.verdeOscuro,
+            }),
+            ...createFormattedTextRuns(step, { size: 18 }),
+          ],
+          spacing: { before: 30, after: 30 },
+          indent: { left: 200 },
+        })
+      );
+    });
+  } else {
+    // Fallback: show available node labels as components
+    const nodeLabels = Array.from(nodes.values());
+    if (nodeLabels.length > 0) {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Componentes del diagrama:',
+              bold: true,
+              italics: true,
+              size: 18, // 9pt
+              font: VANDARUM_FONTS.texto,
+              color: VANDARUM_COLORS.grisTexto,
+            }),
+          ],
+          spacing: { before: 80, after: 50 },
+          indent: { left: 100 },
+        })
+      );
+      
+      nodeLabels.forEach((label) => {
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: '• ',
+                size: 18,
+                font: VANDARUM_FONTS.texto,
+                color: VANDARUM_COLORS.verdeOscuro,
+              }),
+              ...createFormattedTextRuns(label, { size: 18 }),
+            ],
+            spacing: { before: 20, after: 20 },
+            indent: { left: 200 },
+          })
+        );
+      });
+    } else {
+      // If nothing could be parsed, add a note
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: '(Ver diagrama visual en la aplicación)',
+              italics: true,
+              size: 18, // 9pt
+              font: VANDARUM_FONTS.texto,
+              color: VANDARUM_COLORS.grisTexto,
+            }),
+          ],
+          spacing: { after: 100 },
+          indent: { left: 200 },
+        })
+      );
+    }
   }
+  
+  // Add spacing after diagram section
+  paragraphs.push(
+    new Paragraph({ children: [], spacing: { after: 100 } })
+  );
   
   return paragraphs;
 }
