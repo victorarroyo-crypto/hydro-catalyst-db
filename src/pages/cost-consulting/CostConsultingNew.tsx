@@ -37,6 +37,8 @@ import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+const RAILWAY_URL = import.meta.env.VITE_RAILWAY_URL || 'https://watertech-scouting-production.up.railway.app';
+
 interface UploadedFile {
   file: File;
   id: string;
@@ -331,7 +333,48 @@ const CostConsultingNew = () => {
         .update({ status: 'processing' })
         .eq('id', projectId);
       
-      toast.success('Proyecto creado correctamente. Iniciando análisis...');
+      // 5. Wait for documents to be processed (embeddings)
+      toast.info('Esperando procesamiento de documentos...');
+      
+      let attempts = 0;
+      const maxAttempts = 60; // 2 minutos máximo
+      
+      while (attempts < maxAttempts) {
+        const { data: docs } = await externalSupabase
+          .from('cost_project_documents')
+          .select('status')
+          .eq('project_id', projectId);
+        
+        const pending = docs?.filter(d => 
+          d.status === 'pending' || d.status === 'processing'
+        );
+        
+        if (!pending || pending.length === 0) {
+          break;
+        }
+        
+        await new Promise(r => setTimeout(r, 2000));
+        attempts++;
+      }
+      
+      // 6. Start analysis with CrewAI agents
+      try {
+        const analyzeResponse = await fetch(
+          `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/analyze`,
+          { method: 'POST' }
+        );
+        
+        if (!analyzeResponse.ok) {
+          console.error('Failed to start analysis:', await analyzeResponse.text());
+          toast.warning('Documentos subidos pero error al iniciar análisis automático.');
+        } else {
+          toast.success('Análisis iniciado correctamente');
+        }
+      } catch (analyzeError) {
+        console.error('Error starting analysis:', analyzeError);
+        toast.warning('Documentos subidos. Inicia el análisis manualmente.');
+      }
+      
       navigate(`/cost-consulting/${projectId}`);
       
     } catch (error: unknown) {
