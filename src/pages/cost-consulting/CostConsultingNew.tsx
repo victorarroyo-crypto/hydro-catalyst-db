@@ -1,8 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDropzone } from 'react-dropzone';
 import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { useDropzone } from 'react-dropzone';
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -13,7 +12,6 @@ import {
   Upload, 
   X, 
   Loader2,
-  CalendarIcon,
   CheckCircle2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -29,8 +27,7 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DatePickerWithPresets } from '@/components/ui/date-picker-with-presets';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
@@ -493,59 +490,21 @@ const CostConsultingNew = () => {
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex-1">
                     <Label className="text-xs text-muted-foreground mb-1">Desde</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !formData.dateFrom && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formData.dateFrom 
-                            ? format(formData.dateFrom, "PPP", { locale: es }) 
-                            : "Seleccionar fecha"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={formData.dateFrom}
-                          onSelect={(date) => setFormData({ ...formData, dateFrom: date })}
-                          initialFocus
-                          className="pointer-events-auto"
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <DatePickerWithPresets
+                      date={formData.dateFrom}
+                      onDateChange={(date) => setFormData({ ...formData, dateFrom: date })}
+                      placeholder="Seleccionar fecha"
+                      fromYear={2018}
+                    />
                   </div>
                   <div className="flex-1">
                     <Label className="text-xs text-muted-foreground mb-1">Hasta</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !formData.dateTo && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formData.dateTo 
-                            ? format(formData.dateTo, "PPP", { locale: es }) 
-                            : "Seleccionar fecha"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={formData.dateTo}
-                          onSelect={(date) => setFormData({ ...formData, dateTo: date })}
-                          initialFocus
-                          className="pointer-events-auto"
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <DatePickerWithPresets
+                      date={formData.dateTo}
+                      onDateChange={(date) => setFormData({ ...formData, dateTo: date })}
+                      placeholder="Seleccionar fecha"
+                      fromYear={2018}
+                    />
                   </div>
                 </div>
               </div>
