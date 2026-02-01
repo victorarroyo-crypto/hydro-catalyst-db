@@ -31,6 +31,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
 import { 
   ArrowLeft,
@@ -47,16 +57,23 @@ import {
   Euro,
   FileWarning,
   RefreshCw,
-  Loader2
+  Loader2,
+  Plus,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart } from 'recharts';
-import { useCostInvoices, CostInvoice } from '@/hooks/useCostConsultingData';
-import { useQuery } from '@tanstack/react-query';
+import { useCostInvoices, useCostContracts, useCostAllSuppliers, CostInvoice } from '@/hooks/useCostConsultingData';
+import { useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
+import { FailedDocumentsAlert } from '@/components/cost-consulting/FailedDocumentsAlert';
+import { deleteInvoice } from '@/services/costConsultingApi';
 
 // Types for mapped invoice data
 interface InvoiceIssue {
@@ -118,7 +135,10 @@ const getComplianceBadge = (compliance: string, issuesCount: number) => {
 
 const CostConsultingInvoices = () => {
   const { id } = useParams();
-  const { data: rawInvoices = [], isLoading } = useCostInvoices(id);
+  const queryClient = useQueryClient();
+  const { data: rawInvoices = [], isLoading, refetch } = useCostInvoices(id);
+  const { data: contracts = [] } = useCostContracts(id);
+  const { data: suppliers = [] } = useCostAllSuppliers();
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
@@ -127,6 +147,12 @@ const CostConsultingInvoices = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<DisplayInvoice | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedTrendCategory, setSelectedTrendCategory] = useState<string>('');
+
+  // Modal states
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<CostInvoice | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
 
   // Extract line items from invoices for trend analysis
   // Note: line_items are embedded JSON in cost_project_invoices, not a separate table
@@ -218,8 +244,8 @@ const CostConsultingInvoices = () => {
     ),
   }));
 
-  // Derive suppliers and categories from actual data
-  const suppliers = [...new Set(invoices.map(i => i.supplier))].filter(Boolean);
+  // Derive supplier names and categories from actual data
+  const supplierNames = [...new Set(invoices.map(i => i.supplier))].filter(Boolean);
   const categories = [...new Set(invoices.map(i => i.category))].filter(Boolean);
 
   // Available categories for trend chart (from extracted line items)
@@ -447,7 +473,7 @@ const CostConsultingInvoices = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los proveedores</SelectItem>
-                  {suppliers.map(s => (
+                  {supplierNames.map(s => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>

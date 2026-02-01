@@ -26,6 +26,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
 import { 
   ArrowLeft,
@@ -39,10 +49,18 @@ import {
   FileText,
   CreditCard,
   TrendingUp,
-  Loader2
+  Loader2,
+  Plus,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { useCostContracts, CostContract } from '@/hooks/useCostConsultingData';
+import { toast } from 'sonner';
+import { useCostContracts, useCostAllSuppliers, CostContract } from '@/hooks/useCostConsultingData';
+import { ContractFormModal } from '@/components/cost-consulting/ContractFormModal';
+import { FailedDocumentsAlert } from '@/components/cost-consulting/FailedDocumentsAlert';
+import { deleteContract } from '@/services/costConsultingApi';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Type for mapped contract display
 interface DisplayContract {
@@ -146,15 +164,23 @@ const formatDate = (dateStr: string | null) => {
 
 const CostConsultingContracts = () => {
   const { id } = useParams();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('risk');
   const [selectedContract, setSelectedContract] = useState<DisplayContract | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  
+  // Modal states
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingContract, setEditingContract] = useState<CostContract | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [contractToDelete, setContractToDelete] = useState<string | null>(null);
 
   // Fetch real data from Supabase
-  const { data: contracts = [], isLoading, error } = useCostContracts(id);
+  const { data: contracts = [], isLoading, error, refetch } = useCostContracts(id);
+  const { data: suppliers = [] } = useCostAllSuppliers();
 
   // Map contracts to display format
   const mappedContracts = contracts.map(mapContractToDisplay);
@@ -186,6 +212,46 @@ const CostConsultingContracts = () => {
   const handleViewContract = (contract: DisplayContract) => {
     setSelectedContract(contract);
     setSheetOpen(true);
+  };
+
+  const handleEditContract = (contractId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const contract = contracts.find(c => c.id === contractId);
+    if (contract) {
+      setEditingContract(contract);
+      setFormModalOpen(true);
+    }
+  };
+
+  const handleDeleteContract = async (contractId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setContractToDelete(contractId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!contractToDelete || !id) return;
+    try {
+      await deleteContract(id, contractToDelete);
+      toast.success('Contrato eliminado');
+      refetch();
+      setSheetOpen(false);
+    } catch (error) {
+      toast.error('Error al eliminar el contrato');
+    } finally {
+      setDeleteDialogOpen(false);
+      setContractToDelete(null);
+    }
+  };
+
+  const handleFormSaved = () => {
+    refetch();
+    setEditingContract(null);
+  };
+
+  const openNewContractModal = () => {
+    setEditingContract(null);
+    setFormModalOpen(true);
   };
 
   // Loading state
@@ -222,20 +288,37 @@ const CostConsultingContracts = () => {
           <span className="text-foreground font-medium">Contratos</span>
         </nav>
         
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to={`/cost-consulting/${id}`}>
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Contratos</h1>
-            <p className="text-muted-foreground mt-1">
-              {filteredContracts.length} contratos · {filteredContracts.reduce((sum, c) => sum + c.annualValue, 0).toLocaleString('es-ES')}€/año
-            </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild>
+              <Link to={`/cost-consulting/${id}`}>
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Contratos</h1>
+              <p className="text-muted-foreground mt-1">
+                {filteredContracts.length} contratos · {filteredContracts.reduce((sum, c) => sum + c.annualValue, 0).toLocaleString('es-ES')}€/año
+              </p>
+            </div>
           </div>
+          <Button onClick={openNewContractModal}>
+            <Plus className="h-4 w-4 mr-2" />
+            Añadir manual
+          </Button>
         </div>
       </div>
+
+      {/* Failed Documents Alert */}
+      {id && (
+        <FailedDocumentsAlert
+          projectId={id}
+          onDocumentReprocessed={() => refetch()}
+          onAddManual={(type) => {
+            if (type === 'contract') openNewContractModal();
+          }}
+        />
+      )}
 
       {/* Filters */}
       <Card>
@@ -346,9 +429,17 @@ const CostConsultingContracts = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => handleViewContract(contract)}>
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => handleViewContract(contract)}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={(e) => handleEditContract(contract.id, e)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={(e) => handleDeleteContract(contract.id, e)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -533,9 +624,9 @@ const CostConsultingContracts = () => {
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-4">
-                  <Button variant="outline" className="flex-1">
-                    <Calculator className="h-4 w-4 mr-2" />
-                    Simular cambio
+                  <Button variant="outline" className="flex-1" onClick={() => handleEditContract(selectedContract.id)}>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Editar contrato
                   </Button>
                   <Button className="flex-1">
                     <Flag className="h-4 w-4 mr-2" />
@@ -547,6 +638,37 @@ const CostConsultingContracts = () => {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Contract Form Modal */}
+      <ContractFormModal
+        projectId={id || ''}
+        contract={editingContract}
+        suppliers={suppliers}
+        open={formModalOpen}
+        onClose={() => {
+          setFormModalOpen(false);
+          setEditingContract(null);
+        }}
+        onSaved={handleFormSaved}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar contrato?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. El contrato será eliminado permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
