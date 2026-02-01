@@ -335,17 +335,21 @@ const CostConsultingNew = () => {
       // 5. Call /extract endpoint to start extraction (this is async)
       try {
         const { data: extractData, error: extractError } = await supabase.functions.invoke(
-          `cost-consulting-analyze/${projectId}`,
-          { method: 'POST' }
+          'cost-consulting-analyze',
+          { 
+            body: { projectId }
+          }
         );
         
         if (extractError) {
           console.error('Failed to start extraction:', extractError);
-          // Don't fail completely - the user can still see the project
           toast.warning('Documentos subidos. La extracción puede tardar unos minutos.');
-        } else {
+        } else if (extractData?.success || extractData?.alreadyProcessing) {
           console.log('Extraction started:', extractData);
           toast.success('Extracción iniciada correctamente');
+        } else if (extractData?.error) {
+          console.error('Extraction error:', extractData.error);
+          toast.warning('Documentos subidos. Revisa el estado en unos minutos.');
         }
       } catch (extractError) {
         console.error('Error starting extraction:', extractError);
