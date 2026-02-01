@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   ArrowLeft,
   ArrowRight,
@@ -14,6 +16,7 @@ import {
   TrendingDown,
   Euro,
   AlertTriangle,
+  AlertCircle,
   Download,
   Archive,
   CheckCircle2,
@@ -24,11 +27,14 @@ import {
   Zap,
   ChevronRight,
   FileDown,
-  Loader2
+  Loader2,
+  Building2,
+  Play,
+  Pencil
 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ReportGeneratorModal } from '@/components/cost-consulting/ReportGeneratorModal';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { 
   useCostProject, 
@@ -38,6 +44,9 @@ import {
   useCostDocuments
 } from '@/hooks/useCostConsultingData';
 import { DocumentsManagementCard } from '@/components/cost-consulting/DocumentsManagementCard';
+import { toast } from 'sonner';
+
+const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
 const processingPhases = [
   { id: 1, name: 'Extrayendo documentos' },
@@ -318,10 +327,160 @@ const AlertsSection = ({ alerts }: { alerts: AlertItem[] }) => {
   );
 };
 
+// Review state components
+interface ContractForReview {
+  id: string;
+  supplier_name_raw?: string;
+  contract_number?: string;
+  contract_title?: string;
+  start_date?: string;
+  end_date?: string;
+  total_annual_value?: number;
+  source?: string;
+}
+
+interface InvoiceForReview {
+  id: string;
+  supplier_name_raw?: string;
+  invoice_number?: string;
+  invoice_date?: string;
+  total?: number;
+  source?: string;
+}
+
+const ContractsReviewTable = ({ contracts }: { contracts: ContractForReview[] }) => {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Proveedor</TableHead>
+          <TableHead>Nº Contrato</TableHead>
+          <TableHead>Título</TableHead>
+          <TableHead>Vigencia</TableHead>
+          <TableHead className="text-right">Valor Anual</TableHead>
+          <TableHead>Fuente</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {contracts.map((contract) => (
+          <TableRow key={contract.id}>
+            <TableCell className="font-medium">{contract.supplier_name_raw || '-'}</TableCell>
+            <TableCell>{contract.contract_number || '-'}</TableCell>
+            <TableCell>{contract.contract_title || '-'}</TableCell>
+            <TableCell>
+              {contract.start_date && contract.end_date
+                ? `${new Date(contract.start_date).toLocaleDateString('es-ES')} - ${new Date(contract.end_date).toLocaleDateString('es-ES')}`
+                : '-'}
+            </TableCell>
+            <TableCell className="text-right">
+              {contract.total_annual_value
+                ? `${contract.total_annual_value.toLocaleString('es-ES')}€`
+                : '-'}
+            </TableCell>
+            <TableCell>
+              <Badge variant="outline" className={contract.source === 'manual' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>
+                {contract.source === 'manual' ? 'Manual' : 'Extraído'}
+              </Badge>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
+
+const InvoicesReviewTable = ({ invoices }: { invoices: InvoiceForReview[] }) => {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Proveedor</TableHead>
+          <TableHead>Nº Factura</TableHead>
+          <TableHead>Fecha</TableHead>
+          <TableHead className="text-right">Total</TableHead>
+          <TableHead>Fuente</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {invoices.map((invoice) => (
+          <TableRow key={invoice.id}>
+            <TableCell className="font-medium">{invoice.supplier_name_raw || '-'}</TableCell>
+            <TableCell>{invoice.invoice_number || '-'}</TableCell>
+            <TableCell>
+              {invoice.invoice_date
+                ? new Date(invoice.invoice_date).toLocaleDateString('es-ES')
+                : '-'}
+            </TableCell>
+            <TableCell className="text-right">
+              {invoice.total
+                ? `${invoice.total.toLocaleString('es-ES')}€`
+                : '-'}
+            </TableCell>
+            <TableCell>
+              <Badge variant="outline" className={invoice.source === 'manual' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>
+                {invoice.source === 'manual' ? 'Manual' : 'Extraído'}
+              </Badge>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
+
+const SuppliersReviewList = ({ projectId }: { projectId?: string }) => {
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['cost-suppliers-review', projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      const { data } = await externalSupabase
+        .from('cost_project_suppliers')
+        .select('id, name, trade_name, tax_id, country')
+        .eq('project_id', projectId);
+      return data || [];
+    },
+    enabled: !!projectId,
+  });
+
+  if (suppliers.length === 0) {
+    return (
+      <p className="text-muted-foreground text-center py-8">
+        No se detectaron proveedores
+      </p>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Nombre</TableHead>
+          <TableHead>Nombre Comercial</TableHead>
+          <TableHead>CIF/NIF</TableHead>
+          <TableHead>País</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {suppliers.map((supplier: { id: string; name?: string; trade_name?: string; tax_id?: string; country?: string }) => (
+          <TableRow key={supplier.id}>
+            <TableCell className="font-medium">{supplier.name || '-'}</TableCell>
+            <TableCell>{supplier.trade_name || '-'}</TableCell>
+            <TableCell>{supplier.tax_id || '-'}</TableCell>
+            <TableCell>{supplier.country || '-'}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
+
 const CostConsultingDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('overview');
   const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
   
   // Fetch project data from external Supabase
   const { data: project, isLoading: isLoadingProject } = useCostProject(id);
@@ -458,8 +617,37 @@ const CostConsultingDetail = () => {
   const invoicesCount = documents.filter(d => d.document_type === 'invoice').length || invoices.length;
   const suppliersCount = new Set([...contracts.map(c => c.supplier_name_raw), ...invoices.map(i => i.supplier_name_raw)].filter(Boolean)).size;
 
+  const isReview = project?.status === 'review';
   const isExtracting = project?.status === 'extracting';
   const isProcessing = project?.status === 'processing' || project?.status === 'analyzing';
+
+  // Function to start analysis from review state
+  const handleStartAnalysis = async () => {
+    if (!project?.id) return;
+
+    setIsStartingAnalysis(true);
+    try {
+      const response = await fetch(
+        `${RAILWAY_URL}/api/cost-consulting/projects/${project.id}/analyze`,
+        { method: 'POST' }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Error al iniciar análisis');
+      }
+
+      toast.success('Análisis iniciado correctamente');
+      // Refetch to see the new "analyzing" status
+      queryClient.invalidateQueries({ queryKey: ['cost-project', id] });
+
+    } catch (error) {
+      console.error('Error starting analysis:', error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo iniciar el análisis');
+    } finally {
+      setIsStartingAnalysis(false);
+    }
+  };
 
   if (isLoadingProject) {
     return (
@@ -569,6 +757,133 @@ const CostConsultingDetail = () => {
         </Card>
       )}
 
+      {/* Review State - Most important state in new flow */}
+      {isReview && (
+        <div className="space-y-6">
+          {/* Informative Alert */}
+          <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800">
+            <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <AlertTitle className="text-blue-800 dark:text-blue-300">Revisión de datos extraídos</AlertTitle>
+            <AlertDescription className="text-blue-700 dark:text-blue-400">
+              Hemos extraído los datos de tus documentos. Revisa que estén correctos
+              en las pestañas de Contratos y Facturas antes de ejecutar el análisis.
+            </AlertDescription>
+          </Alert>
+
+          {/* Extraction Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                  <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{contracts.length}</p>
+                  <p className="text-sm text-muted-foreground">Contratos extraídos</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                  <Receipt className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{invoices.length}</p>
+                  <p className="text-sm text-muted-foreground">Facturas extraídas</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
+                  <Building2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{suppliersCount}</p>
+                  <p className="text-sm text-muted-foreground">Proveedores detectados</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Tabs to review data */}
+          <Card>
+            <Tabs defaultValue="contracts" className="w-full">
+              <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+                <TabsTrigger 
+                  value="contracts" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                >
+                  Contratos ({contracts.length})
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="invoices" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                >
+                  Facturas ({invoices.length})
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="suppliers" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                >
+                  Proveedores
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="contracts" className="p-4">
+                {contracts.length > 0 ? (
+                  <ContractsReviewTable contracts={contracts} />
+                ) : (
+                  <p className="text-muted-foreground text-center py-8">
+                    No se encontraron contratos en los documentos
+                  </p>
+                )}
+              </TabsContent>
+
+              <TabsContent value="invoices" className="p-4">
+                {invoices.length > 0 ? (
+                  <InvoicesReviewTable invoices={invoices} />
+                ) : (
+                  <p className="text-muted-foreground text-center py-8">
+                    No se encontraron facturas en los documentos
+                  </p>
+                )}
+              </TabsContent>
+
+              <TabsContent value="suppliers" className="p-4">
+                <SuppliersReviewList projectId={project?.id} />
+              </TabsContent>
+            </Tabs>
+          </Card>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-4">
+            <Button variant="outline" onClick={() => navigate('/cost-consulting')}>
+              Volver
+            </Button>
+            <Button
+              onClick={handleStartAnalysis}
+              disabled={isStartingAnalysis}
+            >
+              {isStartingAnalysis ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Iniciando...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Validar y Ejecutar Análisis
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Extracting State */}
       {isExtracting && (
         <ExtractingState progressPct={project.progress_pct || 25} />
@@ -581,7 +896,7 @@ const CostConsultingDetail = () => {
       )}
 
       {/* Completed State */}
-      {!isProcessing && !isExtracting && (
+      {!isProcessing && !isExtracting && !isReview && (
         <>
           {/* Alerts */}
           <AlertsSection alerts={alerts} />
