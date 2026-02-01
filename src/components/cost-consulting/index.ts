@@ -6,3 +6,4 @@ export { InvoiceFormModal } from './InvoiceFormModal';
 export { SupplierFormModal } from './SupplierFormModal';
 export { FailedDocumentsAlert } from './FailedDocumentsAlert';
 export { ContractsReviewTable } from './ContractsReviewTable';
+export { InvoicesReviewTable } from './InvoicesReviewTable';
