@@ -23,41 +23,20 @@ import {
   Users,
   Zap,
   ChevronRight,
-  FileDown
+  FileDown,
+  Loader2
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { ReportGeneratorModal } from '@/components/cost-consulting/ReportGeneratorModal';
-
-// Mock data - in real implementation this would come from Supabase
-const mockProject = {
-  id: '1',
-  name: 'EDAR Municipal Castellón',
-  status: 'completed', // 'processing' | 'completed' | 'draft' | 'review'
-  vertical: 'Agua Industrial',
-  currentPhase: 2,
-  totalSpend: 245000,
-  totalSavings: 12450,
-  savingsPercent: 5.1,
-  opportunitiesCount: 8,
-  quickWinsCount: 3,
-  spendCategories: [
-    { name: 'Químicos', amount: 85750, percent: 35 },
-    { name: 'Canon y tasas', amount: 53900, percent: 22 },
-    { name: 'Residuos', amount: 44100, percent: 18 },
-    { name: 'O&M', amount: 36750, percent: 15 },
-    { name: 'Otros', amount: 24500, percent: 10 },
-  ],
-  opportunities: [
-    { id: 1, title: 'Renegociar químicos', savings: 4500, rating: 5, type: 'Quick Win' },
-    { id: 2, title: 'Contrato zombie O&M', savings: 2400, rating: 4, type: 'Quick Win' },
-    { id: 3, title: 'Cambiar gestor residuos', savings: 3200, rating: 3, type: 'Medio plazo' },
-  ],
-  alerts: [
-    { type: 'warning', message: '3 contratos con renovación automática próxima' },
-    { type: 'warning', message: '5 facturas con desviaciones de precio' },
-    { type: 'error', message: '1 contrato zombie detectado' },
-  ],
-};
+import { useQuery } from '@tanstack/react-query';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { 
+  useCostProject, 
+  useCostContracts, 
+  useCostInvoices, 
+  useCostOpportunities,
+  useCostDocuments
+} from '@/hooks/useCostConsultingData';
 
 const processingPhases = [
   { id: 1, name: 'Extrayendo documentos' },
@@ -167,7 +146,13 @@ const ProcessingState = ({ currentPhase }: { currentPhase: number }) => {
   );
 };
 
-const SpendMap = ({ categories }: { categories: typeof mockProject.spendCategories }) => {
+interface SpendCategory {
+  name: string;
+  amount: number;
+  percent: number;
+}
+
+const SpendMap = ({ categories }: { categories: SpendCategory[] }) => {
   const maxPercent = Math.max(...categories.map(c => c.percent));
   
   return (
@@ -198,7 +183,15 @@ const SpendMap = ({ categories }: { categories: typeof mockProject.spendCategori
   );
 };
 
-const TopOpportunities = ({ opportunities }: { opportunities: typeof mockProject.opportunities }) => {
+interface DisplayOpportunity {
+  id: string;
+  title: string;
+  savings: number;
+  rating: number;
+  type: string;
+}
+
+const TopOpportunities = ({ opportunities }: { opportunities: DisplayOpportunity[] }) => {
   return (
     <Card className="h-full">
       <CardHeader>
@@ -251,7 +244,12 @@ const TopOpportunities = ({ opportunities }: { opportunities: typeof mockProject
   );
 };
 
-const AlertsSection = ({ alerts }: { alerts: typeof mockProject.alerts }) => {
+interface AlertItem {
+  type: 'warning' | 'error';
+  message: string;
+}
+
+const AlertsSection = ({ alerts }: { alerts: AlertItem[] }) => {
   if (alerts.length === 0) return null;
   
   return (
@@ -278,9 +276,136 @@ const CostConsultingDetail = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [reportModalOpen, setReportModalOpen] = useState(false);
   
-  // In real implementation, fetch project data from Supabase
-  const project = mockProject;
-  const isProcessing = project.status === 'processing' || project.status === 'analyzing';
+  // Fetch project data from external Supabase
+  const { data: project, isLoading: isLoadingProject } = useCostProject(id);
+  const { data: contracts = [] } = useCostContracts(id);
+  const { data: invoices = [] } = useCostInvoices(id);
+  const { data: opportunities = [] } = useCostOpportunities(id);
+  const { data: documents = [] } = useCostDocuments(id);
+
+  // Real alerts queries
+  const { data: autoRenewalContracts = [] } = useQuery({
+    queryKey: ["auto-renewal-contracts", id],
+    queryFn: async () => {
+      if (!id) return [];
+      const { data } = await externalSupabase
+        .from("cost_project_contracts")
+        .select("id, end_date, notice_period_days")
+        .eq("project_id", id)
+        .eq("auto_renewal", true);
+      return data?.filter(c => {
+        const noticeDate = new Date(c.end_date);
+        noticeDate.setDate(noticeDate.getDate() - (c.notice_period_days || 30));
+        return noticeDate <= new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+      }) || [];
+    },
+    enabled: !!id,
+  });
+
+  const { data: invoiceIssues = [] } = useQuery({
+    queryKey: ["invoice-issues", id],
+    queryFn: async () => {
+      if (!id) return [];
+      const { data } = await externalSupabase
+        .from("cost_project_invoices")
+        .select("id, compliance_status")
+        .eq("project_id", id)
+        .neq("compliance_status", "ok");
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
+  const { data: zombieContracts = [] } = useQuery({
+    queryKey: ["zombie-contracts", id],
+    queryFn: async () => {
+      if (!id) return [];
+      const { data } = await externalSupabase
+        .from("cost_project_contracts")
+        .select("id")
+        .eq("project_id", id)
+        .eq("is_zombie", true);
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
+  // Build alerts from real data
+  const alerts: Array<{ type: 'warning' | 'error'; message: string }> = [];
+  if (autoRenewalContracts.length > 0) {
+    alerts.push({ type: 'warning', message: `${autoRenewalContracts.length} contratos con renovación automática próxima` });
+  }
+  if (invoiceIssues.length > 0) {
+    alerts.push({ type: 'warning', message: `${invoiceIssues.length} facturas con desviaciones de precio` });
+  }
+  if (zombieContracts.length > 0) {
+    alerts.push({ type: 'error', message: `${zombieContracts.length} contrato${zombieContracts.length > 1 ? 's' : ''} zombie detectado${zombieContracts.length > 1 ? 's' : ''}` });
+  }
+
+  // Calculate KPIs from real data
+  const totalSpend = project?.total_spend || 0;
+  const totalSavings = opportunities.reduce((sum, o) => sum + (o.savings_annual || 0), 0);
+  const savingsPercent = totalSpend > 0 ? ((totalSavings / totalSpend) * 100).toFixed(1) : '0';
+  const quickWinsCount = opportunities.filter(o => o.effort_level === 'low' || o.opportunity_type === 'quick_win').length;
+
+  // Build spend categories from invoices
+  const spendByCategory = invoices.reduce((acc: Record<string, number>, inv) => {
+    const cat = inv.category || 'Otros';
+    acc[cat] = (acc[cat] || 0) + (inv.total || 0);
+    return acc;
+  }, {});
+  
+  const totalCatSpend = Object.values(spendByCategory).reduce((a, b) => a + b, 0);
+  const spendCategories = Object.entries(spendByCategory)
+    .map(([name, amount]) => ({
+      name,
+      amount,
+      percent: totalCatSpend > 0 ? Math.round((amount / totalCatSpend) * 100) : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5);
+
+  // Top opportunities
+  const topOpportunities = opportunities
+    .sort((a, b) => (b.priority_score || 0) - (a.priority_score || 0))
+    .slice(0, 3)
+    .map(o => ({
+      id: o.id,
+      title: o.title,
+      savings: o.savings_annual || 0,
+      rating: Math.min(5, Math.ceil((o.impact_score || 50) / 20)),
+      type: o.effort_level === 'low' ? 'Quick Win' : 'Medio plazo',
+    }));
+
+  // Document counts
+  const contractsCount = documents.filter(d => d.document_type === 'contract').length || contracts.length;
+  const invoicesCount = documents.filter(d => d.document_type === 'invoice').length || invoices.length;
+  const suppliersCount = new Set([...contracts.map(c => c.supplier_name_raw), ...invoices.map(i => i.supplier_name_raw)].filter(Boolean)).size;
+
+  const isProcessing = project?.status === 'processing' || project?.status === 'analyzing';
+
+  if (isLoadingProject) {
+    return (
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="container mx-auto p-6">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground">Proyecto no encontrado</p>
+            <Button asChild className="mt-4">
+              <Link to="/cost-consulting">Volver a proyectos</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -292,7 +417,7 @@ const CostConsultingDetail = () => {
             Consultoría de Costes
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <span className="text-foreground font-medium">{project.name}</span>
+          <span className="text-foreground font-medium">{project.name || 'Proyecto'}</span>
         </nav>
         
         {/* Title row */}
@@ -305,10 +430,10 @@ const CostConsultingDetail = () => {
             </Button>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold text-foreground">{project.name}</h1>
-                {getStatusBadge(project.status)}
+                <h1 className="text-3xl font-bold text-foreground">{project.name || 'Proyecto'}</h1>
+                {getStatusBadge(project.status || 'draft')}
               </div>
-              <p className="text-muted-foreground mt-1">{project.vertical}</p>
+              <p className="text-muted-foreground mt-1">{project.client_name || 'Sin cliente'}</p>
             </div>
           </div>
           
@@ -339,14 +464,14 @@ const CostConsultingDetail = () => {
 
       {/* Processing State */}
       {isProcessing && (
-        <ProcessingState currentPhase={project.currentPhase} />
+        <ProcessingState currentPhase={parseInt(project.current_phase || '1', 10)} />
       )}
 
       {/* Completed State */}
       {!isProcessing && (
         <>
           {/* Alerts */}
-          <AlertsSection alerts={project.alerts} />
+          <AlertsSection alerts={alerts} />
 
           {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -357,7 +482,7 @@ const CostConsultingDetail = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {project.totalSpend.toLocaleString('es-ES')}€
+                  {totalSpend.toLocaleString('es-ES')}€
                 </div>
                 <p className="text-xs text-muted-foreground">Período analizado</p>
               </CardContent>
@@ -370,10 +495,10 @@ const CostConsultingDetail = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-primary">
-                  {project.totalSavings.toLocaleString('es-ES')}€
+                  {totalSavings.toLocaleString('es-ES')}€
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {project.savingsPercent}% del gasto total
+                  {savingsPercent}% del gasto total
                 </p>
               </CardContent>
             </Card>
@@ -384,7 +509,7 @@ const CostConsultingDetail = () => {
                 <Lightbulb className="h-4 w-4 text-primary" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{project.opportunitiesCount}</div>
+                <div className="text-2xl font-bold">{opportunities.length}</div>
                 <p className="text-xs text-muted-foreground">Identificadas</p>
               </CardContent>
             </Card>
@@ -395,7 +520,7 @@ const CostConsultingDetail = () => {
                 <Zap className="h-4 w-4 text-yellow-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{project.quickWinsCount}</div>
+                <div className="text-2xl font-bold">{quickWinsCount}</div>
                 <p className="text-xs text-muted-foreground">Implementación rápida</p>
               </CardContent>
             </Card>
@@ -404,10 +529,10 @@ const CostConsultingDetail = () => {
           {/* Main Content - Two Columns */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div className="lg:col-span-3">
-              <SpendMap categories={project.spendCategories} />
+              <SpendMap categories={spendCategories} />
             </div>
             <div className="lg:col-span-2">
-              <TopOpportunities opportunities={project.opportunities} />
+              <TopOpportunities opportunities={topOpportunities} />
             </div>
           </div>
 
@@ -446,21 +571,21 @@ const CostConsultingDetail = () => {
                     <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
                       <FileText className="h-8 w-8 text-blue-500" />
                       <div>
-                        <p className="text-2xl font-bold">12</p>
+                        <p className="text-2xl font-bold">{contractsCount}</p>
                         <p className="text-sm text-muted-foreground">Contratos</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
                       <Receipt className="h-8 w-8 text-green-500" />
                       <div>
-                        <p className="text-2xl font-bold">156</p>
+                        <p className="text-2xl font-bold">{invoicesCount}</p>
                         <p className="text-sm text-muted-foreground">Facturas</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
                       <Users className="h-8 w-8 text-orange-500" />
                       <div>
-                        <p className="text-2xl font-bold">8</p>
+                        <p className="text-2xl font-bold">{suppliersCount}</p>
                         <p className="text-sm text-muted-foreground">Proveedores</p>
                       </div>
                     </div>
