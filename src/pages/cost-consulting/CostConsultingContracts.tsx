@@ -38,139 +38,73 @@ import {
   Flag,
   FileText,
   CreditCard,
-  TrendingUp
+  TrendingUp,
+  Loader2
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { useCostContracts, CostContract } from '@/hooks/useCostConsultingData';
 
-// Mock data
-const mockContracts = [
-  {
-    id: '1',
-    supplier: 'Química Industrial SL',
-    category: 'Químicos',
-    subcategory: 'Coagulantes',
-    annualValue: 45000,
-    endDate: '2025-03-31',
-    riskScore: 72,
-    alertsCount: 2,
-    autoRenewal: true,
-    startDate: '2024-01-01',
-    paymentTerms: '30 días',
-    indexation: 'IPC anual',
-    penalty: '1%/día retraso',
-    products: [
-      { name: 'PAC 18%', price: 0.38, unit: '€/kg', benchmarkMin: 0.28, benchmarkMax: 0.35, gap: 9 },
-      { name: 'Floculante', price: 2.80, unit: '€/kg', benchmarkMin: 2.20, benchmarkMax: 3.00, gap: 0 },
-    ],
-    alerts: [
-      'Renovación automática en 45 días',
-      'Precio PAC por encima de mercado',
-    ],
-    recommendations: [
-      'Renegociar precio PAC antes de renovación',
-      'Añadir cláusula de salida',
-    ],
-  },
-  {
-    id: '2',
-    supplier: 'Mantenimientos Técnicos SA',
-    category: 'O&M',
-    subcategory: 'Mantenimiento preventivo',
-    annualValue: 36000,
-    endDate: null,
-    riskScore: 25,
-    alertsCount: 0,
-    autoRenewal: false,
-    startDate: '2022-06-01',
-    paymentTerms: '60 días',
-    indexation: 'Sin indexación',
-    penalty: 'Ninguna',
-    products: [
-      { name: 'Horas técnico', price: 45, unit: '€/h', benchmarkMin: 40, benchmarkMax: 55, gap: 0 },
-    ],
-    alerts: [],
-    recommendations: [
-      'Revisar alcance y añadir SLAs',
-    ],
-  },
-  {
-    id: '3',
-    supplier: 'Limpiezas Industriales',
-    category: 'Limpieza',
-    subcategory: 'Limpieza industrial',
-    annualValue: 12000,
-    endDate: '2024-12-31',
-    riskScore: 45,
-    alertsCount: 1,
-    autoRenewal: true,
-    startDate: '2023-01-01',
-    paymentTerms: '15 días',
-    indexation: 'IPC anual',
-    penalty: 'Ninguna',
-    products: [
-      { name: 'Servicio mensual', price: 1000, unit: '€/mes', benchmarkMin: 800, benchmarkMax: 1200, gap: 0 },
-    ],
-    alerts: [
-      'Contrato expira en 60 días',
-    ],
-    recommendations: [
-      'Solicitar 3 ofertas alternativas',
-      'Negociar descuento por renovación plurianual',
-    ],
-  },
-  {
-    id: '4',
-    supplier: 'Residuos Mediterráneo',
-    category: 'Residuos',
-    subcategory: 'Gestión de lodos',
-    annualValue: 28000,
-    endDate: '2025-06-30',
-    riskScore: 58,
-    alertsCount: 1,
-    autoRenewal: false,
-    startDate: '2023-07-01',
-    paymentTerms: '30 días',
-    indexation: 'Trimestral según mercado',
-    penalty: '5% cancelación anticipada',
-    products: [
-      { name: 'Transporte lodos', price: 85, unit: '€/t', benchmarkMin: 70, benchmarkMax: 90, gap: 0 },
-      { name: 'Tratamiento', price: 45, unit: '€/t', benchmarkMin: 35, benchmarkMax: 50, gap: 0 },
-    ],
-    alerts: [
-      'Variación de precio trimestral pendiente',
-    ],
-    recommendations: [
-      'Bloquear precio fijo para próximo año',
-    ],
-  },
-  {
-    id: '5',
-    supplier: 'Contrato Zombie SL',
-    category: 'O&M',
-    subcategory: 'Servicio obsoleto',
-    annualValue: 8400,
-    endDate: null,
-    riskScore: 95,
-    alertsCount: 3,
-    autoRenewal: true,
-    startDate: '2019-01-01',
-    paymentTerms: '30 días',
-    indexation: 'Ninguna',
-    penalty: 'Ninguna',
-    products: [
-      { name: 'Servicio mensual', price: 700, unit: '€/mes', benchmarkMin: 0, benchmarkMax: 0, gap: 100 },
-    ],
-    alerts: [
-      'Contrato zombie detectado - sin uso verificado',
-      'Sin revisión desde 2019',
-      'Renovación automática activa',
-    ],
-    recommendations: [
-      'Cancelar inmediatamente',
-      'Verificar si servicio sigue siendo necesario',
-    ],
-  },
-];
+// Type for mapped contract display
+interface DisplayContract {
+  id: string;
+  supplier: string;
+  category: string;
+  subcategory: string;
+  annualValue: number;
+  endDate: string | null;
+  startDate: string | null;
+  riskScore: number;
+  alertsCount: number;
+  autoRenewal: boolean;
+  paymentTerms: string;
+  indexation: string;
+  penalty: string;
+  products: Array<{
+    name: string;
+    price: number;
+    unit: string;
+    benchmarkMin: number;
+    benchmarkMax: number;
+    gap: number;
+  }>;
+  alerts: string[];
+  recommendations: string[];
+}
+
+// Map Supabase data to display format
+const mapContractToDisplay = (contract: CostContract): DisplayContract => {
+  const riskFlags = contract.risk_flags || [];
+  const prices = contract.prices || [];
+  
+  // Map prices from DB to product format
+  const products = prices.map((p: Record<string, unknown>) => ({
+    name: (p.name as string) || 'Producto',
+    price: (p.price as number) || 0,
+    unit: (p.unit as string) || '€',
+    benchmarkMin: (p.benchmark_min as number) || 0,
+    benchmarkMax: (p.benchmark_max as number) || 0,
+    gap: (p.gap as number) || 0,
+  }));
+
+  return {
+    id: contract.id,
+    supplier: contract.supplier_name_raw || contract.cost_suppliers?.name || 'Sin nombre',
+    category: 'Contrato',
+    subcategory: '',
+    annualValue: contract.total_annual_value || 0,
+    endDate: contract.end_date,
+    startDate: contract.start_date,
+    riskScore: contract.risk_score || 0,
+    alertsCount: riskFlags.length,
+    autoRenewal: contract.auto_renewal || false,
+    paymentTerms: contract.payment_days ? `${contract.payment_days} días` : 'No especificado',
+    indexation: 'Ver contrato',
+    penalty: 'Ver contrato',
+    products,
+    alerts: riskFlags,
+    recommendations: [],
+  };
+};
 
 const categories = ['Químicos', 'O&M', 'Limpieza', 'Residuos', 'Canon y tasas', 'Otros'];
 
@@ -211,10 +145,17 @@ const CostConsultingContracts = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('risk');
-  const [selectedContract, setSelectedContract] = useState<typeof mockContracts[0] | null>(null);
+  const [selectedContract, setSelectedContract] = useState<DisplayContract | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const filteredContracts = mockContracts
+  // Fetch real data from Supabase
+  const { data: contracts = [], isLoading, error } = useCostContracts(id);
+
+  // Map contracts to display format
+  const mappedContracts = contracts.map(mapContractToDisplay);
+
+  // Filter and sort
+  const filteredContracts = mappedContracts
     .filter(contract => {
       const matchesSearch = contract.supplier.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = categoryFilter === 'all' || contract.category === categoryFilter;
@@ -237,10 +178,28 @@ const CostConsultingContracts = () => {
       }
     });
 
-  const handleViewContract = (contract: typeof mockContracts[0]) => {
+  const handleViewContract = (contract: DisplayContract) => {
     setSelectedContract(contract);
     setSheetOpen(true);
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="container mx-auto p-6">
+        <p className="text-destructive">Error cargando contratos: {error.message}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
