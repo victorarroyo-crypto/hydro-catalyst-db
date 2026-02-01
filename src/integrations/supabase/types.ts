@@ -555,6 +555,96 @@ export type Database = {
         }
         Relationships: []
       }
+      cost_consulting_projects: {
+        Row: {
+          client_name: string | null
+          contracts_count: number | null
+          created_at: string | null
+          id: string
+          invoices_count: number | null
+          name: string
+          notes: string | null
+          opportunities_count: number | null
+          status: string
+          total_savings_identified: number | null
+          total_spend_analyzed: number | null
+          updated_at: string | null
+          user_id: string
+          vertical_id: string | null
+        }
+        Insert: {
+          client_name?: string | null
+          contracts_count?: number | null
+          created_at?: string | null
+          id?: string
+          invoices_count?: number | null
+          name: string
+          notes?: string | null
+          opportunities_count?: number | null
+          status?: string
+          total_savings_identified?: number | null
+          total_spend_analyzed?: number | null
+          updated_at?: string | null
+          user_id: string
+          vertical_id?: string | null
+        }
+        Update: {
+          client_name?: string | null
+          contracts_count?: number | null
+          created_at?: string | null
+          id?: string
+          invoices_count?: number | null
+          name?: string
+          notes?: string | null
+          opportunities_count?: number | null
+          status?: string
+          total_savings_identified?: number | null
+          total_spend_analyzed?: number | null
+          updated_at?: string | null
+          user_id?: string
+          vertical_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_consulting_projects_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "advisor_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cost_consulting_projects_vertical_id_fkey"
+            columns: ["vertical_id"]
+            isOneToOne: false
+            referencedRelation: "cost_verticals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cost_verticals: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       knowledge_chunks: {
         Row: {
           chunk_index: number
