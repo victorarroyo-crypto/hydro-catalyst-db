@@ -22,6 +22,13 @@ export interface CostDocument {
   uploaded_at: string;
 }
 
+export interface CostProjectExtractionStatus {
+  contracts_found: number;
+  invoices_found: number;
+  suppliers_found: number;
+  errors: string[];
+}
+
 export interface CostProject {
   id: string;
   user_id: string;
@@ -38,6 +45,7 @@ export interface CostProject {
   savings_pct: number | null;
   opportunities_count: number | null;
   quick_wins_count: number | null;
+  extraction_status: CostProjectExtractionStatus | null;
   created_at: string;
   cost_verticals?: { name: string; icon: string } | null;
 }
@@ -147,7 +155,10 @@ export const useCostProject = (projectId?: string) => {
       
       const { data, error } = await externalSupabase
         .from('cost_consulting_projects')
-        .select('*, cost_verticals(name, icon)')
+        .select(`
+          *,
+          cost_verticals (name, icon)
+        `)
         .eq('id', projectId)
         .single();
       
@@ -155,6 +166,14 @@ export const useCostProject = (projectId?: string) => {
       return data as CostProject;
     },
     enabled: !!projectId,
+    // Polling activo si está en proceso
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === 'extracting' || status === 'processing' || status === 'analyzing' || status === 'uploading') {
+        return 3000; // Poll cada 3 segundos
+      }
+      return false;
+    }
   });
 };
 
