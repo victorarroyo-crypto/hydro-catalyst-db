@@ -58,14 +58,15 @@ const processingPhases = [
 ];
 
 const getStatusBadge = (status: string) => {
-  const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; hasSpinner?: boolean }> = {
     draft: { label: 'Borrador', variant: 'secondary' },
-    uploading: { label: 'Subiendo docs', variant: 'default' },
-    extracting: { label: 'Extrayendo', variant: 'default' },
-    processing: { label: 'Procesando', variant: 'default' },
-    analyzing: { label: 'Analizando', variant: 'default' },
-    review: { label: 'En revisión', variant: 'outline' },
+    uploading: { label: 'Subiendo...', variant: 'outline', hasSpinner: true },
+    extracting: { label: 'Extrayendo...', variant: 'outline', hasSpinner: true },
+    review: { label: 'En revisión', variant: 'default' },
+    processing: { label: 'Procesando...', variant: 'outline', hasSpinner: true },
+    analyzing: { label: 'Analizando...', variant: 'outline', hasSpinner: true },
     completed: { label: 'Completado', variant: 'default' },
+    failed: { label: 'Error', variant: 'destructive' },
     archived: { label: 'Archivado', variant: 'secondary' },
   };
   const config = statusConfig[status] || statusConfig.draft;
@@ -78,11 +79,13 @@ const getStatusBadge = (status: string) => {
     analyzing: 'bg-yellow-500/10 text-yellow-600 border-yellow-200',
     review: 'bg-orange-500/10 text-orange-600 border-orange-200',
     completed: 'bg-green-500/10 text-green-600 border-green-200',
+    failed: '',
     archived: 'bg-muted text-muted-foreground',
   };
   
   return (
-    <Badge variant={config.variant} className={colorClasses[status]}>
+    <Badge variant={config.variant} className={`flex items-center gap-1 ${colorClasses[status] || ''}`}>
+      {config.hasSpinner && <Loader2 className="h-3 w-3 animate-spin" />}
       {config.label}
     </Badge>
   );

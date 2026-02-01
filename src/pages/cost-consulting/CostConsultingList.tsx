@@ -32,18 +32,38 @@ const formatCurrency = (value: number | null): string => {
 };
 
 const getStatusBadge = (status: string) => {
-  const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-    draft: { label: 'Borrador', variant: 'outline' },
-    uploading: { label: 'Subiendo', variant: 'secondary' },
-    processing: { label: 'Procesando', variant: 'secondary' },
-    analyzing: { label: 'Analizando', variant: 'default' },
+  const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; hasSpinner?: boolean }> = {
+    draft: { label: 'Borrador', variant: 'secondary' },
+    uploading: { label: 'Subiendo...', variant: 'outline', hasSpinner: true },
+    extracting: { label: 'Extrayendo...', variant: 'outline', hasSpinner: true },
     review: { label: 'En revisión', variant: 'default' },
+    processing: { label: 'Procesando...', variant: 'outline', hasSpinner: true },
+    analyzing: { label: 'Analizando...', variant: 'outline', hasSpinner: true },
     completed: { label: 'Completado', variant: 'default' },
-    archived: { label: 'Archivado', variant: 'outline' },
+    failed: { label: 'Error', variant: 'destructive' },
+    archived: { label: 'Archivado', variant: 'secondary' },
   };
   
   const config = statusConfig[status] || { label: status, variant: 'outline' as const };
-  return <Badge variant={config.variant}>{config.label}</Badge>;
+  
+  const colorClasses: Record<string, string> = {
+    draft: '',
+    uploading: 'bg-blue-500/10 text-blue-600 border-blue-200',
+    extracting: 'bg-blue-500/10 text-blue-600 border-blue-200',
+    review: 'bg-orange-500/10 text-orange-600 border-orange-200',
+    processing: 'bg-yellow-500/10 text-yellow-600 border-yellow-200',
+    analyzing: 'bg-yellow-500/10 text-yellow-600 border-yellow-200',
+    completed: 'bg-green-500/10 text-green-600 border-green-200',
+    failed: '',
+    archived: '',
+  };
+  
+  return (
+    <Badge variant={config.variant} className={`flex items-center gap-1 ${colorClasses[status] || ''}`}>
+      {config.hasSpinner && <Loader2 className="h-3 w-3 animate-spin" />}
+      {config.label}
+    </Badge>
+  );
 };
 
 const CostConsultingList = () => {
