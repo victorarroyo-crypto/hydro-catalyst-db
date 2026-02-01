@@ -14,6 +14,7 @@ export interface CostDocument {
   project_id: string;
   filename: string;
   file_type: 'contrato' | 'factura' | 'listado_proveedores' | 'otro';
+  document_type?: string; // 'contract' | 'invoice' | 'other'
   file_url: string | null;
   file_size: number | null;
   mime_type: string | null;
@@ -31,6 +32,7 @@ export interface CostProject {
   status: string;
   current_phase: string | null;
   progress_pct: number;
+  total_spend: number | null; // alias for total_spend_analyzed
   total_spend_analyzed: number | null;
   total_savings_identified: number | null;
   savings_pct: number | null;
@@ -71,6 +73,8 @@ export interface CostInvoice {
   subtotal: number | null;
   tax_amount: number | null;
   total: number | null;
+  category: string | null;
+  supplier_name_raw: string | null;
   compliance_status: string | null;
   compliance_issues: Record<string, unknown>[] | null;
   line_items: Record<string, unknown>[] | null;
@@ -91,6 +95,7 @@ export interface CostOpportunity {
   confidence: string | null;
   impact_score: number | null;
   effort_score: number | null;
+  effort_level: string | null; // 'low' | 'medium' | 'high'
   risk_score: number | null;
   priority_score: number | null;
   implementation_horizon: string | null;
