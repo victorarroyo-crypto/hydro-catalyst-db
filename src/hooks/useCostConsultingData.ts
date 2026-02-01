@@ -9,6 +9,18 @@ import { externalSupabase } from '@/integrations/supabase/externalClient';
 // TIPOS
 // ============================================================
 
+export interface CostDocument {
+  id: string;
+  project_id: string;
+  filename: string;
+  file_type: 'contrato' | 'factura' | 'listado_proveedores' | 'otro';
+  file_url: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  extraction_status: 'pending' | 'processing' | 'completed' | 'failed';
+  uploaded_at: string;
+}
+
 export interface CostProject {
   id: string;
   user_id: string;
@@ -31,27 +43,39 @@ export interface CostProject {
 export interface CostContract {
   id: string;
   project_id: string;
+  document_id: string | null;
   supplier_name_raw: string | null;
+  supplier_tax_id: string | null;
   contract_number: string | null;
   total_annual_value: number | null;
   start_date: string | null;
   end_date: string | null;
   auto_renewal: boolean | null;
+  notice_period_days: number | null;
+  payment_days: number | null;
   risk_score: number | null;
   risk_flags: string[] | null;
   benchmark_comparison: Record<string, unknown> | null;
+  prices: Record<string, unknown>[] | null;
   cost_suppliers?: { name: string; tax_id: string } | null;
+  cost_project_documents?: CostDocument | null;
 }
 
 export interface CostInvoice {
   id: string;
   project_id: string;
+  document_id: string | null;
   invoice_number: string | null;
   invoice_date: string | null;
+  due_date: string | null;
+  subtotal: number | null;
+  tax_amount: number | null;
   total: number | null;
   compliance_status: string | null;
   compliance_issues: Record<string, unknown>[] | null;
+  line_items: Record<string, unknown>[] | null;
   cost_suppliers?: { name: string } | null;
+  cost_project_documents?: CostDocument | null;
 }
 
 export interface CostOpportunity {
@@ -61,10 +85,13 @@ export interface CostOpportunity {
   title: string;
   description: string | null;
   current_annual_cost: number | null;
+  target_annual_cost: number | null;
   savings_annual: number | null;
   savings_pct: number | null;
+  confidence: string | null;
   impact_score: number | null;
   effort_score: number | null;
+  risk_score: number | null;
   priority_score: number | null;
   implementation_horizon: string | null;
   status: string;
@@ -81,6 +108,7 @@ export interface CostSupplier {
   reputation_score: number | null;
   price_competitiveness: string | null;
   verified: boolean;
+  certifications: string[] | null;
 }
 
 // ============================================================
@@ -126,7 +154,30 @@ export const useCostProject = (projectId?: string) => {
 };
 
 // ============================================================
-// HOOKS - CONTRATOS
+// HOOKS - DOCUMENTOS (PDFs)
+// ============================================================
+
+export const useCostDocuments = (projectId?: string) => {
+  return useQuery({
+    queryKey: ['cost-documents', projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      
+      const { data, error } = await externalSupabase
+        .from('cost_project_documents')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('uploaded_at', { ascending: false });
+      
+      if (error) throw error;
+      return (data || []) as CostDocument[];
+    },
+    enabled: !!projectId,
+  });
+};
+
+// ============================================================
+// HOOKS - CONTRATOS (con PDF)
 // ============================================================
 
 export const useCostContracts = (projectId?: string) => {
@@ -137,7 +188,11 @@ export const useCostContracts = (projectId?: string) => {
       
       const { data, error } = await externalSupabase
         .from('cost_project_contracts')
-        .select('*, cost_suppliers(name, tax_id)')
+        .select(`
+          *,
+          cost_suppliers(name, tax_id),
+          cost_project_documents(id, filename, file_url, file_type)
+        `)
         .eq('project_id', projectId)
         .order('total_annual_value', { ascending: false });
       
@@ -149,7 +204,7 @@ export const useCostContracts = (projectId?: string) => {
 };
 
 // ============================================================
-// HOOKS - FACTURAS
+// HOOKS - FACTURAS (con PDF)
 // ============================================================
 
 export const useCostInvoices = (projectId?: string) => {
@@ -160,7 +215,11 @@ export const useCostInvoices = (projectId?: string) => {
       
       const { data, error } = await externalSupabase
         .from('cost_project_invoices')
-        .select('*, cost_suppliers(name)')
+        .select(`
+          *,
+          cost_suppliers(name),
+          cost_project_documents(id, filename, file_url, file_type)
+        `)
         .eq('project_id', projectId)
         .order('invoice_date', { ascending: false });
       
@@ -214,6 +273,22 @@ export const useCostSuppliers = () => {
   });
 };
 
+export const useCostAllSuppliers = () => {
+  return useQuery({
+    queryKey: ['cost-all-suppliers'],
+    queryFn: async () => {
+      const { data, error } = await externalSupabase
+        .from('cost_suppliers')
+        .select('*')
+        .order('verified', { ascending: false })
+        .order('name');
+      
+      if (error) throw error;
+      return (data || []) as CostSupplier[];
+    },
+  });
+};
+
 // ============================================================
 // HOOKS - ESTADÍSTICAS
 // ============================================================
@@ -222,11 +297,11 @@ export const useCostStats = (userId?: string) => {
   return useQuery({
     queryKey: ['cost-stats', userId],
     queryFn: async () => {
-      if (!userId) return { projects: 0, savings: 0, suppliers: 0 };
+      if (!userId) return { projects: 0, savings: 0, suppliers: 0, quickWins: 0 };
       
       const { data: projects } = await externalSupabase
         .from('cost_consulting_projects')
-        .select('total_savings_identified')
+        .select('total_savings_identified, quick_wins_count')
         .eq('user_id', userId);
       
       const { count: suppliersCount } = await externalSupabase
@@ -238,10 +313,15 @@ export const useCostStats = (userId?: string) => {
         (sum, p) => sum + (p.total_savings_identified || 0), 0
       );
       
+      const totalQuickWins = (projects || []).reduce(
+        (sum, p) => sum + (p.quick_wins_count || 0), 0
+      );
+      
       return {
         projects: projects?.length || 0,
         savings: totalSavings,
         suppliers: suppliersCount || 0,
+        quickWins: totalQuickWins,
       };
     },
     enabled: !!userId,
