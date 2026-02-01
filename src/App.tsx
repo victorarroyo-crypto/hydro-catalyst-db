@@ -111,16 +111,16 @@ const App = () => (
               <Route path="/consultoria/:id/documentos" element={<ConsultoriaDocumentos />} />
               <Route path="/consultoria/:id/scenarios/designer" element={<ScenarioDesignerPage />} />
               
-              {/* Cost Consulting Routes - Wrapped with AdvisorAuthProvider */}
-              <Route path="/cost-consulting" element={<AdvisorAuthProvider><CostConsultingList /></AdvisorAuthProvider>} />
-              <Route path="/cost-consulting/new" element={<AdvisorAuthProvider><CostConsultingNew /></AdvisorAuthProvider>} />
-              <Route path="/cost-consulting/suppliers" element={<AdvisorAuthProvider><CostConsultingSuppliers /></AdvisorAuthProvider>} />
-              <Route path="/cost-consulting/benchmarks" element={<AdvisorAuthProvider><CostConsultingBenchmarks /></AdvisorAuthProvider>} />
-              <Route path="/cost-consulting/:id" element={<AdvisorAuthProvider><CostConsultingDetail /></AdvisorAuthProvider>} />
-              <Route path="/cost-consulting/:id/contracts" element={<AdvisorAuthProvider><CostConsultingContracts /></AdvisorAuthProvider>} />
-              <Route path="/cost-consulting/:id/invoices" element={<AdvisorAuthProvider><CostConsultingInvoices /></AdvisorAuthProvider>} />
-              <Route path="/cost-consulting/:id/opportunities" element={<AdvisorAuthProvider><CostConsultingOpportunities /></AdvisorAuthProvider>} />
-              <Route path="/cost-consulting/:id/simulator" element={<AdvisorAuthProvider><CostConsultingSimulator /></AdvisorAuthProvider>} />
+              {/* Cost Consulting Routes - Uses main AuthContext */}
+              <Route path="/cost-consulting" element={<CostConsultingList />} />
+              <Route path="/cost-consulting/new" element={<CostConsultingNew />} />
+              <Route path="/cost-consulting/suppliers" element={<CostConsultingSuppliers />} />
+              <Route path="/cost-consulting/benchmarks" element={<CostConsultingBenchmarks />} />
+              <Route path="/cost-consulting/:id" element={<CostConsultingDetail />} />
+              <Route path="/cost-consulting/:id/contracts" element={<CostConsultingContracts />} />
+              <Route path="/cost-consulting/:id/invoices" element={<CostConsultingInvoices />} />
+              <Route path="/cost-consulting/:id/opportunities" element={<CostConsultingOpportunities />} />
+              <Route path="/cost-consulting/:id/simulator" element={<CostConsultingSimulator />} />
               
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/data-quality" element={<DataQualityControl />} />
