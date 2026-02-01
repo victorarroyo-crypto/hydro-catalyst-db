@@ -37,6 +37,7 @@ import {
   useCostOpportunities,
   useCostDocuments
 } from '@/hooks/useCostConsultingData';
+import { DocumentsManagementCard } from '@/components/cost-consulting/DocumentsManagementCard';
 
 const processingPhases = [
   { id: 1, name: 'Extrayendo documentos' },
@@ -618,13 +619,14 @@ const CostConsultingDetail = () => {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
+              {/* Document Summary Cards */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <FileText className="h-5 w-5" />
-                    Documentos Analizados
+                    Resumen de Documentos
                   </CardTitle>
-                  <CardDescription>Resumen de documentos procesados</CardDescription>
+                  <CardDescription>Documentos procesados por tipo</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -652,6 +654,9 @@ const CostConsultingDetail = () => {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Documents Management Card */}
+              {id && <DocumentsManagementCard projectId={id} />}
             </TabsContent>
           </Tabs>
         </>
