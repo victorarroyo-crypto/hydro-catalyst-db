@@ -95,11 +95,13 @@ serve(async (req) => {
       responseData = { raw: responseText };
     }
 
+    // Always return 200 to avoid FunctionsHttpError - include success/error in body
     return new Response(JSON.stringify({
       success: response.ok,
+      status: response.status,
       ...responseData,
     }), {
-      status: response.ok ? 200 : response.status,
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
