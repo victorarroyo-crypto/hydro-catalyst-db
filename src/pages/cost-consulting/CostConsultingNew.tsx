@@ -264,7 +264,7 @@ const CostConsultingNew = () => {
         .eq('name', VERTICALS.find(v => v.id === formData.vertical)?.name || '')
         .single();
       
-      // 2. Create project in Supabase
+      // 2. Create project in Supabase with 'uploading' status
       const { data: newProject, error: projectError } = await externalSupabase
         .from('cost_consulting_projects')
         .insert({
@@ -327,55 +327,35 @@ const CostConsultingNew = () => {
         toast.warning(`${failedUploads} archivo(s) no se pudieron subir`);
       }
       
-      // 4. Update project status to processing
+      // 4. Update project status to 'extracting' and call /extract endpoint
       await externalSupabase
         .from('cost_consulting_projects')
-        .update({ status: 'processing' })
+        .update({ status: 'extracting' })
         .eq('id', projectId);
       
-      // 5. Wait for documents to be processed (embeddings)
-      toast.info('Esperando procesamiento de documentos...');
+      toast.info('Iniciando extracción de datos...');
       
-      let attempts = 0;
-      const maxAttempts = 60; // 2 minutos máximo
-      
-      while (attempts < maxAttempts) {
-        const { data: docs } = await externalSupabase
-          .from('cost_project_documents')
-          .select('extraction_status')
-          .eq('project_id', projectId);
-        
-        const pending = docs?.filter(d => 
-          d.extraction_status === 'pending' || d.extraction_status === 'processing'
-        );
-        
-        if (!pending || pending.length === 0) {
-          break;
-        }
-        
-        await new Promise(r => setTimeout(r, 2000));
-        attempts++;
-      }
-      
-      // 6. Start analysis with CrewAI agents via Edge Function proxy
+      // 5. Call /extract endpoint to start extraction (this is async)
       try {
-        const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke(
+        const { data: extractData, error: extractError } = await supabase.functions.invoke(
           `cost-consulting-analyze/${projectId}`,
           { method: 'POST' }
         );
         
-        if (analyzeError) {
-          console.error('Failed to start analysis:', analyzeError);
-          toast.warning('Documentos subidos pero error al iniciar análisis automático.');
+        if (extractError) {
+          console.error('Failed to start extraction:', extractError);
+          // Don't fail completely - the user can still see the project
+          toast.warning('Documentos subidos. La extracción puede tardar unos minutos.');
         } else {
-          console.log('Analysis started:', analyzeData);
-          toast.success('Análisis iniciado correctamente');
+          console.log('Extraction started:', extractData);
+          toast.success('Extracción iniciada correctamente');
         }
-      } catch (analyzeError) {
-        console.error('Error starting analysis:', analyzeError);
-        toast.warning('Documentos subidos. Inicia el análisis manualmente.');
+      } catch (extractError) {
+        console.error('Error starting extraction:', extractError);
+        toast.warning('Documentos subidos. Revisa el estado en unos minutos.');
       }
       
+      // 6. Navigate to project detail page to see extraction progress
       navigate(`/cost-consulting/${projectId}`);
       
     } catch (error: unknown) {
