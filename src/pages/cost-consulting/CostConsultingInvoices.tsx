@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +55,8 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart } from 'recharts';
 import { useCostInvoices, CostInvoice } from '@/hooks/useCostConsultingData';
+import { useQuery } from '@tanstack/react-query';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 // Types for mapped invoice data
 interface InvoiceIssue {
@@ -124,6 +126,34 @@ const CostConsultingInvoices = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [selectedInvoice, setSelectedInvoice] = useState<DisplayInvoice | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedTrendCategory, setSelectedTrendCategory] = useState<string>('');
+
+  // Query for invoice lines for trend analysis
+  const { data: invoiceLines = [] } = useQuery({
+    queryKey: ['invoice-lines-trend', id],
+    queryFn: async () => {
+      if (!id) return [];
+      const { data } = await externalSupabase
+        .from('cost_project_invoice_lines')
+        .select(`
+          id,
+          description,
+          quantity,
+          unit_price,
+          unit,
+          total,
+          category,
+          cost_project_invoices!inner(
+            invoice_date,
+            project_id
+          )
+        `)
+        .eq('cost_project_invoices.project_id', id)
+        .not('unit_price', 'is', null);
+      return data || [];
+    },
+    enabled: !!id,
+  });
 
   // Map raw invoices to display format
   const invoices: DisplayInvoice[] = rawInvoices.map(inv => ({
@@ -135,7 +165,7 @@ const CostConsultingInvoices = () => {
     total: inv.total || 0,
     compliance: inv.compliance_status || 'ok',
     issuesCount: Array.isArray(inv.compliance_issues) ? inv.compliance_issues.length : 0,
-    linkedContract: null, // No contract_id in current schema
+    linkedContract: null,
     issues: (inv.compliance_issues || []).map((issue: Record<string, unknown>) => ({
       type: (issue.type as string) || 'unknown',
       severity: (issue.severity as string) || 'warning',
@@ -159,8 +189,87 @@ const CostConsultingInvoices = () => {
   const suppliers = [...new Set(invoices.map(i => i.supplier))].filter(Boolean);
   const categories = [...new Set(invoices.map(i => i.category))].filter(Boolean);
 
-  // Trend data placeholder (would need historical invoice data to calculate)
-  const trendData: Array<{ month: string; quimicos: number; contratado_min: number; contratado_max: number; anomaly?: boolean }> = [];
+  // Available categories for trend chart
+  const availableCategories = useMemo(() => {
+    const catMap = new Map<string, { count: number; unit: string }>();
+    invoiceLines.forEach((line: Record<string, unknown>) => {
+      const cat = (line.category as string) || 'Otros';
+      const existing = catMap.get(cat);
+      if (existing) {
+        existing.count++;
+      } else {
+        catMap.set(cat, { count: 1, unit: (line.unit as string) || '€' });
+      }
+    });
+    return Array.from(catMap.entries())
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.count - a.count);
+  }, [invoiceLines]);
+
+  // Auto-select first category if none selected
+  useEffect(() => {
+    if (!selectedTrendCategory && availableCategories.length > 0) {
+      setSelectedTrendCategory(availableCategories[0].name);
+    }
+  }, [availableCategories, selectedTrendCategory]);
+
+  // Calculate trend data for selected category
+  const { trendData, categoryUnit } = useMemo(() => {
+    if (!selectedTrendCategory || invoiceLines.length === 0) {
+      return { trendData: [], categoryUnit: '€' };
+    }
+    
+    const categoryLines = invoiceLines.filter(
+      (line: Record<string, unknown>) => ((line.category as string) || 'Otros') === selectedTrendCategory
+    );
+    
+    if (categoryLines.length === 0) {
+      return { trendData: [], categoryUnit: '€' };
+    }
+    
+    const unit = (categoryLines[0] as Record<string, unknown>)?.unit as string || '€/ud';
+    
+    // Group by month
+    const grouped = categoryLines.reduce((acc: Record<string, { prices: number[]; date: string }>, line: Record<string, unknown>) => {
+      const invoiceData = line.cost_project_invoices as Record<string, unknown> | null;
+      const date = invoiceData?.invoice_date as string;
+      const unitPrice = line.unit_price as number;
+      if (!date || !unitPrice) return acc;
+      
+      const monthKey = date.substring(0, 7);
+      if (!acc[monthKey]) {
+        acc[monthKey] = { prices: [], date: monthKey };
+      }
+      acc[monthKey].prices.push(unitPrice);
+      return acc;
+    }, {});
+    
+    // Calculate baseline from first month for contract range estimation
+    const sortedMonths = Object.keys(grouped).sort();
+    const baselinePrice = sortedMonths.length > 0 
+      ? grouped[sortedMonths[0]].prices.reduce((a, b) => a + b, 0) / grouped[sortedMonths[0]].prices.length
+      : 0;
+    
+    const data = Object.values(grouped)
+      .map((g) => {
+        const avgPrice = g.prices.reduce((a, b) => a + b, 0) / g.prices.length;
+        const contractMin = baselinePrice * 0.95;
+        const contractMax = baselinePrice * 1.05;
+        const isAnomaly = avgPrice > contractMax * 1.1 || avgPrice < contractMin * 0.9;
+        
+        return {
+          month: new Date(g.date + '-01').toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }),
+          sortKey: g.date,
+          price: Number(avgPrice.toFixed(3)),
+          contractMin: Number(contractMin.toFixed(3)),
+          contractMax: Number(contractMax.toFixed(3)),
+          isAnomaly,
+        };
+      })
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    
+    return { trendData: data, categoryUnit: unit };
+  }, [invoiceLines, selectedTrendCategory]);
 
   const filteredInvoices = invoices.filter(invoice => {
     const matchesSupplier = supplierFilter === 'all' || invoice.supplier === supplierFilter;
@@ -345,77 +454,112 @@ const CostConsultingInvoices = () => {
 
       {/* Price Trends Chart */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Tendencia de Precios - Químicos (PAC 18%)
-          </CardTitle>
-          <CardDescription>Evolución del precio facturado vs contratado (€/kg)</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0">
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Tendencia de Precios - {selectedTrendCategory || 'Selecciona categoría'}
+            </CardTitle>
+            <CardDescription>
+              Evolución del precio facturado vs contratado ({categoryUnit})
+            </CardDescription>
+          </div>
+          {availableCategories.length > 0 && (
+            <div className="w-[200px]">
+              <Select value={selectedTrendCategory} onValueChange={setSelectedTrendCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCategories.map(cat => (
+                    <SelectItem key={cat.name} value={cat.name}>
+                      {cat.name} ({cat.count})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          <div className="h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} className="text-muted-foreground" />
-                <YAxis domain={[0.30, 0.42]} tick={{ fontSize: 12 }} className="text-muted-foreground" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
-                  }}
-                  formatter={(value: number) => [`${value.toFixed(2)}€/kg`]}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="contratado_max" 
-                  stackId="1"
-                  stroke="none" 
-                  fill="hsl(var(--primary))" 
-                  fillOpacity={0.1}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="contratado_min" 
-                  stackId="2"
-                  stroke="none" 
-                  fill="hsl(var(--background))" 
-                  fillOpacity={1}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="quimicos" 
-                  stroke="hsl(var(--primary))" 
-                  strokeWidth={2}
-                  dot={(props) => {
-                    const { cx, cy, payload } = props;
-                    if (payload.anomaly) {
-                      return (
-                        <circle cx={cx} cy={cy} r={6} fill="hsl(var(--destructive))" stroke="white" strokeWidth={2} />
-                      );
-                    }
-                    return <circle cx={cx} cy={cy} r={3} fill="hsl(var(--primary))" />;
-                  }}
-                />
-                <ReferenceLine y={0.36} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" label={{ value: 'Máx contrato', position: 'right', fontSize: 10 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex gap-4 mt-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-primary" />
-              <span className="text-muted-foreground">Precio facturado</span>
+          {trendData.length > 0 ? (
+            <>
+              <div className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                    <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                      formatter={(value: number) => [`${value.toFixed(3)} ${categoryUnit}`]}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="contractMax" 
+                      stackId="1"
+                      stroke="none" 
+                      fill="hsl(var(--primary))" 
+                      fillOpacity={0.1}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="contractMin" 
+                      stackId="2"
+                      stroke="none" 
+                      fill="hsl(var(--background))" 
+                      fillOpacity={1}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="price" 
+                      stroke="hsl(var(--primary))" 
+                      strokeWidth={2}
+                      dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        if (payload.isAnomaly) {
+                          return (
+                            <circle cx={cx} cy={cy} r={6} fill="hsl(var(--destructive))" stroke="white" strokeWidth={2} />
+                          );
+                        }
+                        return <circle cx={cx} cy={cy} r={3} fill="hsl(var(--primary))" />;
+                      }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex gap-4 mt-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-primary" />
+                  <span className="text-muted-foreground">Precio facturado</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-3 rounded bg-primary/10" />
+                  <span className="text-muted-foreground">Rango contratado (±5%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-destructive" />
+                  <span className="text-muted-foreground">Anomalía detectada</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="h-[250px] flex items-center justify-center">
+              <div className="text-center space-y-2">
+                <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground/50" />
+                <p className="text-muted-foreground">
+                  Sin datos de tendencia para {selectedTrendCategory || 'esta categoría'}
+                </p>
+                <p className="text-sm text-muted-foreground/70">
+                  Se necesitan facturas con líneas de detalle y precios unitarios
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-3 rounded bg-primary/10" />
-              <span className="text-muted-foreground">Rango contratado</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-destructive" />
-              <span className="text-muted-foreground">Anomalía detectada</span>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
