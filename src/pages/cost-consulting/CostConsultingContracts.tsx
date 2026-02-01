@@ -86,10 +86,15 @@ const mapContractToDisplay = (contract: CostContract): DisplayContract => {
     gap: (p.gap as number) || 0,
   }));
 
+  // Extract category from contract or first price item
+  const contractAny = contract as unknown as Record<string, unknown>;
+  const firstPrice = prices[0] as Record<string, unknown> | undefined;
+  const extractedCategory = (contractAny.category as string) || (firstPrice?.category as string) || 'Contrato';
+
   return {
     id: contract.id,
     supplier: contract.supplier_name_raw || contract.cost_suppliers?.name || 'Sin nombre',
-    category: 'Contrato',
+    category: extractedCategory,
     subcategory: '',
     annualValue: contract.total_annual_value || 0,
     endDate: contract.end_date,

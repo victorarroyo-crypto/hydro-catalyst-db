@@ -33,6 +33,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
 
 interface UploadedFile {
   file: File;
@@ -187,6 +189,7 @@ const FileDropZone: React.FC<FileDropZoneProps> = ({
 
 const CostConsultingNew = () => {
   const navigate = useNavigate();
+  const { advisorUser } = useAdvisorAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
@@ -241,25 +244,92 @@ const CostConsultingNew = () => {
   };
 
   const handleSubmit = async () => {
-    if (!canProceed()) return;
+    if (!canProceed() || !advisorUser) {
+      if (!advisorUser) {
+        toast.error('Debes iniciar sesión para crear un análisis');
+      }
+      return;
+    }
 
     setIsSubmitting(true);
     
     try {
-      // TODO: Implement actual API calls
-      // 1. POST /api/cost-consulting/projects → crear proyecto
-      // 2. Para cada documento: POST /api/cost-consulting/projects/{id}/documents
-      // 3. POST /api/cost-consulting/projects/{id}/analyze → iniciar análisis
+      // 1. Get vertical ID
+      const { data: verticalData } = await externalSupabase
+        .from('cost_verticals')
+        .select('id')
+        .eq('name', VERTICALS.find(v => v.id === formData.vertical)?.name || '')
+        .single();
       
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+      // 2. Create project in Supabase
+      const { data: newProject, error: projectError } = await externalSupabase
+        .from('cost_consulting_projects')
+        .insert({
+          user_id: advisorUser.id,
+          name: formData.name,
+          vertical_id: verticalData?.id || null,
+          status: 'uploading',
+        })
+        .select()
+        .single();
       
-      toast.success('Análisis iniciado correctamente');
+      if (projectError) throw projectError;
       
-      // Redirigir a /cost-consulting/{id} con estado "processing"
-      // Por ahora redirigimos a la lista
-      navigate('/cost-consulting');
-    } catch (error) {
-      toast.error('Error al crear el análisis');
+      const projectId = newProject.id;
+      
+      // 3. Upload documents to storage and create records
+      const allFiles = [
+        ...contracts.map(f => ({ ...f, type: 'contrato' as const })),
+        ...invoices.map(f => ({ ...f, type: 'factura' as const })),
+        ...suppliers.map(f => ({ ...f, type: 'listado_proveedores' as const })),
+      ];
+      
+      for (const fileData of allFiles) {
+        const file = fileData.file;
+        const filePath = `${projectId}/${Date.now()}_${file.name}`;
+        
+        // Upload to storage
+        const { error: uploadError } = await externalSupabase.storage
+          .from('cost-documents')
+          .upload(filePath, file);
+        
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          continue;
+        }
+        
+        // Get public URL
+        const { data: urlData } = externalSupabase.storage
+          .from('cost-documents')
+          .getPublicUrl(filePath);
+        
+        // Create document record
+        await externalSupabase
+          .from('cost_project_documents')
+          .insert({
+            project_id: projectId,
+            filename: file.name,
+            file_type: fileData.type,
+            file_url: urlData.publicUrl,
+            file_size: file.size,
+            mime_type: file.type,
+            extraction_status: 'pending',
+          });
+      }
+      
+      // 4. Update project status to processing
+      await externalSupabase
+        .from('cost_consulting_projects')
+        .update({ status: 'processing' })
+        .eq('id', projectId);
+      
+      toast.success('Proyecto creado correctamente. Iniciando análisis...');
+      navigate(`/cost-consulting/${projectId}`);
+      
+    } catch (error: unknown) {
+      console.error('Error creating project:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error al crear el análisis';
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
