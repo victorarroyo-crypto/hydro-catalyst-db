@@ -342,11 +342,11 @@ const CostConsultingNew = () => {
       while (attempts < maxAttempts) {
         const { data: docs } = await externalSupabase
           .from('cost_project_documents')
-          .select('status')
+          .select('extraction_status')
           .eq('project_id', projectId);
         
         const pending = docs?.filter(d => 
-          d.status === 'pending' || d.status === 'processing'
+          d.extraction_status === 'pending' || d.extraction_status === 'processing'
         );
         
         if (!pending || pending.length === 0) {
