@@ -357,17 +357,18 @@ const CostConsultingNew = () => {
         attempts++;
       }
       
-      // 6. Start analysis with CrewAI agents
+      // 6. Start analysis with CrewAI agents via Edge Function proxy
       try {
-        const analyzeResponse = await fetch(
-          `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/analyze`,
+        const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke(
+          `cost-consulting-analyze/${projectId}`,
           { method: 'POST' }
         );
         
-        if (!analyzeResponse.ok) {
-          console.error('Failed to start analysis:', await analyzeResponse.text());
+        if (analyzeError) {
+          console.error('Failed to start analysis:', analyzeError);
           toast.warning('Documentos subidos pero error al iniciar análisis automático.');
         } else {
+          console.log('Analysis started:', analyzeData);
           toast.success('Análisis iniciado correctamente');
         }
       } catch (analyzeError) {
