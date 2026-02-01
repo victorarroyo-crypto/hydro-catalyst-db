@@ -46,143 +46,45 @@ import {
   TrendingUp,
   Euro,
   FileWarning,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart } from 'recharts';
+import { useCostInvoices, CostInvoice } from '@/hooks/useCostConsultingData';
 
-// Mock data
-const mockInvoices = [
-  {
-    id: '1',
-    invoiceNumber: 'F-2024-123',
-    date: '2024-03-15',
-    supplier: 'Química Industrial SL',
-    category: 'Químicos',
-    total: 3450,
-    compliance: 'error',
-    issuesCount: 2,
-    linkedContract: 'CTR-2024-089',
-    issues: [
-      {
-        type: 'price_deviation',
-        severity: 'error',
-        title: 'Desviación de precio',
-        product: 'PAC 18%',
-        contracted: 0.35,
-        invoiced: 0.38,
-        unit: '€/kg',
-        deviation: 8.6,
-        impact: 125,
-      },
-      {
-        type: 'service_not_contracted',
-        severity: 'error',
-        title: 'Servicio no contratado',
-        description: '"Gestión urgente": 45€',
-        note: 'Este servicio no aparece en el contrato',
-        impact: 45,
-      },
-    ],
-    recoverableAmount: 170,
-  },
-  {
-    id: '2',
-    invoiceNumber: 'F-2024-124',
-    date: '2024-03-18',
-    supplier: 'Mantenimientos Técnicos SA',
-    category: 'O&M',
-    total: 3000,
-    compliance: 'ok',
-    issuesCount: 0,
-    linkedContract: 'CTR-2023-045',
-    issues: [],
-    recoverableAmount: 0,
-  },
-  {
-    id: '3',
-    invoiceNumber: 'F-2024-125',
-    date: '2024-03-20',
-    supplier: 'Residuos Mediterráneo',
-    category: 'Residuos',
-    total: 1200,
-    compliance: 'warning',
-    issuesCount: 1,
-    linkedContract: 'CTR-2023-078',
-    issues: [
-      {
-        type: 'quantity_deviation',
-        severity: 'warning',
-        title: 'Cantidad fuera de rango',
-        product: 'Transporte lodos',
-        expected: '50-80 t/mes',
-        invoiced: '95 t',
-        note: 'Verificar si hubo incidencia puntual',
-        impact: 0,
-      },
-    ],
-    recoverableAmount: 0,
-  },
-  {
-    id: '4',
-    invoiceNumber: 'F-2024-126',
-    date: '2024-03-22',
-    supplier: 'Química Industrial SL',
-    category: 'Químicos',
-    total: 2800,
-    compliance: 'error',
-    issuesCount: 1,
-    linkedContract: 'CTR-2024-089',
-    issues: [
-      {
-        type: 'duplicate',
-        severity: 'error',
-        title: 'Posible factura duplicada',
-        description: 'Coincide con F-2024-119 (mismo importe y fecha similar)',
-        note: 'Verificar si es una refacturación o duplicado',
-        impact: 2800,
-      },
-    ],
-    recoverableAmount: 2800,
-  },
-  {
-    id: '5',
-    invoiceNumber: 'F-2024-127',
-    date: '2024-03-25',
-    supplier: 'Limpiezas Industriales',
-    category: 'Limpieza',
-    total: 1000,
-    compliance: 'ok',
-    issuesCount: 0,
-    linkedContract: 'CTR-2023-112',
-    issues: [],
-    recoverableAmount: 0,
-  },
-];
+// Types for mapped invoice data
+interface InvoiceIssue {
+  type: string;
+  severity: string;
+  title: string;
+  description?: string;
+  impact: number;
+  product?: string;
+  contracted?: number;
+  invoiced?: number;
+  unit?: string;
+  deviation?: number;
+  expected?: string;
+  note?: string;
+}
 
-const mockTrendData = [
-  { month: 'Ene 23', quimicos: 0.34, contratado_min: 0.32, contratado_max: 0.36 },
-  { month: 'Feb 23', quimicos: 0.35, contratado_min: 0.32, contratado_max: 0.36 },
-  { month: 'Mar 23', quimicos: 0.33, contratado_min: 0.32, contratado_max: 0.36 },
-  { month: 'Abr 23', quimicos: 0.35, contratado_min: 0.32, contratado_max: 0.36 },
-  { month: 'May 23', quimicos: 0.34, contratado_min: 0.32, contratado_max: 0.36 },
-  { month: 'Jun 23', quimicos: 0.36, contratado_min: 0.32, contratado_max: 0.36 },
-  { month: 'Jul 23', quimicos: 0.35, contratado_min: 0.32, contratado_max: 0.36 },
-  { month: 'Ago 23', quimicos: 0.37, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
-  { month: 'Sep 23', quimicos: 0.36, contratado_min: 0.32, contratado_max: 0.36 },
-  { month: 'Oct 23', quimicos: 0.35, contratado_min: 0.32, contratado_max: 0.36 },
-  { month: 'Nov 23', quimicos: 0.38, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
-  { month: 'Dic 23', quimicos: 0.37, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
-  { month: 'Ene 24', quimicos: 0.38, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
-  { month: 'Feb 24', quimicos: 0.38, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
-  { month: 'Mar 24', quimicos: 0.38, contratado_min: 0.32, contratado_max: 0.36, anomaly: true },
-];
-
-const suppliers = ['Química Industrial SL', 'Mantenimientos Técnicos SA', 'Residuos Mediterráneo', 'Limpiezas Industriales'];
-const categories = ['Químicos', 'O&M', 'Residuos', 'Limpieza', 'Canon y tasas'];
+interface DisplayInvoice {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  supplier: string;
+  category: string;
+  total: number;
+  compliance: string;
+  issuesCount: number;
+  linkedContract: string | null;
+  issues: InvoiceIssue[];
+  recoverableAmount: number;
+}
 
 const getComplianceBadge = (compliance: string, issuesCount: number) => {
   switch (compliance) {
@@ -214,14 +116,53 @@ const getComplianceBadge = (compliance: string, issuesCount: number) => {
 
 const CostConsultingInvoices = () => {
   const { id } = useParams();
+  const { data: rawInvoices = [], isLoading } = useCostInvoices(id);
+  
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
   const [complianceFilter, setComplianceFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [selectedInvoice, setSelectedInvoice] = useState<typeof mockInvoices[0] | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<DisplayInvoice | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const filteredInvoices = mockInvoices.filter(invoice => {
+  // Map raw invoices to display format
+  const invoices: DisplayInvoice[] = rawInvoices.map(inv => ({
+    id: inv.id,
+    invoiceNumber: inv.invoice_number || 'Sin número',
+    date: inv.invoice_date || '',
+    supplier: inv.supplier_name_raw || inv.cost_suppliers?.name || 'Sin proveedor',
+    category: inv.category || 'Otros',
+    total: inv.total || 0,
+    compliance: inv.compliance_status || 'ok',
+    issuesCount: Array.isArray(inv.compliance_issues) ? inv.compliance_issues.length : 0,
+    linkedContract: null, // No contract_id in current schema
+    issues: (inv.compliance_issues || []).map((issue: Record<string, unknown>) => ({
+      type: (issue.type as string) || 'unknown',
+      severity: (issue.severity as string) || 'warning',
+      title: (issue.title as string) || (issue.description as string) || 'Issue detectado',
+      description: issue.description as string | undefined,
+      impact: (issue.amount as number) || 0,
+      product: issue.product as string | undefined,
+      contracted: issue.contracted as number | undefined,
+      invoiced: issue.invoiced as number | undefined,
+      unit: issue.unit as string | undefined,
+      deviation: issue.deviation as number | undefined,
+      expected: issue.expected as string | undefined,
+      note: issue.note as string | undefined,
+    })),
+    recoverableAmount: (inv.compliance_issues || []).reduce(
+      (sum: number, i: Record<string, unknown>) => sum + ((i.amount as number) || 0), 0
+    ),
+  }));
+
+  // Derive suppliers and categories from actual data
+  const suppliers = [...new Set(invoices.map(i => i.supplier))].filter(Boolean);
+  const categories = [...new Set(invoices.map(i => i.category))].filter(Boolean);
+
+  // Trend data placeholder (would need historical invoice data to calculate)
+  const trendData: Array<{ month: string; quimicos: number; contratado_min: number; contratado_max: number; anomaly?: boolean }> = [];
+
+  const filteredInvoices = invoices.filter(invoice => {
     const matchesSupplier = supplierFilter === 'all' || invoice.supplier === supplierFilter;
     const matchesCompliance = complianceFilter === 'all' || 
       (complianceFilter === 'ok' && invoice.compliance === 'ok') ||
@@ -235,10 +176,18 @@ const CostConsultingInvoices = () => {
   const invoicesWithIssues = filteredInvoices.filter(inv => inv.issuesCount > 0).length;
   const recoverableAmount = filteredInvoices.reduce((sum, inv) => sum + inv.recoverableAmount, 0);
 
-  const handleViewInvoice = (invoice: typeof mockInvoices[0]) => {
+  const handleViewInvoice = (invoice: DisplayInvoice) => {
     setSelectedInvoice(invoice);
     setSheetOpen(true);
   };
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -406,7 +355,7 @@ const CostConsultingInvoices = () => {
         <CardContent>
           <div className="h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={mockTrendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <ComposedChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} className="text-muted-foreground" />
                 <YAxis domain={[0.30, 0.42]} tick={{ fontSize: 12 }} className="text-muted-foreground" />
