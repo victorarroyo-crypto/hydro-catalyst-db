@@ -9,6 +9,8 @@ import { useCostProjects, useCostStats } from '@/hooks/useCostConsultingData';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+
+const RAILWAY_API_URL = import.meta.env.VITE_RAILWAY_COST_API_URL || 'https://cost-consulting-api.up.railway.app';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -106,7 +108,8 @@ const CostConsultingList = () => {
     setDeletingId(projectId);
     try {
       // CASCADE DELETE in correct order:
-      // 1. Delete chunks first (no FK cascade from external DB)
+      
+      // 1. Delete chunks first (has project_id column)
       await externalSupabase
         .from('cost_document_chunks')
         .delete()
@@ -118,29 +121,56 @@ const CostConsultingList = () => {
         .delete()
         .eq('project_id', projectId);
       
-      // 3. Delete contracts
-      await externalSupabase
-        .from('cost_project_contracts')
-        .delete()
+      // 3. Get invoice IDs first (invoice_lines don't have project_id)
+      const { data: invoices } = await externalSupabase
+        .from('cost_project_invoices')
+        .select('id')
         .eq('project_id', projectId);
       
-      // 4. Delete invoices
+      const invoiceIds = invoices?.map(i => i.id) || [];
+      
+      // 4. Delete invoice lines using invoice IDs
+      if (invoiceIds.length > 0) {
+        await externalSupabase
+          .from('cost_project_invoice_lines')
+          .delete()
+          .in('invoice_id', invoiceIds);
+      }
+      
+      // 5. Delete invoices
       await externalSupabase
         .from('cost_project_invoices')
         .delete()
         .eq('project_id', projectId);
       
-      // 5. Delete suppliers
+      // 6. Delete contracts
+      await externalSupabase
+        .from('cost_project_contracts')
+        .delete()
+        .eq('project_id', projectId);
+      
+      // 7. Delete suppliers
       await externalSupabase
         .from('cost_project_suppliers')
         .delete()
         .eq('project_id', projectId);
       
-      // 6. Finally delete the project
+      // 8. Finally delete the project
       await externalSupabase
         .from('cost_consulting_projects')
         .delete()
         .eq('id', projectId);
+      
+      // 9. Call backend cleanup for any orphaned data
+      try {
+        await fetch(`${RAILWAY_API_URL}/api/cost-consulting/admin/cleanup-orphaned-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (cleanupError) {
+        console.warn('Cleanup endpoint not available:', cleanupError);
+        // Don't fail the delete if cleanup fails
+      }
       
       toast.success('Análisis eliminado correctamente');
       queryClient.invalidateQueries({ queryKey: ['cost-projects'] });
