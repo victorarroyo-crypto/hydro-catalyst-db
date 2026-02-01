@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,23 +26,28 @@ import {
   FileText,
   GitCompare,
   Trash2,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { useCostContracts, useCostProject, useCostSuppliers } from '@/hooks/useCostConsultingData';
 
-// Mock data
-const categories = [
-  { id: 'quimicos-coagulantes', name: 'Químicos - Coagulantes', supplier: 'Química Industrial SL', spend: 45000, price: 0.38, benchmarkMin: 0.28, benchmarkMax: 0.35, volume: 118421 },
-  { id: 'quimicos-floculantes', name: 'Químicos - Floculantes', supplier: 'Química Industrial SL', spend: 28000, price: 2.80, benchmarkMin: 2.20, benchmarkMax: 3.00, volume: 10000 },
-  { id: 'residuos-lodos', name: 'Residuos - Lodos', supplier: 'Residuos del Norte SL', spend: 35000, price: 45, benchmarkMin: 38, benchmarkMax: 48, volume: 778 },
-  { id: 'om-mantenimiento', name: 'O&M - Mantenimiento', supplier: 'Servicios Técnicos SA', spend: 36000, price: 3000, benchmarkMin: 2500, benchmarkMax: 3200, volume: 12 },
-];
+interface CategoryItem {
+  id: string;
+  name: string;
+  supplier: string;
+  spend: number;
+  price: number;
+  benchmarkMin: number;
+  benchmarkMax: number;
+  volume: number;
+}
 
-const existingSuppliers = [
-  { id: 'quimicas-norte', name: 'Químicas Norte SL', discount: 12 },
-  { id: 'suministros-agua', name: 'Suministros de Agua SA', discount: 8 },
-  { id: 'provquim', name: 'ProvQuim SL', discount: 15 },
-];
+interface SupplierItem {
+  id: string;
+  name: string;
+  discount: number;
+}
 
 interface Scenario {
   id: string;
@@ -59,17 +64,85 @@ interface Scenario {
 
 const CostConsultingSimulator = () => {
   const { id } = useParams();
-  const [selectedCategory, setSelectedCategory] = useState(categories[0].id);
+  
+  const { data: project, isLoading: isLoadingProject } = useCostProject(id);
+  const { data: contracts = [], isLoading: isLoadingContracts } = useCostContracts(id);
+  const { data: rawSuppliers = [] } = useCostSuppliers();
+  
+  // Generate categories from contracts
+  const categories: CategoryItem[] = useMemo(() => {
+    if (contracts.length === 0) {
+      // Fallback mock data if no contracts
+      return [
+        { id: 'quimicos-coagulantes', name: 'Químicos - Coagulantes', supplier: 'Proveedor A', spend: 45000, price: 0.38, benchmarkMin: 0.28, benchmarkMax: 0.35, volume: 118421 },
+        { id: 'om-mantenimiento', name: 'O&M - Mantenimiento', supplier: 'Proveedor B', spend: 36000, price: 3000, benchmarkMin: 2500, benchmarkMax: 3200, volume: 12 },
+      ];
+    }
+    
+    return contracts.map(contract => {
+      const priceValue = Array.isArray(contract.prices) && contract.prices[0] 
+        ? (contract.prices[0] as any).unit_price || contract.total_annual_value || 0
+        : contract.total_annual_value || 0;
+      const benchmarkData = contract.benchmark_comparison as Record<string, any> | null;
+      const volumeValue = Array.isArray(contract.prices) && contract.prices[0]
+        ? (contract.prices[0] as any).quantity || 1
+        : 1;
+      
+      return {
+        id: contract.id,
+        name: contract.contract_number || 'Sin número',
+        supplier: contract.supplier_name_raw || contract.cost_suppliers?.name || 'Sin proveedor',
+        spend: contract.total_annual_value || 0,
+        price: Number(priceValue) || 0,
+        benchmarkMin: benchmarkData?.min || (contract.total_annual_value || 0) * 0.85,
+        benchmarkMax: benchmarkData?.max || (contract.total_annual_value || 0) * 1.05,
+        volume: Number(volumeValue) || 1
+      };
+    });
+  }, [contracts]);
+
+  // Generate suppliers list
+  const existingSuppliers: SupplierItem[] = useMemo(() => {
+    if (rawSuppliers.length === 0) {
+      return [
+        { id: 'default-1', name: 'Proveedor Alternativo 1', discount: 12 },
+        { id: 'default-2', name: 'Proveedor Alternativo 2', discount: 8 },
+      ];
+    }
+    
+    return rawSuppliers.map(s => ({
+      id: s.id,
+      name: s.name,
+      discount: s.price_competitiveness === 'below' ? 12 : s.price_competitiveness === 'above' ? 5 : 8
+    }));
+  }, [rawSuppliers]);
+
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [scenarioType, setScenarioType] = useState('consolidate');
-  const [targetSupplier, setTargetSupplier] = useState('quimicas-norte');
+  const [targetSupplier, setTargetSupplier] = useState<string>('');
   const [discountPercent, setDiscountPercent] = useState([12]);
   const [customPrice, setCustomPrice] = useState('');
   const [calculatedResult, setCalculatedResult] = useState<Scenario | null>(null);
   const [savedScenarios, setSavedScenarios] = useState<Scenario[]>([]);
   const [showComparator, setShowComparator] = useState(false);
 
+  // Set defaults when data loads
+  React.useEffect(() => {
+    if (categories.length > 0 && !selectedCategory) {
+      setSelectedCategory(categories[0].id);
+    }
+  }, [categories, selectedCategory]);
+
+  React.useEffect(() => {
+    if (existingSuppliers.length > 0 && !targetSupplier) {
+      setTargetSupplier(existingSuppliers[0].id);
+    }
+  }, [existingSuppliers, targetSupplier]);
+
   const currentCategory = categories.find(c => c.id === selectedCategory) || categories[0];
   const currentSupplier = existingSuppliers.find(s => s.id === targetSupplier);
+  
+  const isLoading = isLoadingProject || isLoadingContracts;
 
   const calculateScenario = () => {
     let newPrice: number;
@@ -224,6 +297,14 @@ const CostConsultingSimulator = () => {
     ? Math.round(((calculatedResult.newPrice - currentCategory.price) / currentCategory.price) * 100) 
     : 0;
 
+  if (isLoading || !currentCategory) {
+    return (
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
@@ -235,7 +316,7 @@ const CostConsultingSimulator = () => {
         </Button>
         <div>
           <h1 className="text-3xl font-bold text-foreground">Simulador de Escenarios</h1>
-          <p className="text-muted-foreground mt-1">Análisis #{id}</p>
+          <p className="text-muted-foreground mt-1">{project?.name || `Análisis #${id}`}</p>
         </div>
       </div>
 

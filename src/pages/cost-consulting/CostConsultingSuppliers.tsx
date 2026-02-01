@@ -31,103 +31,10 @@ import {
   FileText,
   TrendingUp,
   TrendingDown,
-  BarChart3
+  BarChart3,
+  Loader2
 } from 'lucide-react';
-
-// Mock data
-const mockSuppliers = [
-  {
-    id: '1',
-    name: 'Química Industrial SL',
-    cif: 'B12345678',
-    categories: ['Químicos - Coagulantes', 'Químicos - Floculantes'],
-    verified: true,
-    projects: 3,
-    reputation: 4,
-    region: 'Cataluña',
-    web: 'www.quimicaindustrial.es',
-    size: 'grande',
-    certifications: ['ISO 9001', 'ISO 14001'],
-    avgPriceVsBenchmark: -5,
-    invoiceCount: 24,
-    totalSpend: 135000
-  },
-  {
-    id: '2',
-    name: 'Mantenimientos SA',
-    cif: 'A87654321',
-    categories: ['O&M - Mantenimiento preventivo'],
-    verified: true,
-    projects: 2,
-    reputation: 3,
-    region: 'Madrid',
-    web: 'www.mantenimientossa.com',
-    size: 'pyme',
-    certifications: ['ISO 9001'],
-    avgPriceVsBenchmark: 2,
-    invoiceCount: 12,
-    totalSpend: 72000
-  },
-  {
-    id: '3',
-    name: 'Residuos del Norte SL',
-    cif: 'B55667788',
-    categories: ['Residuos - Lodos', 'Residuos - Transporte'],
-    verified: true,
-    projects: 1,
-    reputation: 4,
-    region: 'País Vasco',
-    web: 'www.residuosnorte.es',
-    size: 'pyme',
-    certifications: ['ISO 9001', 'ISO 14001', 'OHSAS 18001'],
-    avgPriceVsBenchmark: -8,
-    invoiceCount: 8,
-    totalSpend: 35000
-  }
-];
-
-const pendingSuppliers = [
-  {
-    id: 'p1',
-    name: 'Química del Sur SL',
-    cif: 'B12345678',
-    suggestedCategory: 'Químicos',
-    detectedIn: 'Proyecto Lácteos Norte',
-    web: 'www.quimicadelsur.es'
-  },
-  {
-    id: 'p2',
-    name: 'Transportes Rápidos SA',
-    cif: 'A87654321',
-    suggestedCategory: 'Residuos - Transporte',
-    detectedIn: 'Proyecto Química Levante',
-    web: null
-  },
-  {
-    id: 'p3',
-    name: 'Servicios Técnicos Levante',
-    cif: 'B99887766',
-    suggestedCategory: 'O&M',
-    detectedIn: 'Proyecto Alimentaria Sur',
-    web: 'www.stlevante.com'
-  },
-  {
-    id: 'p4',
-    name: 'Gestión Ambiental 2000',
-    cif: 'B11223344',
-    suggestedCategory: 'Residuos - Gestión',
-    detectedIn: 'Proyecto Farmacéutica Centro',
-    web: 'www.gestionambiental2000.es'
-  },
-  {
-    id: 'p5',
-    name: 'Limpieza Industrial Norte',
-    cif: 'A55443322',
-    suggestedCategory: 'Limpieza',
-    detectedIn: 'Proyecto Lácteos Norte',
-    web: null
-  }
-];
+import { useCostAllSuppliers, CostSupplier } from '@/hooks/useCostConsultingData';
 
 const categories = [
   'Químicos - Coagulantes',
@@ -144,20 +51,46 @@ const categories = [
   'Análisis - Laboratorio'
 ];
 
-const priceHistory = [
-  { date: 'Ene 2024', price: 0.35, benchmark: 0.32 },
-  { date: 'Feb 2024', price: 0.36, benchmark: 0.33 },
-  { date: 'Mar 2024', price: 0.35, benchmark: 0.32 },
-  { date: 'Abr 2024', price: 0.38, benchmark: 0.34 },
-  { date: 'May 2024', price: 0.38, benchmark: 0.35 }
-];
+// UI display type for suppliers
+interface DisplaySupplier {
+  id: string;
+  name: string;
+  cif: string | null;
+  categories: string[];
+  verified: boolean;
+  projects: number;
+  reputation: number;
+  region: string | null;
+  web: string | null;
+  size: string | null;
+  certifications: string[];
+  avgPriceVsBenchmark: number;
+  invoiceCount: number;
+  totalSpend: number;
+}
+
+const mapSupplierToDisplay = (supplier: CostSupplier): DisplaySupplier => ({
+  id: supplier.id,
+  name: supplier.name,
+  cif: supplier.tax_id,
+  categories: [], // Would need category field
+  verified: supplier.verified,
+  projects: 0, // Would need relation
+  reputation: supplier.reputation_score || 0,
+  region: supplier.region,
+  web: null,
+  size: supplier.company_size,
+  certifications: supplier.certifications || [],
+  avgPriceVsBenchmark: supplier.price_competitiveness === 'below' ? -5 : supplier.price_competitiveness === 'above' ? 5 : 0,
+  invoiceCount: 0,
+  totalSpend: 0
+});
 
 const CostConsultingSuppliers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
-  const [selectedSupplier, setSelectedSupplier] = useState<typeof mockSuppliers[0] | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<DisplaySupplier | null>(null);
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
-  const [supplierToVerify, setSupplierToVerify] = useState<typeof pendingSuppliers[0] | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   
   // Form state for verification
@@ -171,20 +104,12 @@ const CostConsultingSuppliers = () => {
     notes: ''
   });
 
-  const openVerifyModal = (supplier: typeof pendingSuppliers[0]) => {
-    setSupplierToVerify(supplier);
-    setVerifyForm({
-      name: supplier.name,
-      cif: supplier.cif,
-      region: '',
-      web: supplier.web || '',
-      size: 'pyme',
-      certifications: [],
-      notes: ''
-    });
-    setSelectedCategories([supplier.suggestedCategory]);
-    setVerifyModalOpen(true);
-  };
+  const { data: rawSuppliers = [], isLoading } = useCostAllSuppliers();
+  
+  // Map to display format
+  const suppliers: DisplaySupplier[] = rawSuppliers.map(mapSupplierToDisplay);
+  // For now, pending suppliers is empty - would need a separate table or status field
+  const pendingSuppliers: DisplaySupplier[] = suppliers.filter(s => !s.verified);
 
   const toggleCategory = (category: string) => {
     setSelectedCategories(prev => 
@@ -216,14 +141,14 @@ const CostConsultingSuppliers = () => {
     </div>
   );
 
-  const filteredSuppliers = mockSuppliers.filter(s => 
+  const filteredSuppliers = suppliers.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const verifiedSuppliers = filteredSuppliers.filter(s => s.verified);
 
   // Group suppliers by category
-  const suppliersByCategory: Record<string, typeof mockSuppliers> = {};
+  const suppliersByCategory: Record<string, DisplaySupplier[]> = {};
   filteredSuppliers.forEach(supplier => {
     supplier.categories.forEach(cat => {
       const mainCat = cat.split(' - ')[0];
@@ -236,7 +161,7 @@ const CostConsultingSuppliers = () => {
     });
   });
 
-  const SupplierTable = ({ suppliers }: { suppliers: typeof mockSuppliers }) => (
+  const SupplierTable = ({ suppliers }: { suppliers: DisplaySupplier[] }) => (
     <Table>
       <TableHeader>
         <TableRow>
@@ -311,6 +236,14 @@ const CostConsultingSuppliers = () => {
     </Table>
   );
 
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
@@ -344,7 +277,7 @@ const CostConsultingSuppliers = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="all">
-            Todos ({mockSuppliers.length})
+            Todos ({suppliers.length})
           </TabsTrigger>
           <TabsTrigger value="verified">
             Verificados ({verifiedSuppliers.length})
@@ -402,16 +335,16 @@ const CostConsultingSuppliers = () => {
                         </div>
                         <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
                           <div>
-                            <span className="text-muted-foreground">Detectado en: </span>
-                            <span className="font-medium">{supplier.detectedIn}</span>
+                            <span className="text-muted-foreground">Región: </span>
+                            <span className="font-medium">{supplier.region || 'Sin especificar'}</span>
                           </div>
                           <div>
                             <span className="text-muted-foreground">CIF: </span>
-                            <span className="font-medium">{supplier.cif}</span>
+                            <span className="font-medium">{supplier.cif || 'Sin CIF'}</span>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Categoría sugerida: </span>
-                            <Badge variant="outline">{supplier.suggestedCategory}</Badge>
+                            <span className="text-muted-foreground">Tamaño: </span>
+                            <Badge variant="outline">{supplier.size || 'Sin especificar'}</Badge>
                           </div>
                           <div>
                             <span className="text-muted-foreground">Web: </span>
@@ -428,7 +361,18 @@ const CostConsultingSuppliers = () => {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => openVerifyModal(supplier)}>
+                        <Button size="sm" onClick={() => {
+                          setVerifyForm({
+                            name: supplier.name,
+                            cif: supplier.cif || '',
+                            region: supplier.region || '',
+                            web: supplier.web || '',
+                            size: supplier.size || 'pyme',
+                            certifications: supplier.certifications,
+                            notes: ''
+                          });
+                          setVerifyModalOpen(true);
+                        }}>
                           Verificar
                         </Button>
                         <Button size="sm" variant="ghost">
@@ -465,7 +409,7 @@ const CostConsultingSuppliers = () => {
       <Dialog open={verifyModalOpen} onOpenChange={setVerifyModalOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Verificar: {supplierToVerify?.name}</DialogTitle>
+            <DialogTitle>Verificar proveedor</DialogTitle>
             <DialogDescription>
               Completa la información del proveedor para añadirlo a la base de datos
             </DialogDescription>
@@ -731,19 +675,9 @@ const CostConsultingSuppliers = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
-                      {priceHistory.map((entry, i) => (
-                        <div key={i} className="flex items-center justify-between text-sm p-2 bg-muted/30 rounded">
-                          <span className="text-muted-foreground">{entry.date}</span>
-                          <div className="flex items-center gap-4">
-                            <span className="font-medium">{entry.price}€/kg</span>
-                            <span className={entry.price > entry.benchmark ? 'text-red-600' : 'text-green-600'}>
-                              vs {entry.benchmark}€
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Historial de precios no disponible para este proveedor.
+                    </p>
                   </CardContent>
                 </Card>
 

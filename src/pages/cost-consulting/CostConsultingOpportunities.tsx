@@ -21,133 +21,78 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { useCostOpportunities, useCostProject, CostOpportunity } from '@/hooks/useCostConsultingData';
 
-// Mock data for opportunities
-const mockOpportunities = [
-  {
-    id: '1',
-    title: 'Renegociar precio PAC',
-    category: 'Químicos',
-    supplier: 'Química Industrial SL',
-    savings: 4500,
-    savingsPercent: 10,
-    impact: 'high',
-    effort: 'low',
-    horizon: 'quick_win',
-    confidence: 'high',
-    risk: 'low',
-    status: 'identified',
-    rating: 5,
-    description: 'El precio actual (0.38€/kg) está 9% por encima del benchmark de mercado (0.28-0.35€/kg).',
-    actions: ['Solicitar ofertas alternativas', 'Preparar análisis comparativo', 'Negociar antes de renovación']
-  },
-  {
-    id: '2',
-    title: 'Eliminar contrato zombie O&M',
-    category: 'O&M',
-    supplier: 'Servicios Técnicos SA',
-    savings: 2400,
-    savingsPercent: 100,
-    impact: 'medium',
-    effort: 'low',
-    horizon: 'quick_win',
-    confidence: 'high',
-    risk: 'low',
-    status: 'validated',
-    rating: 5,
-    description: 'Contrato de mantenimiento de equipos que ya no existen en la planta.',
-    actions: ['Verificar inventario de equipos', 'Enviar carta de cancelación']
-  },
-  {
-    id: '3',
-    title: 'Optimizar términos de pago',
-    category: 'General',
+// Map DB opportunity to UI display
+interface DisplayOpportunity {
+  id: string;
+  title: string;
+  category: string;
+  supplier: string;
+  savings: number;
+  savingsPercent: number;
+  impact: 'high' | 'medium' | 'low';
+  effort: 'high' | 'medium' | 'low';
+  horizon: string;
+  confidence: 'high' | 'medium' | 'low';
+  risk: 'high' | 'medium' | 'low';
+  status: string;
+  rating: number;
+  description: string;
+  actions: string[];
+}
+
+const mapOpportunityToDisplay = (opp: CostOpportunity): DisplayOpportunity => {
+  const savingsPercent = opp.current_annual_cost && opp.savings_annual 
+    ? Math.round((opp.savings_annual / opp.current_annual_cost) * 100)
+    : opp.savings_pct || 0;
+  
+  return {
+    id: opp.id,
+    title: opp.title,
+    category: opp.opportunity_type || 'General',
     supplier: 'Varios',
-    savings: 800,
-    savingsPercent: 2,
-    impact: 'low',
-    effort: 'medium',
-    horizon: 'quick_win',
-    confidence: 'medium',
-    risk: 'low',
-    status: 'identified',
-    rating: 3,
-    description: 'Negociar pronto pago con descuento del 2% en proveedores principales.',
-    actions: ['Identificar proveedores con margen', 'Proponer descuento por pronto pago']
-  },
-  {
-    id: '4',
-    title: 'Cambiar gestor de residuos',
-    category: 'Residuos',
-    supplier: 'Residuos del Norte SL',
-    savings: 3200,
-    savingsPercent: 15,
-    impact: 'high',
-    effort: 'high',
-    horizon: 'medium',
-    confidence: 'medium',
-    risk: 'medium',
-    status: 'identified',
-    rating: 4,
-    description: 'Existen alternativas en el mercado con precios más competitivos y mejor servicio.',
-    actions: ['Solicitar ofertas de 3+ gestores', 'Evaluar requisitos legales', 'Planificar transición']
-  },
-  {
-    id: '5',
-    title: 'Consolidar proveedores químicos',
-    category: 'Químicos',
-    supplier: 'Múltiples',
-    savings: 1500,
-    savingsPercent: 5,
-    impact: 'medium',
-    effort: 'high',
-    horizon: 'medium',
-    confidence: 'medium',
-    risk: 'low',
-    status: 'identified',
-    rating: 3,
-    description: 'Consolidar 4 proveedores en 2 para obtener mejores condiciones por volumen.',
-    actions: ['Analizar compatibilidad de productos', 'Negociar contratos marco']
-  },
-  {
-    id: '6',
-    title: 'Renegociar contrato energía',
-    category: 'Energía',
-    supplier: 'Energía Plus SA',
-    savings: 5200,
-    savingsPercent: 8,
-    impact: 'high',
-    effort: 'high',
-    horizon: 'short',
-    confidence: 'high',
-    risk: 'medium',
-    status: 'in_progress',
-    rating: 4,
-    description: 'El contrato actual tiene condiciones desfavorables comparado con el mercado actual.',
-    actions: ['Solicitar ofertas de comercializadoras', 'Analizar consumos', 'Negociar nuevo contrato']
-  }
-];
+    savings: opp.savings_annual || 0,
+    savingsPercent,
+    impact: opp.impact_score && opp.impact_score > 70 ? 'high' : opp.impact_score && opp.impact_score > 40 ? 'medium' : 'low',
+    effort: opp.effort_score && opp.effort_score > 70 ? 'high' : opp.effort_score && opp.effort_score > 40 ? 'medium' : 'low',
+    horizon: opp.implementation_horizon || 'medium',
+    confidence: opp.confidence === 'high' || opp.confidence === 'alta' ? 'high' : opp.confidence === 'medium' || opp.confidence === 'media' ? 'medium' : 'low',
+    risk: opp.risk_score && opp.risk_score > 70 ? 'high' : opp.risk_score && opp.risk_score > 40 ? 'medium' : 'low',
+    status: opp.status,
+    rating: Math.min(5, Math.ceil((opp.priority_score || 50) / 20)),
+    description: opp.description || '',
+    actions: opp.recommended_actions?.map((a: any) => typeof a === 'string' ? a : a.action || a.description || '') || []
+  };
+};
 
 const CostConsultingOpportunities = () => {
   const { id } = useParams();
   const [viewMode, setViewMode] = useState<'matrix' | 'list'>('list');
-  const [selectedOpportunity, setSelectedOpportunity] = useState<typeof mockOpportunities[0] | null>(null);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<DisplayOpportunity | null>(null);
   const [horizonFilter, setHorizonFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [expandedSections, setExpandedSections] = useState<string[]>(['quick_win', 'short', 'medium']);
 
+  const { data: project } = useCostProject(id);
+  const { data: rawOpportunities = [], isLoading } = useCostOpportunities(id);
+  
+  // Map to display format
+  const opportunities: DisplayOpportunity[] = rawOpportunities.map(mapOpportunityToDisplay);
+
   // Calculate metrics
-  const totalSavings = mockOpportunities.reduce((sum, o) => sum + o.savings, 0);
-  const quickWins = mockOpportunities.filter(o => o.horizon === 'quick_win');
+  const totalSavings = opportunities.reduce((sum, o) => sum + o.savings, 0);
+  const quickWins = opportunities.filter(o => o.horizon === 'quick_win');
   const quickWinSavings = quickWins.reduce((sum, o) => sum + o.savings, 0);
 
   // Filter opportunities
-  const filteredOpportunities = mockOpportunities.filter(o => {
+  const filteredOpportunities = opportunities.filter(o => {
     if (horizonFilter !== 'all' && o.horizon !== horizonFilter) return false;
     if (statusFilter !== 'all' && o.status !== statusFilter) return false;
     if (categoryFilter !== 'all' && o.category !== categoryFilter) return false;
@@ -157,9 +102,9 @@ const CostConsultingOpportunities = () => {
   // Group by horizon
   const groupedOpportunities = {
     quick_win: filteredOpportunities.filter(o => o.horizon === 'quick_win'),
-    short: filteredOpportunities.filter(o => o.horizon === 'short'),
-    medium: filteredOpportunities.filter(o => o.horizon === 'medium'),
-    long: filteredOpportunities.filter(o => o.horizon === 'long')
+    short: filteredOpportunities.filter(o => o.horizon === 'short' || o.horizon === 'corto'),
+    medium: filteredOpportunities.filter(o => o.horizon === 'medium' || o.horizon === 'medio'),
+    long: filteredOpportunities.filter(o => o.horizon === 'long' || o.horizon === 'largo')
   };
 
   const toggleSection = (section: string) => {
@@ -242,7 +187,7 @@ const CostConsultingOpportunities = () => {
     );
   };
 
-  const OpportunityCard = ({ opportunity }: { opportunity: typeof mockOpportunities[0] }) => (
+  const OpportunityCard = ({ opportunity }: { opportunity: DisplayOpportunity }) => (
     <Card 
       className="cursor-pointer hover:shadow-md transition-shadow"
       onClick={() => setSelectedOpportunity(opportunity)}
@@ -491,6 +436,14 @@ const CostConsultingOpportunities = () => {
     );
   };
 
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
@@ -503,7 +456,7 @@ const CostConsultingOpportunities = () => {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-foreground">Oportunidades de Ahorro</h1>
-            <p className="text-muted-foreground mt-1">Análisis #{id}</p>
+            <p className="text-muted-foreground mt-1">{project?.name || `Análisis #${id}`}</p>
           </div>
         </div>
       </div>
@@ -534,7 +487,7 @@ const CostConsultingOpportunities = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Oportunidades</p>
-                <p className="text-2xl font-bold">{mockOpportunities.length}</p>
+                <p className="text-2xl font-bold">{opportunities.length}</p>
               </div>
             </div>
           </CardContent>
