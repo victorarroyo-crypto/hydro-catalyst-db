@@ -52,6 +52,7 @@ const getStatusBadge = (status: string) => {
   const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
     draft: { label: 'Borrador', variant: 'secondary' },
     uploading: { label: 'Subiendo docs', variant: 'default' },
+    extracting: { label: 'Extrayendo', variant: 'default' },
     processing: { label: 'Procesando', variant: 'default' },
     analyzing: { label: 'Analizando', variant: 'default' },
     review: { label: 'En revisión', variant: 'outline' },
@@ -63,6 +64,7 @@ const getStatusBadge = (status: string) => {
   const colorClasses: Record<string, string> = {
     draft: 'bg-muted text-muted-foreground',
     uploading: 'bg-blue-500/10 text-blue-600 border-blue-200',
+    extracting: 'bg-blue-500/10 text-blue-600 border-blue-200',
     processing: 'bg-yellow-500/10 text-yellow-600 border-yellow-200',
     analyzing: 'bg-yellow-500/10 text-yellow-600 border-yellow-200',
     review: 'bg-orange-500/10 text-orange-600 border-orange-200',
@@ -143,6 +145,50 @@ const ProcessingState = ({ currentPhase }: { currentPhase: number }) => {
           })}
         </div>
       </CardContent>
+    </Card>
+  );
+};
+
+const extractingPhases = [
+  { id: 1, name: 'Documentos cargados', status: 'completed' as const },
+  { id: 2, name: 'Extrayendo contratos y facturas', status: 'current' as const },
+  { id: 3, name: 'Detectando proveedores', status: 'pending' as const },
+  { id: 4, name: 'Validando datos', status: 'pending' as const },
+];
+
+const ExtractingState = ({ progressPct }: { progressPct: number }) => {
+  return (
+    <Card className="p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <Clock className="h-6 w-6 text-blue-500 animate-pulse" />
+        <div>
+          <h3 className="text-lg font-semibold">Extrayendo datos...</h3>
+          <p className="text-sm text-muted-foreground">
+            Procesando documentos para extraer contratos y facturas
+          </p>
+        </div>
+      </div>
+
+      <Progress value={progressPct || 25} className="mb-4" />
+
+      <div className="space-y-2 text-sm">
+        {extractingPhases.map((phase) => (
+          <div key={phase.id} className="flex items-center gap-2">
+            {phase.status === 'completed' && (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            )}
+            {phase.status === 'current' && (
+              <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+            )}
+            {phase.status === 'pending' && (
+              <Circle className="h-4 w-4 text-muted-foreground" />
+            )}
+            <span className={phase.status === 'pending' ? 'text-muted-foreground' : ''}>
+              {phase.name}{phase.status === 'current' ? '...' : ''}
+            </span>
+          </div>
+        ))}
+      </div>
     </Card>
   );
 };
@@ -412,6 +458,7 @@ const CostConsultingDetail = () => {
   const invoicesCount = documents.filter(d => d.document_type === 'invoice').length || invoices.length;
   const suppliersCount = new Set([...contracts.map(c => c.supplier_name_raw), ...invoices.map(i => i.supplier_name_raw)].filter(Boolean)).size;
 
+  const isExtracting = project?.status === 'extracting';
   const isProcessing = project?.status === 'processing' || project?.status === 'analyzing';
 
   if (isLoadingProject) {
@@ -522,6 +569,11 @@ const CostConsultingDetail = () => {
         </Card>
       )}
 
+      {/* Extracting State */}
+      {isExtracting && (
+        <ExtractingState progressPct={project.progress_pct || 25} />
+      )}
+
       {/* Processing State */}
       {/* Normal Processing State - Has documents */}
       {isProcessing && documents.length > 0 && (
@@ -529,7 +581,7 @@ const CostConsultingDetail = () => {
       )}
 
       {/* Completed State */}
-      {!isProcessing && (
+      {!isProcessing && !isExtracting && (
         <>
           {/* Alerts */}
           <AlertsSection alerts={alerts} />
