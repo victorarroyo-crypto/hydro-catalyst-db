@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -283,22 +283,40 @@ const CostConsultingDetail = () => {
   const { data: opportunities = [] } = useCostOpportunities(id);
   const { data: documents = [] } = useCostDocuments(id);
 
-  // Fetch invoice lines for accurate spend map by category
-  const { data: invoiceLines = [] } = useQuery({
-    queryKey: ['invoice-lines-spend-map', id],
-    queryFn: async () => {
-      if (!id) return [];
-      const { data } = await externalSupabase
-        .from('cost_project_invoice_lines')
-        .select(`
-          id, category, total,
-          cost_project_invoices!inner(project_id)
-        `)
-        .eq('cost_project_invoices.project_id', id);
-      return data || [];
-    },
-    enabled: !!id,
-  });
+  // Extract spend by category from invoice line_items (embedded JSON, not a separate table)
+  const spendByInvoiceLines = useMemo(() => {
+    const catSpend: Record<string, number> = {};
+    
+    invoices.forEach((inv) => {
+      const lineItems = inv.line_items || [];
+      lineItems.forEach((item: Record<string, unknown>) => {
+        const desc = ((item.description as string) || '').toLowerCase();
+        const total = (item.total as number) || 0;
+        
+        // Infer category from description
+        let category = 'Otros';
+        if (desc.includes('pac') || desc.includes('polímero') || desc.includes('hipoclorito') || desc.includes('químic')) {
+          category = 'Químicos';
+        } else if (desc.includes('fango') || desc.includes('lodo') || desc.includes('residuo')) {
+          category = 'Lodos';
+        } else if (desc.includes('energía') || desc.includes('potencia') || desc.includes('kwh') || desc.includes('eléctric') || desc.includes('consumo')) {
+          category = 'Energía';
+        } else if (desc.includes('analítica') || desc.includes('laboratorio') || desc.includes('ensayo')) {
+          category = 'Analíticas';
+        } else if (desc.includes('mantenimiento') || desc.includes('reparación') || desc.includes('recambio')) {
+          category = 'Mantenimiento';
+        } else if (desc.includes('canon') || desc.includes('tasa') || desc.includes('o&m')) {
+          category = 'O&M';
+        } else if (desc.includes('impuesto')) {
+          category = 'Tasas';
+        }
+        
+        catSpend[category] = (catSpend[category] || 0) + total;
+      });
+    });
+    
+    return catSpend;
+  }, [invoices]);
 
   // Real alerts queries
   const { data: autoRenewalContracts = [] } = useQuery({
@@ -365,19 +383,13 @@ const CostConsultingDetail = () => {
   const savingsPercent = totalSpend > 0 ? ((potentialSavings / totalSpend) * 100).toFixed(1) : '0';
   const quickWinsCount = opportunities.filter(o => o.effort_level === 'low').length;
 
-  // Build spend categories from invoice LINES (more accurate category breakdown)
-  const spendByCategory = invoiceLines.reduce((acc: Record<string, number>, line: any) => {
-    const cat = line.category || 'Otros';
-    acc[cat] = (acc[cat] || 0) + (line.total || 0);
-    return acc;
-  }, {});
-  
-  const totalCatSpend = Object.values(spendByCategory).reduce((a, b) => a + b, 0);
-  const spendCategories = Object.entries(spendByCategory)
+  // Build spend categories from invoice line items
+  const totalCatSpend = Object.values(spendByInvoiceLines).reduce((a: number, b: number) => a + b, 0);
+  const spendCategories = Object.entries(spendByInvoiceLines)
     .map(([name, amount]) => ({
       name,
-      amount,
-      percent: totalCatSpend > 0 ? Math.round((amount / totalCatSpend) * 100) : 0,
+      amount: amount as number,
+      percent: totalCatSpend > 0 ? Math.round(((amount as number) / totalCatSpend) * 100) : 0,
     }))
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 6);

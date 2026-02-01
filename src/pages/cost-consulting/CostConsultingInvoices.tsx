@@ -128,32 +128,65 @@ const CostConsultingInvoices = () => {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedTrendCategory, setSelectedTrendCategory] = useState<string>('');
 
-  // Query for invoice lines for trend analysis
-  const { data: invoiceLines = [] } = useQuery({
-    queryKey: ['invoice-lines-trend', id],
-    queryFn: async () => {
-      if (!id) return [];
-      const { data } = await externalSupabase
-        .from('cost_project_invoice_lines')
-        .select(`
-          id,
-          description,
-          quantity,
-          unit_price,
-          unit,
-          total,
-          category,
-          cost_project_invoices!inner(
-            invoice_date,
-            project_id
-          )
-        `)
-        .eq('cost_project_invoices.project_id', id)
-        .not('unit_price', 'is', null);
-      return data || [];
-    },
-    enabled: !!id,
-  });
+  // Extract line items from invoices for trend analysis
+  // Note: line_items are embedded JSON in cost_project_invoices, not a separate table
+  const invoiceLines = useMemo(() => {
+    const lines: Array<{
+      id: string;
+      description: string;
+      quantity: number;
+      unit_price: number;
+      unit: string;
+      total: number;
+      category: string;
+      invoice_date: string;
+    }> = [];
+    
+    rawInvoices.forEach((inv, invIdx) => {
+      const lineItems = inv.line_items || [];
+      lineItems.forEach((item: Record<string, unknown>, idx: number) => {
+        if (item.unit_price != null) {
+          lines.push({
+            id: `${inv.id}-${idx}`,
+            description: (item.description as string) || '',
+            quantity: (item.quantity as number) || 0,
+            unit_price: item.unit_price as number,
+            unit: (item.unit as string) || '€',
+            total: (item.total as number) || 0,
+            // Infer category from description if not provided
+            category: inferCategoryFromDescription((item.description as string) || ''),
+            invoice_date: inv.invoice_date || '',
+          });
+        }
+      });
+    });
+    
+    return lines;
+  }, [rawInvoices]);
+
+  // Helper function to infer category from line item description
+  function inferCategoryFromDescription(description: string): string {
+    const desc = description.toLowerCase();
+    if (desc.includes('pac') || desc.includes('polímero') || desc.includes('hipoclorito') || desc.includes('químic')) {
+      return 'Químicos';
+    }
+    if (desc.includes('fango') || desc.includes('lodo') || desc.includes('residuo')) {
+      return 'Lodos';
+    }
+    if (desc.includes('energía') || desc.includes('potencia') || desc.includes('kwh') || desc.includes('eléctric')) {
+      return 'Energía';
+    }
+    if (desc.includes('analítica') || desc.includes('laboratorio') || desc.includes('ensayo')) {
+      return 'Analíticas';
+    }
+    if (desc.includes('mantenimiento') || desc.includes('reparación') || desc.includes('recambio')) {
+      return 'Mantenimiento';
+    }
+    if (desc.includes('canon') || desc.includes('tasa')) {
+      return 'O&M';
+    }
+    return 'Otros';
+  }
 
   // Map raw invoices to display format
   const invoices: DisplayInvoice[] = rawInvoices.map(inv => ({
@@ -189,16 +222,16 @@ const CostConsultingInvoices = () => {
   const suppliers = [...new Set(invoices.map(i => i.supplier))].filter(Boolean);
   const categories = [...new Set(invoices.map(i => i.category))].filter(Boolean);
 
-  // Available categories for trend chart
+  // Available categories for trend chart (from extracted line items)
   const availableCategories = useMemo(() => {
     const catMap = new Map<string, { count: number; unit: string }>();
-    invoiceLines.forEach((line: Record<string, unknown>) => {
-      const cat = (line.category as string) || 'Otros';
+    invoiceLines.forEach((line) => {
+      const cat = line.category;
       const existing = catMap.get(cat);
       if (existing) {
         existing.count++;
       } else {
-        catMap.set(cat, { count: 1, unit: (line.unit as string) || '€' });
+        catMap.set(cat, { count: 1, unit: line.unit || '€' });
       }
     });
     return Array.from(catMap.entries())
@@ -220,20 +253,19 @@ const CostConsultingInvoices = () => {
     }
     
     const categoryLines = invoiceLines.filter(
-      (line: Record<string, unknown>) => ((line.category as string) || 'Otros') === selectedTrendCategory
+      (line) => line.category === selectedTrendCategory
     );
     
     if (categoryLines.length === 0) {
       return { trendData: [], categoryUnit: '€' };
     }
     
-    const unit = (categoryLines[0] as Record<string, unknown>)?.unit as string || '€/ud';
+    const unit = categoryLines[0]?.unit || '€/ud';
     
     // Group by month
-    const grouped = categoryLines.reduce((acc: Record<string, { prices: number[]; date: string }>, line: Record<string, unknown>) => {
-      const invoiceData = line.cost_project_invoices as Record<string, unknown> | null;
-      const date = invoiceData?.invoice_date as string;
-      const unitPrice = line.unit_price as number;
+    const grouped = categoryLines.reduce((acc: Record<string, { prices: number[]; date: string }>, line) => {
+      const date = line.invoice_date;
+      const unitPrice = line.unit_price;
       if (!date || !unitPrice) return acc;
       
       const monthKey = date.substring(0, 7);

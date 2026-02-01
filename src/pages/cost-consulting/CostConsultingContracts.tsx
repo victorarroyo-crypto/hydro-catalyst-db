@@ -317,22 +317,26 @@ const CostConsultingContracts = () => {
                 <TableRow 
                   key={contract.id}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => handleViewContract(contract)}
                 >
-                  <TableCell className="font-medium">{contract.supplier}</TableCell>
-                  <TableCell>
+                  <TableCell 
+                    className="font-medium" 
+                    onClick={() => handleViewContract(contract)}
+                  >
+                    {contract.supplier}
+                  </TableCell>
+                  <TableCell onClick={() => handleViewContract(contract)}>
                     <Badge variant="outline">{contract.category}</Badge>
                   </TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="text-right font-medium" onClick={() => handleViewContract(contract)}>
                     {contract.annualValue.toLocaleString('es-ES')}€
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={() => handleViewContract(contract)}>
                     <span className={!contract.endDate ? 'text-muted-foreground' : ''}>
                       {formatDate(contract.endDate)}
                     </span>
                   </TableCell>
-                  <TableCell>{getRiskBadge(contract.riskScore)}</TableCell>
-                  <TableCell className="text-center">
+                  <TableCell onClick={() => handleViewContract(contract)}>{getRiskBadge(contract.riskScore)}</TableCell>
+                  <TableCell className="text-center" onClick={() => handleViewContract(contract)}>
                     {contract.alertsCount > 0 ? (
                       <Badge variant="destructive" className="min-w-[24px]">
                         {contract.alertsCount}
@@ -342,7 +346,7 @@ const CostConsultingContracts = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={() => handleViewContract(contract)}>
                       <Eye className="h-4 w-4" />
                     </Button>
                   </TableCell>
