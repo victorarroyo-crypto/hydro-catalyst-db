@@ -34,6 +34,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface UploadedFile {
@@ -277,44 +278,51 @@ const CostConsultingNew = () => {
       
       const projectId = newProject.id;
       
-      // 3. Upload documents to storage and create records
+      // 3. Upload documents via edge function (Railway backend)
       const allFiles = [
         ...contracts.map(f => ({ ...f, type: 'contrato' as const })),
         ...invoices.map(f => ({ ...f, type: 'factura' as const })),
         ...suppliers.map(f => ({ ...f, type: 'listado_proveedores' as const })),
       ];
       
+      let successfulUploads = 0;
+      let failedUploads = 0;
+      
       for (const fileData of allFiles) {
-        const file = fileData.file;
-        const filePath = `${projectId}/${Date.now()}_${file.name}`;
+        const formData = new FormData();
+        formData.append('file', fileData.file);
+        formData.append('file_type', fileData.type);
+        formData.append('project_id', projectId);
         
-        // Upload to storage
-        const { error: uploadError } = await externalSupabase.storage
-          .from('cost-documents')
-          .upload(filePath, file);
+        const { data, error } = await supabase.functions.invoke(
+          'cost-consulting-upload',
+          { body: formData }
+        );
         
-        if (uploadError) {
-          console.error('Upload error:', uploadError);
+        if (error || !data?.success) {
+          console.error(`Upload failed for ${fileData.file.name}:`, error || data?.error);
+          failedUploads++;
           continue;
         }
         
-        // Get public URL
-        const { data: urlData } = externalSupabase.storage
-          .from('cost-documents')
-          .getPublicUrl(filePath);
-        
-        // Create document record
+        successfulUploads++;
+      }
+      
+      // If no uploads succeeded, revert project to draft
+      if (successfulUploads === 0 && allFiles.length > 0) {
         await externalSupabase
-          .from('cost_project_documents')
-          .insert({
-            project_id: projectId,
-            filename: file.name,
-            file_type: fileData.type,
-            file_url: urlData.publicUrl,
-            file_size: file.size,
-            mime_type: file.type,
-            extraction_status: 'pending',
-          });
+          .from('cost_consulting_projects')
+          .update({ status: 'draft' })
+          .eq('id', projectId);
+        
+        toast.error('Error al subir documentos. El almacenamiento no está disponible.');
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Notify about failed uploads but continue if some succeeded
+      if (failedUploads > 0) {
+        toast.warning(`${failedUploads} archivo(s) no se pudieron subir`);
       }
       
       // 4. Update project status to processing
