@@ -343,10 +343,10 @@ const CostConsultingDetail = () => {
   }
 
   // Calculate KPIs from real data
-  const totalSpend = project?.total_spend || 0;
-  const totalSavings = opportunities.reduce((sum, o) => sum + (o.savings_annual || 0), 0);
-  const savingsPercent = totalSpend > 0 ? ((totalSavings / totalSpend) * 100).toFixed(1) : '0';
-  const quickWinsCount = opportunities.filter(o => o.effort_level === 'low' || o.opportunity_type === 'quick_win').length;
+  const totalSpend = project?.total_spend_analyzed || 0;
+  const potentialSavings = project?.total_savings_identified || 0;
+  const savingsPercent = totalSpend > 0 ? ((potentialSavings / totalSpend) * 100).toFixed(1) : '0';
+  const quickWinsCount = opportunities.filter(o => o.effort_level === 'low').length;
 
   // Build spend categories from invoices
   const spendByCategory = invoices.reduce((acc: Record<string, number>, inv) => {
@@ -495,7 +495,7 @@ const CostConsultingDetail = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-primary">
-                  {totalSavings.toLocaleString('es-ES')}€
+                  {potentialSavings.toLocaleString('es-ES')}€
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {savingsPercent}% del gasto total
