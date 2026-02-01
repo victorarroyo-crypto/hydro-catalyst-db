@@ -482,7 +482,7 @@ const CostConsultingDetail = () => {
           </div>
         </div>
 
-        {/* Report Generator Modal */}
+      {/* Report Generator Modal */}
         <ReportGeneratorModal
           open={reportModalOpen}
           onOpenChange={setReportModalOpen}
@@ -491,8 +491,39 @@ const CostConsultingDetail = () => {
         />
       </div>
 
+      {/* Stuck Processing State - No documents uploaded */}
+      {isProcessing && documents.length === 0 && (
+        <Card className="border-yellow-200 bg-yellow-50/50 dark:bg-yellow-900/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+              <AlertTriangle className="h-5 w-5" />
+              Error en la subida de documentos
+            </CardTitle>
+            <CardDescription>
+              No se pudieron subir los documentos al servidor. Esto puede deberse a un 
+              problema con el almacenamiento o la conexión.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Por favor, intenta crear un nuevo análisis o contacta al administrador 
+              si el problema persiste.
+            </p>
+            <div className="flex gap-2">
+              <Button asChild>
+                <Link to="/cost-consulting/new">Crear nuevo análisis</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to="/cost-consulting">Volver a proyectos</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Processing State */}
-      {isProcessing && (
+      {/* Normal Processing State - Has documents */}
+      {isProcessing && documents.length > 0 && (
         <ProcessingState currentPhase={parseInt(project.current_phase || '1', 10)} />
       )}
 
