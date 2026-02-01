@@ -1,13 +1,89 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, FileText, TrendingDown, Building2, BarChart3, Coins } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, FileText, TrendingDown, Building2, BarChart3, Coins, Loader2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
+
+interface CostProject {
+  id: string;
+  name: string;
+  client_name: string | null;
+  status: string;
+  total_spend_analyzed: number;
+  total_savings_identified: number;
+  opportunities_count: number;
+  contracts_count: number;
+  invoices_count: number;
+  created_at: string;
+  cost_verticals: {
+    name: string;
+    icon: string | null;
+  } | null;
+}
+
+const formatCurrency = (value: number): string => {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+};
+
+const getStatusBadge = (status: string) => {
+  const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+    draft: { label: 'Borrador', variant: 'outline' },
+    uploading: { label: 'Subiendo', variant: 'secondary' },
+    processing: { label: 'Procesando', variant: 'secondary' },
+    analyzing: { label: 'Analizando', variant: 'default' },
+    review: { label: 'En revisión', variant: 'default' },
+    completed: { label: 'Completado', variant: 'default' },
+    archived: { label: 'Archivado', variant: 'outline' },
+  };
+  
+  const config = statusConfig[status] || { label: status, variant: 'outline' as const };
+  return <Badge variant={config.variant}>{config.label}</Badge>;
+};
 
 const CostConsultingList = () => {
-  // TODO: Replace with actual data from cost_consulting_projects table
-  const projects: any[] = [];
+  const { advisorUser } = useAdvisorAuth();
+
+  const { data: projects = [], isLoading } = useQuery({
+    queryKey: ['cost-consulting-projects', advisorUser?.id],
+    queryFn: async () => {
+      if (!advisorUser?.id) return [];
+      const { data, error } = await supabase
+        .from('cost_consulting_projects')
+        .select(`
+          *,
+          cost_verticals (name, icon)
+        `)
+        .eq('user_id', advisorUser.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []) as CostProject[];
+    },
+    enabled: !!advisorUser?.id,
+  });
+
   const hasProjects = projects.length > 0;
+
+  // Calculate totals
+  const totalSavings = projects.reduce((sum, p) => sum + (p.total_savings_identified || 0), 0);
+  const totalOpportunities = projects.reduce((sum, p) => sum + (p.opportunities_count || 0), 0);
+  const totalSuppliers = new Set(projects.map(p => p.client_name).filter(Boolean)).size;
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -35,34 +111,34 @@ const CostConsultingList = () => {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">0</div>
+              <div className="text-2xl font-bold">{projects.length}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Ahorro Identificado</CardTitle>
-              <TrendingDown className="h-4 w-4 text-green-500" />
+              <TrendingDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">€0</div>
+              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(totalSavings)}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Proveedores</CardTitle>
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">0</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Benchmarks</CardTitle>
+              <CardTitle className="text-sm font-medium">Oportunidades</CardTitle>
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">0</div>
+              <div className="text-2xl font-bold">{totalOpportunities}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Clientes</CardTitle>
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalSuppliers}</div>
             </CardContent>
           </Card>
         </div>
@@ -91,10 +167,51 @@ const CostConsultingList = () => {
         </Card>
       )}
 
-      {/* Projects Grid - only show if there are projects */}
+      {/* Projects Grid */}
       {hasProjects && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {/* Project cards will go here */}
+          {projects.map((project) => (
+            <Card key={project.id} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg">{project.name}</CardTitle>
+                    {project.client_name && (
+                      <CardDescription>{project.client_name}</CardDescription>
+                    )}
+                  </div>
+                  {getStatusBadge(project.status)}
+                </div>
+                {project.cost_verticals?.name && (
+                  <Badge variant="outline" className="w-fit mt-2">
+                    {project.cost_verticals.name}
+                  </Badge>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Gasto analizado</p>
+                    <p className="font-semibold">{formatCurrency(project.total_spend_analyzed || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Ahorro identificado</p>
+                    <p className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(project.total_savings_identified || 0)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>{project.opportunities_count || 0} oportunidades</span>
+                  <span>{project.contracts_count || 0} contratos</span>
+                </div>
+                <Button variant="outline" className="w-full" asChild>
+                  <Link to={`/cost-consulting/${project.id}`}>
+                    Ver análisis
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
     </div>
