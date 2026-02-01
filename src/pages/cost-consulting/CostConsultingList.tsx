@@ -105,21 +105,47 @@ const CostConsultingList = () => {
   const handleDeleteProject = async (projectId: string) => {
     setDeletingId(projectId);
     try {
-      // Delete all documents first
+      // CASCADE DELETE in correct order:
+      // 1. Delete chunks first (no FK cascade from external DB)
+      await externalSupabase
+        .from('cost_document_chunks')
+        .delete()
+        .eq('project_id', projectId);
+      
+      // 2. Delete documents
       await externalSupabase
         .from('cost_project_documents')
         .delete()
         .eq('project_id', projectId);
       
-      // Delete the project
+      // 3. Delete contracts
+      await externalSupabase
+        .from('cost_project_contracts')
+        .delete()
+        .eq('project_id', projectId);
+      
+      // 4. Delete invoices
+      await externalSupabase
+        .from('cost_project_invoices')
+        .delete()
+        .eq('project_id', projectId);
+      
+      // 5. Delete suppliers
+      await externalSupabase
+        .from('cost_project_suppliers')
+        .delete()
+        .eq('project_id', projectId);
+      
+      // 6. Finally delete the project
       await externalSupabase
         .from('cost_consulting_projects')
         .delete()
         .eq('id', projectId);
       
-      toast.success('Análisis eliminado');
+      toast.success('Análisis eliminado correctamente');
       queryClient.invalidateQueries({ queryKey: ['cost-projects'] });
     } catch (error) {
+      console.error('Error deleting project:', error);
       toast.error('Error al eliminar el análisis');
     } finally {
       setDeletingId(null);
