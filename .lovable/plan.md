@@ -1,123 +1,115 @@
 
-# Plan: Arreglar la Detección de Fin de Diagramas Mermaid
+# Plan: Unificar Autenticacion Cost Consulting con Auth Principal
 
 ## Problema Identificado
+El modulo Cost Consulting usa un sistema de autenticacion separado (`AdvisorAuthContext` con tabla `advisor_users`) que es independiente del sistema principal de Supabase Auth. Esto causa que usuarios ya autenticados en la app vean el error "Debes iniciar sesion".
 
-El error en consola muestra exactamente qué pasa:
-```
-Parse error on line 15:
-...rriente 4| G``* *C1: Pre-lavado**
-```
+## Solucion Propuesta
+Modificar el modulo Cost Consulting para usar el usuario de Supabase Auth existente en lugar de requerir autenticacion adicional con AdvisorAuth.
 
-El preprocesador de Mermaid (`normalizeMarkdownDiagrams.ts`) **no cierra el bloque** cuando termina el diagrama real y empieza texto markdown normal. Esto causa que líneas como `` ` ` * *C1: Pre-lavado**`` se incluyan dentro del bloque Mermaid, rompiendo el parser.
+---
 
-## Causa Raíz
+## Cambios a Realizar
 
-La función `looksLikeMermaidContinuation()` es demasiado permisiva y no detecta correctamente:
-1. Líneas que empiezan con backticks sueltos (`` ` ` ``)
-2. Líneas que son claramente bullets markdown (`* *Texto**`)  
-3. Patrones de lista con asteriscos (`* -`, `- `)
+### 1. Modificar CostConsultingNew.tsx
 
-## Solución
-
-Modificar `src/utils/normalizeMarkdownDiagrams.ts` para:
-
-1. **Detectar explícitamente el FIN del diagrama**
-   - Si una línea empieza con backticks sueltos → FIN
-   - Si una línea es un bullet markdown (`* texto`, `- texto`) → FIN
-   - Si una línea es texto narrativo sin sintaxis Mermaid → FIN
-
-2. **Añadir patrones de "no es Mermaid"**
-   - Bullets: `/^[\*\-]\s+\*?\*?[A-Z]/` 
-   - Backticks: `/^`{1,3}[^`]/`
-   - Texto normal: líneas que empiezan con mayúscula sin corchetes
-
-3. **Limpiar el código extraído antes de pasar a Mermaid**
-   - En `MermaidRenderer.tsx`: añadir limpieza adicional para eliminar backticks residuales al final del bloque
-
-## Cambios Específicos
-
-### Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
-
-Añadir función para detectar patrones que definitivamente NO son Mermaid:
+**Cambios:**
+- Reemplazar `useAdvisorAuth()` por `useAuth()` del contexto principal
+- Usar `user.id` de Supabase Auth en lugar de `advisorUser.id`
 
 ```typescript
-function definitelyNotMermaid(line: string): boolean {
-  const trimmed = line.trim();
-  
-  // Backticks sueltos (fin de código o errores)
-  if (/^`{1,3}$/.test(trimmed)) return true;
-  if (/^`{1,3}[^`\n]/.test(trimmed) && !trimmed.includes('mermaid')) return true;
-  
-  // Bullets markdown: "* texto", "- texto"  
-  if (/^[\*\-]\s+[^\[\(\{]/.test(trimmed)) return true;
-  
-  // Texto narrativo que empieza con mayúscula sin sintaxis Mermaid
-  if (/^[A-ZÁÉÍÓÚ][a-záéíóú]+\s+[a-záéíóú]/.test(trimmed) && 
-      !/[\[\]\(\)\{\}]|-->|---/.test(trimmed)) return true;
-  
-  return false;
-}
+// ANTES
+import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
+const { advisorUser } = useAdvisorAuth();
+// ...
+user_id: advisorUser.id,
+
+// DESPUES  
+import { useAuth } from '@/contexts/AuthContext';
+const { user } = useAuth();
+// ...
+user_id: user.id,
 ```
 
-En la función `wrapUnfencedMermaid()`, añadir check al inicio del loop:
-
+**Actualizar validacion:**
 ```typescript
-if (inMermaidBlock) {
-  // NUEVO: Detectar fin explícito del diagrama
-  if (definitelyNotMermaid(trimmed)) {
-    // Cerrar bloque Mermaid
-    processedLines.push('```mermaid');
-    processedLines.push(...mermaidBuffer);
-    processedLines.push('```');
-    // Añadir la línea actual como texto normal
-    processedLines.push(line);
-    inMermaidBlock = false;
-    mermaidBuffer = [];
-    continue;
+// ANTES
+if (!canProceed() || !advisorUser) {
+  if (!advisorUser) {
+    toast.error('Debes iniciar sesión...');
   }
-  // ... resto de la lógica existente
-}
+
+// DESPUES
+if (!canProceed() || !user) {
+  if (!user) {
+    toast.error('Sesión expirada. Por favor recarga la página.');
+  }
 ```
 
-### Archivo: `src/components/advisor/MermaidRenderer.tsx`
+### 2. Modificar useCostConsultingData.ts
 
-Limpiar contenido antes de renderizar - eliminar backticks residuales y líneas no-Mermaid al final:
+**Cambios:**
+- Reemplazar `useAdvisorAuth()` por `useAuth()`
+- Actualizar la logica de filtrado por `user_id`
 
 ```typescript
-// Dentro de renderDiagram()
-let cleanContent = content.trim();
-if (cleanContent.startsWith('```')) {
-  cleanContent = cleanContent.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
-}
+// ANTES
+import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
+const { advisorUser } = useAdvisorAuth();
+const userId = advisorUser?.id;
 
-// NUEVO: Eliminar backticks sueltos y texto no-mermaid al final
-cleanContent = cleanContent.replace(/`{1,3}\s*$/, '').trim();
-
-// NUEVO: Si hay líneas que claramente no son Mermaid al final, removerlas
-const lines = cleanContent.split('\n');
-while (lines.length > 0) {
-  const lastLine = lines[lines.length - 1].trim();
-  // Remover líneas vacías o que son claramente markdown
-  if (!lastLine || /^[\*\-]\s/.test(lastLine) || /^[A-Z][a-z]+\s/.test(lastLine)) {
-    lines.pop();
-  } else {
-    break;
-  }
-}
-cleanContent = lines.join('\n');
+// DESPUES
+import { useAuth } from '@/contexts/AuthContext';
+const { user } = useAuth();
+const userId = user?.id;
 ```
 
-## Beneficios
+### 3. Actualizar App.tsx - Remover AdvisorAuthProvider de rutas Cost Consulting
 
-1. **Solución robusta**: Detecta correctamente dónde termina el diagrama
-2. **Doble protección**: Limpieza tanto en extracción como en renderizado
-3. **No afecta diagramas válidos**: Solo corta cuando detecta contenido claramente no-Mermaid
-4. **Sin cambios en Railway**: Todo se maneja en frontend
+**Cambios:**
+Las rutas de Cost Consulting ya estan dentro de `AppLayout` que requiere autenticacion principal. No necesitan el wrapper adicional de `AdvisorAuthProvider`.
 
-## Verificación
+```typescript
+// ANTES
+<Route path="/cost-consulting" element={<AdvisorAuthProvider><CostConsultingList /></AdvisorAuthProvider>} />
+<Route path="/cost-consulting/new" element={<AdvisorAuthProvider><CostConsultingNew /></AdvisorAuthProvider>} />
+// ... etc
 
-Después de implementar:
-1. El diagrama de flujo se renderizará correctamente (sin el texto `* *C1:...`)
-2. El contenido markdown debajo (`* *C1: Pre-lavado**`) se mostrará como texto normal
-3. No habrá error "Parse error" en consola
+// DESPUES
+<Route path="/cost-consulting" element={<CostConsultingList />} />
+<Route path="/cost-consulting/new" element={<CostConsultingNew />} />
+// ... etc
+```
+
+### 4. Verificar CostConsultingList.tsx y otros componentes
+
+Revisar y actualizar cualquier otro componente de Cost Consulting que use `useAdvisorAuth`:
+- CostConsultingList.tsx
+- CostConsultingDetail.tsx
+- Otros archivos en `/pages/cost-consulting/`
+
+---
+
+## Archivos a Modificar
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/App.tsx` | Remover `AdvisorAuthProvider` wrapper de rutas cost-consulting |
+| `src/pages/cost-consulting/CostConsultingNew.tsx` | Cambiar de `useAdvisorAuth` a `useAuth` |
+| `src/hooks/useCostConsultingData.ts` | Cambiar de `useAdvisorAuth` a `useAuth` |
+| `src/pages/cost-consulting/CostConsultingList.tsx` | Verificar y actualizar si usa AdvisorAuth |
+
+---
+
+## Consideraciones Tecnicas
+
+### Base de datos externa
+La tabla `cost_consulting_projects` en la base de datos externa tiene un campo `user_id`. Este campo debera almacenar el UUID del usuario de Supabase Auth (que es diferente del ID de advisor_users).
+
+**Verificar compatibilidad:** Ambos son UUIDs, por lo que deberia ser compatible. Los proyectos existentes creados con IDs de advisor_users quedaran huerfanos, pero como es un modulo nuevo esto no deberia ser problema.
+
+### Beneficios
+1. UX simplificada - no mas doble login
+2. Codigo mas limpio - un solo sistema de auth
+3. Consistencia con el resto de la aplicacion
+
