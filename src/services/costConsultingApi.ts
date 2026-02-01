@@ -290,6 +290,44 @@ export const reprocessDocument = async (projectId: string, documentId: string) =
 };
 
 // ============================================================
+// EXTRACTION & ANALYSIS API
+// ============================================================
+
+/**
+ * Start the extraction process for a project.
+ * This will extract contracts, invoices, and suppliers from uploaded documents.
+ * After extraction, the project will be in 'review' status.
+ */
+export const startExtraction = async (projectId: string) => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/extract`,
+    { method: 'POST' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error starting extraction' }));
+    throw new Error(error.detail || 'Error starting extraction');
+  }
+  return response.json();
+};
+
+/**
+ * Start the analysis process for a project (after review).
+ * This runs the multi-agent AI analysis to identify opportunities.
+ * After analysis, the project will be in 'completed' status.
+ */
+export const startAnalysis = async (projectId: string) => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/analyze`,
+    { method: 'POST' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error starting analysis' }));
+    throw new Error(error.detail || 'Error starting analysis');
+  }
+  return response.json();
+};
+
+// ============================================================
 // CATEGORIES API (mock for now - extend when backend supports)
 // ============================================================
 

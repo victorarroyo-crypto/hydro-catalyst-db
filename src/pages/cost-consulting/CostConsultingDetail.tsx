@@ -161,46 +161,139 @@ const ProcessingState = ({ currentPhase }: { currentPhase: number }) => {
   );
 };
 
-const extractingPhases = [
-  { id: 1, name: 'Documentos cargados', status: 'completed' as const },
-  { id: 2, name: 'Extrayendo contratos y facturas', status: 'current' as const },
-  { id: 3, name: 'Detectando proveedores', status: 'pending' as const },
-  { id: 4, name: 'Validando datos', status: 'pending' as const },
+const ExtractingState = ({ progressPct }: { progressPct: number }) => {
+  // Calculate which phase based on progress
+  const currentPhaseIndex = progressPct < 25 ? 0 : progressPct < 50 ? 1 : progressPct < 75 ? 2 : 3;
+  
+  const phases = [
+    { id: 1, name: 'Documentos cargados' },
+    { id: 2, name: 'Extrayendo contratos y facturas' },
+    { id: 3, name: 'Detectando proveedores' },
+    { id: 4, name: 'Validando datos' },
+  ];
+  
+  return (
+    <Card className="border-blue-200 bg-blue-50/30 dark:bg-blue-950/20">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-3">
+          <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+            <Loader2 className="h-6 w-6 text-blue-600 dark:text-blue-400 animate-spin" />
+          </div>
+          <div>
+            <span className="text-xl">Extrayendo datos...</span>
+            <p className="text-sm text-muted-foreground font-normal mt-1">
+              Procesando documentos para extraer contratos, facturas y proveedores
+            </p>
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <Progress value={progressPct || 25} className="h-3" />
+
+        <div className="space-y-3">
+          {phases.map((phase, index) => {
+            const isCompleted = index < currentPhaseIndex;
+            const isCurrent = index === currentPhaseIndex;
+            const isPending = index > currentPhaseIndex;
+            
+            return (
+              <div 
+                key={phase.id} 
+                className={`flex items-center gap-3 text-sm ${isPending ? 'text-muted-foreground' : ''}`}
+              >
+                {isCompleted && (
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                )}
+                {isCurrent && (
+                  <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                )}
+                {isPending && (
+                  <Circle className="h-5 w-5 text-muted-foreground" />
+                )}
+                <span className={isCurrent ? 'font-medium text-foreground' : ''}>
+                  {phase.name}
+                  {isCompleted && ' ✓'}
+                  {isCurrent && '...'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        
+        <p className="text-xs text-muted-foreground text-center">
+          Este proceso puede tardar unos minutos dependiendo del número de documentos.
+          <br />La página se actualizará automáticamente cuando termine.
+        </p>
+      </CardContent>
+    </Card>
+  );
+};
+
+const analyzingPhases = [
+  { id: 1, name: 'Clasificando gasto por categoría' },
+  { id: 2, name: 'Analizando contratos' },
+  { id: 3, name: 'Comparando con benchmarks' },
+  { id: 4, name: 'Identificando oportunidades' },
+  { id: 5, name: 'Calculando ahorros potenciales' },
+  { id: 6, name: 'Generando recomendaciones' },
 ];
 
-const ExtractingState = ({ progressPct }: { progressPct: number }) => {
+const AnalyzingState = ({ currentPhase, progressPct }: { currentPhase: number; progressPct: number }) => {
+  const progress = progressPct || (currentPhase / analyzingPhases.length) * 100;
+  
   return (
-    <Card className="p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <Clock className="h-6 w-6 text-blue-500 animate-pulse" />
-        <div>
-          <h3 className="text-lg font-semibold">Extrayendo datos...</h3>
-          <p className="text-sm text-muted-foreground">
-            Procesando documentos para extraer contratos y facturas
-          </p>
-        </div>
-      </div>
-
-      <Progress value={progressPct || 25} className="mb-4" />
-
-      <div className="space-y-2 text-sm">
-        {extractingPhases.map((phase) => (
-          <div key={phase.id} className="flex items-center gap-2">
-            {phase.status === 'completed' && (
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-            )}
-            {phase.status === 'current' && (
-              <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-            )}
-            {phase.status === 'pending' && (
-              <Circle className="h-4 w-4 text-muted-foreground" />
-            )}
-            <span className={phase.status === 'pending' ? 'text-muted-foreground' : ''}>
-              {phase.name}{phase.status === 'current' ? '...' : ''}
-            </span>
+    <Card className="border-yellow-200 bg-yellow-50/30 dark:bg-yellow-950/20">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-3">
+          <div className="p-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg">
+            <Loader2 className="h-6 w-6 text-yellow-600 dark:text-yellow-400 animate-spin" />
           </div>
-        ))}
-      </div>
+          <div>
+            <span className="text-xl">Analizando datos...</span>
+            <p className="text-sm text-muted-foreground font-normal mt-1">
+              Nuestros agentes de IA están procesando tus datos para identificar oportunidades de ahorro
+            </p>
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <Progress value={progress} className="h-3" />
+        
+        <div className="space-y-3">
+          {analyzingPhases.map((phase) => {
+            const isCompleted = phase.id < currentPhase;
+            const isCurrent = phase.id === currentPhase;
+            const isPending = phase.id > currentPhase;
+            
+            return (
+              <div 
+                key={phase.id}
+                className={`flex items-center gap-3 text-sm ${isPending ? 'text-muted-foreground' : ''}`}
+              >
+                {isCompleted && (
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                )}
+                {isCurrent && (
+                  <Loader2 className="h-5 w-5 text-yellow-500 animate-spin" />
+                )}
+                {isPending && (
+                  <Circle className="h-5 w-5 text-muted-foreground" />
+                )}
+                <span className={isCurrent ? 'font-medium text-foreground' : ''}>
+                  {phase.name}
+                  {isCompleted && ' ✓'}
+                  {isCurrent && '...'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        
+        <p className="text-xs text-muted-foreground text-center">
+          El análisis multi-agente puede tardar varios minutos.
+          <br />La página se actualizará automáticamente cuando termine.
+        </p>
+      </CardContent>
     </Card>
   );
 };
@@ -622,7 +715,10 @@ const CostConsultingDetail = () => {
 
   const isReview = project?.status === 'review';
   const isExtracting = project?.status === 'extracting';
-  const isProcessing = project?.status === 'processing' || project?.status === 'analyzing';
+  const isAnalyzing = project?.status === 'analyzing';
+  const isProcessing = project?.status === 'processing';
+  const isCompleted = project?.status === 'completed';
+  const isActivelyProcessing = isExtracting || isAnalyzing || isProcessing;
 
   // Function to start analysis from review state
   const handleStartAnalysis = async () => {
@@ -708,13 +804,13 @@ const CostConsultingDetail = () => {
           <div className="flex gap-2">
             <Button 
               variant="outline" 
-              disabled={isProcessing}
+              disabled={isActivelyProcessing}
               onClick={() => setReportModalOpen(true)}
             >
               <FileDown className="h-4 w-4 mr-2" />
               Descargar PDF
             </Button>
-            <Button variant="outline" disabled={isProcessing}>
+            <Button variant="outline" disabled={isActivelyProcessing}>
               <Archive className="h-4 w-4 mr-2" />
               Archivar
             </Button>
@@ -731,7 +827,7 @@ const CostConsultingDetail = () => {
       </div>
 
       {/* Stuck Processing State - No documents uploaded */}
-      {isProcessing && documents.length === 0 && (
+      {isActivelyProcessing && documents.length === 0 && (
         <Card className="border-yellow-200 bg-yellow-50/50 dark:bg-yellow-900/10">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
@@ -892,14 +988,21 @@ const CostConsultingDetail = () => {
         <ExtractingState progressPct={project.progress_pct || 25} />
       )}
 
-      {/* Processing State */}
-      {/* Normal Processing State - Has documents */}
-      {isProcessing && documents.length > 0 && (
+      {/* Analyzing State - Distinct from processing */}
+      {project?.status === 'analyzing' && (
+        <AnalyzingState 
+          currentPhase={parseInt(project.current_phase || '1', 10)} 
+          progressPct={project.progress_pct || 0}
+        />
+      )}
+
+      {/* Processing State (legacy, for backwards compatibility) */}
+      {project?.status === 'processing' && documents.length > 0 && (
         <ProcessingState currentPhase={parseInt(project.current_phase || '1', 10)} />
       )}
 
-      {/* Completed State */}
-      {!isProcessing && !isExtracting && !isReview && (
+      {/* Completed State - Show dashboard only when analysis is done */}
+      {!isActivelyProcessing && !isExtracting && !isReview && !isAnalyzing && (
         <>
           {/* Alerts */}
           <AlertsSection alerts={alerts} />
