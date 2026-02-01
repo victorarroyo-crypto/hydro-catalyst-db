@@ -99,12 +99,21 @@ const CostConsultingOpportunities = () => {
     return true;
   });
 
-  // Group by horizon
+  // Group by horizon - handle both DB values (quick_win, short_term, medium_term, long_term)
+  // and legacy values (short, medium, long, corto, medio, largo)
   const groupedOpportunities = {
-    quick_win: filteredOpportunities.filter(o => o.horizon === 'quick_win'),
-    short: filteredOpportunities.filter(o => o.horizon === 'short' || o.horizon === 'corto'),
-    medium: filteredOpportunities.filter(o => o.horizon === 'medium' || o.horizon === 'medio'),
-    long: filteredOpportunities.filter(o => o.horizon === 'long' || o.horizon === 'largo')
+    quick_win: filteredOpportunities.filter(o => 
+      o.horizon === 'quick_win' || o.horizon === 'quick-win'
+    ),
+    short: filteredOpportunities.filter(o => 
+      o.horizon === 'short' || o.horizon === 'short_term' || o.horizon === 'corto'
+    ),
+    medium: filteredOpportunities.filter(o => 
+      o.horizon === 'medium' || o.horizon === 'medium_term' || o.horizon === 'medio'
+    ),
+    long: filteredOpportunities.filter(o => 
+      o.horizon === 'long' || o.horizon === 'long_term' || o.horizon === 'largo'
+    )
   };
 
   const toggleSection = (section: string) => {
