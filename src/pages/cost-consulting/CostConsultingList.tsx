@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Plus, FileText, TrendingDown, Building2, BarChart3, Coins, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useCostProjects, useCostStats } from '@/hooks/useCostConsultingData';
 
 const formatCurrency = (value: number | null): string => {
@@ -33,9 +33,9 @@ const getStatusBadge = (status: string) => {
 };
 
 const CostConsultingList = () => {
-  const { advisorUser } = useAdvisorAuth();
-  const { data: projects = [], isLoading } = useCostProjects(advisorUser?.id);
-  const { data: stats } = useCostStats(advisorUser?.id);
+  const { user } = useAuth();
+  const { data: projects = [], isLoading } = useCostProjects(user?.id);
+  const { data: stats } = useCostStats(user?.id);
 
   const hasProjects = projects.length > 0;
 

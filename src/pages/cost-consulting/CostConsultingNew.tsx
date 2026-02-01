@@ -34,7 +34,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
-import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UploadedFile {
   file: File;
@@ -189,7 +189,7 @@ const FileDropZone: React.FC<FileDropZoneProps> = ({
 
 const CostConsultingNew = () => {
   const navigate = useNavigate();
-  const { advisorUser } = useAdvisorAuth();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
@@ -244,9 +244,9 @@ const CostConsultingNew = () => {
   };
 
   const handleSubmit = async () => {
-    if (!canProceed() || !advisorUser) {
-      if (!advisorUser) {
-        toast.error('Debes iniciar sesión para crear un análisis');
+    if (!canProceed() || !user) {
+      if (!user) {
+        toast.error('Sesión expirada. Por favor recarga la página.');
       }
       return;
     }
@@ -265,7 +265,7 @@ const CostConsultingNew = () => {
       const { data: newProject, error: projectError } = await externalSupabase
         .from('cost_consulting_projects')
         .insert({
-          user_id: advisorUser.id,
+          user_id: user.id,
           name: formData.name,
           vertical_id: verticalData?.id || null,
           status: 'uploading',
