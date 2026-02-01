@@ -2,30 +2,13 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, TrendingDown, Building2, BarChart3, Coins, Loader2, ArrowRight } from 'lucide-react';
+import { Plus, FileText, TrendingDown, Building2, BarChart3, Coins, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAdvisorAuth } from '@/contexts/AdvisorAuthContext';
+import { useCostProjects, useCostStats } from '@/hooks/useCostConsultingData';
 
-interface CostProject {
-  id: string;
-  name: string;
-  client_name: string | null;
-  status: string;
-  total_spend_analyzed: number;
-  total_savings_identified: number;
-  opportunities_count: number;
-  contracts_count: number;
-  invoices_count: number;
-  created_at: string;
-  cost_verticals: {
-    name: string;
-    icon: string | null;
-  } | null;
-}
-
-const formatCurrency = (value: number): string => {
+const formatCurrency = (value: number | null): string => {
+  if (value === null || value === undefined) return '€0';
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
     currency: 'EUR',
@@ -51,31 +34,13 @@ const getStatusBadge = (status: string) => {
 
 const CostConsultingList = () => {
   const { advisorUser } = useAdvisorAuth();
-
-  const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['cost-consulting-projects', advisorUser?.id],
-    queryFn: async () => {
-      if (!advisorUser?.id) return [];
-      const { data, error } = await supabase
-        .from('cost_consulting_projects')
-        .select(`
-          *,
-          cost_verticals (name, icon)
-        `)
-        .eq('user_id', advisorUser.id)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []) as CostProject[];
-    },
-    enabled: !!advisorUser?.id,
-  });
+  const { data: projects = [], isLoading } = useCostProjects(advisorUser?.id);
+  const { data: stats } = useCostStats(advisorUser?.id);
 
   const hasProjects = projects.length > 0;
 
-  // Calculate totals
-  const totalSavings = projects.reduce((sum, p) => sum + (p.total_savings_identified || 0), 0);
-  const totalOpportunities = projects.reduce((sum, p) => sum + (p.opportunities_count || 0), 0);
-  const totalSuppliers = new Set(projects.map(p => p.client_name).filter(Boolean)).size;
+  // Calculate quick wins from projects
+  const totalQuickWins = projects.reduce((sum, p) => sum + (p.quick_wins_count || 0), 0);
 
   if (isLoading) {
     return (
@@ -111,7 +76,7 @@ const CostConsultingList = () => {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{projects.length}</div>
+              <div className="text-2xl font-bold">{stats?.projects || 0}</div>
             </CardContent>
           </Card>
           <Card>
@@ -120,25 +85,27 @@ const CostConsultingList = () => {
               <TrendingDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(totalSavings)}</div>
+              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                {formatCurrency(stats?.savings || 0)}
+              </div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Oportunidades</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalOpportunities}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Clientes</CardTitle>
+              <CardTitle className="text-sm font-medium">Proveedores</CardTitle>
               <Building2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalSuppliers}</div>
+              <div className="text-2xl font-bold">{stats?.suppliers || 0}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Quick Wins</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalQuickWins}</div>
             </CardContent>
           </Card>
         </div>
@@ -171,46 +138,45 @@ const CostConsultingList = () => {
       {hasProjects && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <Card key={project.id} className="hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-lg">{project.name}</CardTitle>
-                    {project.client_name && (
-                      <CardDescription>{project.client_name}</CardDescription>
-                    )}
+            <Link key={project.id} to={`/cost-consulting/${project.id}`}>
+              <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg">{project.name}</CardTitle>
+                      <CardDescription>{project.client_name || 'Sin cliente'}</CardDescription>
+                    </div>
+                    {getStatusBadge(project.status)}
                   </div>
-                  {getStatusBadge(project.status)}
-                </div>
-                {project.cost_verticals?.name && (
-                  <Badge variant="outline" className="w-fit mt-2">
-                    {project.cost_verticals.name}
-                  </Badge>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Gasto analizado</p>
-                    <p className="font-semibold">{formatCurrency(project.total_spend_analyzed || 0)}</p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Gasto analizado</p>
+                      <p className="font-semibold">{formatCurrency(project.total_spend_analyzed)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Ahorro identificado</p>
+                      <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(project.total_savings_identified)}
+                        {project.savings_pct && ` (${project.savings_pct.toFixed(1)}%)`}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Ahorro identificado</p>
-                    <p className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(project.total_savings_identified || 0)}</p>
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>
+                      {project.opportunities_count || 0} oportunidades
+                      {project.quick_wins_count ? ` (${project.quick_wins_count} quick wins)` : ''}
+                    </span>
                   </div>
-                </div>
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>{project.opportunities_count || 0} oportunidades</span>
-                  <span>{project.contracts_count || 0} contratos</span>
-                </div>
-                <Button variant="outline" className="w-full" asChild>
-                  <Link to={`/cost-consulting/${project.id}`}>
-                    Ver análisis
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+                  {project.cost_verticals && (
+                    <Badge variant="outline" className="w-fit">
+                      {project.cost_verticals.icon} {project.cost_verticals.name}
+                    </Badge>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
