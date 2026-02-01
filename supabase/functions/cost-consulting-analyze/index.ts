@@ -30,8 +30,8 @@ serve(async (req) => {
 
     console.log(`[cost-consulting-analyze] Starting analysis for project: ${projectId}`);
 
-    // Forward the request to Railway
-    const railwayUrl = `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/analyze`;
+    // Forward the request to Railway - call extract endpoint (not analyze)
+    const railwayUrl = `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/extract`;
     console.log(`[cost-consulting-analyze] Forwarding to: ${railwayUrl}`);
 
     const response = await fetch(railwayUrl, {
