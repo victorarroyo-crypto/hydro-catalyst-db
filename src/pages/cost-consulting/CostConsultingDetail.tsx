@@ -283,6 +283,23 @@ const CostConsultingDetail = () => {
   const { data: opportunities = [] } = useCostOpportunities(id);
   const { data: documents = [] } = useCostDocuments(id);
 
+  // Fetch invoice lines for accurate spend map by category
+  const { data: invoiceLines = [] } = useQuery({
+    queryKey: ['invoice-lines-spend-map', id],
+    queryFn: async () => {
+      if (!id) return [];
+      const { data } = await externalSupabase
+        .from('cost_project_invoice_lines')
+        .select(`
+          id, category, total,
+          cost_project_invoices!inner(project_id)
+        `)
+        .eq('cost_project_invoices.project_id', id);
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
   // Real alerts queries
   const { data: autoRenewalContracts = [] } = useQuery({
     queryKey: ["auto-renewal-contracts", id],
@@ -348,10 +365,10 @@ const CostConsultingDetail = () => {
   const savingsPercent = totalSpend > 0 ? ((potentialSavings / totalSpend) * 100).toFixed(1) : '0';
   const quickWinsCount = opportunities.filter(o => o.effort_level === 'low').length;
 
-  // Build spend categories from invoices
-  const spendByCategory = invoices.reduce((acc: Record<string, number>, inv) => {
-    const cat = inv.category || 'Otros';
-    acc[cat] = (acc[cat] || 0) + (inv.total || 0);
+  // Build spend categories from invoice LINES (more accurate category breakdown)
+  const spendByCategory = invoiceLines.reduce((acc: Record<string, number>, line: any) => {
+    const cat = line.category || 'Otros';
+    acc[cat] = (acc[cat] || 0) + (line.total || 0);
     return acc;
   }, {});
   
@@ -363,7 +380,7 @@ const CostConsultingDetail = () => {
       percent: totalCatSpend > 0 ? Math.round((amount / totalCatSpend) * 100) : 0,
     }))
     .sort((a, b) => b.amount - a.amount)
-    .slice(0, 5);
+    .slice(0, 6);
 
   // Top opportunities
   const topOpportunities = opportunities
