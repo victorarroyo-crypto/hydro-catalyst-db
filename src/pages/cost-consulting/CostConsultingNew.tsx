@@ -324,12 +324,7 @@ const CostConsultingNew = () => {
         toast.warning(`${failedUploads} archivo(s) no se pudieron subir`);
       }
       
-      // 4. Update project status to 'extracting' and call /extract endpoint
-      await externalSupabase
-        .from('cost_consulting_projects')
-        .update({ status: 'extracting' })
-        .eq('id', projectId);
-      
+      // 4. Call /extract endpoint to start extraction (backend handles status change)
       toast.info('Iniciando extracción de datos...');
       
       // 5. Call /extract endpoint to start extraction (this is async)
