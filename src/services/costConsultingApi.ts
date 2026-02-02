@@ -484,3 +484,36 @@ export const validateAllDocuments = async (
   }
   return response.json();
 };
+
+// ============================================================
+// PROJECT DOCUMENTS API - List all uploaded documents
+// ============================================================
+
+export interface ProjectDocument {
+  id: string;
+  project_id: string;
+  filename: string;
+  file_url?: string;
+  document_type?: string;
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+  chunk_count?: number;
+  file_size?: number;
+  mime_type?: string;
+  processing_error?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+/**
+ * Get all documents uploaded to a project (regardless of extraction status)
+ */
+export const getProjectDocuments = async (projectId: string): Promise<ProjectDocument[]> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error fetching documents' }));
+    throw new Error(error.detail || 'Error fetching documents');
+  }
+  return response.json();
+};

@@ -52,6 +52,7 @@ import { useContractsWithDocuments, useInvoicesWithDocuments } from '@/hooks/use
 import { useDocumentReview } from '@/hooks/useDocumentReview';
 import { DocumentsManagementCard } from '@/components/cost-consulting/DocumentsManagementCard';
 import { UploadMoreDocumentsModal } from '@/components/cost-consulting/UploadMoreDocumentsModal';
+import { PendingDocumentsList } from '@/components/cost-consulting/PendingDocumentsList';
 import { ContractFormModal } from '@/components/cost-consulting/ContractFormModal';
 import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
 import { toast } from 'sonner';
@@ -992,6 +993,16 @@ const CostConsultingDetail = () => {
               </AlertDescription>
             </Alert>
           )}
+
+          {/* NEW: Pending Documents List - Shows all uploaded documents with status */}
+          <PendingDocumentsList 
+            projectId={project.id}
+            onDocumentDeleted={() => {
+              queryClient.invalidateQueries({ queryKey: ['cost-documents', id] });
+              queryClient.invalidateQueries({ queryKey: ['cost-contracts', id] });
+              queryClient.invalidateQueries({ queryKey: ['cost-invoices', id] });
+            }}
+          />
 
           {/* Review Summary Card - Document validation status */}
           <ReviewSummaryCard

@@ -9,3 +9,4 @@ export { ContractsReviewTable } from './ContractsReviewTable';
 export { InvoicesReviewTable } from './InvoicesReviewTable';
 export { ReviewSummaryCard } from './ReviewSummaryCard';
 export { DocumentReviewTable } from './DocumentReviewTable';
+export { PendingDocumentsList } from './PendingDocumentsList';
