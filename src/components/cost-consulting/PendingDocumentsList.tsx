@@ -44,7 +44,9 @@ import {
   AlertTriangle,
   RefreshCw,
   Files,
-  FileQuestion
+  FileQuestion,
+  ExternalLink,
+  ArrowRightLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -55,6 +57,7 @@ import {
   ProjectDocument 
 } from '@/services/costConsultingApi';
 import { useDocumentEntityCounts, getDocumentCounts, documentHasEntities } from '@/hooks/useDocumentEntityCounts';
+import { DocumentReclassifyModal } from './DocumentReclassifyModal';
 
 export interface DocumentStats {
   pending: number;
@@ -123,6 +126,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [reExtractingId, setReExtractingId] = useState<string | null>(null);
   const [documentToDelete, setDocumentToDelete] = useState<ProjectDocument | null>(null);
+  const [documentToReclassify, setDocumentToReclassify] = useState<ProjectDocument | null>(null);
   
   const { data: documents = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['project-documents-list', projectId],
@@ -223,6 +227,19 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
       toast.error(error instanceof Error ? error.message : 'Error al re-extraer el documento');
     } finally {
       setReExtractingId(null);
+    }
+  };
+
+  const handleReclassified = async () => {
+    // Refetch documents and entity counts
+    await refetch();
+    queryClient.invalidateQueries({ queryKey: ['cost-contracts', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['cost-invoices', projectId] });
+  };
+
+  const handleViewPdf = (doc: ProjectDocument) => {
+    if (doc.file_url) {
+      window.open(doc.file_url, '_blank');
     }
   };
 
@@ -427,6 +444,42 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
+                            {/* View PDF button - for all completed documents with file_url */}
+                            {doc.file_url && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                      onClick={() => handleViewPdf(doc)}
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Ver PDF original</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            {/* Reclassify button - only for completed documents without entities */}
+                            {hasNoEntities && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-blue-600"
+                                      onClick={() => setDocumentToReclassify(doc)}
+                                    >
+                                      <ArrowRightLeft className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Reclasificar documento</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                             {/* Reprocess button - only for failed or pending (embeddings only) */}
                             {(doc.extraction_status === 'failed' || doc.extraction_status === 'pending') && (
                               <TooltipProvider>
@@ -561,6 +614,15 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Reclassify Modal */}
+      <DocumentReclassifyModal
+        open={!!documentToReclassify}
+        onOpenChange={(open) => !open && setDocumentToReclassify(null)}
+        document={documentToReclassify}
+        projectId={projectId}
+        onReclassified={handleReclassified}
+      />
     </Card>
   );
 };
