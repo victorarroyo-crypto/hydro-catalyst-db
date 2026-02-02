@@ -518,6 +518,8 @@ const CostConsultingDetail = () => {
   // States for review actions
   const [isValidating, setIsValidating] = useState<string | null>(null);
   const [isValidatingAll, setIsValidatingAll] = useState(false);
+  const [deletingContractId, setDeletingContractId] = useState<string | null>(null);
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
   const [changeTypeDoc, setChangeTypeDoc] = useState<{
     doc: ChangeTypeDocument;
     type: 'contract' | 'invoice';
@@ -594,6 +596,40 @@ const CostConsultingDetail = () => {
       setChangeTypeDoc(null);
     } finally {
       setIsChangingType(false);
+    }
+  };
+
+  // Handler for delete contract
+  const handleDeleteContract = async (contractId: string) => {
+    if (!id) return;
+    setDeletingContractId(contractId);
+    try {
+      const { deleteContract } = await import('@/services/costConsultingApi');
+      await deleteContract(id, contractId);
+      toast.success('Contrato eliminado');
+      queryClient.invalidateQueries({ queryKey: ['cost-contracts', id] });
+    } catch (error) {
+      console.error('Error deleting contract:', error);
+      toast.error('Error al eliminar contrato');
+    } finally {
+      setDeletingContractId(null);
+    }
+  };
+
+  // Handler for delete invoice
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    if (!id) return;
+    setDeletingInvoiceId(invoiceId);
+    try {
+      const { deleteInvoice } = await import('@/services/costConsultingApi');
+      await deleteInvoice(id, invoiceId);
+      toast.success('Factura eliminada');
+      queryClient.invalidateQueries({ queryKey: ['cost-invoices', id] });
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      toast.error('Error al eliminar factura');
+    } finally {
+      setDeletingInvoiceId(null);
     }
   };
 
@@ -1073,7 +1109,9 @@ const CostConsultingDetail = () => {
                     doc: { id: c.id, supplier_name_raw: c.supplier_name_raw, contract_number: c.contract_number },
                     type: 'contract'
                   })}
+                  onDelete={handleDeleteContract}
                   isValidating={isValidating}
+                  isDeleting={deletingContractId}
                 />
               </TabsContent>
 
@@ -1087,7 +1125,9 @@ const CostConsultingDetail = () => {
                     doc: { id: i.id, supplier_name_raw: i.supplier_name_raw, invoice_number: i.invoice_number },
                     type: 'invoice'
                   })}
+                  onDelete={handleDeleteInvoice}
                   isValidating={isValidating}
+                  isDeleting={deletingInvoiceId}
                 />
               </TabsContent>
 

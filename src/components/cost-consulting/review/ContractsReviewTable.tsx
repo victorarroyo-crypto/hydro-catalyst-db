@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -69,7 +69,9 @@ interface ContractsReviewTableProps {
   onEdit?: (contract: ContractForReview) => void;
   onValidate?: (contractId: string) => void;
   onChangeType?: (contract: ContractForReview) => void;
+  onDelete?: (contractId: string) => void;
   isValidating?: string | null;
+  isDeleting?: string | null;
 }
 
 const formatCurrency = (value: number | null | undefined) => {
@@ -134,7 +136,9 @@ export function ContractsReviewTable({
   onEdit,
   onValidate,
   onChangeType,
+  onDelete,
   isValidating,
+  isDeleting,
 }: ContractsReviewTableProps) {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -327,6 +331,24 @@ export function ContractsReviewTable({
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>Validar</TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  {/* Delete */}
+                  {onDelete && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => onDelete(contract.id)}
+                          disabled={isDeleting === contract.id}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Eliminar</TooltipContent>
                     </Tooltip>
                   )}
                 </div>
