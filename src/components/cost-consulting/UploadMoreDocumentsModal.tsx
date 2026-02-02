@@ -9,14 +9,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Upload, FileText, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,11 +21,6 @@ interface UploadMoreDocumentsModalProps {
   onUploadComplete: () => void;
 }
 
-interface FileWithType {
-  file: File;
-  type: 'contrato' | 'factura' | 'listado_proveedores' | 'otro';
-}
-
 const ACCEPTED_TYPES = {
   'application/pdf': ['.pdf'],
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
@@ -43,30 +30,19 @@ const ACCEPTED_TYPES = {
   'image/webp': ['.webp'],
 };
 
-const FILE_TYPE_OPTIONS = [
-  { value: 'contrato', label: 'Contrato' },
-  { value: 'factura', label: 'Factura' },
-  { value: 'listado_proveedores', label: 'Listado de proveedores' },
-  { value: 'otro', label: 'Otro' },
-];
-
 export function UploadMoreDocumentsModal({
   open,
   onOpenChange,
   projectId,
   onUploadComplete,
 }: UploadMoreDocumentsModalProps) {
-  const [files, setFiles] = useState<FileWithType[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadComplete, setUploadComplete] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    const newFiles = acceptedFiles.map((file) => ({
-      file,
-      type: 'otro' as const,
-    }));
-    setFiles((prev) => [...prev, ...newFiles]);
+    setFiles((prev) => [...prev, ...acceptedFiles]);
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -79,12 +55,6 @@ export function UploadMoreDocumentsModal({
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateFileType = (index: number, type: FileWithType['type']) => {
-    setFiles((prev) =>
-      prev.map((f, i) => (i === index ? { ...f, type } : f))
-    );
-  };
-
   const handleUpload = async () => {
     if (files.length === 0) return;
 
@@ -93,11 +63,10 @@ export function UploadMoreDocumentsModal({
 
     try {
       for (let i = 0; i < files.length; i++) {
-        const { file, type } = files[i];
+        const file = files[i];
         
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('file_type', type);
         formData.append('project_id', projectId);
 
         const { data, error } = await supabase.functions.invoke('cost-consulting-upload', {
@@ -190,31 +159,18 @@ export function UploadMoreDocumentsModal({
           {/* File list */}
           {files.length > 0 && (
             <div className="space-y-2 max-h-[200px] overflow-y-auto">
-              {files.map((fileWithType, index) => (
+              {files.map((file, index) => (
                 <div
-                  key={`${fileWithType.file.name}-${index}`}
+                  key={`${file.name}-${index}`}
                   className="flex items-center gap-2 p-2 border rounded-lg bg-muted/30"
                 >
                   <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm truncate flex-1" title={fileWithType.file.name}>
-                    {fileWithType.file.name}
+                  <span className="text-sm truncate flex-1" title={file.name}>
+                    {file.name}
                   </span>
-                  <Select
-                    value={fileWithType.type}
-                    onValueChange={(value) => updateFileType(index, value as FileWithType['type'])}
-                    disabled={isUploading}
-                  >
-                    <SelectTrigger className="w-[140px] h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FILE_TYPE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <span className="text-xs text-muted-foreground">
+                    {(file.size / 1024).toFixed(0)} KB
+                  </span>
                   <Button
                     variant="ghost"
                     size="icon"
