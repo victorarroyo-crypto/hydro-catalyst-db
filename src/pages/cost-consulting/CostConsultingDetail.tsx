@@ -161,16 +161,24 @@ const ProcessingState = ({ currentPhase }: { currentPhase: number }) => {
   );
 };
 
-const ExtractingState = ({ progressPct }: { progressPct: number }) => {
-  // Calculate which phase based on progress
-  const currentPhaseIndex = progressPct < 25 ? 0 : progressPct < 50 ? 1 : progressPct < 75 ? 2 : 3;
+import { useExtractionProgress, PHASE_LABELS } from '@/hooks/useExtractionProgress';
+
+const ExtractingState = ({ projectId }: { projectId: string }) => {
+  const { progress_pct, current_phase } = useExtractionProgress(projectId, true);
   
+  // Ordered phases for visual progress display
   const phases = [
-    { id: 1, name: 'Documentos cargados' },
-    { id: 2, name: 'Extrayendo contratos y facturas' },
-    { id: 3, name: 'Detectando proveedores' },
-    { id: 4, name: 'Validando datos' },
+    { id: 'loading_documents', name: 'Cargando documentos' },
+    { id: 'classifying_documents', name: 'Clasificando documentos' },
+    { id: 'extracting_contracts', name: 'Extrayendo contratos' },
+    { id: 'extracting_invoices', name: 'Extrayendo facturas' },
+    { id: 'detecting_suppliers', name: 'Detectando proveedores' },
+    { id: 'extraction_finished', name: 'Finalizado' },
   ];
+  
+  // Find current phase index
+  const currentPhaseIndex = phases.findIndex(p => p.id === current_phase);
+  const displayPhaseIndex = currentPhaseIndex >= 0 ? currentPhaseIndex : 0;
   
   return (
     <Card className="border-blue-200 bg-blue-50/30 dark:bg-blue-950/20">
@@ -182,19 +190,25 @@ const ExtractingState = ({ progressPct }: { progressPct: number }) => {
           <div>
             <span className="text-xl">Extrayendo datos...</span>
             <p className="text-sm text-muted-foreground font-normal mt-1">
-              Procesando documentos para extraer contratos, facturas y proveedores
+              {PHASE_LABELS[current_phase || ''] || 'Procesando documentos...'}
             </p>
           </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <Progress value={progressPct || 25} className="h-3" />
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Progreso</span>
+            <span className="font-medium">{progress_pct}%</span>
+          </div>
+          <Progress value={progress_pct} className="h-3" />
+        </div>
 
         <div className="space-y-3">
           {phases.map((phase, index) => {
-            const isCompleted = index < currentPhaseIndex;
-            const isCurrent = index === currentPhaseIndex;
-            const isPending = index > currentPhaseIndex;
+            const isCompleted = index < displayPhaseIndex;
+            const isCurrent = index === displayPhaseIndex;
+            const isPending = index > displayPhaseIndex;
             
             return (
               <div 
@@ -984,8 +998,8 @@ const CostConsultingDetail = () => {
       )}
 
       {/* Extracting State */}
-      {isExtracting && (
-        <ExtractingState progressPct={project.progress_pct || 25} />
+      {isExtracting && project?.id && (
+        <ExtractingState projectId={project.id} />
       )}
 
       {/* Analyzing State - Distinct from processing */}
