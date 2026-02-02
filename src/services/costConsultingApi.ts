@@ -296,6 +296,20 @@ export const getDocumentsStatus = async (projectId: string): Promise<DocumentSta
   return response.json();
 };
 
+/**
+ * Get a specific document by ID to check its status
+ */
+export const getDocumentById = async (
+  projectId: string,
+  documentId: string
+): Promise<ProjectDocument> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${documentId}`
+  );
+  if (!response.ok) throw new Error('Error fetching document');
+  return response.json();
+};
+
 export const reprocessDocument = async (projectId: string, documentId: string) => {
   const response = await fetch(
     `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${documentId}/reprocess`,
