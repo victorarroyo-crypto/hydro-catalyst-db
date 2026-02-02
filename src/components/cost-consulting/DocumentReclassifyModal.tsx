@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, FileText, ExternalLink, FileCheck, FilePlus2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ProjectDocument } from '@/services/costConsultingApi';
+import { openDocumentUrl } from '@/utils/storageUrlHelper';
 
 interface DocumentReclassifyModalProps {
   open: boolean;
@@ -67,7 +68,7 @@ export const DocumentReclassifyModal: React.FC<DocumentReclassifyModalProps> = (
 
   const handleViewPdf = () => {
     if (document?.file_url) {
-      window.open(document.file_url, '_blank');
+      openDocumentUrl(document.file_url);
     }
   };
 

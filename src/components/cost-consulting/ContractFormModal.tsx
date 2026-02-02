@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner';
 import { Loader2, FileDown, ArrowRightLeft } from 'lucide-react';
 import { CostContract, CostSupplier } from '@/hooks/useCostConsultingData';
+import { openDocumentUrl, convertStorageUrl } from '@/utils/storageUrlHelper';
 import { 
   createContract, 
   updateContract, 
@@ -189,7 +190,7 @@ export const ContractFormModal = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => window.open(fileUrl, '_blank')}
+                onClick={() => openDocumentUrl(fileUrl)}
               >
                 <FileDown className="h-4 w-4 mr-2" />
                 Ver PDF Original

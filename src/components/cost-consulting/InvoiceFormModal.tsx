@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner';
 import { Loader2, Plus, Trash2, FileDown, ArrowRightLeft } from 'lucide-react';
 import { CostInvoice, CostSupplier, CostContract } from '@/hooks/useCostConsultingData';
+import { openDocumentUrl, convertStorageUrl } from '@/utils/storageUrlHelper';
 import {
   createInvoice,
   updateInvoice,
@@ -258,7 +259,7 @@ export const InvoiceFormModal = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => window.open(fileUrl, '_blank')}
+                onClick={() => openDocumentUrl(fileUrl)}
               >
                 <FileDown className="h-4 w-4 mr-2" />
                 Ver PDF Original
