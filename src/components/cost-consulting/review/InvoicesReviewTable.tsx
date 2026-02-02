@@ -7,6 +7,7 @@ import { FileSpreadsheet } from 'lucide-react';
 import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, ChevronDown, ChevronRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { openDocumentUrl } from '@/utils/storageUrlHelper';
 
 type SortField = 'status' | 'invoice_number' | 'invoice_date' | 'supplier' | 'total' | 'confidence' | 'lines';
 type SortDirection = 'asc' | 'desc';
@@ -322,7 +323,7 @@ export function InvoicesReviewTable({
                               size="icon"
                               variant="ghost"
                               className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                              onClick={() => window.open(invoice.cost_project_documents?.file_url, '_blank')}
+                              onClick={() => openDocumentUrl(invoice.cost_project_documents?.file_url)}
                             >
                               <FileDown className="h-4 w-4" />
                             </Button>

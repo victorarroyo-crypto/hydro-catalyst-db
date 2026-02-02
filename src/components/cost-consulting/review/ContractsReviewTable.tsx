@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { openDocumentUrl } from '@/utils/storageUrlHelper';
 
 type SortField = 'status' | 'supplier' | 'contract_number' | 'start_date' | 'total_annual_value' | 'confidence';
 type SortDirection = 'asc' | 'desc';
@@ -260,7 +261,7 @@ export function ContractsReviewTable({
                           size="icon"
                           variant="ghost"
                           className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={() => window.open(contract.cost_project_documents?.file_url, '_blank')}
+                          onClick={() => openDocumentUrl(contract.cost_project_documents?.file_url)}
                         >
                           <FileDown className="h-4 w-4" />
                         </Button>

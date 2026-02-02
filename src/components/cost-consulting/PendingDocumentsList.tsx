@@ -58,6 +58,7 @@ import {
 } from '@/services/costConsultingApi';
 import { useDocumentEntityCounts, getDocumentCounts, documentHasEntities } from '@/hooks/useDocumentEntityCounts';
 import { DocumentReclassifyModal } from './DocumentReclassifyModal';
+import { openDocumentUrl } from '@/utils/storageUrlHelper';
 
 export interface DocumentStats {
   pending: number;
@@ -239,7 +240,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
 
   const handleViewPdf = (doc: ProjectDocument) => {
     if (doc.file_url) {
-      window.open(doc.file_url, '_blank');
+      openDocumentUrl(doc.file_url);
     }
   };
 
