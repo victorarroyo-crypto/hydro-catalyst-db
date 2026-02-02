@@ -212,10 +212,11 @@ export const useCostContracts = (projectId?: string) => {
       if (!projectId) return [];
       
       console.log('[useCostContracts] Fetching via Railway API for projectId:', projectId);
-      const data = await getContracts(projectId);
-      console.log('[useCostContracts] API response:', data);
+      const response = await getContracts(projectId);
+      console.log('[useCostContracts] API response:', response);
       
-      return (data || []) as CostContract[];
+      // API returns { contracts: [...] }, extract the array
+      return (response?.contracts || []) as CostContract[];
     },
     enabled: !!projectId,
   });
@@ -232,10 +233,11 @@ export const useCostInvoices = (projectId?: string) => {
       if (!projectId) return [];
       
       console.log('[useCostInvoices] Fetching via Railway API for projectId:', projectId);
-      const data = await getInvoices(projectId);
-      console.log('[useCostInvoices] API response:', data);
+      const response = await getInvoices(projectId);
+      console.log('[useCostInvoices] API response:', response);
       
-      return (data || []) as CostInvoice[];
+      // API returns { invoices: [...] }, extract the array
+      return (response?.invoices || []) as CostInvoice[];
     },
     enabled: !!projectId,
   });
