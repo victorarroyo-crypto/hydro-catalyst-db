@@ -1,167 +1,123 @@
 
+# Plan: Espera Activa con Polling en Modal de Reclasificación
 
-# Plan: Trazabilidad Documento → Entidades Extraídas
+## Objetivo
 
-## Problema Real Identificado
+Mantener el modal abierto mientras se extrae el documento, mostrando feedback visual al usuario y esperando hasta que la entidad (contrato/factura) esté creada.
 
-Actualmente hay 145 documentos subidos pero solo 109 entidades extraídas (9 contratos + 100 facturas). El usuario no tiene forma de saber:
+## Cambios a Implementar
 
-1. **Qué documentos generaron entidades** y cuáles no
-2. **Por qué 36 documentos no generaron nada** (¿timeout? ¿documentos no procesables?)
-3. **Cómo reclasificar manualmente** un documento que fue mal clasificado o ignorado
+### 1. Archivo: `src/services/costConsultingApi.ts`
 
-La clasificación la hace automáticamente el backend, pero no hay feedback al usuario.
-
-## Análisis de la Arquitectura Actual
-
-```text
-┌─────────────────────────────┐
-│  cost_project_documents     │  ← 145 documentos
-│  - id                       │
-│  - filename                 │
-│  - extraction_status        │  ← "completed" para todos
-│  - file_type                │  ← "contrato", "factura", "otro"
-└─────────────────────────────┘
-            │
-            │ document_id (FK)
-            ▼
-┌─────────────────────────────┐    ┌─────────────────────────────┐
-│  cost_project_contracts     │    │  cost_project_invoices      │
-│  - id                       │    │  - id                       │
-│  - document_id              │    │  - document_id              │
-│  - supplier_name_raw        │    │  - invoice_number           │
-│  ...                        │    │  ...                        │
-└─────────────────────────────┘    └─────────────────────────────┘
-        9 contratos                       100 facturas
-```
-
-**Problema**: Un documento puede tener múltiples entidades o ninguna. No se muestra esta relación al usuario.
-
-## Solución Propuesta
-
-### 1. Enriquecer la lista de documentos con conteo de entidades
-
-Crear un hook que calcule cuántas entidades (contratos/facturas) tiene cada documento:
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Documento                    │ Estado    │ Tipo      │ Contratos │ Facturas │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ factura_enero.pdf            │ ✓ Listo   │ Factura   │    0      │    3     │
-│ contrato_telefonica.pdf      │ ✓ Listo   │ Contrato  │    1      │    0     │
-│ anexo_precios.pdf            │ ✓ Listo   │ Otro      │    0      │    0     │ ← ⚠️
-│ listado_gastos.pdf           │ ✓ Listo   │ Otro      │    0      │    0     │ ← ⚠️
-└─────────────────────────────────────────────────────────────────────────────┘
-
-⚠️ 36 documentos procesados no generaron datos extraíbles.
-```
-
-### 2. Mostrar indicador visual para documentos sin entidades
-
-Añadir badge o alerta cuando hay documentos que no produjeron nada:
-
-- Badge "Sin datos" en rojo/naranja junto al documento
-- Contador global: "X documentos sin contratos ni facturas"
-- Tooltip explicando: "Este documento fue procesado pero no se encontraron contratos ni facturas"
-
-### 3. Habilitar extracción individual
-
-Para documentos sin entidades, ofrecer botón "Re-extraer" individual que:
-- Borra cualquier entidad previa de ese documento
-- Vuelve a ejecutar el pipeline de extracción solo para ese documento
-
-## Cambios Técnicos
-
-### Archivo 1: `src/hooks/useDocumentEntityCounts.ts` (NUEVO)
-
-Crear hook que cruza documentos con contratos/facturas:
+Añadir función para obtener el estado de un documento específico:
 
 ```typescript
-export interface DocumentEntityCounts {
-  [documentId: string]: {
-    contracts: number;
-    invoices: number;
-  }
-}
-
-export const useDocumentEntityCounts = (projectId?: string) => {
-  const { data: contracts = [] } = useCostContracts(projectId);
-  const { data: invoices = [] } = useCostInvoices(projectId);
-  
-  return useMemo(() => {
-    const counts: DocumentEntityCounts = {};
-    
-    contracts.forEach(c => {
-      if (c.document_id) {
-        counts[c.document_id] = counts[c.document_id] || { contracts: 0, invoices: 0 };
-        counts[c.document_id].contracts++;
-      }
-    });
-    
-    invoices.forEach(i => {
-      if (i.document_id) {
-        counts[i.document_id] = counts[i.document_id] || { contracts: 0, invoices: 0 };
-        counts[i.document_id].invoices++;
-      }
-    });
-    
-    return counts;
-  }, [contracts, invoices]);
+export const getDocumentById = async (
+  projectId: string, 
+  documentId: string
+): Promise<ProjectDocument> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${documentId}`
+  );
+  if (!response.ok) throw new Error('Error fetching document');
+  return response.json();
 };
 ```
 
-### Archivo 2: `src/components/cost-consulting/PendingDocumentsList.tsx`
+### 2. Archivo: `src/components/cost-consulting/DocumentReclassifyModal.tsx`
 
-Modificar para mostrar columnas de entidades:
+**Cambios principales:**
 
-1. Importar el nuevo hook `useDocumentEntityCounts`
-2. Añadir columnas "Contratos" y "Facturas" a la tabla
-3. Mostrar badge "Sin datos" cuando ambos son 0 y el documento está completado
-4. Añadir a stats: `{ ...stats, noEntities: X }`
+1. Nuevo estado para tracking del proceso:
+   - `processingState`: `'idle' | 'reclassifying' | 'extracting' | 'done' | 'error'`
 
-### Archivo 3: `src/pages/cost-consulting/CostConsultingDetail.tsx`
+2. Modificar `handleReclassify`:
+   - Fase 1: Llamar al endpoint `/reclassify` → estado `'reclassifying'`
+   - Fase 2: Polling cada 1.5s hasta 60 segundos → estado `'extracting'`
+   - Fase 3: Detectar `completed` o `failed` → cerrar modal o mostrar error
 
-1. Extender el callback `onStatsChange` para incluir `noEntities`
-2. Mostrar alerta cuando hay documentos sin entidades:
+3. Nueva UI durante extracción:
+   - Ocultar botones de reclasificación
+   - Mostrar indicador de progreso con mensaje informativo
+   - Botón "Cancelar" cambia a "Cerrar" sin detener el proceso
+
+4. Helper `sleep`:
+   ```typescript
+   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
    ```
-   ⚠️ 36 documentos procesados no generaron contratos ni facturas.
-   Esto puede deberse a que son anexos, catálogos o documentos auxiliares.
-   ```
-3. Diferenciar en la alerta:
-   - Documentos pendientes/fallidos → Problema de procesamiento
-   - Documentos sin entidades → Posiblemente no extraíbles (o timeout)
 
-## Archivos a Crear/Modificar
-
-| Archivo | Acción | Cambio |
-|---------|--------|--------|
-| `src/hooks/useDocumentEntityCounts.ts` | NUEVO | Hook que cuenta entidades por documento |
-| `src/components/cost-consulting/PendingDocumentsList.tsx` | Modificar | Añadir columnas contratos/facturas y badge "Sin datos" |
-| `src/pages/cost-consulting/CostConsultingDetail.tsx` | Modificar | Mostrar alerta de documentos sin entidades |
-
-## Interfaz Resultado
-
-La tabla de documentos mostrará:
+**Flujo visual del proceso:**
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│ Documentos Subidos (145)                                                         │
-│ 145 procesados · 36 sin entidades                                                │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│ Documento              │ Estado    │ Contratos │ Facturas │ Acciones             │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│ 📄 factura_001.pdf     │ ✓ Listo   │    0      │    2     │ 🗑️                   │
-│ 📄 contrato_iber.pdf   │ ✓ Listo   │    1      │    0     │ 🗑️                   │
-│ 📄 anexo_tecnico.pdf   │ ⚠️ Sin datos │  0     │    0     │ 🔄 🗑️               │
-│ 📄 catalogo.pdf        │ ⚠️ Sin datos │  0     │    0     │ 🔄 🗑️               │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│  Reclasificar Documento                      │
+├──────────────────────────────────────────────┤
+│  📄 factura_001.pdf                          │
+│  Tipo actual: No clasificado                 │
+├──────────────────────────────────────────────┤
+│  🔄 Extrayendo datos como factura...         │  ← Nuevo estado visual
+│  Esto puede tardar unos segundos.            │
+│  ████████░░░░░░░░░░░░  40%                   │
+├──────────────────────────────────────────────┤
+│                              [Cerrar]        │
+└──────────────────────────────────────────────┘
 ```
 
-Alerta adicional:
-```text
-⚠️ 36 documentos procesados no generaron datos
-   Estos documentos fueron procesados correctamente pero no contienen
-   información extraíble (contratos/facturas). Pueden ser anexos técnicos,
-   catálogos u otros documentos de soporte.
+## Lógica de Polling
+
+```typescript
+const handleReclassify = async (targetType: 'contract' | 'invoice') => {
+  setProcessingState('reclassifying');
+  
+  // 1. Llamar endpoint de reclasificación
+  const response = await fetch(`.../reclassify`, { 
+    method: 'POST',
+    body: JSON.stringify({ target_type: targetType })
+  });
+  
+  if (!response.ok) { /* handle error */ }
+  
+  // 2. Polling hasta completar
+  setProcessingState('extracting');
+  toast.info(`Extrayendo datos como ${typeLabel}...`);
+  
+  const maxAttempts = 40; // 40 * 1.5s = 60 segundos
+  for (let i = 0; i < maxAttempts; i++) {
+    await sleep(1500);
+    
+    const doc = await getDocumentById(projectId, document.id);
+    
+    if (doc.extraction_status === 'completed') {
+      setProcessingState('done');
+      toast.success(`Datos extraídos correctamente como ${typeLabel}`);
+      onReclassified();
+      onOpenChange(false);
+      return;
+    }
+    
+    if (doc.extraction_status === 'failed') {
+      setProcessingState('error');
+      toast.error(`Error: ${doc.extraction_error || 'Extracción fallida'}`);
+      return;
+    }
+  }
+  
+  // 3. Timeout
+  toast.warning('La extracción está tardando más de lo esperado');
+  setProcessingState('idle');
+};
 ```
 
+## Archivos a Modificar
+
+| Archivo | Acción |
+|---------|--------|
+| `src/services/costConsultingApi.ts` | Añadir `getDocumentById()` |
+| `src/components/cost-consulting/DocumentReclassifyModal.tsx` | Implementar polling y UI de estados |
+
+## Resultado
+
+- El modal permanece abierto durante la extracción
+- El usuario ve el progreso en tiempo real
+- Solo se cierra cuando la entidad está creada
+- La lista de facturas/contratos se actualiza automáticamente
