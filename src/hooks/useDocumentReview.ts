@@ -8,6 +8,36 @@ import { toast } from 'sonner';
 const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
 // ============================================================
+// HELPERS
+// ============================================================
+
+/**
+ * Parse error response from backend (handles FastAPI/Pydantic format)
+ */
+const parseErrorMessage = (errorData: unknown, defaultMsg: string): string => {
+  if (!errorData) return defaultMsg;
+  
+  if (typeof errorData === 'object' && 'detail' in errorData) {
+    const detail = (errorData as { detail: unknown }).detail;
+    
+    // If detail is a string, return it directly
+    if (typeof detail === 'string') {
+      return detail;
+    }
+    
+    // If detail is an array (Pydantic/FastAPI validation error format)
+    if (Array.isArray(detail) && detail.length > 0) {
+      const firstError = detail[0];
+      if (firstError && typeof firstError === 'object' && 'msg' in firstError) {
+        return (firstError as { msg: string }).msg;
+      }
+    }
+  }
+  
+  return defaultMsg;
+};
+
+// ============================================================
 // TYPES
 // ============================================================
 
@@ -141,8 +171,8 @@ export function useDocumentReview(projectId: string | undefined, userId?: string
       
       const response = await fetch(url.toString(), { method: 'POST' });
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Error validating document' }));
-        throw new Error(error.detail || 'Error validating document');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(parseErrorMessage(errorData, 'Error al validar el documento'));
       }
       
       toast.success('Documento validado');
@@ -169,8 +199,8 @@ export function useDocumentReview(projectId: string | undefined, userId?: string
       
       const response = await fetch(url.toString(), { method: 'POST' });
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Error changing document type' }));
-        throw new Error(error.detail || 'Error changing document type');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(parseErrorMessage(errorData, 'Error al cambiar el tipo del documento'));
       }
       
       const result = await response.json();
@@ -199,8 +229,8 @@ export function useDocumentReview(projectId: string | undefined, userId?: string
       
       const response = await fetch(url.toString(), { method: 'POST' });
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Error validating all documents' }));
-        throw new Error(error.detail || 'Error validating all documents');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(parseErrorMessage(errorData, 'Error al validar los documentos'));
       }
       
       const result = await response.json();
