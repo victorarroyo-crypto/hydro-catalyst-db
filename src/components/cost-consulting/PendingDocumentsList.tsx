@@ -374,7 +374,16 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                               {doc.filename}
                             </span>
                             {doc.file_type && doc.file_type !== 'otro' && (
-                              <Badge variant="outline" className="text-xs shrink-0">
+                              <Badge 
+                                variant="outline" 
+                                className={`text-xs shrink-0 ${
+                                  doc.file_type === 'contrato' 
+                                    ? 'bg-blue-500/10 text-blue-600 border-blue-200' 
+                                    : doc.file_type === 'factura'
+                                    ? 'bg-green-500/10 text-green-600 border-green-200'
+                                    : ''
+                                }`}
+                              >
                                 {doc.file_type === 'contrato' ? 'Contrato' : 
                                  doc.file_type === 'factura' ? 'Factura' : 
                                  doc.file_type}
