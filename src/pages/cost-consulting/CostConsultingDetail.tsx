@@ -54,6 +54,15 @@ import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal'
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CostContract, CostInvoice, CostSupplier } from '@/hooks/useCostConsultingData';
+import {
+  ContractsReviewTable,
+  InvoicesReviewTable,
+  ChangeTypeConfirmDialog,
+  ReviewProgressCard,
+  ContractForReview,
+  InvoiceForReview,
+  ChangeTypeDocument,
+} from '@/components/cost-consulting/review';
 
 const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
@@ -446,185 +455,7 @@ const AlertsSection = ({ alerts }: { alerts: AlertItem[] }) => {
   );
 };
 
-// Review state components
-interface ContractForReview {
-  id: string;
-  supplier_name_raw?: string;
-  contract_number?: string;
-  contract_title?: string;
-  start_date?: string;
-  end_date?: string;
-  total_annual_value?: number;
-  source?: string;
-}
-
-interface InvoiceForReview {
-  id: string;
-  supplier_name_raw?: string;
-  invoice_number?: string;
-  invoice_date?: string;
-  total?: number;
-  source?: string;
-  line_items?: Array<Record<string, unknown>>;
-}
-
-interface ContractsReviewTableProps {
-  contracts: ContractForReview[];
-  onView?: (contract: ContractForReview) => void;
-  onEdit?: (contract: ContractForReview) => void;
-}
-
-interface InvoicesReviewTableProps {
-  invoices: InvoiceForReview[];
-  onView?: (invoice: InvoiceForReview) => void;
-  onEdit?: (invoice: InvoiceForReview) => void;
-}
-
-const ContractsReviewTable = ({ contracts, onView, onEdit }: ContractsReviewTableProps) => {
-  return (
-    <TooltipProvider>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Proveedor</TableHead>
-            <TableHead>Nº Contrato</TableHead>
-            <TableHead>Título</TableHead>
-            <TableHead>Vigencia</TableHead>
-            <TableHead className="text-right">Valor Anual</TableHead>
-            <TableHead>Fuente</TableHead>
-            <TableHead className="text-right">Acciones</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {contracts.map((contract) => (
-            <TableRow key={contract.id}>
-              <TableCell className="font-medium">{contract.supplier_name_raw || '-'}</TableCell>
-              <TableCell>{contract.contract_number || '-'}</TableCell>
-              <TableCell>{contract.contract_title || '-'}</TableCell>
-              <TableCell>
-                {contract.start_date && contract.end_date
-                  ? `${new Date(contract.start_date).toLocaleDateString('es-ES')} - ${new Date(contract.end_date).toLocaleDateString('es-ES')}`
-                  : '-'}
-              </TableCell>
-              <TableCell className="text-right">
-                {contract.total_annual_value
-                  ? `${contract.total_annual_value.toLocaleString('es-ES')}€`
-                  : '-'}
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className={contract.source === 'manual' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>
-                  {contract.source === 'manual' ? 'Manual' : 'Extraído'}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-8 w-8"
-                        onClick={() => onView?.(contract)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Ver detalles</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-8 w-8"
-                        onClick={() => onEdit?.(contract)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Editar</TooltipContent>
-                  </Tooltip>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TooltipProvider>
-  );
-};
-
-const InvoicesReviewTable = ({ invoices, onView, onEdit }: InvoicesReviewTableProps) => {
-  return (
-    <TooltipProvider>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Proveedor</TableHead>
-            <TableHead>Nº Factura</TableHead>
-            <TableHead>Fecha</TableHead>
-            <TableHead className="text-right">Total</TableHead>
-            <TableHead>Fuente</TableHead>
-            <TableHead className="text-right">Acciones</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {invoices.map((invoice) => (
-            <TableRow key={invoice.id}>
-              <TableCell className="font-medium">{invoice.supplier_name_raw || '-'}</TableCell>
-              <TableCell>{invoice.invoice_number || '-'}</TableCell>
-              <TableCell>
-                {invoice.invoice_date
-                  ? new Date(invoice.invoice_date).toLocaleDateString('es-ES')
-                  : '-'}
-              </TableCell>
-              <TableCell className="text-right">
-                {invoice.total
-                  ? `${invoice.total.toLocaleString('es-ES')}€`
-                  : '-'}
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className={invoice.source === 'manual' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>
-                  {invoice.source === 'manual' ? 'Manual' : 'Extraído'}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-8 w-8"
-                        onClick={() => onView?.(invoice)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Ver detalles</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-8 w-8"
-                        onClick={() => onEdit?.(invoice)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Editar</TooltipContent>
-                  </Tooltip>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TooltipProvider>
-  );
-};
+// Review state components are now imported from src/components/cost-consulting/review/
 
 const SuppliersReviewList = ({ projectId }: { projectId?: string }) => {
   const { data: suppliers = [] } = useQuery({
@@ -685,6 +516,15 @@ const CostConsultingDetail = () => {
   const [editingContract, setEditingContract] = useState<CostContract | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<CostInvoice | null>(null);
   
+  // States for review actions
+  const [isValidating, setIsValidating] = useState<string | null>(null);
+  const [isValidatingAll, setIsValidatingAll] = useState(false);
+  const [changeTypeDoc, setChangeTypeDoc] = useState<{
+    doc: ChangeTypeDocument;
+    type: 'contract' | 'invoice';
+  } | null>(null);
+  const [isChangingType, setIsChangingType] = useState(false);
+  
   // Fetch project data from external Supabase
   const { data: project, isLoading: isLoadingProject } = useCostProject(id);
   const { data: contracts = [] } = useCostContracts(id);
@@ -713,10 +553,50 @@ const CostConsultingDetail = () => {
     loading: reviewLoading,
     validateDocument,
     changeDocumentType,
+    validateAll,
     allValidated,
     hasCriticalWarnings,
     refresh: refreshReview,
   } = useDocumentReview(id, undefined, project?.status === 'review');
+
+  // Handler for single document validation
+  const handleValidateDocument = async (docType: 'contract' | 'invoice', docId: string) => {
+    setIsValidating(docId);
+    try {
+      await validateDocument(docType, docId);
+      queryClient.invalidateQueries({ queryKey: ['cost-contracts', id] });
+      queryClient.invalidateQueries({ queryKey: ['cost-invoices', id] });
+    } finally {
+      setIsValidating(null);
+    }
+  };
+
+  // Handler for validate all
+  const handleValidateAll = async () => {
+    setIsValidatingAll(true);
+    try {
+      await validateAll();
+      queryClient.invalidateQueries({ queryKey: ['cost-contracts', id] });
+      queryClient.invalidateQueries({ queryKey: ['cost-invoices', id] });
+    } finally {
+      setIsValidatingAll(false);
+    }
+  };
+
+  // Handler for change type confirmation
+  const handleConfirmChangeType = async () => {
+    if (!changeTypeDoc) return;
+    
+    setIsChangingType(true);
+    try {
+      await changeDocumentType(changeTypeDoc.type, changeTypeDoc.doc.id);
+      queryClient.invalidateQueries({ queryKey: ['cost-contracts', id] });
+      queryClient.invalidateQueries({ queryKey: ['cost-invoices', id] });
+      setChangeTypeDoc(null);
+    } finally {
+      setIsChangingType(false);
+    }
+  };
 
   // Extract spend by category from invoice line_items (embedded JSON, not a separate table)
   const spendByInvoiceLines = useMemo(() => {
@@ -1110,31 +990,31 @@ const CostConsultingDetail = () => {
               </TabsList>
 
               <TabsContent value="contracts" className="p-4">
-                {contracts.length > 0 ? (
-                  <ContractsReviewTable 
-                    contracts={contracts}
-                    onView={(c) => setEditingContract(c as unknown as CostContract)}
-                    onEdit={(c) => setEditingContract(c as unknown as CostContract)}
-                  />
-                ) : (
-                  <p className="text-muted-foreground text-center py-8">
-                    No se encontraron contratos en los documentos
-                  </p>
-                )}
+                <ContractsReviewTable 
+                  contracts={contracts as unknown as ContractForReview[]}
+                  onView={(c) => setEditingContract(c as unknown as CostContract)}
+                  onEdit={(c) => setEditingContract(c as unknown as CostContract)}
+                  onValidate={(contractId) => handleValidateDocument('contract', contractId)}
+                  onChangeType={(c) => setChangeTypeDoc({ 
+                    doc: { id: c.id, supplier_name_raw: c.supplier_name_raw, contract_number: c.contract_number },
+                    type: 'contract'
+                  })}
+                  isValidating={isValidating}
+                />
               </TabsContent>
 
               <TabsContent value="invoices" className="p-4">
-                {invoices.length > 0 ? (
-                  <InvoicesReviewTable 
-                    invoices={invoices}
-                    onView={(i) => setEditingInvoice(i as unknown as CostInvoice)}
-                    onEdit={(i) => setEditingInvoice(i as unknown as CostInvoice)}
-                  />
-                ) : (
-                  <p className="text-muted-foreground text-center py-8">
-                    No se encontraron facturas en los documentos
-                  </p>
-                )}
+                <InvoicesReviewTable 
+                  invoices={invoices as unknown as InvoiceForReview[]}
+                  onView={(i) => setEditingInvoice(i as unknown as CostInvoice)}
+                  onEdit={(i) => setEditingInvoice(i as unknown as CostInvoice)}
+                  onValidate={(invoiceId) => handleValidateDocument('invoice', invoiceId)}
+                  onChangeType={(i) => setChangeTypeDoc({ 
+                    doc: { id: i.id, supplier_name_raw: i.supplier_name_raw, invoice_number: i.invoice_number },
+                    type: 'invoice'
+                  })}
+                  isValidating={isValidating}
+                />
               </TabsContent>
 
               <TabsContent value="suppliers" className="p-4">
@@ -1346,6 +1226,16 @@ const CostConsultingDetail = () => {
           queryClient.invalidateQueries({ queryKey: ['cost-invoices', id] });
           setEditingInvoice(null);
         }}
+      />
+
+      {/* Change Type Confirmation Dialog */}
+      <ChangeTypeConfirmDialog
+        open={!!changeTypeDoc}
+        onOpenChange={(open) => !open && setChangeTypeDoc(null)}
+        onConfirm={handleConfirmChangeType}
+        document={changeTypeDoc?.doc || null}
+        currentType={changeTypeDoc?.type || 'contract'}
+        isLoading={isChangingType}
       />
     </div>
   );
