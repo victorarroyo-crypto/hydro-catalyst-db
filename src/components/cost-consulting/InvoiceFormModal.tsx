@@ -26,16 +26,17 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Plus, Trash2, FileDown } from 'lucide-react';
+import { Loader2, Plus, Trash2, FileDown, ArrowRightLeft } from 'lucide-react';
 import { CostInvoice, CostSupplier, CostContract } from '@/hooks/useCostConsultingData';
 import {
   createInvoice,
   updateInvoice,
   createInvoiceLine,
+  changeDocumentType,
   InvoiceFormData,
   InvoiceLineData,
 } from '@/services/costConsultingApi';
-
+import { useQueryClient } from '@tanstack/react-query';
 interface InvoiceFormModalProps {
   projectId: string;
   invoice?: CostInvoice | null;
@@ -44,6 +45,7 @@ interface InvoiceFormModalProps {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  userId?: string;
 }
 
 const UNITS = [
@@ -65,8 +67,11 @@ export const InvoiceFormModal = ({
   open,
   onClose,
   onSaved,
+  userId,
 }: InvoiceFormModalProps) => {
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isChangingType, setIsChangingType] = useState(false);
   const [formData, setFormData] = useState<InvoiceFormData>({
     supplier_id: '',
     supplier_name_raw: '',
@@ -214,6 +219,32 @@ export const InvoiceFormModal = ({
 
   // Get file_url from the associated document
   const fileUrl = (invoice as any)?.cost_project_documents?.file_url;
+
+  const handleChangeToContract = async () => {
+    if (!invoice?.id || !projectId || !userId) return;
+    
+    const confirmed = window.confirm(
+      '¿Estás seguro de cambiar este documento de FACTURA a CONTRATO?\n\n' +
+      'El documento se moverá a la tabla de contratos.'
+    );
+    
+    if (!confirmed) return;
+    
+    setIsChangingType(true);
+    try {
+      await changeDocumentType(projectId, 'invoice', invoice.id, userId);
+      toast.success('Documento convertido a contrato');
+      onClose();
+      queryClient.invalidateQueries({ queryKey: ['cost-contracts', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['cost-invoices', projectId] });
+      onSaved();
+    } catch (error) {
+      toast.error('Error al cambiar tipo de documento');
+      console.error(error);
+    } finally {
+      setIsChangingType(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -467,14 +498,31 @@ export const InvoiceFormModal = ({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {invoice ? 'Guardar cambios' : 'Crear factura'}
-          </Button>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {invoice && userId && (
+            <Button
+              variant="outline"
+              onClick={handleChangeToContract}
+              disabled={isSubmitting || isChangingType}
+              className="text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30 mr-auto"
+            >
+              {isChangingType ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+              )}
+              Cambiar a Contrato
+            </Button>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} disabled={isSubmitting || isChangingType}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmit} disabled={isSubmitting || isChangingType}>
+              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {invoice ? 'Guardar cambios' : 'Crear factura'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
