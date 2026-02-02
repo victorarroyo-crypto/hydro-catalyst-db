@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { FileSpreadsheet } from 'lucide-react';
-import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, ChevronDown, ChevronRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, ChevronDown, ChevronRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -79,7 +79,9 @@ interface InvoicesReviewTableProps {
   onEdit?: (invoice: InvoiceForReview) => void;
   onValidate?: (invoiceId: string) => void;
   onChangeType?: (invoice: InvoiceForReview) => void;
+  onDelete?: (invoiceId: string) => void;
   isValidating?: string | null;
+  isDeleting?: string | null;
 }
 
 const formatCurrency = (value: number | null | undefined) => {
@@ -165,7 +167,9 @@ export function InvoicesReviewTable({
   onEdit,
   onValidate,
   onChangeType,
+  onDelete,
   isValidating,
+  isDeleting,
 }: InvoicesReviewTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -389,6 +393,24 @@ export function InvoicesReviewTable({
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Validar</TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {/* Delete */}
+                      {onDelete && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => onDelete(invoice.id)}
+                              disabled={isDeleting === invoice.id}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Eliminar</TooltipContent>
                         </Tooltip>
                       )}
                     </div>
