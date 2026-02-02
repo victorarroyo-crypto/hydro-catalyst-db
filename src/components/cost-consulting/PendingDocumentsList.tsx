@@ -122,7 +122,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
     try {
       await deleteDocument(projectId, doc.id);
       toast.success('Documento eliminado');
-      queryClient.invalidateQueries({ queryKey: ['project-documents-list', projectId] });
+      await refetch();
       onDocumentDeleted?.();
     } catch (error) {
       console.error('Error deleting document:', error);
@@ -166,7 +166,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
       
       toast.success(`Re-extracción iniciada para "${doc.filename}"${deletedMsg}`);
       
-      queryClient.invalidateQueries({ queryKey: ['project-documents-list', projectId] });
+      await refetch();
       queryClient.invalidateQueries({ queryKey: ['cost-contracts', projectId] });
       queryClient.invalidateQueries({ queryKey: ['cost-invoices', projectId] });
     } catch (error) {
