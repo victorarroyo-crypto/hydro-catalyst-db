@@ -18,7 +18,6 @@ import { deleteDocument, reprocessDocument } from '@/services/costConsultingApi'
 interface CostProjectDocument {
   id: string;
   filename: string;
-  doc_type: string | null;
   status: string;
   chunk_count: number | null;
   created_at: string;
@@ -87,7 +86,7 @@ export const DocumentsManagementCard: React.FC<DocumentsManagementCardProps> = (
     queryFn: async () => {
       const { data, error } = await externalSupabase
         .from('cost_project_documents')
-        .select('id, filename, doc_type, status, chunk_count, created_at, error_message')
+        .select('id, filename, status, chunk_count, created_at, error_message')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -288,7 +287,6 @@ export const DocumentsManagementCard: React.FC<DocumentsManagementCardProps> = (
               <TableHeader>
                 <TableRow>
                   <TableHead>Documento</TableHead>
-                  <TableHead>Tipo</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-center">Chunks</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -304,11 +302,6 @@ export const DocumentsManagementCard: React.FC<DocumentsManagementCardProps> = (
                           {doc.filename}
                         </span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="capitalize">
-                        {doc.doc_type || 'documento'}
-                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
