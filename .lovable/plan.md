@@ -1,79 +1,66 @@
 
-# Plan: Detectar documentos pendientes automáticamente y habilitar re-extracción
+# Plan: Corregir la detección de documentos pendientes y proyectos fallidos
 
-## Problema identificado
-Actualmente el botón "Re-extraer documentos" y la alerta amarilla solo aparecen cuando el usuario sube documentos **en la sesión actual**. Esto se debe a que `pendingReExtraction` es un estado local (`useState(false)`) que solo se activa en `handleUploadComplete`.
+## Problema Identificado
 
-Si hay documentos pendientes o fallidos de sesiones anteriores (por ejemplo, después de un timeout), el usuario no ve ninguna señal visual ni tiene forma de reprocesarlos.
+La alerta amarilla y el botón "Re-extraer documentos" no aparecen porque:
 
-## Solución propuesta
-Modificar la lógica para detectar documentos pendientes/fallidos desde los datos reales, no desde un estado local efímero.
+1. **Todos los documentos tienen `extraction_status: "completed"`** - La extracción de texto/embeddings funcionó correctamente para cada documento individual.
 
-## Cambios técnicos
+2. **Pero el proyecto tiene `status: "failed"`** con el error "Pipeline timeout después de 600s" - El proceso de extracción de entidades (contratos/facturas) falló a nivel de proyecto, no de documento.
 
-### 1. Usar `PendingDocumentsList` para exponer estadísticas de documentos
-Modificar el componente `PendingDocumentsList` para exponer las estadísticas de documentos (pendientes, fallidos) al componente padre mediante una nueva prop callback.
+3. **La lógica actual solo verifica documentos pendientes/fallidos**, pero no considera el estado del proyecto. Cuando el proyecto está en estado `failed` después del timeout, los documentos ya están procesados pero las entidades (contratos/facturas) no fueron creadas.
 
-```
-Archivo: src/components/cost-consulting/PendingDocumentsList.tsx
+## Solución
 
-- Añadir prop: onStatsChange?: (stats: { pending: number; failed: number }) => void
-- Llamar a esta función cuando las estadísticas cambien (usando useEffect)
-```
+Ampliar la lógica de `hasPendingDocuments` para que también considere:
+- Estado `failed` del proyecto (especialmente con `current_phase: "extraction_error"`)
+- Documentos con `completed` pero sin entidades extraídas asociadas
 
-### 2. Actualizar `CostConsultingDetail` para recibir estadísticas
-En la página de detalle, usar las estadísticas para determinar si hay documentos pendientes:
+## Cambios Técnicos
 
-```
-Archivo: src/pages/cost-consulting/CostConsultingDetail.tsx
+### 1. Modificar la lógica en `CostConsultingDetail.tsx`
 
-- Añadir estado: documentStats con { pending: number; failed: number }
-- Pasar callback a PendingDocumentsList para actualizar documentStats
-- Calcular hasPendingDocuments = documentStats.pending > 0 || documentStats.failed > 0
-- Usar hasPendingDocuments en lugar de (o además de) pendingReExtraction
+Actualmente:
+```typescript
+const hasPendingDocuments = documentStats.pending > 0 || documentStats.failed > 0;
 ```
 
-### 3. Mejorar la alerta y el botón
-Mostrar información más específica sobre qué documentos están pendientes:
-
-```
-- Si hay documentos pendientes: "X documentos pendientes de extracción"
-- Si hay documentos fallidos: "X documentos con error"
-- Botón siempre visible si hay documentos pendientes o fallidos
-```
-
-## Flujo visual esperado
-
-```text
-┌─────────────────────────────────────────────────────────┐
-│  Usuario abre proyecto                                  │
-│         ↓                                               │
-│  PendingDocumentsList carga documentos de Railway API   │
-│         ↓                                               │
-│  Calcula stats: { pending: 5, failed: 2 }               │
-│         ↓                                               │
-│  Llama onStatsChange con las estadísticas               │
-│         ↓                                               │
-│  CostConsultingDetail recibe stats                      │
-│         ↓                                               │
-│  hasPendingDocuments = true                             │
-│         ↓                                               │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │ ⚠️ Alerta: 5 documentos pendientes, 2 con error  │  │
-│  │ [Botón: Re-extraer documentos]                    │  │
-│  └───────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+Nueva lógica:
+```typescript
+// Mostrar alerta si:
+// 1. Hay documentos pendientes o fallidos
+// 2. O el proyecto falló durante extracción (documentos OK pero entidades no extraídas)
+const hasExtractionIssues = 
+  documentStats.pending > 0 || 
+  documentStats.failed > 0 || 
+  (project?.status === 'failed' && project?.current_phase === 'extraction_error');
 ```
 
-## Archivos a modificar
+### 2. Mejorar el mensaje de la alerta
+
+Cuando el proyecto falló pero los documentos están "completed":
+```
+"La extracción de datos falló debido a un timeout. 
+Los documentos están procesados pero no se generaron contratos/facturas.
+Ejecuta "Re-extraer documentos" para reintentar."
+```
+
+### 3. Corregir el error 400 en `DocumentsManagementCard`
+
+Persiste un error porque intenta seleccionar `status` en lugar de `extraction_status`. Corregir la consulta.
+
+## Archivos a Modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/components/cost-consulting/PendingDocumentsList.tsx` | Añadir prop `onStatsChange` y llamarlo cuando cambien las estadísticas |
-| `src/pages/cost-consulting/CostConsultingDetail.tsx` | Recibir estadísticas y usar `hasPendingDocuments` derivado de datos reales |
+| `src/pages/cost-consulting/CostConsultingDetail.tsx` | Ampliar lógica `hasExtractionIssues` para incluir proyecto `failed` con `extraction_error` |
+| `src/components/cost-consulting/DocumentsManagementCard.tsx` | Corregir consulta que usa `status` → `extraction_status` |
 
-## Ventajas de esta solución
-1. Los documentos "colgados" se detectan automáticamente al cargar la página
-2. El estado refleja la realidad de los datos, no depende de acciones del usuario en la sesión
-3. El usuario siempre tiene visibilidad sobre documentos problemáticos
-4. Mantiene compatibilidad con el flujo actual (también se activa al subir nuevos documentos)
+## Resultado Esperado
+
+Después de la corrección:
+- Cuando el proyecto tiene `status: failed` y `current_phase: extraction_error`, se mostrará:
+  - Alerta amarilla explicando que la extracción de datos falló
+  - Botón "Re-extraer documentos" visible
+- El usuario puede pulsar el botón para reintentar el proceso completo
