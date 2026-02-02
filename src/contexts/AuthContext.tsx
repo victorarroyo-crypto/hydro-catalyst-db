@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import type { Profile } from '@/types/database';
 
 interface AuthContextType {
@@ -15,6 +16,27 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+/**
+ * Sync user to external Supabase app_users table
+ * This ensures FK constraints work when validating contracts/invoices
+ */
+const syncUserToExternal = async (user: User) => {
+  try {
+    await externalSupabase.from('app_users').upsert({
+      id: user.id,
+      email: user.email,
+      name: user.user_metadata?.full_name || user.user_metadata?.name || null,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'id'
+    });
+    console.log('[Auth] User synced to external DB:', user.id);
+  } catch (error) {
+    // Silent fail - don't block login flow
+    console.error('[Auth] Error syncing user to external:', error);
+  }
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -41,6 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session?.user ?? null);
         
         if (session?.user) {
+          // Sync user to external DB on SIGNED_IN
+          if (event === 'SIGNED_IN') {
+            syncUserToExternal(session.user);
+          }
+          
           setTimeout(() => {
             fetchProfile(session.user.id);
           }, 0);
@@ -67,14 +94,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    
+    // Sync user after successful login
+    if (!error && data.user) {
+      syncUserToExternal(data.user);
+    }
+    
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -84,6 +117,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       },
     });
+    
+    // Sync user after successful signup
+    if (!error && data.user) {
+      syncUserToExternal(data.user);
+    }
+    
     return { error };
   };
 
