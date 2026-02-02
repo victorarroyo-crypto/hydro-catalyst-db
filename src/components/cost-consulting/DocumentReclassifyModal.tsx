@@ -45,6 +45,11 @@ export const DocumentReclassifyModal: React.FC<DocumentReclassifyModalProps> = (
   const handleReclassify = async (type: 'contract' | 'invoice') => {
     if (!document) return;
 
+    if (!userId) {
+      toast.error('No se pudo identificar el usuario. Recarga la página e inténtalo de nuevo.');
+      return;
+    }
+
     setTargetType(type);
     setProcessingState('reclassifying');
     setProgress(5);
@@ -52,19 +57,37 @@ export const DocumentReclassifyModal: React.FC<DocumentReclassifyModalProps> = (
     const typeLabel = type === 'contract' ? 'contrato' : 'factura';
 
     try {
-      // Phase 1: Call reclassify endpoint (requires user_id query param)
-      const response = await fetch(
-        `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${document.id}/reclassify?user_id=${userId}`,
-        {
+      // Phase 1: Try reclassify endpoint (some deployments may not have it).
+      // If it returns 404, fallback to re-extract endpoint with target_type.
+      const reclassifyUrl = `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${document.id}/reclassify?user_id=${encodeURIComponent(
+        userId
+      )}`;
+
+      const reExtractUrl = `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${document.id}/re-extract?user_id=${encodeURIComponent(
+        userId
+      )}`;
+
+      const tryPost = async (url: string) => {
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target_type: type }),
-        }
-      );
+        });
+        return res;
+      };
+
+      let response = await tryPost(reclassifyUrl);
+
+      if (response.status === 404) {
+        // Fallback path
+        response = await tryPost(reExtractUrl);
+      }
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Error al reclasificar' }));
-        throw new Error(error.detail || 'Error al reclasificar el documento');
+        const error = await response
+          .json()
+          .catch(() => ({ detail: `Error al iniciar reclasificación (${response.status})` }));
+        throw new Error(error.detail || 'Error al iniciar la reclasificación del documento');
       }
 
       // Phase 2: Polling until extraction completes
