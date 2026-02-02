@@ -1,66 +1,167 @@
 
-# Plan: Corregir la detección de documentos pendientes y proyectos fallidos
 
-## Problema Identificado
+# Plan: Trazabilidad Documento → Entidades Extraídas
 
-La alerta amarilla y el botón "Re-extraer documentos" no aparecen porque:
+## Problema Real Identificado
 
-1. **Todos los documentos tienen `extraction_status: "completed"`** - La extracción de texto/embeddings funcionó correctamente para cada documento individual.
+Actualmente hay 145 documentos subidos pero solo 109 entidades extraídas (9 contratos + 100 facturas). El usuario no tiene forma de saber:
 
-2. **Pero el proyecto tiene `status: "failed"`** con el error "Pipeline timeout después de 600s" - El proceso de extracción de entidades (contratos/facturas) falló a nivel de proyecto, no de documento.
+1. **Qué documentos generaron entidades** y cuáles no
+2. **Por qué 36 documentos no generaron nada** (¿timeout? ¿documentos no procesables?)
+3. **Cómo reclasificar manualmente** un documento que fue mal clasificado o ignorado
 
-3. **La lógica actual solo verifica documentos pendientes/fallidos**, pero no considera el estado del proyecto. Cuando el proyecto está en estado `failed` después del timeout, los documentos ya están procesados pero las entidades (contratos/facturas) no fueron creadas.
+La clasificación la hace automáticamente el backend, pero no hay feedback al usuario.
 
-## Solución
+## Análisis de la Arquitectura Actual
 
-Ampliar la lógica de `hasPendingDocuments` para que también considere:
-- Estado `failed` del proyecto (especialmente con `current_phase: "extraction_error"`)
-- Documentos con `completed` pero sin entidades extraídas asociadas
+```text
+┌─────────────────────────────┐
+│  cost_project_documents     │  ← 145 documentos
+│  - id                       │
+│  - filename                 │
+│  - extraction_status        │  ← "completed" para todos
+│  - file_type                │  ← "contrato", "factura", "otro"
+└─────────────────────────────┘
+            │
+            │ document_id (FK)
+            ▼
+┌─────────────────────────────┐    ┌─────────────────────────────┐
+│  cost_project_contracts     │    │  cost_project_invoices      │
+│  - id                       │    │  - id                       │
+│  - document_id              │    │  - document_id              │
+│  - supplier_name_raw        │    │  - invoice_number           │
+│  ...                        │    │  ...                        │
+└─────────────────────────────┘    └─────────────────────────────┘
+        9 contratos                       100 facturas
+```
+
+**Problema**: Un documento puede tener múltiples entidades o ninguna. No se muestra esta relación al usuario.
+
+## Solución Propuesta
+
+### 1. Enriquecer la lista de documentos con conteo de entidades
+
+Crear un hook que calcule cuántas entidades (contratos/facturas) tiene cada documento:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Documento                    │ Estado    │ Tipo      │ Contratos │ Facturas │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ factura_enero.pdf            │ ✓ Listo   │ Factura   │    0      │    3     │
+│ contrato_telefonica.pdf      │ ✓ Listo   │ Contrato  │    1      │    0     │
+│ anexo_precios.pdf            │ ✓ Listo   │ Otro      │    0      │    0     │ ← ⚠️
+│ listado_gastos.pdf           │ ✓ Listo   │ Otro      │    0      │    0     │ ← ⚠️
+└─────────────────────────────────────────────────────────────────────────────┘
+
+⚠️ 36 documentos procesados no generaron datos extraíbles.
+```
+
+### 2. Mostrar indicador visual para documentos sin entidades
+
+Añadir badge o alerta cuando hay documentos que no produjeron nada:
+
+- Badge "Sin datos" en rojo/naranja junto al documento
+- Contador global: "X documentos sin contratos ni facturas"
+- Tooltip explicando: "Este documento fue procesado pero no se encontraron contratos ni facturas"
+
+### 3. Habilitar extracción individual
+
+Para documentos sin entidades, ofrecer botón "Re-extraer" individual que:
+- Borra cualquier entidad previa de ese documento
+- Vuelve a ejecutar el pipeline de extracción solo para ese documento
 
 ## Cambios Técnicos
 
-### 1. Modificar la lógica en `CostConsultingDetail.tsx`
+### Archivo 1: `src/hooks/useDocumentEntityCounts.ts` (NUEVO)
 
-Actualmente:
+Crear hook que cruza documentos con contratos/facturas:
+
 ```typescript
-const hasPendingDocuments = documentStats.pending > 0 || documentStats.failed > 0;
+export interface DocumentEntityCounts {
+  [documentId: string]: {
+    contracts: number;
+    invoices: number;
+  }
+}
+
+export const useDocumentEntityCounts = (projectId?: string) => {
+  const { data: contracts = [] } = useCostContracts(projectId);
+  const { data: invoices = [] } = useCostInvoices(projectId);
+  
+  return useMemo(() => {
+    const counts: DocumentEntityCounts = {};
+    
+    contracts.forEach(c => {
+      if (c.document_id) {
+        counts[c.document_id] = counts[c.document_id] || { contracts: 0, invoices: 0 };
+        counts[c.document_id].contracts++;
+      }
+    });
+    
+    invoices.forEach(i => {
+      if (i.document_id) {
+        counts[i.document_id] = counts[i.document_id] || { contracts: 0, invoices: 0 };
+        counts[i.document_id].invoices++;
+      }
+    });
+    
+    return counts;
+  }, [contracts, invoices]);
+};
 ```
 
-Nueva lógica:
-```typescript
-// Mostrar alerta si:
-// 1. Hay documentos pendientes o fallidos
-// 2. O el proyecto falló durante extracción (documentos OK pero entidades no extraídas)
-const hasExtractionIssues = 
-  documentStats.pending > 0 || 
-  documentStats.failed > 0 || 
-  (project?.status === 'failed' && project?.current_phase === 'extraction_error');
+### Archivo 2: `src/components/cost-consulting/PendingDocumentsList.tsx`
+
+Modificar para mostrar columnas de entidades:
+
+1. Importar el nuevo hook `useDocumentEntityCounts`
+2. Añadir columnas "Contratos" y "Facturas" a la tabla
+3. Mostrar badge "Sin datos" cuando ambos son 0 y el documento está completado
+4. Añadir a stats: `{ ...stats, noEntities: X }`
+
+### Archivo 3: `src/pages/cost-consulting/CostConsultingDetail.tsx`
+
+1. Extender el callback `onStatsChange` para incluir `noEntities`
+2. Mostrar alerta cuando hay documentos sin entidades:
+   ```
+   ⚠️ 36 documentos procesados no generaron contratos ni facturas.
+   Esto puede deberse a que son anexos, catálogos o documentos auxiliares.
+   ```
+3. Diferenciar en la alerta:
+   - Documentos pendientes/fallidos → Problema de procesamiento
+   - Documentos sin entidades → Posiblemente no extraíbles (o timeout)
+
+## Archivos a Crear/Modificar
+
+| Archivo | Acción | Cambio |
+|---------|--------|--------|
+| `src/hooks/useDocumentEntityCounts.ts` | NUEVO | Hook que cuenta entidades por documento |
+| `src/components/cost-consulting/PendingDocumentsList.tsx` | Modificar | Añadir columnas contratos/facturas y badge "Sin datos" |
+| `src/pages/cost-consulting/CostConsultingDetail.tsx` | Modificar | Mostrar alerta de documentos sin entidades |
+
+## Interfaz Resultado
+
+La tabla de documentos mostrará:
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ Documentos Subidos (145)                                                         │
+│ 145 procesados · 36 sin entidades                                                │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│ Documento              │ Estado    │ Contratos │ Facturas │ Acciones             │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│ 📄 factura_001.pdf     │ ✓ Listo   │    0      │    2     │ 🗑️                   │
+│ 📄 contrato_iber.pdf   │ ✓ Listo   │    1      │    0     │ 🗑️                   │
+│ 📄 anexo_tecnico.pdf   │ ⚠️ Sin datos │  0     │    0     │ 🔄 🗑️               │
+│ 📄 catalogo.pdf        │ ⚠️ Sin datos │  0     │    0     │ 🔄 🗑️               │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. Mejorar el mensaje de la alerta
-
-Cuando el proyecto falló pero los documentos están "completed":
+Alerta adicional:
+```text
+⚠️ 36 documentos procesados no generaron datos
+   Estos documentos fueron procesados correctamente pero no contienen
+   información extraíble (contratos/facturas). Pueden ser anexos técnicos,
+   catálogos u otros documentos de soporte.
 ```
-"La extracción de datos falló debido a un timeout. 
-Los documentos están procesados pero no se generaron contratos/facturas.
-Ejecuta "Re-extraer documentos" para reintentar."
-```
 
-### 3. Corregir el error 400 en `DocumentsManagementCard`
-
-Persiste un error porque intenta seleccionar `status` en lugar de `extraction_status`. Corregir la consulta.
-
-## Archivos a Modificar
-
-| Archivo | Cambio |
-|---------|--------|
-| `src/pages/cost-consulting/CostConsultingDetail.tsx` | Ampliar lógica `hasExtractionIssues` para incluir proyecto `failed` con `extraction_error` |
-| `src/components/cost-consulting/DocumentsManagementCard.tsx` | Corregir consulta que usa `status` → `extraction_status` |
-
-## Resultado Esperado
-
-Después de la corrección:
-- Cuando el proyecto tiene `status: failed` y `current_phase: extraction_error`, se mostrará:
-  - Alerta amarilla explicando que la extracción de datos falló
-  - Botón "Re-extraer documentos" visible
-- El usuario puede pulsar el botón para reintentar el proceso completo
