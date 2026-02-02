@@ -109,9 +109,9 @@ export function ChangeTypeConfirmDialog({
                 </p>
               </div>
             </div>
-          </AlertDialogDescription>
+        </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 mt-4">
           <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
@@ -123,7 +123,7 @@ export function ChangeTypeConfirmDialog({
           >
             {isLoading ? 'Procesando...' : 'Confirmar cambio'}
           </AlertDialogAction>
-        </AlertDialogFooter>
+        </div>
       </AlertDialogContent>
     </AlertDialog>
   );
