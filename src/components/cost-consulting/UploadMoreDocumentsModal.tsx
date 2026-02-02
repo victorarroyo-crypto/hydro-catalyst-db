@@ -108,16 +108,20 @@ export function UploadMoreDocumentsModal({
           throw new Error(`Error subiendo ${file.name}: ${error.message}`);
         }
 
-        if (!data?.success) {
-          throw new Error(`Error subiendo ${file.name}: ${data?.error || 'Error desconocido'}`);
+        // Handle duplicate documents as info, not error
+        if (data?.already_exists) {
+          console.log(`${file.name} ya existía en el sistema, continuando...`);
+        } else if (!data?.success) {
+          const errorMessage = data?.detail || data?.error || data?.message || 'Error desconocido';
+          throw new Error(`Error subiendo ${file.name}: ${errorMessage}`);
         }
 
         setUploadProgress(Math.round(((i + 1) / files.length) * 100));
       }
 
       setUploadComplete(true);
-      toast.success('Documentos subidos correctamente', {
-        description: 'Ejecuta "Re-extraer" para procesar los nuevos documentos.',
+      toast.success('Documentos procesados', {
+        description: 'Ejecuta "Re-extraer documentos" para procesarlos.',
       });
       
       // Wait a bit before closing to show success state
