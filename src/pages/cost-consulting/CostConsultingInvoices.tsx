@@ -645,7 +645,7 @@ const CostConsultingInvoices = () => {
                 >
                   <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                   <TableCell>
-                    {format(new Date(invoice.date), 'dd/MM', { locale: es })}
+                    {invoice.date ? format(new Date(invoice.date), 'dd/MM', { locale: es }) : '-'}
                   </TableCell>
                   <TableCell>{invoice.supplier}</TableCell>
                   <TableCell>
