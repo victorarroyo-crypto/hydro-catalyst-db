@@ -39,6 +39,7 @@ import { toast } from 'sonner';
 import { 
   getProjectDocuments, 
   deleteDocument, 
+  reprocessDocument,
   ProjectDocument 
 } from '@/services/costConsultingApi';
 
@@ -95,7 +96,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const { data: documents = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['project-documents-list', projectId],
     queryFn: () => getProjectDocuments(projectId),
@@ -126,6 +127,20 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
       toast.error('Error al eliminar el documento');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleReprocess = async (doc: ProjectDocument) => {
+    setReprocessingId(doc.id);
+    try {
+      await reprocessDocument(projectId, doc.id);
+      toast.success('Documento enviado a reprocesar');
+      queryClient.invalidateQueries({ queryKey: ['project-documents-list', projectId] });
+    } catch (error) {
+      console.error('Error reprocessing document:', error);
+      toast.error('Error al reprocesar el documento');
+    } finally {
+      setReprocessingId(null);
     }
   };
 
@@ -285,26 +300,52 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                           {formatFileSize(doc.file_size)}
                         </TableCell>
                         <TableCell>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                  onClick={() => handleDelete(doc)}
-                                  disabled={deletingId === doc.id}
-                                >
-                                  {deletingId === doc.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Eliminar documento</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <div className="flex items-center gap-1">
+                            {/* Reprocess button - only for failed or pending */}
+                            {(doc.processing_status === 'failed' || doc.processing_status === 'pending') && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                      onClick={() => handleReprocess(doc)}
+                                      disabled={reprocessingId === doc.id}
+                                    >
+                                      {reprocessingId === doc.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <RefreshCw className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Reprocesar documento</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            {/* Delete button */}
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                    onClick={() => handleDelete(doc)}
+                                    disabled={deletingId === doc.id}
+                                  >
+                                    {deletingId === doc.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Eliminar documento</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
