@@ -20,6 +20,7 @@ interface DocumentReclassifyModalProps {
   onOpenChange: (open: boolean) => void;
   document: ProjectDocument | null;
   projectId: string;
+  userId: string;
   onReclassified: () => void;
 }
 
@@ -34,6 +35,7 @@ export const DocumentReclassifyModal: React.FC<DocumentReclassifyModalProps> = (
   onOpenChange,
   document,
   projectId,
+  userId,
   onReclassified,
 }) => {
   const [processingState, setProcessingState] = useState<ProcessingState>('idle');
@@ -50,9 +52,9 @@ export const DocumentReclassifyModal: React.FC<DocumentReclassifyModalProps> = (
     const typeLabel = type === 'contract' ? 'contrato' : 'factura';
 
     try {
-      // Phase 1: Call reclassify endpoint
+      // Phase 1: Call reclassify endpoint (requires user_id query param)
       const response = await fetch(
-        `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${document.id}/reclassify`,
+        `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${document.id}/reclassify?user_id=${userId}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

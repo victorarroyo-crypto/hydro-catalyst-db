@@ -71,6 +71,7 @@ export interface DocumentStats {
 
 interface PendingDocumentsListProps {
   projectId: string;
+  userId?: string;
   onDocumentDeleted?: () => void;
   onStatsChange?: (stats: DocumentStats) => void;
 }
@@ -118,6 +119,7 @@ const formatFileSize = (bytes?: number) => {
 
 export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
   projectId,
+  userId,
   onDocumentDeleted,
   onStatsChange,
 }) => {
@@ -622,6 +624,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
         onOpenChange={(open) => !open && setDocumentToReclassify(null)}
         document={documentToReclassify}
         projectId={projectId}
+        userId={userId || ''}
         onReclassified={handleReclassified}
       />
     </Card>

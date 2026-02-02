@@ -1037,6 +1037,7 @@ const CostConsultingDetail = () => {
           {/* NEW: Pending Documents List - Shows all uploaded documents with status */}
           <PendingDocumentsList 
             projectId={project.id}
+            userId={user?.id}
             onDocumentDeleted={() => {
               queryClient.invalidateQueries({ queryKey: ['cost-documents', id] });
               queryClient.invalidateQueries({ queryKey: ['cost-contracts', id] });
