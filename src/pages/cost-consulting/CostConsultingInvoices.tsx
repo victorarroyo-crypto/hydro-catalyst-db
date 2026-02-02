@@ -63,7 +63,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -104,6 +104,26 @@ interface DisplayInvoice {
   issues: InvoiceIssue[];
   recoverableAmount: number;
 }
+
+const safeFormatDate = (dateStr: string | null | undefined, pattern: string) => {
+  if (!dateStr) return '-';
+
+  // Prefer ISO parsing when possible.
+  const iso = parseISO(dateStr);
+  if (isValid(iso)) return format(iso, pattern, { locale: es });
+
+  // Fallback for non-ISO strings.
+  const fallback = new Date(dateStr);
+  if (!isValid(fallback)) return '-';
+  return format(fallback, pattern, { locale: es });
+};
+
+const safeMonthLabel = (monthKey: string) => {
+  // monthKey is expected to be YYYY-MM
+  const d = parseISO(`${monthKey}-01`);
+  if (!isValid(d)) return monthKey;
+  return d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
+};
 
 const getComplianceBadge = (compliance: string, issuesCount: number) => {
   switch (compliance) {
@@ -316,7 +336,7 @@ const CostConsultingInvoices = () => {
         const isAnomaly = avgPrice > contractMax * 1.1 || avgPrice < contractMin * 0.9;
         
         return {
-          month: new Date(g.date + '-01').toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }),
+          month: safeMonthLabel(g.date),
           sortKey: g.date,
           price: Number(avgPrice.toFixed(3)),
           contractMin: Number(contractMin.toFixed(3)),
@@ -645,7 +665,7 @@ const CostConsultingInvoices = () => {
                 >
                   <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                   <TableCell>
-                    {invoice.date ? format(new Date(invoice.date), 'dd/MM', { locale: es }) : '-'}
+                    {safeFormatDate(invoice.date, 'dd/MM')}
                   </TableCell>
                   <TableCell>{invoice.supplier}</TableCell>
                   <TableCell>
@@ -699,7 +719,7 @@ const CostConsultingInvoices = () => {
                     <div>
                       <span className="text-muted-foreground">Fecha</span>
                       <p className="font-medium">
-                        {format(new Date(selectedInvoice.date), 'dd/MM/yyyy', { locale: es })}
+                        {safeFormatDate(selectedInvoice.date, 'dd/MM/yyyy')}
                       </p>
                     </div>
                     <div>
