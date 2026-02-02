@@ -30,10 +30,13 @@ import {
   Loader2,
   Building2,
   Play,
-  Pencil
+  Pencil,
+  FileSearch
 } from 'lucide-react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ReportGeneratorModal } from '@/components/cost-consulting/ReportGeneratorModal';
+import { ReviewSummaryCard } from '@/components/cost-consulting/ReviewSummaryCard';
+import { DocumentReviewTable } from '@/components/cost-consulting/DocumentReviewTable';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { 
@@ -43,6 +46,7 @@ import {
   useCostOpportunities,
   useCostDocuments
 } from '@/hooks/useCostConsultingData';
+import { useDocumentReview } from '@/hooks/useDocumentReview';
 import { DocumentsManagementCard } from '@/components/cost-consulting/DocumentsManagementCard';
 import { toast } from 'sonner';
 
@@ -591,6 +595,7 @@ const CostConsultingDetail = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
+  const [showReviewTable, setShowReviewTable] = useState(false);
   
   // Fetch project data from external Supabase
   const { data: project, isLoading: isLoadingProject } = useCostProject(id);
@@ -598,6 +603,18 @@ const CostConsultingDetail = () => {
   const { data: invoices = [] } = useCostInvoices(id);
   const { data: opportunities = [] } = useCostOpportunities(id);
   const { data: documents = [] } = useCostDocuments(id);
+  
+  // Document review hook for validation workflow
+  const {
+    allDocs,
+    summary: reviewSummary,
+    loading: reviewLoading,
+    validateDocument,
+    changeDocumentType,
+    allValidated,
+    hasCriticalWarnings,
+    refresh: refreshReview,
+  } = useDocumentReview(id, undefined, project?.status === 'review');
 
   // Extract spend by category from invoice line_items (embedded JSON, not a separate table)
   const spendByInvoiceLines = useMemo(() => {
@@ -879,9 +896,19 @@ const CostConsultingDetail = () => {
             <AlertTitle className="text-blue-800 dark:text-blue-300">Revisión de datos extraídos</AlertTitle>
             <AlertDescription className="text-blue-700 dark:text-blue-400">
               Hemos extraído los datos de tus documentos. Revisa que estén correctos
-              en las pestañas de Contratos y Facturas antes de ejecutar el análisis.
+              y valida los documentos antes de ejecutar el análisis.
             </AlertDescription>
           </Alert>
+
+          {/* Review Summary Card - Document validation status */}
+          <ReviewSummaryCard
+            projectId={project?.id || ''}
+            onReviewClick={() => setShowReviewTable(true)}
+            onAllValidated={() => {
+              refreshReview();
+              queryClient.invalidateQueries({ queryKey: ['cost-project', id] });
+            }}
+          />
 
           {/* Extraction Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -921,6 +948,40 @@ const CostConsultingDetail = () => {
               </div>
             </Card>
           </div>
+
+          {/* Document Review Table - Shown when user clicks "Revisar documentos" */}
+          {showReviewTable && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <FileSearch className="h-5 w-5 text-primary" />
+                    <div>
+                      <CardTitle>Revisión de Documentos</CardTitle>
+                      <CardDescription>
+                        Valida la clasificación de cada documento antes del análisis
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setShowReviewTable(false)}
+                  >
+                    Cerrar
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <DocumentReviewTable
+                  documents={allDocs}
+                  onValidate={validateDocument}
+                  onChangeType={changeDocumentType}
+                  loading={reviewLoading}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Tabs to review data */}
           <Card>
@@ -979,7 +1040,8 @@ const CostConsultingDetail = () => {
             </Button>
             <Button
               onClick={handleStartAnalysis}
-              disabled={isStartingAnalysis}
+              disabled={isStartingAnalysis || (!allValidated && hasCriticalWarnings)}
+              title={!allValidated && hasCriticalWarnings ? 'Valida los documentos con advertencias antes de continuar' : ''}
             >
               {isStartingAnalysis ? (
                 <>
@@ -989,7 +1051,7 @@ const CostConsultingDetail = () => {
               ) : (
                 <>
                   <Play className="h-4 w-4 mr-2" />
-                  Validar y Ejecutar Análisis
+                  {allValidated ? 'Ejecutar Análisis' : 'Validar y Ejecutar Análisis'}
                 </>
               )}
             </Button>

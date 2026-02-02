@@ -7,3 +7,5 @@ export { SupplierFormModal } from './SupplierFormModal';
 export { FailedDocumentsAlert } from './FailedDocumentsAlert';
 export { ContractsReviewTable } from './ContractsReviewTable';
 export { InvoicesReviewTable } from './InvoicesReviewTable';
+export { ReviewSummaryCard } from './ReviewSummaryCard';
+export { DocumentReviewTable } from './DocumentReviewTable';
