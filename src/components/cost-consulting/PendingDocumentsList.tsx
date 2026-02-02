@@ -243,7 +243,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                     <TableHead>Documento</TableHead>
                     <TableHead className="w-[100px]">Estado</TableHead>
                     <TableHead className="w-[100px] text-right">Tamaño</TableHead>
-                    <TableHead className="w-[60px]"></TableHead>
+                    <TableHead className="w-[100px] text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
