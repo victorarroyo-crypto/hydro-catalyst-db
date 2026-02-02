@@ -104,13 +104,13 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
     refetchInterval: 5000, // Poll every 5 seconds to catch status changes
   });
 
-  // Calculate stats
+  // Calculate stats - use extraction_status (API field name)
   const stats = {
     total: documents.length,
-    completed: documents.filter(d => d.processing_status === 'completed').length,
-    processing: documents.filter(d => d.processing_status === 'processing').length,
-    pending: documents.filter(d => d.processing_status === 'pending').length,
-    failed: documents.filter(d => d.processing_status === 'failed').length,
+    completed: documents.filter(d => d.extraction_status === 'completed').length,
+    processing: documents.filter(d => d.extraction_status === 'processing').length,
+    pending: documents.filter(d => d.extraction_status === 'pending').length,
+    failed: documents.filter(d => d.extraction_status === 'failed').length,
   };
 
   const handleDelete = async (doc: ProjectDocument) => {
@@ -248,7 +248,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                 </TableHeader>
                 <TableBody>
                   {documents.map((doc) => {
-                    const statusConfig = getStatusConfig(doc.processing_status);
+                    const statusConfig = getStatusConfig(doc.extraction_status);
                     const StatusIcon = statusConfig.icon;
                     
                     return (
@@ -259,17 +259,17 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                             <span className="truncate max-w-[300px]" title={doc.filename}>
                               {doc.filename}
                             </span>
-                            {doc.document_type && (
+                            {doc.file_type && doc.file_type !== 'otro' && (
                               <Badge variant="outline" className="text-xs shrink-0">
-                                {doc.document_type === 'contract' ? 'Contrato' : 
-                                 doc.document_type === 'invoice' ? 'Factura' : 
-                                 doc.document_type}
+                                {doc.file_type === 'contrato' ? 'Contrato' : 
+                                 doc.file_type === 'factura' ? 'Factura' : 
+                                 doc.file_type}
                               </Badge>
                             )}
                           </div>
-                          {doc.processing_error && (
-                            <p className="text-xs text-red-500 mt-1 ml-6 truncate max-w-[400px]" title={doc.processing_error}>
-                              {doc.processing_error}
+                          {doc.extraction_error && (
+                            <p className="text-xs text-red-500 mt-1 ml-6 truncate max-w-[400px]" title={doc.extraction_error}>
+                              {doc.extraction_error}
                             </p>
                           )}
                         </TableCell>
@@ -288,7 +288,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
-                                {doc.processing_status === 'completed' && doc.chunk_count 
+                                {doc.extraction_status === 'completed' && doc.chunk_count 
                                   ? `${doc.chunk_count} fragmentos procesados`
                                   : statusConfig.label
                                 }
@@ -302,7 +302,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                         <TableCell>
                           <div className="flex items-center gap-1">
                             {/* Reprocess button - only for failed or pending */}
-                            {(doc.processing_status === 'failed' || doc.processing_status === 'pending') && (
+                            {(doc.extraction_status === 'failed' || doc.extraction_status === 'pending') && (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
