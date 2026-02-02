@@ -13,8 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
-
-const RAILWAY_URL = import.meta.env.VITE_RAILWAY_URL || 'https://watertech-scouting-production.up.railway.app';
+import { deleteDocument, reprocessDocument } from '@/services/costConsultingApi';
 
 interface CostProjectDocument {
   id: string;
@@ -142,9 +141,7 @@ export const DocumentsManagementCard: React.FC<DocumentsManagementCardProps> = (
     
     try {
       for (const doc of failed) {
-        await fetch(`${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${doc.id}/reprocess`, {
-          method: 'POST',
-        });
+        await reprocessDocument(projectId, doc.id);
       }
       toast.success(`Reprocesando ${failed.length} documentos`);
       refetch();
@@ -159,10 +156,7 @@ export const DocumentsManagementCard: React.FC<DocumentsManagementCardProps> = (
     
     try {
       for (const doc of failed) {
-        await externalSupabase
-          .from('cost_project_documents')
-          .delete()
-          .eq('id', doc.id);
+        await deleteDocument(projectId, doc.id);
       }
       toast.success(`${failed.length} documentos eliminados`);
       queryClient.invalidateQueries({ queryKey: ['cost-documents', projectId] });
@@ -174,11 +168,8 @@ export const DocumentsManagementCard: React.FC<DocumentsManagementCardProps> = (
 
   const handleDeleteDocument = async (docId: string) => {
     try {
-      await externalSupabase
-        .from('cost_project_documents')
-        .delete()
-        .eq('id', docId);
-      toast.success('Documento eliminado');
+      await deleteDocument(projectId, docId);
+      toast.success('Documento eliminado (BD, chunks y Storage)');
       queryClient.invalidateQueries({ queryKey: ['cost-documents', projectId] });
       refetch();
     } catch (error) {
@@ -188,9 +179,7 @@ export const DocumentsManagementCard: React.FC<DocumentsManagementCardProps> = (
 
   const handleReprocessDocument = async (docId: string) => {
     try {
-      await fetch(`${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${docId}/reprocess`, {
-        method: 'POST',
-      });
+      await reprocessDocument(projectId, docId);
       toast.success('Reprocesando documento');
       refetch();
     } catch (error) {
