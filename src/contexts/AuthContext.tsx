@@ -64,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (session?.user) {
           // Sync user to external DB on SIGNED_IN
-          if (event === 'SIGNED_IN') {
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
             syncUserToExternal(session.user);
           }
           
@@ -84,6 +84,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(session?.user ?? null);
       
       if (session?.user) {
+        // Sync user on session restore (page refresh, etc.)
+        syncUserToExternal(session.user);
         fetchProfile(session.user.id);
       }
       
