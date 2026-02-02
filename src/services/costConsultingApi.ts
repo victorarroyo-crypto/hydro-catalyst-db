@@ -297,17 +297,18 @@ export const getDocumentsStatus = async (projectId: string): Promise<DocumentSta
 };
 
 /**
- * Get a specific document by ID to check its status
+ * Get a specific document by ID to check its status.
+ * Uses the /documents list endpoint and filters client-side
+ * (the backend doesn't expose a single-document GET).
  */
 export const getDocumentById = async (
   projectId: string,
   documentId: string
 ): Promise<ProjectDocument> => {
-  const response = await fetch(
-    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${documentId}`
-  );
-  if (!response.ok) throw new Error('Error fetching document');
-  return response.json();
+  const docs = await getProjectDocuments(projectId);
+  const doc = docs.find((d) => d.id === documentId);
+  if (!doc) throw new Error('Documento no encontrado');
+  return doc;
 };
 
 export const reprocessDocument = async (projectId: string, documentId: string) => {
