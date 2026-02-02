@@ -51,25 +51,42 @@ serve(async (req) => {
 
     console.log(`Uploading file: ${file.name} (${file.size} bytes) for project: ${projectId}`);
 
-    // 3. Upload to Supabase Storage first
+    // 3. Upload to Supabase Storage - use consistent path (no timestamp) to enable overwrite
     const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    const storagePath = `${projectId}/${Date.now()}_${sanitizedFilename}`;
+    // Use consistent path: projectId/filename (no timestamp) so same file overwrites
+    const storagePath = `${projectId}/${sanitizedFilename}`;
     
     // Read file content as ArrayBuffer for storage upload
     const fileArrayBuffer = await file.arrayBuffer();
     const fileContent = new Uint8Array(fileArrayBuffer);
     
+    // First, delete any existing file at this path to avoid duplicates
+    console.log(`Checking for existing file at: ${storagePath}`);
+    const { error: deleteError } = await supabase.storage
+      .from('cost-documents')
+      .remove([storagePath]);
+    
+    if (deleteError) {
+      // 404/not found errors are expected for new files - only log actual errors
+      if (!deleteError.message?.includes('Not Found') && !deleteError.message?.includes('Object not found')) {
+        console.warn('Warning deleting existing file (continuing anyway):', deleteError.message);
+      }
+    } else {
+      console.log('Deleted existing file before re-upload');
+    }
+    
+    // Now upload the new file
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('cost-documents')
       .upload(storagePath, fileContent, {
         contentType: file.type || 'application/pdf',
-        upsert: true, // Allow overwriting if file somehow exists
+        upsert: true, // Also enable upsert as fallback
       });
 
     let fileUrl: string | null = null;
     if (uploadError) {
       console.error('Storage upload error:', uploadError);
-      // If upload fails, try to get existing file URL (in case it's a duplicate path)
+      // Try to get URL anyway in case file exists
       const { data: urlData } = supabase.storage
         .from('cost-documents')
         .getPublicUrl(storagePath);
@@ -77,7 +94,6 @@ serve(async (req) => {
         fileUrl = urlData.publicUrl;
         console.log('Using existing Storage URL:', fileUrl);
       }
-      // Continue even without URL - Railway can still process the file
     } else if (uploadData?.path) {
       const { data: urlData } = supabase.storage
         .from('cost-documents')
