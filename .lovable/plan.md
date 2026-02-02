@@ -1,45 +1,75 @@
 
-# Plan: Corregir Error "Field Required" en Validar Todos
+# Plan: Sincronizar Usuario a app_users en Restauración de Sesión
 
-## Problema Identificado
-El botón "Validar todos los documentos" falla con el error "Field required" porque el backend requiere un parametro `user_id` obligatorio para auditoría, pero el frontend no lo está enviando.
+## Problema Actual
+La sincronización a `app_users` solo ocurre en:
+- Login explícito (`signIn`)
+- Registro (`signUp`)  
+- Evento `SIGNED_IN` en `onAuthStateChange`
 
-## Causa Raíz
-En `CostConsultingDetail.tsx`, el componente `ReviewSummaryCard` se usa sin pasar la propiedad `userId`:
+Pero cuando un usuario ya logueado **recarga la página**, la sesión se restaura via `getSession()` y el evento puede ser `INITIAL_SESSION` (no `SIGNED_IN`), causando que el usuario **no se sincronice** a la base de datos externa.
 
-```tsx
-<ReviewSummaryCard
-  projectId={project?.id || ''}
-  onAllValidated={() => {...}}
-/>
-// Falta: userId={user?.id}
+## Cambios Propuestos
+
+### Archivo: `src/contexts/AuthContext.tsx`
+
+**Cambio 1: Sincronizar en `getSession()` (líneas 82-91)**
+
+Actual:
+```typescript
+supabase.auth.getSession().then(({ data: { session } }) => {
+  setSession(session);
+  setUser(session?.user ?? null);
+  
+  if (session?.user) {
+    fetchProfile(session.user.id);
+  }
+  
+  setLoading(false);
+});
 ```
 
-El archivo ya tiene acceso al usuario via `const { user } = useAuth()`, pero no lo está pasando al componente.
-
-## Solución
-
-### Archivo a modificar
-**`src/pages/cost-consulting/CostConsultingDetail.tsx`**
-
-### Cambio
-Agregar la propiedad `userId` al componente `ReviewSummaryCard` (líneas 1050-1056):
-
-```tsx
-<ReviewSummaryCard
-  projectId={project?.id || ''}
-  userId={user?.id}  // <-- Agregar esta línea
-  onAllValidated={() => {
-    refreshReview();
-    queryClient.invalidateQueries({ queryKey: ['cost-project', id] });
-  }}
-/>
+Nuevo:
+```typescript
+supabase.auth.getSession().then(({ data: { session } }) => {
+  setSession(session);
+  setUser(session?.user ?? null);
+  
+  if (session?.user) {
+    // Sync user on session restore (page refresh, etc.)
+    syncUserToExternal(session.user);
+    fetchProfile(session.user.id);
+  }
+  
+  setLoading(false);
+});
 ```
 
-## Detalles Técnicos
-- El hook `useDocumentReview` ya maneja correctamente el `userId` cuando se proporciona
-- La función `validateAll` construye la URL con `user_id` como query parameter
-- El backend FastAPI requiere este parámetro para registrar quién realizó la validación
+**Cambio 2: Ampliar condición en `onAuthStateChange` (líneas 66-69)**
+
+Actual:
+```typescript
+if (event === 'SIGNED_IN') {
+  syncUserToExternal(session.user);
+}
+```
+
+Nuevo:
+```typescript
+if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+  syncUserToExternal(session.user);
+}
+```
+
+## Por qué esto resuelve el problema
+
+1. **`getSession()`**: Se ejecuta siempre al cargar la app. Si hay sesión persistida, sincroniza inmediatamente.
+
+2. **`INITIAL_SESSION`**: Evento que Supabase dispara cuando hay una sesión inicial (diferente a `SIGNED_IN` que es para logins nuevos).
+
+3. **Upsert es idempotente**: Llamar `syncUserToExternal` múltiples veces no causa problemas - el `upsert` con `onConflict: 'id'` simplemente actualiza `updated_at`.
 
 ## Resultado Esperado
-Después del cambio, al hacer clic en "Validar todos", la petición incluirá el parámetro `user_id` requerido y la validación masiva funcionará correctamente.
+- Usuario recarga página → `getSession()` detecta sesión → `syncUserToExternal()` se ejecuta
+- Usuario existe en `app_users` antes de intentar validar documentos
+- FK constraint en `human_validated_by` funciona correctamente
