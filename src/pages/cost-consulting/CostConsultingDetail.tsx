@@ -43,11 +43,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { 
   useCostProject, 
-  useCostContracts, 
-  useCostInvoices, 
   useCostOpportunities,
   useCostDocuments
 } from '@/hooks/useCostConsultingData';
+import { useContractsWithDocuments, useInvoicesWithDocuments } from '@/hooks/useCostEntitiesWithDocuments';
 import { useDocumentReview } from '@/hooks/useDocumentReview';
 import { DocumentsManagementCard } from '@/components/cost-consulting/DocumentsManagementCard';
 import { ContractFormModal } from '@/components/cost-consulting/ContractFormModal';
@@ -519,8 +518,8 @@ const CostConsultingDetail = () => {
   
   // Fetch project data from external Supabase
   const { data: project, isLoading: isLoadingProject } = useCostProject(id);
-  const { data: contracts = [] } = useCostContracts(id);
-  const { data: invoices = [] } = useCostInvoices(id);
+  const { data: contracts = [] } = useContractsWithDocuments(id);
+  const { data: invoices = [] } = useInvoicesWithDocuments(id);
   const { data: opportunities = [] } = useCostOpportunities(id);
   const { data: documents = [] } = useCostDocuments(id);
   
@@ -1211,7 +1210,7 @@ const CostConsultingDetail = () => {
         projectId={project?.id || ''}
         invoice={editingInvoice}
         suppliers={suppliers}
-        contracts={contracts}
+        contracts={contracts as CostContract[]}
         open={!!editingInvoice}
         onClose={() => setEditingInvoice(null)}
         onSaved={() => {
