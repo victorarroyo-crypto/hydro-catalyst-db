@@ -1,158 +1,115 @@
 
-# Plan: Añadir Botones de Eliminar a las Tablas de Revisión
+# Plan: Mejorar Gestión de Documentos para Proyectos Grandes
 
-## Resumen
+## Problema Identificado
 
-Añadir un botón de papelera (🗑️) a cada fila de las tablas de Contratos y Facturas en la vista de revisión, permitiendo eliminar registros individuales antes o después del análisis.
+Cuando se suben documentos en múltiples bloques, no hay visibilidad de:
+- Cuántos documentos están registrados en el sistema
+- Cuáles están pendientes de extracción
+- Si la extracción procesó todos o solo algunos
+
+El backend Railway puede estar filtrando documentos (por status, por límites, etc.), pero el frontend no lo muestra.
+
+## Solución Propuesta
+
+### 1. Añadir Panel de Documentos Pendientes en Vista de Revisión
+
+Mostrar siempre la lista de documentos registrados (tabla `cost_project_documents`) para que el usuario vea:
+- Qué documentos están subidos
+- Su estado de procesamiento (pending/processing/completed/failed)
+- Posibilidad de eliminar antes de extraer
+
+**Archivo:** `src/pages/cost-consulting/CostConsultingDetail.tsx`
+
+Añadir sección colapsable "Documentos Subidos" que muestre:
+- Listado de todos los documentos del proyecto
+- Estado de cada uno (icono de color)
+- Botón de eliminar individual
+- Contador: "X de Y documentos procesados"
+
+### 2. Mostrar DocumentsManagementCard en Estado Review (no solo Completed)
+
+Actualmente `DocumentsManagementCard` solo se muestra en el tab "Documentos" cuando el proyecto está completado. Debería mostrarse también en `review` para dar visibilidad completa.
+
+**Cambio:** Añadir la tarjeta de gestión de documentos en la vista de revisión, antes de las tablas de contratos/facturas.
+
+### 3. Añadir Endpoint para Listar Documentos Pendientes
+
+Verificar que existe `GET /api/cost-consulting/projects/{id}/documents` en Railway y usarlo para obtener la lista completa.
+
+**Archivo:** `src/services/costConsultingApi.ts`
+
+```typescript
+export const getProjectDocuments = async (projectId: string) => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents`
+  );
+  if (!response.ok) throw new Error('Error fetching documents');
+  return response.json();
+};
+```
+
+### 4. Crear Componente PendingDocumentsList
+
+Nuevo componente ligero que muestre los documentos pendientes de forma compacta:
+
+**Archivo:** `src/components/cost-consulting/PendingDocumentsList.tsx`
+
+```typescript
+// Componente que muestra:
+// - Lista compacta de documentos con iconos de estado
+// - Botón "Eliminar" por documento
+// - Resumen: "12 documentos (8 procesados, 2 pendientes, 2 fallidos)"
+```
+
+### 5. Integrar en Flujo de Revisión
+
+En `CostConsultingDetail.tsx`, cuando el estado es `review`:
+
+```tsx
+{isReview && (
+  <div className="space-y-6">
+    {/* Alert informativo existente */}
+    
+    {/* NUEVO: Lista de documentos subidos */}
+    <PendingDocumentsList 
+      projectId={project.id}
+      onDocumentDeleted={() => queryClient.invalidateQueries(['cost-documents', id])}
+    />
+    
+    {/* Botones de acción existentes */}
+    {/* Tablas de contratos/facturas */}
+  </div>
+)}
+```
 
 ## Archivos a Modificar
 
-| Archivo | Cambio |
-|---------|--------|
-| `ContractsReviewTable.tsx` | Añadir prop `onDelete`, botón Trash2 |
-| `InvoicesReviewTable.tsx` | Añadir prop `onDelete`, botón Trash2 |
-| `CostConsultingDetail.tsx` | Implementar handlers y pasarlos a las tablas |
+| Archivo | Cambios |
+|---------|---------|
+| `costConsultingApi.ts` | Añadir `getProjectDocuments()` |
+| `PendingDocumentsList.tsx` | Nuevo componente |
+| `CostConsultingDetail.tsx` | Integrar lista en vista review |
 
-## Cambios Detallados
+## Beneficios
 
-### 1. ContractsReviewTable.tsx
+1. **Visibilidad total**: El usuario ve todos los documentos subidos, no solo los extraídos
+2. **Diagnóstico fácil**: Si solo se procesaron 12 de 36, es visible inmediatamente
+3. **Control granular**: Puede eliminar documentos problemáticos antes de re-extraer
+4. **Mejor UX para proyectos grandes**: Sabe exactamente qué hay en el sistema
 
-```typescript
-// Importar Trash2
-import { ..., Trash2 } from 'lucide-react';
+## Consideraciones Backend
 
-// Actualizar interface (línea 66-73)
-interface ContractsReviewTableProps {
-  contracts: ContractForReview[];
-  onView?: (contract: ContractForReview) => void;
-  onEdit?: (contract: ContractForReview) => void;
-  onValidate?: (contractId: string) => void;
-  onChangeType?: (contract: ContractForReview) => void;
-  onDelete?: (contractId: string) => void;  // NUEVO
-  isValidating?: string | null;
-  isDeleting?: string | null;  // NUEVO
-}
+Si el backend Railway tiene límites en la extracción, esto los haría visibles. El usuario podría:
+- Subir en lotes más pequeños
+- Identificar qué documentos no se procesaron
+- Re-extraer selectivamente
 
-// Añadir botón después de Validar (línea ~331)
-{/* Delete */}
-{onDelete && (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-        onClick={() => onDelete(contract.id)}
-        disabled={isDeleting === contract.id}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </TooltipTrigger>
-    <TooltipContent>Eliminar</TooltipContent>
-  </Tooltip>
-)}
-```
+## Alternativa: Subida por Lotes con Confirmación
 
-### 2. InvoicesReviewTable.tsx
+Si el problema es que Railway no puede manejar muchos documentos a la vez, podríamos añadir:
+- Subida en lotes de 10-15 documentos
+- Esperar confirmación antes del siguiente lote
+- Barra de progreso global
 
-```typescript
-// Importar Trash2 (ya hay otros iconos)
-import { ..., Trash2 } from 'lucide-react';
-
-// Actualizar interface (línea 76-83)
-interface InvoicesReviewTableProps {
-  invoices: InvoiceForReview[];
-  onView?: (invoice: InvoiceForReview) => void;
-  onEdit?: (invoice: InvoiceForReview) => void;
-  onValidate?: (invoiceId: string) => void;
-  onChangeType?: (invoice: InvoiceForReview) => void;
-  onDelete?: (invoiceId: string) => void;  // NUEVO
-  isValidating?: string | null;
-  isDeleting?: string | null;  // NUEVO
-}
-
-// Añadir botón después de Validar (línea ~393)
-{/* Delete */}
-{onDelete && (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-        onClick={() => onDelete(invoice.id)}
-        disabled={isDeleting === invoice.id}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </TooltipTrigger>
-    <TooltipContent>Eliminar</TooltipContent>
-  </Tooltip>
-)}
-```
-
-### 3. CostConsultingDetail.tsx
-
-```typescript
-// Estados para tracking de eliminación
-const [deletingContractId, setDeletingContractId] = useState<string | null>(null);
-const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
-
-// Handler para eliminar contrato
-const handleDeleteContract = async (contractId: string) => {
-  setDeletingContractId(contractId);
-  try {
-    await deleteContract(projectId, contractId);
-    toast.success('Contrato eliminado');
-    refetchContracts();
-  } catch (error) {
-    toast.error('Error al eliminar contrato');
-  } finally {
-    setDeletingContractId(null);
-  }
-};
-
-// Handler para eliminar factura
-const handleDeleteInvoice = async (invoiceId: string) => {
-  setDeletingInvoiceId(invoiceId);
-  try {
-    await deleteInvoice(projectId, invoiceId);
-    toast.success('Factura eliminada');
-    refetchInvoices();
-  } catch (error) {
-    toast.error('Error al eliminar factura');
-  } finally {
-    setDeletingInvoiceId(null);
-  }
-};
-
-// Pasar a los componentes
-<ContractsReviewTable
-  contracts={contracts}
-  onDelete={handleDeleteContract}
-  isDeleting={deletingContractId}
-  // ... otras props
-/>
-
-<InvoicesReviewTable
-  invoices={invoices}
-  onDelete={handleDeleteInvoice}
-  isDeleting={deletingInvoiceId}
-  // ... otras props
-/>
-```
-
-## Diseño Visual
-
-El botón de eliminar:
-- Icono: `Trash2` de lucide-react
-- Color: Rojo (`text-destructive`)
-- Posición: Último botón de la fila (después de "Validar")
-- Hover: `hover:bg-destructive/10`
-- Estado deshabilitado mientras se elimina
-
-## Notas
-
-- Los endpoints `deleteContract` y `deleteInvoice` ya existen en `costConsultingApi.ts`
-- No se requiere confirmación previa (el usuario puede volver a extraer si elimina por error)
-- El botón aparece siempre, independientemente del estado de validación
+Esto sería un cambio mayor en `CostConsultingNew.tsx` y requiere más análisis del backend.
