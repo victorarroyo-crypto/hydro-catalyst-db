@@ -210,6 +210,9 @@ export const useCostContracts = (projectId?: string) => {
     queryFn: async () => {
       if (!projectId) return [];
       
+      console.log('[useCostContracts] Fetching for projectId:', projectId);
+      
+      // Primero intentar query con JOINs
       const { data, error } = await externalSupabase
         .from('cost_project_contracts')
         .select(`
@@ -219,6 +222,25 @@ export const useCostContracts = (projectId?: string) => {
         `)
         .eq('project_id', projectId)
         .order('total_annual_value', { ascending: false });
+      
+      console.log('[useCostContracts] Query result - data:', data, 'error:', error);
+      
+      // Si hay error o vacío, intentar query simplificado
+      if (error || (data && data.length === 0)) {
+        console.log('[useCostContracts] Trying simplified query without JOINs...');
+        const { data: simpleData, error: simpleError } = await externalSupabase
+          .from('cost_project_contracts')
+          .select('*')
+          .eq('project_id', projectId);
+        
+        console.log('[useCostContracts] Simplified query - data:', simpleData, 'error:', simpleError);
+        
+        if (simpleError) throw simpleError;
+        if (simpleData && simpleData.length > 0) {
+          console.log('[useCostContracts] JOINs are the problem! Found', simpleData.length, 'contracts');
+          return simpleData as CostContract[];
+        }
+      }
       
       if (error) throw error;
       return (data || []) as CostContract[];
@@ -237,6 +259,9 @@ export const useCostInvoices = (projectId?: string) => {
     queryFn: async () => {
       if (!projectId) return [];
       
+      console.log('[useCostInvoices] Fetching for projectId:', projectId);
+      
+      // Primero intentar query con JOINs
       const { data, error } = await externalSupabase
         .from('cost_project_invoices')
         .select(`
@@ -246,6 +271,25 @@ export const useCostInvoices = (projectId?: string) => {
         `)
         .eq('project_id', projectId)
         .order('invoice_date', { ascending: false });
+      
+      console.log('[useCostInvoices] Query result - data:', data, 'error:', error);
+      
+      // Si hay error o vacío, intentar query simplificado
+      if (error || (data && data.length === 0)) {
+        console.log('[useCostInvoices] Trying simplified query without JOINs...');
+        const { data: simpleData, error: simpleError } = await externalSupabase
+          .from('cost_project_invoices')
+          .select('*')
+          .eq('project_id', projectId);
+        
+        console.log('[useCostInvoices] Simplified query - data:', simpleData, 'error:', simpleError);
+        
+        if (simpleError) throw simpleError;
+        if (simpleData && simpleData.length > 0) {
+          console.log('[useCostInvoices] JOINs are the problem! Found', simpleData.length, 'invoices');
+          return simpleData as CostInvoice[];
+        }
+      }
       
       if (error) throw error;
       return (data || []) as CostInvoice[];
