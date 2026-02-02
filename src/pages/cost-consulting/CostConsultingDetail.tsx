@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -506,6 +507,7 @@ const SuppliersReviewList = ({ projectId }: { projectId?: string }) => {
 const CostConsultingDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('overview');
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -557,7 +559,7 @@ const CostConsultingDetail = () => {
     allValidated,
     hasCriticalWarnings,
     refresh: refreshReview,
-  } = useDocumentReview(id, undefined, project?.status === 'review');
+  } = useDocumentReview(id, user?.id, project?.status === 'review');
 
   // Handler for single document validation
   const handleValidateDocument = async (docType: 'contract' | 'invoice', docId: string) => {
