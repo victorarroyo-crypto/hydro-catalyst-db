@@ -1,163 +1,135 @@
 
-# Plan: Añadir botones Ver/Editar a las tablas de Contratos y Facturas ✅ COMPLETADO
+# Plan: Corregir error en cambio de tipo de documento
 
-## Problema
-Las tablas `ContractsReviewTable` e `InvoicesReviewTable` muestran los datos extraídos pero no tienen botones para:
-- Ver los detalles completos del documento
-- Editar los datos extraídos
+## Problemas Identificados
 
-Los modales de edición ya existen (`ContractFormModal`, `InvoiceFormModal`) pero no están conectados a las tablas.
+### 1. Falta `user_id` en las llamadas al backend
+
+**Ubicación:** `src/pages/cost-consulting/CostConsultingDetail.tsx` línea 560
+
+**Código actual:**
+```typescript
+useDocumentReview(id, undefined, project?.status === 'review');
+```
+
+**Problema:** El backend requiere `user_id` como parámetro obligatorio, pero se está pasando `undefined`.
+
+**Error del backend:**
+```json
+{"detail":[{"type":"missing","loc":["query","user_id"],"msg":"Field required"}]}
+```
+
+### 2. Manejo de errores incorrecto
+
+**Ubicación:** `src/hooks/useDocumentReview.ts` líneas 171-173
+
+**Código actual:**
+```typescript
+const error = await response.json().catch(() => ({ detail: 'Error changing document type' }));
+throw new Error(error.detail || 'Error changing document type');
+```
+
+**Problema:** `error.detail` es un array, no un string. Cuando se pasa a `new Error()`, se muestra como `[object Object]`.
+
+---
 
 ## Solución
 
-Añadir una columna "Acciones" a ambas tablas con botones de Ver (👁) y Editar (✏️), y conectarlos con los modales existentes.
+### Archivo 1: `src/pages/cost-consulting/CostConsultingDetail.tsx`
 
----
-
-## Archivos a modificar
-
-| Archivo | Cambio |
-|---------|--------|
-| `src/components/cost-consulting/ContractsReviewTable.tsx` | Añadir columna Acciones con callbacks |
-| `src/components/cost-consulting/InvoicesReviewTable.tsx` | Añadir columna Acciones con callbacks |
-| `src/pages/cost-consulting/CostConsultingDetail.tsx` | Importar modales e integrar con las tablas |
-
----
-
-## Cambios detallados
-
-### 1. ContractsReviewTable.tsx
-
-**Nuevas props:**
+**Cambio 1:** Importar `useAuth`
 ```typescript
-interface ContractsReviewTableProps {
-  contracts: Contract[];
-  onView?: (contract: Contract) => void;   // NUEVO
-  onEdit?: (contract: Contract) => void;   // NUEVO
+import { useAuth } from '@/contexts/AuthContext';
+```
+
+**Cambio 2:** Obtener el usuario dentro del componente
+```typescript
+const CostConsultingDetail = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();  // AÑADIR ESTA LÍNEA
+  // ...
+```
+
+**Cambio 3:** Pasar `user?.id` al hook
+```typescript
+} = useDocumentReview(id, user?.id, project?.status === 'review');
+//                        ^^^^^^^^^ Cambiar undefined por user?.id
+```
+
+### Archivo 2: `src/hooks/useDocumentReview.ts`
+
+**Cambio:** Mejorar el parsing de errores del backend
+
+```typescript
+// Función helper para extraer mensaje de error
+const parseErrorMessage = (errorData: unknown, defaultMsg: string): string => {
+  if (!errorData) return defaultMsg;
+  
+  // Si detail es un string, devolverlo directamente
+  if (typeof errorData === 'object' && 'detail' in errorData) {
+    const detail = (errorData as { detail: unknown }).detail;
+    
+    if (typeof detail === 'string') {
+      return detail;
+    }
+    
+    // Si detail es un array (formato Pydantic/FastAPI)
+    if (Array.isArray(detail) && detail.length > 0) {
+      const firstError = detail[0];
+      if (firstError && typeof firstError === 'object' && 'msg' in firstError) {
+        return firstError.msg;
+      }
+    }
+  }
+  
+  return defaultMsg;
+};
+```
+
+Luego usar esta función en los catch blocks:
+```typescript
+// En changeDocumentType
+if (!response.ok) {
+  const errorData = await response.json().catch(() => null);
+  const message = parseErrorMessage(errorData, 'Error al cambiar el tipo del documento');
+  throw new Error(message);
+}
+
+// En validateDocument
+if (!response.ok) {
+  const errorData = await response.json().catch(() => null);
+  const message = parseErrorMessage(errorData, 'Error al validar el documento');
+  throw new Error(message);
+}
+
+// En validateAll
+if (!response.ok) {
+  const errorData = await response.json().catch(() => null);
+  const message = parseErrorMessage(errorData, 'Error al validar los documentos');
+  throw new Error(message);
 }
 ```
 
-**Nueva columna en la tabla:**
-```
-| Proveedor | Nº Contrato | Valor Anual | Vigencia | Renovación | Pago | Confianza | Acciones |
-                                                                                    [👁] [✏️]
-```
+---
 
-**Iconos a importar:** `Eye`, `Pencil` de lucide-react
+## Resumen de Cambios
 
-### 2. InvoicesReviewTable.tsx
-
-**Nuevas props:**
-```typescript
-interface InvoicesReviewTableProps {
-  invoices: Invoice[];
-  onView?: (invoice: Invoice) => void;   // NUEVO
-  onEdit?: (invoice: Invoice) => void;   // NUEVO
-}
-```
-
-**Nueva columna en la tabla:**
-```
-| ▶ | Nº Factura | Fecha | Proveedor | Base | IVA | Total | Líneas | Acciones |
-                                                                       [👁] [✏️]
-```
-
-**Nota:** Los botones deben usar `e.stopPropagation()` para evitar que expandan la fila al hacer clic.
-
-### 3. CostConsultingDetail.tsx
-
-**Nuevos imports:**
-```typescript
-import { ContractFormModal } from '@/components/cost-consulting/ContractFormModal';
-import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
-```
-
-**Nuevos estados:**
-```typescript
-const [editingContract, setEditingContract] = useState<CostContract | null>(null);
-const [editingInvoice, setEditingInvoice] = useState<CostInvoice | null>(null);
-const [viewingContract, setViewingContract] = useState<CostContract | null>(null);
-const [viewingInvoice, setViewingInvoice] = useState<CostInvoice | null>(null);
-```
-
-**Actualizar las tablas con callbacks:**
-```tsx
-<ContractsReviewTable 
-  contracts={contracts}
-  onView={(c) => setViewingContract(c)}
-  onEdit={(c) => setEditingContract(c)}
-/>
-
-<InvoicesReviewTable 
-  invoices={invoices}
-  onView={(i) => setViewingInvoice(i)}
-  onEdit={(i) => setEditingInvoice(i)}
-/>
-```
-
-**Añadir los modales al final del componente:**
-```tsx
-{/* Contract Edit Modal */}
-<ContractFormModal
-  projectId={project?.id || ''}
-  contract={editingContract}
-  suppliers={[]} // Obtener de hook existente
-  open={!!editingContract}
-  onClose={() => setEditingContract(null)}
-  onSaved={() => {
-    queryClient.invalidateQueries({ queryKey: ['cost-contracts', id] });
-    setEditingContract(null);
-  }}
-/>
-
-{/* Invoice Edit Modal */}
-<InvoiceFormModal
-  projectId={project?.id || ''}
-  invoice={editingInvoice}
-  suppliers={[]}
-  contracts={contracts}
-  open={!!editingInvoice}
-  onClose={() => setEditingInvoice(null)}
-  onSaved={() => {
-    queryClient.invalidateQueries({ queryKey: ['cost-invoices', id] });
-    setEditingInvoice(null);
-  }}
-/>
-```
-
-**Modal de Vista (simplificado):** Para los botones "Ver", abrir el modal de edición en modo solo lectura, o crear un Dialog simple que muestre todos los campos.
+| Archivo | Línea | Cambio |
+|---------|-------|--------|
+| `CostConsultingDetail.tsx` | Import | Añadir `import { useAuth }` |
+| `CostConsultingDetail.tsx` | ~507 | Añadir `const { user } = useAuth();` |
+| `CostConsultingDetail.tsx` | ~560 | Cambiar `undefined` por `user?.id` |
+| `useDocumentReview.ts` | ~10 | Añadir función `parseErrorMessage` |
+| `useDocumentReview.ts` | ~171 | Usar `parseErrorMessage` en `changeDocumentType` |
+| `useDocumentReview.ts` | ~144 | Usar `parseErrorMessage` en `validateDocument` |
+| `useDocumentReview.ts` | ~201 | Usar `parseErrorMessage` en `validateAll` |
 
 ---
 
-## Diseño visual de los botones
+## Resultado Esperado
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Proveedor      │ Nº Factura │ Fecha       │ Total      │ Líneas │ Acciones  │
-├────────────────┼────────────┼─────────────┼────────────┼────────┼───────────┤
-│ AGUASERV S.L.  │ FAS-001    │ 05 dic 2024 │ 15.125,00€ │  [1]   │ [👁] [✏️] │
-│ MAPFRE S.A.    │ POL-001    │ 01 ene 2024 │  6.800,00€ │  [1]   │ [👁] [✏️] │
-└────────────────┴────────────┴─────────────┴────────────┴────────┴───────────┘
-```
-
-- **👁 (Eye)**: Tooltip "Ver detalles" - Abre vista de solo lectura
-- **✏️ (Pencil)**: Tooltip "Editar" - Abre modal de edición
-
----
-
-## Flujo de usuario
-
-1. Usuario ve la tabla de facturas/contratos en el estado "review"
-2. Cada fila tiene botones de Ver y Editar en la última columna
-3. Al hacer clic en "Ver" → Abre modal con todos los detalles (solo lectura)
-4. Al hacer clic en "Editar" → Abre el formulario de edición existente
-5. Al guardar cambios → La tabla se actualiza automáticamente via React Query
-
----
-
-## Detalles técnicos
-
-- **Iconos:** `Eye` y `Pencil` de lucide-react
-- **Botones:** Variante `ghost`, tamaño `icon` o `sm`
-- **Invalidación de queries:** Usar `queryClient.invalidateQueries` tras guardar
-- **Suppliers:** Necesitamos cargar la lista de proveedores para los modales (revisar si ya existe un hook `useCostSuppliers`)
+Después de estos cambios:
+- El `user_id` se enviará correctamente al backend
+- Si hay errores, se mostrarán mensajes legibles como "Field required" en vez de "[object Object]"
+- El cambio de tipo de factura a contrato funcionará correctamente
