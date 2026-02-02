@@ -63,13 +63,21 @@ serve(async (req) => {
       .from('cost-documents')
       .upload(storagePath, fileContent, {
         contentType: file.type || 'application/pdf',
-        upsert: false,
+        upsert: true, // Allow overwriting if file somehow exists
       });
 
     let fileUrl: string | null = null;
     if (uploadError) {
       console.error('Storage upload error:', uploadError);
-      // Continue without URL if storage fails
+      // If upload fails, try to get existing file URL (in case it's a duplicate path)
+      const { data: urlData } = supabase.storage
+        .from('cost-documents')
+        .getPublicUrl(storagePath);
+      if (urlData?.publicUrl) {
+        fileUrl = urlData.publicUrl;
+        console.log('Using existing Storage URL:', fileUrl);
+      }
+      // Continue even without URL - Railway can still process the file
     } else if (uploadData?.path) {
       const { data: urlData } = supabase.storage
         .from('cost-documents')
