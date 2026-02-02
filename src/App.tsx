@@ -55,6 +55,8 @@ import {
   CostConsultingSimulator,
   CostConsultingSuppliers,
   CostConsultingBenchmarks,
+  CostSuppliersAdmin,
+  CostBenchmarksAdmin,
 } from "./pages/cost-consulting";
 
 import ProjectBriefingPage from "./pages/consultoria/ProjectBriefingPage";
@@ -116,6 +118,8 @@ const App = () => (
               <Route path="/cost-consulting/new" element={<CostConsultingNew />} />
               <Route path="/cost-consulting/suppliers" element={<CostConsultingSuppliers />} />
               <Route path="/cost-consulting/benchmarks" element={<CostConsultingBenchmarks />} />
+              <Route path="/cost-consulting/admin/suppliers" element={<CostSuppliersAdmin />} />
+              <Route path="/cost-consulting/admin/benchmarks" element={<CostBenchmarksAdmin />} />
               <Route path="/cost-consulting/:id" element={<CostConsultingDetail />} />
               <Route path="/cost-consulting/:id/contracts" element={<CostConsultingContracts />} />
               <Route path="/cost-consulting/:id/invoices" element={<CostConsultingInvoices />} />
