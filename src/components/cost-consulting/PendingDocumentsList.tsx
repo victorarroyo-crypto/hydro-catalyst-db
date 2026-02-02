@@ -373,20 +373,21 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                             <span className="truncate max-w-[250px]" title={doc.filename}>
                               {doc.filename}
                             </span>
-                            {doc.file_type && doc.file_type !== 'otro' && (
+                            {/* Show document type badge based on extracted entities */}
+                            {doc.extraction_status === 'completed' && docCounts.contracts > 0 && (
                               <Badge 
                                 variant="outline" 
-                                className={`text-xs shrink-0 ${
-                                  doc.file_type === 'contrato' 
-                                    ? 'bg-blue-500/10 text-blue-600 border-blue-200' 
-                                    : doc.file_type === 'factura'
-                                    ? 'bg-green-500/10 text-green-600 border-green-200'
-                                    : ''
-                                }`}
+                                className="text-xs shrink-0 bg-blue-500/10 text-blue-600 border-blue-200"
                               >
-                                {doc.file_type === 'contrato' ? 'Contrato' : 
-                                 doc.file_type === 'factura' ? 'Factura' : 
-                                 doc.file_type}
+                                Contrato
+                              </Badge>
+                            )}
+                            {doc.extraction_status === 'completed' && docCounts.invoices > 0 && (
+                              <Badge 
+                                variant="outline" 
+                                className="text-xs shrink-0 bg-emerald-500/10 text-emerald-600 border-emerald-200"
+                              >
+                                Factura
                               </Badge>
                             )}
                             {hasNoEntities && (
