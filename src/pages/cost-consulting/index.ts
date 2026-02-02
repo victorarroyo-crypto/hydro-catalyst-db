@@ -7,3 +7,7 @@ export { default as CostConsultingOpportunities } from './CostConsultingOpportun
 export { default as CostConsultingSimulator } from './CostConsultingSimulator';
 export { default as CostConsultingSuppliers } from './CostConsultingSuppliers';
 export { default as CostConsultingBenchmarks } from './CostConsultingBenchmarks';
+
+// Admin pages
+export { default as CostSuppliersAdmin } from './admin/CostSuppliersAdmin';
+export { default as CostBenchmarksAdmin } from './admin/CostBenchmarksAdmin';
