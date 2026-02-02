@@ -54,9 +54,18 @@ import {
   ProjectDocument 
 } from '@/services/costConsultingApi';
 
+export interface DocumentStats {
+  pending: number;
+  failed: number;
+  processing: number;
+  completed: number;
+  total: number;
+}
+
 interface PendingDocumentsListProps {
   projectId: string;
   onDocumentDeleted?: () => void;
+  onStatsChange?: (stats: DocumentStats) => void;
 }
 
 const getStatusConfig = (status: string) => {
@@ -103,6 +112,7 @@ const formatFileSize = (bytes?: number) => {
 export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
   projectId,
   onDocumentDeleted,
+  onStatsChange,
 }) => {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(true);
@@ -124,7 +134,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
   });
 
   // Calculate stats - use extraction_status (API field name)
-  const stats = {
+  const stats: DocumentStats = {
     total: documents.length,
     completed: documents.filter(d => d.extraction_status === 'completed').length,
     processing: documents.filter(d => d.extraction_status === 'processing').length,
@@ -132,6 +142,10 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
     failed: documents.filter(d => d.extraction_status === 'failed').length,
   };
 
+  // Notify parent when stats change
+  React.useEffect(() => {
+    onStatsChange?.(stats);
+  }, [stats.pending, stats.failed, stats.processing, stats.completed, stats.total, onStatsChange]);
   const handleDeleteConfirm = async () => {
     if (!documentToDelete) return;
     
