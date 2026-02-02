@@ -9,8 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { 
   CheckCircle2, 
-  AlertTriangle, 
-  FileSearch, 
+  AlertTriangle,
   CheckCheck,
   Loader2,
   FileText,
@@ -21,14 +20,12 @@ import { useDocumentReview, ReviewSummary } from '@/hooks/useDocumentReview';
 interface ReviewSummaryCardProps {
   projectId: string;
   userId?: string;
-  onReviewClick?: () => void;
   onAllValidated?: () => void;
 }
 
 export const ReviewSummaryCard: React.FC<ReviewSummaryCardProps> = ({
   projectId,
   userId,
-  onReviewClick,
   onAllValidated,
 }) => {
   const {
@@ -94,7 +91,7 @@ export const ReviewSummaryCard: React.FC<ReviewSummaryCardProps> = ({
           ) : (
             <>
               <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                <FileSearch className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
               <span className="text-lg">Validación de documentos</span>
             </>
@@ -167,20 +164,31 @@ export const ReviewSummaryCard: React.FC<ReviewSummaryCardProps> = ({
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="flex gap-3 pt-2">
-          {hasDocumentsToReview && onReviewClick && (
-            <Button variant="outline" onClick={onReviewClick} className="flex-1">
-              <FileSearch className="h-4 w-4 mr-2" />
-              Revisar documentos
-            </Button>
+        {/* Status indicator and action button */}
+        <div className="flex items-center justify-between gap-3 pt-2">
+          {/* Status badge */}
+          {hasDocumentsToReview ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Badge variant="outline" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-orange-300">
+                {pendingDocs.length} pendiente{pendingDocs.length !== 1 ? 's' : ''} de validar
+              </Badge>
+              <span className="text-xs">Revisa en la lista de documentos</span>
+            </div>
+          ) : allValidated ? (
+            <Badge variant="outline" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-300">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Todo validado
+            </Badge>
+          ) : (
+            <span className="text-sm text-muted-foreground">Sin documentos pendientes</span>
           )}
           
-          {!allValidated && !hasCriticalWarnings && (
+          {/* Validate all button - only when applicable */}
+          {!allValidated && !hasCriticalWarnings && pendingDocs.length > 0 && (
             <Button 
+              size="sm"
               onClick={handleValidateAll} 
               disabled={isValidatingAll}
-              className="flex-1"
             >
               {isValidatingAll ? (
                 <>
