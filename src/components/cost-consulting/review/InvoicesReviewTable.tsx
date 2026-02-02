@@ -1,11 +1,47 @@
-import React, { useState, Fragment } from 'react';
+import React, { useState, Fragment, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, ChevronDown, ChevronRight, FileDown } from 'lucide-react';
+import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, ChevronDown, ChevronRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+
+type SortField = 'status' | 'invoice_number' | 'invoice_date' | 'supplier' | 'total' | 'confidence' | 'lines';
+type SortDirection = 'asc' | 'desc';
+
+interface SortableHeaderProps {
+  field: SortField;
+  currentField: SortField | null;
+  direction: SortDirection;
+  onSort: (field: SortField) => void;
+  children: React.ReactNode;
+  className?: string;
+}
+
+function SortableHeader({ field, currentField, direction, onSort, children, className = '' }: SortableHeaderProps) {
+  const isActive = currentField === field;
+  
+  return (
+    <TableHead 
+      className={`cursor-pointer hover:bg-muted/50 select-none ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        {isActive ? (
+          direction === 'asc' ? (
+            <ArrowUp className="h-3 w-3 text-primary" />
+          ) : (
+            <ArrowDown className="h-3 w-3 text-primary" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />
+        )}
+      </div>
+    </TableHead>
+  );
+}
 
 interface LineItem {
   description?: string;
@@ -109,6 +145,8 @@ export function InvoicesReviewTable({
   isValidating,
 }: InvoicesReviewTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows);
@@ -119,6 +157,58 @@ export function InvoicesReviewTable({
     }
     setExpandedRows(newExpanded);
   };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getStatusPriority = (invoice: InvoiceForReview): number => {
+    if (invoice.human_validated) return 3;
+    if (invoice.classification_warning) return 1;
+    if (invoice.needs_review) return 2;
+    return 0;
+  };
+
+  const sortedInvoices = useMemo(() => {
+    if (!sortField) return invoices;
+
+    return [...invoices].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortField) {
+        case 'status':
+          comparison = getStatusPriority(a) - getStatusPriority(b);
+          break;
+        case 'invoice_number':
+          comparison = (a.invoice_number || '').localeCompare(b.invoice_number || '');
+          break;
+        case 'invoice_date':
+          const dateA = a.invoice_date ? new Date(a.invoice_date).getTime() : 0;
+          const dateB = b.invoice_date ? new Date(b.invoice_date).getTime() : 0;
+          comparison = dateA - dateB;
+          break;
+        case 'supplier':
+          comparison = (a.supplier_name_raw || '').localeCompare(b.supplier_name_raw || '');
+          break;
+        case 'total':
+          comparison = (a.total || 0) - (b.total || 0);
+          break;
+        case 'confidence':
+          comparison = (a.classification_confidence || 0) - (b.classification_confidence || 0);
+          break;
+        case 'lines':
+          comparison = (a.line_items?.length || 0) - (b.line_items?.length || 0);
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [invoices, sortField, sortDirection]);
 
   if (invoices.length === 0) {
     return (
@@ -134,18 +224,32 @@ export function InvoicesReviewTable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-8"></TableHead>
-            <TableHead>Estado</TableHead>
-            <TableHead>Nº Factura</TableHead>
-            <TableHead>Fecha</TableHead>
-            <TableHead>Proveedor</TableHead>
-            <TableHead className="text-right">Total</TableHead>
-            <TableHead>Confianza</TableHead>
-            <TableHead className="text-center">Líneas</TableHead>
+            <SortableHeader field="status" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Estado
+            </SortableHeader>
+            <SortableHeader field="invoice_number" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Nº Factura
+            </SortableHeader>
+            <SortableHeader field="invoice_date" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Fecha
+            </SortableHeader>
+            <SortableHeader field="supplier" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Proveedor
+            </SortableHeader>
+            <SortableHeader field="total" currentField={sortField} direction={sortDirection} onSort={handleSort} className="text-right">
+              Total
+            </SortableHeader>
+            <SortableHeader field="confidence" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Confianza
+            </SortableHeader>
+            <SortableHeader field="lines" currentField={sortField} direction={sortDirection} onSort={handleSort} className="text-center">
+              Líneas
+            </SortableHeader>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {invoices.map((invoice) => {
+          {sortedInvoices.map((invoice) => {
             const hasLines = invoice.line_items && invoice.line_items.length > 0;
             const isExpanded = expandedRows.has(invoice.id);
 
