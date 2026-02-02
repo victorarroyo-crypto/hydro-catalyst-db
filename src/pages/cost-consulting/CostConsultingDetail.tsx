@@ -31,7 +31,8 @@ import {
   Building2,
   Play,
   Pencil,
-  FileSearch
+  FileSearch,
+  Eye
 } from 'lucide-react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ReportGeneratorModal } from '@/components/cost-consulting/ReportGeneratorModal';
@@ -48,7 +49,11 @@ import {
 } from '@/hooks/useCostConsultingData';
 import { useDocumentReview } from '@/hooks/useDocumentReview';
 import { DocumentsManagementCard } from '@/components/cost-consulting/DocumentsManagementCard';
+import { ContractFormModal } from '@/components/cost-consulting/ContractFormModal';
+import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
 import { toast } from 'sonner';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { CostContract, CostInvoice, CostSupplier } from '@/hooks/useCostConsultingData';
 
 const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
@@ -460,85 +465,164 @@ interface InvoiceForReview {
   invoice_date?: string;
   total?: number;
   source?: string;
+  line_items?: Array<Record<string, unknown>>;
 }
 
-const ContractsReviewTable = ({ contracts }: { contracts: ContractForReview[] }) => {
+interface ContractsReviewTableProps {
+  contracts: ContractForReview[];
+  onView?: (contract: ContractForReview) => void;
+  onEdit?: (contract: ContractForReview) => void;
+}
+
+interface InvoicesReviewTableProps {
+  invoices: InvoiceForReview[];
+  onView?: (invoice: InvoiceForReview) => void;
+  onEdit?: (invoice: InvoiceForReview) => void;
+}
+
+const ContractsReviewTable = ({ contracts, onView, onEdit }: ContractsReviewTableProps) => {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Proveedor</TableHead>
-          <TableHead>Nº Contrato</TableHead>
-          <TableHead>Título</TableHead>
-          <TableHead>Vigencia</TableHead>
-          <TableHead className="text-right">Valor Anual</TableHead>
-          <TableHead>Fuente</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {contracts.map((contract) => (
-          <TableRow key={contract.id}>
-            <TableCell className="font-medium">{contract.supplier_name_raw || '-'}</TableCell>
-            <TableCell>{contract.contract_number || '-'}</TableCell>
-            <TableCell>{contract.contract_title || '-'}</TableCell>
-            <TableCell>
-              {contract.start_date && contract.end_date
-                ? `${new Date(contract.start_date).toLocaleDateString('es-ES')} - ${new Date(contract.end_date).toLocaleDateString('es-ES')}`
-                : '-'}
-            </TableCell>
-            <TableCell className="text-right">
-              {contract.total_annual_value
-                ? `${contract.total_annual_value.toLocaleString('es-ES')}€`
-                : '-'}
-            </TableCell>
-            <TableCell>
-              <Badge variant="outline" className={contract.source === 'manual' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>
-                {contract.source === 'manual' ? 'Manual' : 'Extraído'}
-              </Badge>
-            </TableCell>
+    <TooltipProvider>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Proveedor</TableHead>
+            <TableHead>Nº Contrato</TableHead>
+            <TableHead>Título</TableHead>
+            <TableHead>Vigencia</TableHead>
+            <TableHead className="text-right">Valor Anual</TableHead>
+            <TableHead>Fuente</TableHead>
+            <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {contracts.map((contract) => (
+            <TableRow key={contract.id}>
+              <TableCell className="font-medium">{contract.supplier_name_raw || '-'}</TableCell>
+              <TableCell>{contract.contract_number || '-'}</TableCell>
+              <TableCell>{contract.contract_title || '-'}</TableCell>
+              <TableCell>
+                {contract.start_date && contract.end_date
+                  ? `${new Date(contract.start_date).toLocaleDateString('es-ES')} - ${new Date(contract.end_date).toLocaleDateString('es-ES')}`
+                  : '-'}
+              </TableCell>
+              <TableCell className="text-right">
+                {contract.total_annual_value
+                  ? `${contract.total_annual_value.toLocaleString('es-ES')}€`
+                  : '-'}
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline" className={contract.source === 'manual' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>
+                  {contract.source === 'manual' ? 'Manual' : 'Extraído'}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-8 w-8"
+                        onClick={() => onView?.(contract)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Ver detalles</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-8 w-8"
+                        onClick={() => onEdit?.(contract)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Editar</TooltipContent>
+                  </Tooltip>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TooltipProvider>
   );
 };
 
-const InvoicesReviewTable = ({ invoices }: { invoices: InvoiceForReview[] }) => {
+const InvoicesReviewTable = ({ invoices, onView, onEdit }: InvoicesReviewTableProps) => {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Proveedor</TableHead>
-          <TableHead>Nº Factura</TableHead>
-          <TableHead>Fecha</TableHead>
-          <TableHead className="text-right">Total</TableHead>
-          <TableHead>Fuente</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {invoices.map((invoice) => (
-          <TableRow key={invoice.id}>
-            <TableCell className="font-medium">{invoice.supplier_name_raw || '-'}</TableCell>
-            <TableCell>{invoice.invoice_number || '-'}</TableCell>
-            <TableCell>
-              {invoice.invoice_date
-                ? new Date(invoice.invoice_date).toLocaleDateString('es-ES')
-                : '-'}
-            </TableCell>
-            <TableCell className="text-right">
-              {invoice.total
-                ? `${invoice.total.toLocaleString('es-ES')}€`
-                : '-'}
-            </TableCell>
-            <TableCell>
-              <Badge variant="outline" className={invoice.source === 'manual' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>
-                {invoice.source === 'manual' ? 'Manual' : 'Extraído'}
-              </Badge>
-            </TableCell>
+    <TooltipProvider>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Proveedor</TableHead>
+            <TableHead>Nº Factura</TableHead>
+            <TableHead>Fecha</TableHead>
+            <TableHead className="text-right">Total</TableHead>
+            <TableHead>Fuente</TableHead>
+            <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {invoices.map((invoice) => (
+            <TableRow key={invoice.id}>
+              <TableCell className="font-medium">{invoice.supplier_name_raw || '-'}</TableCell>
+              <TableCell>{invoice.invoice_number || '-'}</TableCell>
+              <TableCell>
+                {invoice.invoice_date
+                  ? new Date(invoice.invoice_date).toLocaleDateString('es-ES')
+                  : '-'}
+              </TableCell>
+              <TableCell className="text-right">
+                {invoice.total
+                  ? `${invoice.total.toLocaleString('es-ES')}€`
+                  : '-'}
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline" className={invoice.source === 'manual' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>
+                  {invoice.source === 'manual' ? 'Manual' : 'Extraído'}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-8 w-8"
+                        onClick={() => onView?.(invoice)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Ver detalles</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-8 w-8"
+                        onClick={() => onEdit?.(invoice)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Editar</TooltipContent>
+                  </Tooltip>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TooltipProvider>
   );
 };
 
@@ -597,12 +681,30 @@ const CostConsultingDetail = () => {
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
   const [showReviewTable, setShowReviewTable] = useState(false);
   
+  // States for edit modals
+  const [editingContract, setEditingContract] = useState<CostContract | null>(null);
+  const [editingInvoice, setEditingInvoice] = useState<CostInvoice | null>(null);
+  
   // Fetch project data from external Supabase
   const { data: project, isLoading: isLoadingProject } = useCostProject(id);
   const { data: contracts = [] } = useCostContracts(id);
   const { data: invoices = [] } = useCostInvoices(id);
   const { data: opportunities = [] } = useCostOpportunities(id);
   const { data: documents = [] } = useCostDocuments(id);
+  
+  // Fetch suppliers for edit modals
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['cost-suppliers', id],
+    queryFn: async () => {
+      if (!id) return [];
+      const { data } = await externalSupabase
+        .from('cost_project_suppliers')
+        .select('*')
+        .eq('project_id', id);
+      return (data || []) as CostSupplier[];
+    },
+    enabled: !!id,
+  });
   
   // Document review hook for validation workflow
   const {
@@ -1009,7 +1111,11 @@ const CostConsultingDetail = () => {
 
               <TabsContent value="contracts" className="p-4">
                 {contracts.length > 0 ? (
-                  <ContractsReviewTable contracts={contracts} />
+                  <ContractsReviewTable 
+                    contracts={contracts}
+                    onView={(c) => setEditingContract(c as unknown as CostContract)}
+                    onEdit={(c) => setEditingContract(c as unknown as CostContract)}
+                  />
                 ) : (
                   <p className="text-muted-foreground text-center py-8">
                     No se encontraron contratos en los documentos
@@ -1019,7 +1125,11 @@ const CostConsultingDetail = () => {
 
               <TabsContent value="invoices" className="p-4">
                 {invoices.length > 0 ? (
-                  <InvoicesReviewTable invoices={invoices} />
+                  <InvoicesReviewTable 
+                    invoices={invoices}
+                    onView={(i) => setEditingInvoice(i as unknown as CostInvoice)}
+                    onEdit={(i) => setEditingInvoice(i as unknown as CostInvoice)}
+                  />
                 ) : (
                   <p className="text-muted-foreground text-center py-8">
                     No se encontraron facturas en los documentos
@@ -1210,6 +1320,33 @@ const CostConsultingDetail = () => {
           </Tabs>
         </>
       )}
+
+      {/* Contract Edit Modal */}
+      <ContractFormModal
+        projectId={project?.id || ''}
+        contract={editingContract}
+        suppliers={suppliers}
+        open={!!editingContract}
+        onClose={() => setEditingContract(null)}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ['cost-contracts', id] });
+          setEditingContract(null);
+        }}
+      />
+
+      {/* Invoice Edit Modal */}
+      <InvoiceFormModal
+        projectId={project?.id || ''}
+        invoice={editingInvoice}
+        suppliers={suppliers}
+        contracts={contracts}
+        open={!!editingInvoice}
+        onClose={() => setEditingInvoice(null)}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ['cost-invoices', id] });
+          setEditingInvoice(null);
+        }}
+      />
     </div>
   );
 };
