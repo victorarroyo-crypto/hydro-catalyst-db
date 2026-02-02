@@ -20,16 +20,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, FileDown } from 'lucide-react';
+import { Loader2, FileDown, ArrowRightLeft } from 'lucide-react';
 import { CostContract, CostSupplier } from '@/hooks/useCostConsultingData';
 import { 
   createContract, 
   updateContract, 
+  changeDocumentType,
   ContractFormData,
   Category,
   getCategories 
 } from '@/services/costConsultingApi';
-
+import { useQueryClient } from '@tanstack/react-query';
 interface ContractFormModalProps {
   projectId: string;
   contract?: CostContract | null;
@@ -37,6 +38,7 @@ interface ContractFormModalProps {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  userId?: string;
 }
 
 export const ContractFormModal = ({
@@ -46,8 +48,11 @@ export const ContractFormModal = ({
   open,
   onClose,
   onSaved,
+  userId,
 }: ContractFormModalProps) => {
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isChangingType, setIsChangingType] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [formData, setFormData] = useState<ContractFormData>({
     supplier_id: '',
@@ -138,6 +143,32 @@ export const ContractFormModal = ({
 
   // Get file_url from the associated document
   const fileUrl = (contract as any)?.cost_project_documents?.file_url;
+
+  const handleChangeToInvoice = async () => {
+    if (!contract?.id || !projectId || !userId) return;
+    
+    const confirmed = window.confirm(
+      '¿Estás seguro de cambiar este documento de CONTRATO a FACTURA?\n\n' +
+      'El documento se moverá a la tabla de facturas.'
+    );
+    
+    if (!confirmed) return;
+    
+    setIsChangingType(true);
+    try {
+      await changeDocumentType(projectId, 'contract', contract.id, userId);
+      toast.success('Documento convertido a factura');
+      onClose();
+      queryClient.invalidateQueries({ queryKey: ['cost-contracts', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['cost-invoices', projectId] });
+      onSaved();
+    } catch (error) {
+      toast.error('Error al cambiar tipo de documento');
+      console.error(error);
+    } finally {
+      setIsChangingType(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -363,14 +394,31 @@ export const ContractFormModal = ({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {contract ? 'Guardar cambios' : 'Crear contrato'}
-          </Button>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {contract && userId && (
+            <Button
+              variant="outline"
+              onClick={handleChangeToInvoice}
+              disabled={isSubmitting || isChangingType}
+              className="text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30 mr-auto"
+            >
+              {isChangingType ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+              )}
+              Cambiar a Factura
+            </Button>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} disabled={isSubmitting || isChangingType}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmit} disabled={isSubmitting || isChangingType}>
+              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {contract ? 'Guardar cambios' : 'Crear contrato'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
