@@ -960,7 +960,6 @@ const CostConsultingDetail = () => {
           {/* Review Summary Card - Document validation status */}
           <ReviewSummaryCard
             projectId={project?.id || ''}
-            onReviewClick={() => setShowReviewTable(true)}
             onAllValidated={() => {
               refreshReview();
               queryClient.invalidateQueries({ queryKey: ['cost-project', id] });
