@@ -23,6 +23,16 @@ import {
   TableRow
 } from '@/components/ui/table';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   FileText,
   ChevronDown,
   ChevronUp,
@@ -99,11 +109,13 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [reExtractingId, setReExtractingId] = useState<string | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<ProjectDocument | null>(null);
+  
   const { data: documents = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['project-documents-list', projectId],
     queryFn: () => getProjectDocuments(projectId),
     enabled: !!projectId,
-    refetchInterval: 5000, // Poll every 5 seconds to catch status changes
+    refetchInterval: 5000,
   });
 
   // Calculate stats - use extraction_status (API field name)
@@ -115,12 +127,14 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
     failed: documents.filter(d => d.extraction_status === 'failed').length,
   };
 
-  const handleDelete = async (doc: ProjectDocument) => {
-    if (!confirm(`¿Eliminar el documento "${doc.filename}"?`)) return;
+  const handleDeleteConfirm = async () => {
+    if (!documentToDelete) return;
     
-    setDeletingId(doc.id);
+    setDeletingId(documentToDelete.id);
+    setDocumentToDelete(null);
+    
     try {
-      await deleteDocument(projectId, doc.id);
+      await deleteDocument(projectId, documentToDelete.id);
       toast.success('Documento eliminado');
       await refetch();
       onDocumentDeleted?.();
@@ -393,7 +407,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                    onClick={() => handleDelete(doc)}
+                                    onClick={() => setDocumentToDelete(doc)}
                                     disabled={deletingId === doc.id}
                                   >
                                     {deletingId === doc.id ? (
@@ -441,6 +455,27 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!documentToDelete} onOpenChange={(open) => !open && setDocumentToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar documento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará permanentemente el documento <strong>"{documentToDelete?.filename}"</strong> junto con todos sus datos extraídos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };
