@@ -1,5 +1,5 @@
 
-# Plan: Añadir botones Ver/Editar a las tablas de Contratos y Facturas
+# Plan: Añadir botones Ver/Editar a las tablas de Contratos y Facturas ✅ COMPLETADO
 
 ## Problema
 Las tablas `ContractsReviewTable` e `InvoicesReviewTable` muestran los datos extraídos pero no tienen botones para:
