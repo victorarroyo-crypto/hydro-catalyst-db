@@ -1,321 +1,235 @@
 
+# Plan: Admin Pages for Cost Consulting - Suppliers & Benchmarks
 
-# Plan: Subir Documentos via Backend Railway
+## Overview
+This plan implements two complete admin pages with full CRUD functionality:
+1. **Suppliers Admin** (`/cost-consulting/admin/suppliers`) - Extended management for providers
+2. **Benchmarks Admin** (`/cost-consulting/admin/benchmarks`) - Price reference data management
 
-## Resumen del Problema
-El módulo Cost Consulting intenta subir archivos directamente al storage de Supabase externa (`cost-documents` bucket), pero este bucket no existe, causando errores 404 y dejando los proyectos bloqueados en estado "processing".
-
-## Solución
-Crear un flujo de subida que pase por el backend de Railway, siguiendo el patrón ya establecido en otros módulos (Knowledge Base, Case Studies). El backend de Railway gestionará el almacenamiento de los archivos.
-
----
-
-## Arquitectura Propuesta
-
-```
-Frontend                    Edge Function                    Railway Backend
-   │                            │                                  │
-   │  POST FormData            │                                  │
-   │  (file + metadata)        │                                  │
-   ├───────────────────────────►│                                  │
-   │                            │  POST FormData                   │
-   │                            │  + X-Sync-Secret                 │
-   │                            ├─────────────────────────────────►│
-   │                            │                                  │
-   │                            │◄─────────────────────────────────┤
-   │                            │  { file_url, document_id }       │
-   │◄───────────────────────────┤                                  │
-   │                            │                                  │
-```
+Both pages will connect to the Railway backend API endpoints and follow existing Vandarum design patterns.
 
 ---
 
-## Cambios a Realizar
+## Technical Details
 
-### 1. Crear Edge Function: `cost-consulting-upload`
+### 1. API Service Extensions (`src/services/costConsultingApi.ts`)
 
-Nueva edge function que:
-- Recibe archivos via FormData desde el frontend
-- Autentica al usuario via JWT
-- Reenvía los archivos al endpoint de Railway `/api/cost-consulting/projects/{id}/documents`
-- Incluye el header `X-Sync-Secret` para autenticación con Railway
+Add new functions to connect with the Railway backend:
 
-**Archivo:** `supabase/functions/cost-consulting-upload/index.ts`
+```text
+SUPPLIERS API:
+- getSuppliers(filters) → GET /api/cost-consulting/suppliers
+- getPendingSuppliers() → GET /api/cost-consulting/suppliers/pending
+- getSupplier(id) → GET /api/cost-consulting/suppliers/{id}
+- createSupplier(data) → POST /api/cost-consulting/suppliers
+- updateSupplier(id, data) → PATCH /api/cost-consulting/suppliers/{id}
+- verifySupplier(id, data) → POST /api/cost-consulting/suppliers/{id}/verify
+- deleteSupplier(id) → DELETE /api/cost-consulting/suppliers/{id}
 
-```typescript
-// Estructura base
-- Recibir POST con FormData (file, file_type, project_id)
-- Validar autenticación JWT
-- Obtener RAILWAY_API_URL y RAILWAY_SYNC_SECRET de env
-- Reenviar FormData a Railway: POST /api/cost-consulting/projects/{project_id}/documents
-- Retornar respuesta (file_url, document_id) al frontend
+BENCHMARKS API:
+- getBenchmarkPrices(filters) → GET /api/cost-consulting/benchmarks/prices
+- getBenchmarkPrice(id) → GET /api/cost-consulting/benchmarks/prices/{id}
+- createBenchmarkPrice(data) → POST /api/cost-consulting/benchmarks/prices
+- updateBenchmarkPrice(id, data) → PATCH /api/cost-consulting/benchmarks/prices/{id}
+- deleteBenchmarkPrice(id) → DELETE /api/cost-consulting/benchmarks/prices/{id}
 ```
 
-**Headers CORS:**
-```typescript
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-```
+### 2. TypeScript Interfaces (`src/types/costConsulting.ts`)
 
-### 2. Modificar `CostConsultingNew.tsx`
-
-Reemplazar las llamadas a `externalSupabase.storage` por llamadas al nuevo edge function.
-
-**Cambios:**
-- Importar `supabase` del cliente local (para invocar edge functions)
-- Crear función `uploadDocument` que:
-  1. Construye FormData con file, file_type, project_id
-  2. Llama a `supabase.functions.invoke('cost-consulting-upload', { body: formData })`
-  3. Retorna { file_url, document_id }
-
-- Eliminar la creación manual de registros en `cost_project_documents` (Railway lo hará)
-- Mejorar manejo de errores con contador de uploads exitosos/fallidos
-- Si no hay uploads exitosos, revertir proyecto a 'draft' y mostrar error claro
-
-**Código actual a reemplazar:**
-```typescript
-// ANTES (líneas 287-318)
-const { error: uploadError } = await externalSupabase.storage
-  .from('cost-documents')
-  .upload(filePath, file);
-// ... crear registro en cost_project_documents manualmente
-```
-
-**Código nuevo:**
-```typescript
-// DESPUÉS
-const { data, error } = await supabase.functions.invoke('cost-consulting-upload', {
-  body: formData,  // FormData con file, file_type, project_id
-});
-if (error) {
-  console.error('Upload error:', error);
-  failedUploads++;
-  continue;
-}
-successfulUploads++;
-// Railway crea el registro en cost_project_documents automáticamente
-```
-
-### 3. Modificar `CostConsultingDetail.tsx`
-
-Añadir detección de proyectos "atascados" (processing sin documentos).
-
-**Cambios:**
-- Detectar `isProcessing && documents.length === 0`
-- Mostrar mensaje informativo con opciones:
-  - "Crear nuevo análisis"
-  - "Volver a proyectos"
-- No mostrar el spinner infinito de ProcessingState
-
----
-
-## Archivos a Crear/Modificar
-
-| Archivo | Acción | Descripción |
-|---------|--------|-------------|
-| `supabase/functions/cost-consulting-upload/index.ts` | Crear | Edge function para proxy de uploads a Railway |
-| `src/pages/cost-consulting/CostConsultingNew.tsx` | Modificar | Usar edge function en lugar de storage directo |
-| `src/pages/cost-consulting/CostConsultingDetail.tsx` | Modificar | Detectar proyectos sin documentos |
-
----
-
-## Detalles Técnicos
-
-### Edge Function: cost-consulting-upload
+New file with complete type definitions:
 
 ```typescript
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    // 1. Autenticar usuario
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-    if (authError || !userData?.user) {
-      return new Response(JSON.stringify({ error: 'Invalid token' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // 2. Parsear FormData
-    const formData = await req.formData();
-    const file = formData.get('file') as File;
-    const fileType = formData.get('file_type') as string;
-    const projectId = formData.get('project_id') as string;
-
-    if (!file || !projectId) {
-      return new Response(JSON.stringify({ error: 'Missing file or project_id' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // 3. Enviar a Railway
-    const railwayUrl = Deno.env.get('RAILWAY_API_URL');
-    const syncSecret = Deno.env.get('RAILWAY_SYNC_SECRET');
-
-    if (!railwayUrl) {
-      return new Response(JSON.stringify({ error: 'Backend not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const railwayFormData = new FormData();
-    railwayFormData.append('file', file);
-    railwayFormData.append('file_type', fileType || 'otro');
-
-    const response = await fetch(
-      `${railwayUrl}/api/cost-consulting/projects/${projectId}/documents`,
-      {
-        method: 'POST',
-        headers: {
-          'X-Sync-Secret': syncSecret || '',
-          'X-User-Id': userData.user.id,
-        },
-        body: railwayFormData,
-      }
-    );
-
-    const responseData = await response.json();
-
-    return new Response(JSON.stringify({
-      success: response.ok,
-      ...responseData,
-    }), {
-      status: response.ok ? 200 : response.status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-
-  } catch (error) {
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-});
-```
-
-### Cambios en CostConsultingNew.tsx
-
-```typescript
-// Importar cliente local de Supabase
-import { supabase } from '@/integrations/supabase/client';
-
-// Nueva función de upload
-const uploadDocument = async (
-  file: File, 
-  fileType: string, 
-  projectId: string
-): Promise<{ success: boolean; error?: string }> => {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('file_type', fileType);
-  formData.append('project_id', projectId);
-
-  const { data, error } = await supabase.functions.invoke(
-    'cost-consulting-upload',
-    { body: formData }
-  );
-
-  if (error) {
-    console.error('Upload error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: data?.success ?? false, error: data?.error };
-};
-
-// En handleSubmit, reemplazar el loop de uploads:
-let successfulUploads = 0;
-let failedUploads = 0;
-
-for (const fileData of allFiles) {
-  const result = await uploadDocument(
-    fileData.file, 
-    fileData.type, 
-    projectId
-  );
-  
-  if (result.success) {
-    successfulUploads++;
-  } else {
-    failedUploads++;
-    console.error(`Failed to upload ${fileData.file.name}:`, result.error);
-  }
+// Extended Supplier interface (matching API spec)
+interface Supplier {
+  id: string;
+  name: string;
+  trade_name?: string;
+  tax_id?: string;
+  vertical_id?: string;
+  category_ids?: string[];
+  country: string;
+  region?: string;
+  web?: string;
+  email?: string;
+  phone?: string;
+  verified: boolean;
+  verified_at?: string;
+  source: "manual" | "extracted";
+  categoria?: SupplierCategory;
+  subcategorias?: string[];
+  productos_servicios?: ProductService[];
+  ambito_geografico?: string;
+  condiciones_comerciales?: CommercialConditions;
+  rating?: SupplierRating;
+  contacto_comercial?: ContactInfo;
+  activo: boolean;
+  fecha_ultima_oferta?: string;
+  notas?: string;
 }
 
-// Verificar si hubo uploads exitosos
-if (successfulUploads === 0 && allFiles.length > 0) {
-  await externalSupabase
-    .from('cost_consulting_projects')
-    .update({ status: 'draft' })
-    .eq('id', projectId);
-  
-  toast.error('Error al subir documentos. Por favor intenta de nuevo.');
-  setIsSubmitting(false);
-  return;
-}
-
-// Notificar uploads fallidos pero continuar si hay éxitos
-if (failedUploads > 0) {
-  toast.warning(`${failedUploads} archivo(s) no se pudieron subir`);
+// Benchmark price interface
+interface BenchmarkPrice {
+  id: string;
+  vertical_id: string;
+  category_id: string;
+  product_name: string;
+  unit: string;
+  region?: string;
+  price_p10: number;
+  price_p25: number;
+  price_p50: number;
+  price_p75: number;
+  price_p90: number;
+  source: string;
+  valid_from: string;
+  valid_until: string;
+  notes?: string;
+  cost_categories?: { code: string; name: string };
 }
 ```
 
----
+### 3. New React Hooks (`src/hooks/useCostAdminData.ts`)
 
-## Dependencias
+```typescript
+// Suppliers hooks
+- useCostAdminSuppliers(filters) - List with filters
+- useCostPendingSuppliers() - Pending verification
+- useSupplierMutations() - Create/Update/Delete/Verify
 
-Este plan asume que el backend de Railway tiene implementado el endpoint:
-
-```
-POST /api/cost-consulting/projects/{project_id}/documents
-Content-Type: multipart/form-data
-
-Body:
-- file: File (PDF/XLSX)
-- file_type: string ('contrato' | 'factura' | 'listado_proveedores' | 'otro')
-
-Response:
-{
-  "success": true,
-  "document_id": "uuid",
-  "file_url": "https://..."
-}
+// Benchmarks hooks  
+- useCostBenchmarks(filters) - List with filters
+- useBenchmarkMutations() - Create/Update/Delete
 ```
 
-Si este endpoint no existe en Railway, habrá que crearlo en el backend de Python/FastAPI.
+### 4. Suppliers Admin Page
+
+**Route:** `/cost-consulting/admin/suppliers`
+
+**File:** `src/pages/cost-consulting/admin/CostSuppliersAdmin.tsx`
+
+**Features:**
+- **Header**: Title with Admin badge, "Nuevo Proveedor" button
+- **Stats Cards**: Total, Verified, Pending, Inactive counts
+- **Filters Bar**: 
+  - Search input
+  - Category dropdown (ENUM values)
+  - Verified filter (All/Yes/No)
+  - Active filter (All/Yes/No)
+  - Region dropdown
+- **Tabs**:
+  - "Todos" - All suppliers table
+  - "Pendientes" - Verification queue with form
+  - "Por Categoría" - Grouped view
+- **Table Columns**: Name, CIF, Categories, Verified badge, Active badge, Region, Rating, Actions
+- **Row Click** → Opens detail Sheet panel
+- **Sheet Panel**: 
+  - Full supplier details
+  - Edit form (expandable sections)
+  - Products/Services list
+  - Commercial conditions
+  - Rating display
+  - Contact info
+  - Delete button with confirmation
+
+**Visual Elements:**
+- Verified badge: Green with CheckCircle icon
+- Pending badge: Yellow with Clock icon
+- Inactive badge: Gray
+- Rating: 5-star display
+
+### 5. Benchmarks Admin Page
+
+**Route:** `/cost-consulting/admin/benchmarks`
+
+**File:** `src/pages/cost-consulting/admin/CostBenchmarksAdmin.tsx`
+
+**Features:**
+- **Header**: Title with Admin badge, "Nuevo Benchmark" button, "Importar CSV" button
+- **Stats Cards**: Categories, Data Points, Last Updated
+- **Filters**: Category dropdown, Region, Year, Search
+- **Table** (grouped by category):
+  - Columns: Product, Unit, P10, P25, P50, P75, P90, Region, Valid Until
+  - Price range visualization bar (gradient green→yellow→red)
+- **Price Comparator Tool**:
+  - Input: Product selector + Price input
+  - Output: Percentile indicator with color (green if below P50, red if above)
+- **Modal for Create/Edit**:
+  - Category selector
+  - Product name
+  - Unit selector
+  - 5 percentile inputs
+  - Region (optional)
+  - Validity dates
+  - Source
+  - Notes
+
+**Visual Elements (Vandarum colors):**
+- P10-P25 range: Green (#8cb63c)
+- P25-P75 range: Yellow/Orange (#ffa720)
+- P75-P90 range: Red
+
+### 6. Component Files
+
+```text
+src/components/cost-consulting/admin/
+├── SupplierAdminTable.tsx       - Table with filters
+├── SupplierDetailSheet.tsx      - Detail panel
+├── SupplierVerifyForm.tsx       - Verification form
+├── ExtendedSupplierFormModal.tsx - Full create/edit form
+├── BenchmarkTable.tsx           - Grouped table with bars
+├── BenchmarkFormModal.tsx       - Create/edit modal
+├── BenchmarkPriceBar.tsx        - Visual percentile bar
+├── PriceComparator.tsx          - Price percentile checker
+```
+
+### 7. Routing Updates (`src/App.tsx`)
+
+Add new admin routes:
+
+```typescript
+<Route path="/cost-consulting/admin/suppliers" element={<CostSuppliersAdmin />} />
+<Route path="/cost-consulting/admin/benchmarks" element={<CostBenchmarksAdmin />} />
+```
+
+Update imports and exports in `src/pages/cost-consulting/index.ts`.
 
 ---
 
-## Beneficios
+## Implementation Order
 
-1. **Elimina dependencia del bucket** - No necesitamos crear bucket en Supabase externa
-2. **Sigue patrón existente** - Usa el mismo flujo que Knowledge Base y Case Studies
-3. **Mejor manejo de errores** - Usuarios ven mensajes claros cuando algo falla
-4. **No más spinners infinitos** - Proyectos sin documentos muestran opciones de acción
+1. **Types & API** - Create interfaces and API service functions
+2. **Hooks** - Implement React Query hooks for data fetching
+3. **Supplier Components** - Build table, sheet, forms
+4. **Supplier Page** - Assemble full admin page
+5. **Benchmark Components** - Build table, modal, price bar
+6. **Benchmark Page** - Assemble full admin page
+7. **Routing** - Add routes and navigation
 
+---
+
+## File Changes Summary
+
+| Action | File |
+|--------|------|
+| Create | `src/types/costConsulting.ts` |
+| Create | `src/hooks/useCostAdminData.ts` |
+| Create | `src/pages/cost-consulting/admin/CostSuppliersAdmin.tsx` |
+| Create | `src/pages/cost-consulting/admin/CostBenchmarksAdmin.tsx` |
+| Create | `src/components/cost-consulting/admin/SupplierDetailSheet.tsx` |
+| Create | `src/components/cost-consulting/admin/ExtendedSupplierFormModal.tsx` |
+| Create | `src/components/cost-consulting/admin/BenchmarkFormModal.tsx` |
+| Create | `src/components/cost-consulting/admin/BenchmarkPriceBar.tsx` |
+| Create | `src/components/cost-consulting/admin/PriceComparator.tsx` |
+| Modify | `src/services/costConsultingApi.ts` - Add supplier & benchmark endpoints |
+| Modify | `src/pages/cost-consulting/index.ts` - Export new pages |
+| Modify | `src/App.tsx` - Add admin routes |
+
+---
+
+## Notes
+
+- The existing `CostConsultingSuppliers.tsx` and `CostConsultingBenchmarks.tsx` pages will be replaced/upgraded
+- All API calls use the Railway backend URL pattern
+- Forms include Zod validation for input security
+- Delete operations require confirmation dialogs
+- The price comparator uses the percentile data to show where a given price falls
