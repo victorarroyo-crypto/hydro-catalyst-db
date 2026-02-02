@@ -87,6 +87,14 @@ export interface Category {
 // CONTRACTS API
 // ============================================================
 
+export const getContracts = async (projectId: string) => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/contracts`
+  );
+  if (!response.ok) throw new Error('Error fetching contracts');
+  return response.json();
+};
+
 export const createContract = async (projectId: string, data: ContractFormData) => {
   const response = await fetch(
     `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/contracts`,
@@ -125,6 +133,14 @@ export const deleteContract = async (projectId: string, contractId: string) => {
 // ============================================================
 // INVOICES API
 // ============================================================
+
+export const getInvoices = async (projectId: string) => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/invoices`
+  );
+  if (!response.ok) throw new Error('Error fetching invoices');
+  return response.json();
+};
 
 export const getInvoiceWithLines = async (projectId: string, invoiceId: string) => {
   const response = await fetch(

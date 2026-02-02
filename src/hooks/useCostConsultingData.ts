@@ -1,9 +1,10 @@
 /**
  * Hooks para el módulo de Cost Consulting
- * Lee de la base de datos externa usando externalSupabase
+ * Usa API de Railway para contratos/facturas, externalSupabase para el resto
  */
 import { useQuery } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { getContracts, getInvoices } from '@/services/costConsultingApi';
 
 // ============================================================
 // TIPOS
@@ -210,39 +211,10 @@ export const useCostContracts = (projectId?: string) => {
     queryFn: async () => {
       if (!projectId) return [];
       
-      console.log('[useCostContracts] Fetching for projectId:', projectId);
+      console.log('[useCostContracts] Fetching via Railway API for projectId:', projectId);
+      const data = await getContracts(projectId);
+      console.log('[useCostContracts] API response:', data);
       
-      // Primero intentar query con JOINs
-      const { data, error } = await externalSupabase
-        .from('cost_project_contracts')
-        .select(`
-          *,
-          cost_suppliers(name, tax_id),
-          cost_project_documents(id, filename, file_url, file_type)
-        `)
-        .eq('project_id', projectId)
-        .order('total_annual_value', { ascending: false });
-      
-      console.log('[useCostContracts] Query result - data:', data, 'error:', error);
-      
-      // Si hay error o vacío, intentar query simplificado
-      if (error || (data && data.length === 0)) {
-        console.log('[useCostContracts] Trying simplified query without JOINs...');
-        const { data: simpleData, error: simpleError } = await externalSupabase
-          .from('cost_project_contracts')
-          .select('*')
-          .eq('project_id', projectId);
-        
-        console.log('[useCostContracts] Simplified query - data:', simpleData, 'error:', simpleError);
-        
-        if (simpleError) throw simpleError;
-        if (simpleData && simpleData.length > 0) {
-          console.log('[useCostContracts] JOINs are the problem! Found', simpleData.length, 'contracts');
-          return simpleData as CostContract[];
-        }
-      }
-      
-      if (error) throw error;
       return (data || []) as CostContract[];
     },
     enabled: !!projectId,
@@ -259,39 +231,10 @@ export const useCostInvoices = (projectId?: string) => {
     queryFn: async () => {
       if (!projectId) return [];
       
-      console.log('[useCostInvoices] Fetching for projectId:', projectId);
+      console.log('[useCostInvoices] Fetching via Railway API for projectId:', projectId);
+      const data = await getInvoices(projectId);
+      console.log('[useCostInvoices] API response:', data);
       
-      // Primero intentar query con JOINs
-      const { data, error } = await externalSupabase
-        .from('cost_project_invoices')
-        .select(`
-          *,
-          cost_suppliers(name),
-          cost_project_documents(id, filename, file_url, file_type)
-        `)
-        .eq('project_id', projectId)
-        .order('invoice_date', { ascending: false });
-      
-      console.log('[useCostInvoices] Query result - data:', data, 'error:', error);
-      
-      // Si hay error o vacío, intentar query simplificado
-      if (error || (data && data.length === 0)) {
-        console.log('[useCostInvoices] Trying simplified query without JOINs...');
-        const { data: simpleData, error: simpleError } = await externalSupabase
-          .from('cost_project_invoices')
-          .select('*')
-          .eq('project_id', projectId);
-        
-        console.log('[useCostInvoices] Simplified query - data:', simpleData, 'error:', simpleError);
-        
-        if (simpleError) throw simpleError;
-        if (simpleData && simpleData.length > 0) {
-          console.log('[useCostInvoices] JOINs are the problem! Found', simpleData.length, 'invoices');
-          return simpleData as CostInvoice[];
-        }
-      }
-      
-      if (error) throw error;
       return (data || []) as CostInvoice[];
     },
     enabled: !!projectId,
