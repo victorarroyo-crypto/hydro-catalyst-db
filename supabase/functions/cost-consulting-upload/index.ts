@@ -128,6 +128,22 @@ serve(async (req) => {
       responseData = { raw: responseText };
     }
 
+    // Handle 409 (duplicate) as success - document already exists and is ready to process
+    if (response.status === 409) {
+      console.log('Document already exists in Railway, treating as success');
+      return new Response(JSON.stringify({
+        success: true,
+        status: 200,
+        file_url: fileUrl,
+        already_exists: true,
+        message: 'Documento ya registrado previamente',
+        ...responseData,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Always return 200 to avoid FunctionsHttpError - include success/error in body
     return new Response(JSON.stringify({
       success: response.ok,
