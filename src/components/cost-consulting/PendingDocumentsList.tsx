@@ -115,7 +115,12 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
     queryKey: ['project-documents-list', projectId],
     queryFn: () => getProjectDocuments(projectId),
     enabled: !!projectId,
-    refetchInterval: 5000,
+    // Poll every 2 seconds when processing, otherwise every 10 seconds
+    refetchInterval: (query) => {
+      const docs = query.state.data as ProjectDocument[] | undefined;
+      const hasProcessing = docs?.some(d => d.extraction_status === 'processing');
+      return hasProcessing ? 2000 : 10000;
+    },
   });
 
   // Calculate stats - use extraction_status (API field name)
@@ -180,7 +185,10 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
       
       toast.success(`Re-extracción iniciada para "${doc.filename}"${deletedMsg}`);
       
+      // Small delay to allow backend to update status
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await refetch();
+      
       queryClient.invalidateQueries({ queryKey: ['cost-contracts', projectId] });
       queryClient.invalidateQueries({ queryKey: ['cost-invoices', projectId] });
     } catch (error) {
