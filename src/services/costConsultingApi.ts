@@ -344,3 +344,112 @@ export const getCategories = async (): Promise<Category[]> => {
     { id: 'other', name: 'Otros' },
   ];
 };
+
+// ============================================================
+// REVIEW API
+// ============================================================
+
+export interface ReviewSummary {
+  contracts: {
+    total: number;
+    validated: number;
+    needs_review: number;
+  };
+  invoices: {
+    total: number;
+    validated: number;
+    needs_review: number;
+  };
+  total: {
+    total: number;
+    validated: number;
+    needs_review: number;
+  };
+}
+
+export interface ChangeTypeResult {
+  success: boolean;
+  new_type: string;
+  new_id: string;
+}
+
+/**
+ * Get summary of documents needing review
+ */
+export const getReviewSummary = async (projectId: string): Promise<ReviewSummary> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/review/summary`
+  );
+  if (!response.ok) throw new Error('Error al obtener resumen de revisión');
+  return response.json();
+};
+
+/**
+ * Get list of pending documents for review
+ */
+export const getPendingDocuments = async (projectId: string) => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/review/pending`
+  );
+  if (!response.ok) throw new Error('Error al obtener documentos pendientes');
+  return response.json();
+};
+
+/**
+ * Validate a single document after human review
+ */
+export const validateDocument = async (
+  projectId: string,
+  docType: 'contract' | 'invoice',
+  docId: string,
+  userId: string
+): Promise<{ success: boolean }> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/review/${docType}/${docId}/validate?user_id=${userId}`,
+    { method: 'POST' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error al validar documento' }));
+    throw new Error(error.detail || 'Error al validar documento');
+  }
+  return response.json();
+};
+
+/**
+ * Change document type (contract <-> invoice)
+ * The backend moves the record between tables
+ */
+export const changeDocumentType = async (
+  projectId: string,
+  currentType: 'contract' | 'invoice',
+  docId: string,
+  userId: string
+): Promise<ChangeTypeResult> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/review/${currentType}/${docId}/change-type?user_id=${userId}`,
+    { method: 'POST' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error al cambiar tipo' }));
+    throw new Error(error.detail || 'Error al cambiar tipo de documento');
+  }
+  return response.json();
+};
+
+/**
+ * Validate all pending documents at once
+ */
+export const validateAllDocuments = async (
+  projectId: string,
+  userId: string
+): Promise<{ validated_count: number }> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/review/validate-all?user_id=${userId}`,
+    { method: 'POST' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error al validar documentos' }));
+    throw new Error(error.detail || 'Error al validar documentos');
+  }
+  return response.json();
+};
