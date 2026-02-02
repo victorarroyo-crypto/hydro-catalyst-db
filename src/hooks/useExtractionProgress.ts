@@ -5,21 +5,52 @@
 import { useState, useEffect } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 
-// Mapeo de fases del backend a texto en español
-export const PHASE_LABELS: Record<string, string> = {
-  'loading_documents': 'Cargando documentos...',
-  'preparing_documents': 'Preparando documentos...',
-  'classifying_documents': 'Clasificando documentos...',
-  'extracting_invoices': 'Extrayendo facturas...',
-  'extracting_contracts': 'Extrayendo contratos...',
-  'extraction_complete': 'Extracción completada',
-  'saving_contracts': 'Guardando contratos...',
-  'saving_invoices': 'Guardando facturas...',
-  'detecting_suppliers': 'Detectando proveedores...',
-  'extraction_finished': 'Finalizado',
-  'timeout_error': 'Error: tiempo agotado',
-  'extraction_error': 'Error en extracción',
+// Mapeo de fases del backend a información de paso y etiqueta
+export const EXTRACTION_PHASES: Record<string, { step: number; label: string }> = {
+  // Cargando documentos
+  'document_extraction': { step: 0, label: 'Cargando documentos' },
+  'loading_documents': { step: 0, label: 'Cargando documentos' },
+  'preparing_documents': { step: 0, label: 'Preparando documentos' },
+  
+  // Clasificando
+  'classifying_documents': { step: 1, label: 'Clasificando documentos' },
+  
+  // Extrayendo
+  'extracting_invoices': { step: 2, label: 'Extrayendo facturas' },
+  'extracting_contracts': { step: 3, label: 'Extrayendo contratos' },
+  
+  // Validando/Guardando
+  'validating_data': { step: 4, label: 'Validando datos' },
+  'saving_contracts': { step: 4, label: 'Guardando contratos' },
+  'saving_invoices': { step: 4, label: 'Guardando facturas' },
+  
+  // Detectando proveedores
+  'detecting_suppliers': { step: 5, label: 'Detectando proveedores' },
+  
+  // Finalizado
+  'extraction_finished': { step: 6, label: 'Finalizado' },
+  'extraction_complete': { step: 6, label: 'Finalizado' },
+  
+  // Errores
+  'timeout_error': { step: -1, label: 'Error: tiempo agotado' },
+  'extraction_error': { step: -1, label: 'Error en extracción' },
 };
+
+// Lista ordenada de pasos para mostrar en UI
+export const EXTRACTION_STEPS = [
+  'Cargando documentos',
+  'Clasificando documentos',
+  'Extrayendo facturas',
+  'Extrayendo contratos',
+  'Validando datos',
+  'Detectando proveedores',
+  'Finalizado',
+];
+
+// Mantener compatibilidad con PHASE_LABELS antiguo
+export const PHASE_LABELS: Record<string, string> = Object.fromEntries(
+  Object.entries(EXTRACTION_PHASES).map(([key, value]) => [key, value.label])
+);
 
 export interface ExtractionProgress {
   progress_pct: number;
@@ -59,11 +90,17 @@ export function useExtractionProgress(
     // Fetch immediately
     fetchProgress();
 
-    // Poll every 10 seconds (extraction phases last 30s-2min each)
-    const interval = setInterval(fetchProgress, 10000);
+    // Poll every 2 seconds for more responsive UI during extraction
+    const interval = setInterval(fetchProgress, 2000);
 
     return () => clearInterval(interval);
   }, [projectId, enabled]);
 
   return progress;
+}
+
+// Helper para obtener información del paso actual
+export function getPhaseInfo(phase: string | null): { step: number; label: string } {
+  if (!phase) return { step: 0, label: 'Procesando...' };
+  return EXTRACTION_PHASES[phase] || { step: 0, label: 'Procesando...' };
 }

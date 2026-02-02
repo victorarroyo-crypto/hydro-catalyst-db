@@ -180,24 +180,14 @@ const ProcessingState = ({ currentPhase }: { currentPhase: number }) => {
   );
 };
 
-import { useExtractionProgress, PHASE_LABELS } from '@/hooks/useExtractionProgress';
+import { useExtractionProgress, EXTRACTION_STEPS, getPhaseInfo } from '@/hooks/useExtractionProgress';
 
 const ExtractingState = ({ projectId }: { projectId: string }) => {
   const { progress_pct, current_phase } = useExtractionProgress(projectId, true);
   
-  // Ordered phases for visual progress display
-  const phases = [
-    { id: 'loading_documents', name: 'Cargando documentos' },
-    { id: 'classifying_documents', name: 'Clasificando documentos' },
-    { id: 'extracting_contracts', name: 'Extrayendo contratos' },
-    { id: 'extracting_invoices', name: 'Extrayendo facturas' },
-    { id: 'detecting_suppliers', name: 'Detectando proveedores' },
-    { id: 'extraction_finished', name: 'Finalizado' },
-  ];
-  
-  // Find current phase index
-  const currentPhaseIndex = phases.findIndex(p => p.id === current_phase);
-  const displayPhaseIndex = currentPhaseIndex >= 0 ? currentPhaseIndex : 0;
+  // Get current phase info
+  const phaseInfo = getPhaseInfo(current_phase);
+  const currentStep = phaseInfo.step >= 0 ? phaseInfo.step : 0;
   
   return (
     <Card className="border-blue-200 bg-blue-50/30 dark:bg-blue-950/20">
@@ -209,7 +199,7 @@ const ExtractingState = ({ projectId }: { projectId: string }) => {
           <div>
             <span className="text-xl">Extrayendo datos...</span>
             <p className="text-sm text-muted-foreground font-normal mt-1">
-              {PHASE_LABELS[current_phase || ''] || 'Procesando documentos...'}
+              {phaseInfo.label}
             </p>
           </div>
         </CardTitle>
@@ -224,14 +214,14 @@ const ExtractingState = ({ projectId }: { projectId: string }) => {
         </div>
 
         <div className="space-y-3">
-          {phases.map((phase, index) => {
-            const isCompleted = index < displayPhaseIndex;
-            const isCurrent = index === displayPhaseIndex;
-            const isPending = index > displayPhaseIndex;
+          {EXTRACTION_STEPS.map((stepName, index) => {
+            const isCompleted = index < currentStep;
+            const isCurrent = index === currentStep;
+            const isPending = index > currentStep;
             
             return (
               <div 
-                key={phase.id} 
+                key={stepName} 
                 className={`flex items-center gap-3 text-sm ${isPending ? 'text-muted-foreground' : ''}`}
               >
                 {isCompleted && (
@@ -244,7 +234,7 @@ const ExtractingState = ({ projectId }: { projectId: string }) => {
                   <Circle className="h-5 w-5 text-muted-foreground" />
                 )}
                 <span className={isCurrent ? 'font-medium text-foreground' : ''}>
-                  {phase.name}
+                  {stepName}
                   {isCompleted && ' ✓'}
                   {isCurrent && '...'}
                 </span>
