@@ -509,8 +509,17 @@ const CostConsultingDetail = () => {
   
   // States for upload more documents
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [pendingReExtraction, setPendingReExtraction] = useState(false);
   const [isReExtracting, setIsReExtracting] = useState(false);
+  
+  // Document stats from PendingDocumentsList - for data-driven pending detection
+  const [documentStats, setDocumentStats] = useState<{ pending: number; failed: number; processing: number }>({ 
+    pending: 0, 
+    failed: 0, 
+    processing: 0 
+  });
+  
+  // Derived: show re-extract button/alert when there are pending or failed documents
+  const hasPendingDocuments = documentStats.pending > 0 || documentStats.failed > 0;
   
   // States for edit modals
   const [editingContract, setEditingContract] = useState<CostContract | null>(null);
@@ -814,7 +823,6 @@ const CostConsultingDetail = () => {
       }
 
       toast.success('Re-extracción iniciada');
-      setPendingReExtraction(false);
       // Refetch to see the new "extracting" status
       queryClient.invalidateQueries({ queryKey: ['cost-project', id] });
 
@@ -828,8 +836,9 @@ const CostConsultingDetail = () => {
 
   // Handle upload complete
   const handleUploadComplete = () => {
-    setPendingReExtraction(true);
+    // Stats will be updated by PendingDocumentsList callback
     queryClient.invalidateQueries({ queryKey: ['cost-documents', id] });
+    queryClient.invalidateQueries({ queryKey: ['project-documents-list', id] });
   };
 
   if (isLoadingProject) {
@@ -963,7 +972,7 @@ const CostConsultingDetail = () => {
               Subir más documentos
             </Button>
             
-            {pendingReExtraction && (
+            {hasPendingDocuments && (
               <Button 
                 onClick={handleReExtract}
                 disabled={isReExtracting}
@@ -984,12 +993,20 @@ const CostConsultingDetail = () => {
           </div>
 
           {/* Pending re-extraction alert */}
-          {pendingReExtraction && (
+          {hasPendingDocuments && (
             <Alert className="bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800">
               <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-              <AlertTitle className="text-yellow-800 dark:text-yellow-300">Documentos pendientes</AlertTitle>
+              <AlertTitle className="text-yellow-800 dark:text-yellow-300">
+                Documentos pendientes
+              </AlertTitle>
               <AlertDescription className="text-yellow-700 dark:text-yellow-400">
-                Has subido nuevos documentos. Ejecuta "Re-extraer documentos" para procesarlos.
+                {documentStats.pending > 0 && documentStats.failed > 0 
+                  ? `${documentStats.pending} documentos pendientes y ${documentStats.failed} con error.`
+                  : documentStats.pending > 0 
+                    ? `${documentStats.pending} documentos pendientes de extracción.`
+                    : `${documentStats.failed} documentos con error de extracción.`
+                }
+                {' '}Ejecuta "Re-extraer documentos" para procesarlos.
               </AlertDescription>
             </Alert>
           )}
@@ -1002,6 +1019,7 @@ const CostConsultingDetail = () => {
               queryClient.invalidateQueries({ queryKey: ['cost-contracts', id] });
               queryClient.invalidateQueries({ queryKey: ['cost-invoices', id] });
             }}
+            onStatsChange={(stats) => setDocumentStats(stats)}
           />
 
           {/* Review Summary Card - Document validation status */}
@@ -1205,7 +1223,7 @@ const CostConsultingDetail = () => {
               Subir más documentos
             </Button>
             
-            {pendingReExtraction && (
+            {hasPendingDocuments && (
               <Button 
                 onClick={handleReExtract}
                 disabled={isReExtracting}
@@ -1226,12 +1244,20 @@ const CostConsultingDetail = () => {
           </div>
 
           {/* Pending re-extraction alert */}
-          {pendingReExtraction && (
+          {hasPendingDocuments && (
             <Alert className="bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800">
               <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-              <AlertTitle className="text-yellow-800 dark:text-yellow-300">Documentos pendientes</AlertTitle>
+              <AlertTitle className="text-yellow-800 dark:text-yellow-300">
+                Documentos pendientes
+              </AlertTitle>
               <AlertDescription className="text-yellow-700 dark:text-yellow-400">
-                Has subido nuevos documentos. Ejecuta "Re-extraer documentos" para procesarlos.
+                {documentStats.pending > 0 && documentStats.failed > 0 
+                  ? `${documentStats.pending} documentos pendientes y ${documentStats.failed} con error.`
+                  : documentStats.pending > 0 
+                    ? `${documentStats.pending} documentos pendientes de extracción.`
+                    : `${documentStats.failed} documentos con error de extracción.`
+                }
+                {' '}Ejecuta "Re-extraer documentos" para procesarlos.
               </AlertDescription>
             </Alert>
           )}
