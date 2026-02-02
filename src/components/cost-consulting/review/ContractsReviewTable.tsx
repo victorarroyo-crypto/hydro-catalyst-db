@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle } from 'lucide-react';
+import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, FileDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -21,6 +21,10 @@ export interface ContractForReview {
   classification_confidence?: number;
   classification_warning?: string;
   detected_type?: string;
+  cost_project_documents?: {
+    file_url?: string;
+    filename?: string;
+  };
 }
 
 interface ContractsReviewTableProps {
@@ -144,6 +148,23 @@ export function ContractsReviewTable({
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">
+                  {/* Download PDF */}
+                  {contract.cost_project_documents?.file_url && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          onClick={() => window.open(contract.cost_project_documents?.file_url, '_blank')}
+                        >
+                          <FileDown className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Descargar PDF</TooltipContent>
+                    </Tooltip>
+                  )}
+
                   {/* View */}
                   <Tooltip>
                     <TooltipTrigger asChild>

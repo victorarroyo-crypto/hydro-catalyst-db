@@ -51,7 +51,34 @@ serve(async (req) => {
 
     console.log(`Uploading file: ${file.name} (${file.size} bytes) for project: ${projectId}`);
 
-    // 3. Forward to Railway backend
+    // 3. Upload to Supabase Storage first
+    const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const storagePath = `${projectId}/${Date.now()}_${sanitizedFilename}`;
+    
+    // Read file content as ArrayBuffer for storage upload
+    const fileArrayBuffer = await file.arrayBuffer();
+    const fileContent = new Uint8Array(fileArrayBuffer);
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('cost-documents')
+      .upload(storagePath, fileContent, {
+        contentType: file.type || 'application/pdf',
+        upsert: false,
+      });
+
+    let fileUrl: string | null = null;
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError);
+      // Continue without URL if storage fails
+    } else if (uploadData?.path) {
+      const { data: urlData } = supabase.storage
+        .from('cost-documents')
+        .getPublicUrl(uploadData.path);
+      fileUrl = urlData.publicUrl;
+      console.log('File uploaded to Storage:', fileUrl);
+    }
+
+    // 4. Forward to Railway backend
     const railwayUrl = Deno.env.get('RAILWAY_API_URL');
     const syncSecret = Deno.env.get('RAILWAY_SYNC_SECRET');
 
@@ -63,10 +90,16 @@ serve(async (req) => {
       });
     }
 
-    // Build FormData for Railway
+    // Build FormData for Railway - need to recreate File from ArrayBuffer
     const railwayFormData = new FormData();
-    railwayFormData.append('file', file);
+    const fileBlob = new Blob([fileContent], { type: file.type || 'application/pdf' });
+    railwayFormData.append('file', fileBlob, file.name);
     railwayFormData.append('file_type', fileType || 'otro');
+    
+    // Include the storage URL for Railway to save
+    if (fileUrl) {
+      railwayFormData.append('file_url', fileUrl);
+    }
 
     const railwayHeaders: Record<string, string> = {
       'X-User-Id': userData.user.id,
@@ -99,6 +132,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       success: response.ok,
       status: response.status,
+      file_url: fileUrl,
       ...responseData,
     }), {
       status: 200,

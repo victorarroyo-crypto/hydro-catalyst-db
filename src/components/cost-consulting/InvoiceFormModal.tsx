@@ -26,7 +26,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, FileDown } from 'lucide-react';
 import { CostInvoice, CostSupplier, CostContract } from '@/hooks/useCostConsultingData';
 import {
   createInvoice,
@@ -212,13 +212,28 @@ export const InvoiceFormModal = ({
     }
   };
 
+  // Get file_url from the associated document
+  const fileUrl = (invoice as any)?.cost_project_documents?.file_url;
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {invoice ? 'Editar Factura' : 'Nueva Factura Manual'}
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>
+              {invoice ? 'Editar Factura' : 'Nueva Factura Manual'}
+            </DialogTitle>
+            {fileUrl && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(fileUrl, '_blank')}
+              >
+                <FileDown className="h-4 w-4 mr-2" />
+                Ver PDF Original
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="space-y-6">

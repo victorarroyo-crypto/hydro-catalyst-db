@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, FileDown } from 'lucide-react';
 import { CostContract, CostSupplier } from '@/hooks/useCostConsultingData';
 import { 
   createContract, 
@@ -136,18 +136,35 @@ export const ContractFormModal = ({
     }
   };
 
+  // Get file_url from the associated document
+  const fileUrl = (contract as any)?.cost_project_documents?.file_url;
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {contract ? 'Editar Contrato' : 'Nuevo Contrato Manual'}
-          </DialogTitle>
-          <DialogDescription>
-            {contract
-              ? 'Modifica los datos del contrato'
-              : 'Introduce los datos del contrato manualmente'}
-          </DialogDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle>
+                {contract ? 'Editar Contrato' : 'Nuevo Contrato Manual'}
+              </DialogTitle>
+              <DialogDescription>
+                {contract
+                  ? 'Modifica los datos del contrato'
+                  : 'Introduce los datos del contrato manualmente'}
+              </DialogDescription>
+            </div>
+            {fileUrl && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(fileUrl, '_blank')}
+              >
+                <FileDown className="h-4 w-4 mr-2" />
+                Ver PDF Original
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-4">
