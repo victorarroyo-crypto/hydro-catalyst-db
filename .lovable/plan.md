@@ -1,115 +1,87 @@
 
-# Plan: Mejorar Gestión de Documentos para Proyectos Grandes
+# Plan: Corregir Mapeo de Campo extraction_status
 
 ## Problema Identificado
 
-Cuando se suben documentos en múltiples bloques, no hay visibilidad de:
-- Cuántos documentos están registrados en el sistema
-- Cuáles están pendientes de extracción
-- Si la extracción procesó todos o solo algunos
+La API Railway devuelve el campo como **`extraction_status`**, pero el frontend usa **`processing_status`**:
 
-El backend Railway puede estar filtrando documentos (por status, por límites, etc.), pero el frontend no lo muestra.
+**Respuesta API:**
+```json
+{
+  "id": "805581af-...",
+  "filename": "FKE-2024-0024_Kemira_Dec2024_Q2.pdf",
+  "extraction_status": "completed",  // <-- Campo real
+  ...
+}
+```
 
-## Solución Propuesta
+**Tipo TypeScript actual:**
+```typescript
+interface ProjectDocument {
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed';  // <-- Nombre incorrecto
+}
+```
 
-### 1. Añadir Panel de Documentos Pendientes en Vista de Revisión
+Esto causa que:
+1. `doc.processing_status` sea siempre `undefined`
+2. La condición `doc.processing_status === 'pending'` nunca sea verdadera
+3. El botón de reprocesar nunca aparezca
 
-Mostrar siempre la lista de documentos registrados (tabla `cost_project_documents`) para que el usuario vea:
-- Qué documentos están subidos
-- Su estado de procesamiento (pending/processing/completed/failed)
-- Posibilidad de eliminar antes de extraer
+## Solución
 
-**Archivo:** `src/pages/cost-consulting/CostConsultingDetail.tsx`
-
-Añadir sección colapsable "Documentos Subidos" que muestre:
-- Listado de todos los documentos del proyecto
-- Estado de cada uno (icono de color)
-- Botón de eliminar individual
-- Contador: "X de Y documentos procesados"
-
-### 2. Mostrar DocumentsManagementCard en Estado Review (no solo Completed)
-
-Actualmente `DocumentsManagementCard` solo se muestra en el tab "Documentos" cuando el proyecto está completado. Debería mostrarse también en `review` para dar visibilidad completa.
-
-**Cambio:** Añadir la tarjeta de gestión de documentos en la vista de revisión, antes de las tablas de contratos/facturas.
-
-### 3. Añadir Endpoint para Listar Documentos Pendientes
-
-Verificar que existe `GET /api/cost-consulting/projects/{id}/documents` en Railway y usarlo para obtener la lista completa.
+### 1. Actualizar Interface ProjectDocument
 
 **Archivo:** `src/services/costConsultingApi.ts`
 
+Cambiar el nombre del campo para que coincida con la API:
+
 ```typescript
-export const getProjectDocuments = async (projectId: string) => {
-  const response = await fetch(
-    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents`
-  );
-  if (!response.ok) throw new Error('Error fetching documents');
-  return response.json();
-};
+export interface ProjectDocument {
+  id: string;
+  project_id: string;
+  filename: string;
+  file_url?: string;
+  file_type?: string;  // También cambiar document_type -> file_type
+  extraction_status: 'pending' | 'processing' | 'completed' | 'failed';  // Renombrado
+  extracted_data?: any;
+  extraction_error?: string;  // También existe en API
+  chunk_count?: number;
+  file_size?: number;
+  mime_type?: string;
+  uploaded_at?: string;  // API usa uploaded_at, no created_at
+  processed_at?: string;
+}
 ```
 
-### 4. Crear Componente PendingDocumentsList
-
-Nuevo componente ligero que muestre los documentos pendientes de forma compacta:
+### 2. Actualizar PendingDocumentsList Component
 
 **Archivo:** `src/components/cost-consulting/PendingDocumentsList.tsx`
 
-```typescript
-// Componente que muestra:
-// - Lista compacta de documentos con iconos de estado
-// - Botón "Eliminar" por documento
-// - Resumen: "12 documentos (8 procesados, 2 pendientes, 2 fallidos)"
-```
+Cambiar todas las referencias de `processing_status` a `extraction_status`:
 
-### 5. Integrar en Flujo de Revisión
+- Línea 89: `doc.processing_status` → `doc.extraction_status`
+- Línea 110-113: Calcular stats con `extraction_status`
+- Línea 251: `getStatusConfig(doc.extraction_status)`
+- Línea 305: Condición del botón reprocesar: `doc.extraction_status === 'failed' || doc.extraction_status === 'pending'`
 
-En `CostConsultingDetail.tsx`, cuando el estado es `review`:
-
-```tsx
-{isReview && (
-  <div className="space-y-6">
-    {/* Alert informativo existente */}
-    
-    {/* NUEVO: Lista de documentos subidos */}
-    <PendingDocumentsList 
-      projectId={project.id}
-      onDocumentDeleted={() => queryClient.invalidateQueries(['cost-documents', id])}
-    />
-    
-    {/* Botones de acción existentes */}
-    {/* Tablas de contratos/facturas */}
-  </div>
-)}
-```
+También cambiar:
+- `document_type` → `file_type`
+- `processing_error` → `extraction_error`
 
 ## Archivos a Modificar
 
 | Archivo | Cambios |
 |---------|---------|
-| `costConsultingApi.ts` | Añadir `getProjectDocuments()` |
-| `PendingDocumentsList.tsx` | Nuevo componente |
-| `CostConsultingDetail.tsx` | Integrar lista en vista review |
+| `src/services/costConsultingApi.ts` | Corregir nombres de campos en `ProjectDocument` |
+| `src/components/cost-consulting/PendingDocumentsList.tsx` | Usar nombres correctos de campos |
 
-## Beneficios
+## Resultado Esperado
 
-1. **Visibilidad total**: El usuario ve todos los documentos subidos, no solo los extraídos
-2. **Diagnóstico fácil**: Si solo se procesaron 12 de 36, es visible inmediatamente
-3. **Control granular**: Puede eliminar documentos problemáticos antes de re-extraer
-4. **Mejor UX para proyectos grandes**: Sabe exactamente qué hay en el sistema
+Después del fix:
+- Los badges de estado mostrarán correctamente "Procesado" (no "Pendiente")
+- El botón de reprocesar aparecerá para documentos con `extraction_status: 'failed'` o `'pending'`
+- Las estadísticas del resumen serán correctas
 
-## Consideraciones Backend
+## Nota Adicional
 
-Si el backend Railway tiene límites en la extracción, esto los haría visibles. El usuario podría:
-- Subir en lotes más pequeños
-- Identificar qué documentos no se procesaron
-- Re-extraer selectivamente
-
-## Alternativa: Subida por Lotes con Confirmación
-
-Si el problema es que Railway no puede manejar muchos documentos a la vez, podríamos añadir:
-- Subida en lotes de 10-15 documentos
-- Esperar confirmación antes del siguiente lote
-- Barra de progreso global
-
-Esto sería un cambio mayor en `CostConsultingNew.tsx` y requiere más análisis del backend.
+Según los datos de la API que vi, todos tus documentos actuales ya tienen `extraction_status: "completed"`, por eso no verías el botón de reprocesar para ellos (es el comportamiento correcto). La UI muestra "Pendiente" incorrectamente porque el campo undefined cae al case default.
