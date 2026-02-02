@@ -494,8 +494,10 @@ export interface ProjectDocument {
   project_id: string;
   filename: string;
   file_url?: string;
-  document_type?: string;
-  processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+  file_type?: string;  // API uses file_type, not document_type
+  extraction_status: 'pending' | 'processing' | 'completed' | 'failed';  // API uses extraction_status
+  extracted_data?: Record<string, unknown>;
+  extraction_error?: string;  // API uses extraction_error
   chunk_count?: number;
   file_size?: number;
   mime_type?: string;
