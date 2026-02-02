@@ -1,87 +1,182 @@
 
-# Plan: Corregir Mapeo de Campo extraction_status
+# Plan: Añadir Botón "Re-extraer" para Documentos
 
-## Problema Identificado
+## Resumen
 
-La API Railway devuelve el campo como **`extraction_status`**, pero el frontend usa **`processing_status`**:
+Añadir una nueva funcionalidad que permite volver a ejecutar la extracción LLM de contratos/facturas desde un documento cuando la extracción inicial falló o produjo resultados incorrectos. Este es un endpoint **diferente** al "Reprocesar" existente.
 
-**Respuesta API:**
-```json
-{
-  "id": "805581af-...",
-  "filename": "FKE-2024-0024_Kemira_Dec2024_Q2.pdf",
-  "extraction_status": "completed",  // <-- Campo real
-  ...
-}
-```
+## Diferencia entre los dos endpoints
 
-**Tipo TypeScript actual:**
-```typescript
-interface ProjectDocument {
-  processing_status: 'pending' | 'processing' | 'completed' | 'failed';  // <-- Nombre incorrecto
-}
-```
+| Acción | Endpoint | Qué hace |
+|--------|----------|----------|
+| **Reprocesar** (existente) | `POST /documents/{id}/reprocess` | Solo regenera embeddings para búsqueda semántica |
+| **Re-extraer** (nuevo) | `POST /documents/{id}/re-extract` | Vuelve a ejecutar el pipeline LLM para extraer contratos/facturas |
 
-Esto causa que:
-1. `doc.processing_status` sea siempre `undefined`
-2. La condición `doc.processing_status === 'pending'` nunca sea verdadera
-3. El botón de reprocesar nunca aparezca
+## Cambios Requeridos
 
-## Solución
-
-### 1. Actualizar Interface ProjectDocument
+### 1. Añadir función `reExtractDocument` en el servicio API
 
 **Archivo:** `src/services/costConsultingApi.ts`
 
-Cambiar el nombre del campo para que coincida con la API:
+Añadir nueva función después de `reprocessDocument`:
 
 ```typescript
-export interface ProjectDocument {
-  id: string;
-  project_id: string;
-  filename: string;
-  file_url?: string;
-  file_type?: string;  // También cambiar document_type -> file_type
-  extraction_status: 'pending' | 'processing' | 'completed' | 'failed';  // Renombrado
-  extracted_data?: any;
-  extraction_error?: string;  // También existe en API
-  chunk_count?: number;
-  file_size?: number;
-  mime_type?: string;
-  uploaded_at?: string;  // API usa uploaded_at, no created_at
-  processed_at?: string;
-}
+/**
+ * Re-extract data (contracts/invoices) from a document using LLM pipeline.
+ * Unlike reprocess (which only regenerates embeddings), this re-runs the full extraction.
+ * Returns info about deleted records before re-extraction.
+ */
+export const reExtractDocument = async (projectId: string, documentId: string) => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${documentId}/re-extract`,
+    { method: 'POST' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error re-extracting document' }));
+    throw new Error(error.detail || 'Error re-extracting document');
+  }
+  return response.json();
+};
 ```
 
-### 2. Actualizar PendingDocumentsList Component
+### 2. Actualizar componente `PendingDocumentsList`
 
 **Archivo:** `src/components/cost-consulting/PendingDocumentsList.tsx`
 
-Cambiar todas las referencias de `processing_status` a `extraction_status`:
+#### 2.1 Importar la nueva función
+```typescript
+import { 
+  getProjectDocuments, 
+  deleteDocument, 
+  reprocessDocument,
+  reExtractDocument,  // Nueva importación
+  ProjectDocument 
+} from '@/services/costConsultingApi';
+```
 
-- Línea 89: `doc.processing_status` → `doc.extraction_status`
-- Línea 110-113: Calcular stats con `extraction_status`
-- Línea 251: `getStatusConfig(doc.extraction_status)`
-- Línea 305: Condición del botón reprocesar: `doc.extraction_status === 'failed' || doc.extraction_status === 'pending'`
+#### 2.2 Añadir estado para re-extracción
+```typescript
+const [reExtractingId, setReExtractingId] = useState<string | null>(null);
+```
 
-También cambiar:
-- `document_type` → `file_type`
-- `processing_error` → `extraction_error`
+#### 2.3 Añadir función `handleReExtract`
+```typescript
+const handleReExtract = async (doc: ProjectDocument) => {
+  setReExtractingId(doc.id);
+  try {
+    const result = await reExtractDocument(projectId, doc.id);
+    
+    // Mostrar información sobre registros borrados
+    const deletedInfo = [];
+    if (result.deleted_contracts > 0) {
+      deletedInfo.push(`${result.deleted_contracts} contratos`);
+    }
+    if (result.deleted_invoices > 0) {
+      deletedInfo.push(`${result.deleted_invoices} facturas`);
+    }
+    
+    const deletedMsg = deletedInfo.length > 0 
+      ? ` (eliminados: ${deletedInfo.join(', ')})` 
+      : '';
+    
+    toast.success(`Re-extracción iniciada para "${doc.filename}"${deletedMsg}`);
+    
+    queryClient.invalidateQueries({ queryKey: ['project-documents-list', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['cost-contracts', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['cost-invoices', projectId] });
+  } catch (error) {
+    console.error('Error re-extracting document:', error);
+    toast.error(error instanceof Error ? error.message : 'Error al re-extraer el documento');
+  } finally {
+    setReExtractingId(null);
+  }
+};
+```
+
+#### 2.4 Añadir botón "Re-extraer" en la columna de acciones
+
+El botón aparece para documentos con `extraction_status === 'failed'` o `'completed'`:
+
+```tsx
+{/* Re-extract button - for failed or completed (to retry if data is wrong) */}
+{(doc.extraction_status === 'failed' || doc.extraction_status === 'completed') && (
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-orange-600"
+          onClick={() => handleReExtract(doc)}
+          disabled={reExtractingId === doc.id}
+        >
+          {reExtractingId === doc.id ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {doc.extraction_status === 'failed' 
+          ? 'Re-extraer datos (pipeline LLM)' 
+          : 'Re-extraer (corregir datos)'
+        }
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+)}
+```
+
+### 3. Diferenciación visual de botones
+
+Para evitar confusión entre los dos botones, usaremos:
+
+| Botón | Color | Cuándo aparece | Tooltip |
+|-------|-------|----------------|---------|
+| Reprocesar | Azul/Primary | `pending` o `failed` | "Reprocesar embeddings" |
+| Re-extraer | Naranja | `failed` o `completed` | "Re-extraer datos (pipeline LLM)" |
+
+### 4. Actualizar mensaje de advertencia
+
+Cambiar el texto en el warning box para reflejar la nueva acción:
+
+```tsx
+<p className="mt-1 text-xs opacity-80">
+  Usa "Re-extraer" para volver a procesar documentos con error.
+</p>
+```
+
+## Flujo Visual
+
+```
+Estado: failed
+├── Botón "Reprocesar" → Solo regenera embeddings
+└── Botón "Re-extraer" → Re-ejecuta extracción LLM ← NUEVO
+
+Estado: completed
+└── Botón "Re-extraer" → Re-ejecuta si los datos son incorrectos ← NUEVO
+
+Estado: pending
+└── Botón "Reprocesar" → Regenera embeddings
+```
 
 ## Archivos a Modificar
 
 | Archivo | Cambios |
 |---------|---------|
-| `src/services/costConsultingApi.ts` | Corregir nombres de campos en `ProjectDocument` |
-| `src/components/cost-consulting/PendingDocumentsList.tsx` | Usar nombres correctos de campos |
+| `src/services/costConsultingApi.ts` | Añadir función `reExtractDocument` |
+| `src/components/cost-consulting/PendingDocumentsList.tsx` | Añadir botón, estado y handler |
 
-## Resultado Esperado
+## Respuesta Esperada del Endpoint
 
-Después del fix:
-- Los badges de estado mostrarán correctamente "Procesado" (no "Pendiente")
-- El botón de reprocesar aparecerá para documentos con `extraction_status: 'failed'` o `'pending'`
-- Las estadísticas del resumen serán correctas
+```json
+{
+  "message": "Re-extracción iniciada para 'factura.pdf'",
+  "document_id": "uuid",
+  "deleted_contracts": 0,
+  "deleted_invoices": 3
+}
+```
 
-## Nota Adicional
-
-Según los datos de la API que vi, todos tus documentos actuales ya tienen `extraction_status: "completed"`, por eso no verías el botón de reprocesar para ellos (es el comportamiento correcto). La UI muestra "Pendiente" incorrectamente porque el campo undefined cae al case default.
+Esta información se mostrará en el toast para que el usuario sepa qué registros se borraron antes de la re-extracción.
