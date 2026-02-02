@@ -1,11 +1,47 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, FileDown } from 'lucide-react';
+import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+
+type SortField = 'status' | 'supplier' | 'contract_number' | 'start_date' | 'total_annual_value' | 'confidence';
+type SortDirection = 'asc' | 'desc';
+
+interface SortableHeaderProps {
+  field: SortField;
+  currentField: SortField | null;
+  direction: SortDirection;
+  onSort: (field: SortField) => void;
+  children: React.ReactNode;
+  className?: string;
+}
+
+function SortableHeader({ field, currentField, direction, onSort, children, className = '' }: SortableHeaderProps) {
+  const isActive = currentField === field;
+  
+  return (
+    <TableHead 
+      className={`cursor-pointer hover:bg-muted/50 select-none ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        {isActive ? (
+          direction === 'asc' ? (
+            <ArrowUp className="h-3 w-3 text-primary" />
+          ) : (
+            <ArrowDown className="h-3 w-3 text-primary" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-50" />
+        )}
+      </div>
+    </TableHead>
+  );
+}
 
 export interface ContractForReview {
   id: string;
@@ -100,6 +136,58 @@ export function ContractsReviewTable({
   onChangeType,
   isValidating,
 }: ContractsReviewTableProps) {
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getStatusPriority = (contract: ContractForReview): number => {
+    if (contract.human_validated) return 3;
+    if (contract.classification_warning) return 1;
+    if (contract.needs_review) return 2;
+    return 0;
+  };
+
+  const sortedContracts = useMemo(() => {
+    if (!sortField) return contracts;
+
+    return [...contracts].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortField) {
+        case 'status':
+          comparison = getStatusPriority(a) - getStatusPriority(b);
+          break;
+        case 'supplier':
+          comparison = (a.supplier_name_raw || '').localeCompare(b.supplier_name_raw || '');
+          break;
+        case 'contract_number':
+          comparison = (a.contract_number || '').localeCompare(b.contract_number || '');
+          break;
+        case 'start_date':
+          const dateA = a.start_date ? new Date(a.start_date).getTime() : 0;
+          const dateB = b.start_date ? new Date(b.start_date).getTime() : 0;
+          comparison = dateA - dateB;
+          break;
+        case 'total_annual_value':
+          comparison = (a.total_annual_value || 0) - (b.total_annual_value || 0);
+          break;
+        case 'confidence':
+          comparison = (a.classification_confidence || 0) - (b.classification_confidence || 0);
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [contracts, sortField, sortDirection]);
+
   if (contracts.length === 0) {
     return (
       <p className="text-muted-foreground text-center py-8">
@@ -113,17 +201,29 @@ export function ContractsReviewTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Estado</TableHead>
-            <TableHead>Proveedor</TableHead>
-            <TableHead>Nº Contrato</TableHead>
-            <TableHead>Vigencia</TableHead>
-            <TableHead className="text-right">Valor Anual</TableHead>
-            <TableHead>Confianza</TableHead>
+            <SortableHeader field="status" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Estado
+            </SortableHeader>
+            <SortableHeader field="supplier" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Proveedor
+            </SortableHeader>
+            <SortableHeader field="contract_number" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Nº Contrato
+            </SortableHeader>
+            <SortableHeader field="start_date" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Vigencia
+            </SortableHeader>
+            <SortableHeader field="total_annual_value" currentField={sortField} direction={sortDirection} onSort={handleSort} className="text-right">
+              Valor Anual
+            </SortableHeader>
+            <SortableHeader field="confidence" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+              Confianza
+            </SortableHeader>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {contracts.map((contract) => (
+          {sortedContracts.map((contract) => (
             <TableRow 
               key={contract.id}
               className={contract.classification_warning ? 'bg-red-50/50 dark:bg-red-950/20' : ''}
