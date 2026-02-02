@@ -515,5 +515,7 @@ export const getProjectDocuments = async (projectId: string): Promise<ProjectDoc
     const error = await response.json().catch(() => ({ detail: 'Error fetching documents' }));
     throw new Error(error.detail || 'Error fetching documents');
   }
-  return response.json();
+  const data = await response.json();
+  // Handle both array response and object wrapper responses
+  return Array.isArray(data) ? data : (data.documents || data.data || []);
 };
