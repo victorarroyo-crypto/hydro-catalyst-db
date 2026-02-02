@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,7 +43,8 @@ import {
   Trash2,
   AlertTriangle,
   RefreshCw,
-  Files
+  Files,
+  FileQuestion
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -53,6 +54,7 @@ import {
   reExtractDocument,
   ProjectDocument 
 } from '@/services/costConsultingApi';
+import { useDocumentEntityCounts, getDocumentCounts, documentHasEntities } from '@/hooks/useDocumentEntityCounts';
 
 export interface DocumentStats {
   pending: number;
@@ -60,6 +62,7 @@ export interface DocumentStats {
   processing: number;
   completed: number;
   total: number;
+  noEntities: number; // Documents completed but with 0 contracts/invoices
 }
 
 interface PendingDocumentsListProps {
@@ -133,19 +136,29 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
     },
   });
 
+  // Fetch entity counts per document
+  const { counts: entityCounts, isLoading: entityCountsLoading } = useDocumentEntityCounts(projectId);
+
   // Calculate stats - use extraction_status (API field name)
-  const stats: DocumentStats = {
-    total: documents.length,
-    completed: documents.filter(d => d.extraction_status === 'completed').length,
-    processing: documents.filter(d => d.extraction_status === 'processing').length,
-    pending: documents.filter(d => d.extraction_status === 'pending').length,
-    failed: documents.filter(d => d.extraction_status === 'failed').length,
-  };
+  // Also count documents that are completed but have no entities
+  const stats: DocumentStats = useMemo(() => {
+    const completed = documents.filter(d => d.extraction_status === 'completed');
+    const completedWithoutEntities = completed.filter(d => !documentHasEntities(entityCounts, d.id));
+    
+    return {
+      total: documents.length,
+      completed: completed.length,
+      processing: documents.filter(d => d.extraction_status === 'processing').length,
+      pending: documents.filter(d => d.extraction_status === 'pending').length,
+      failed: documents.filter(d => d.extraction_status === 'failed').length,
+      noEntities: completedWithoutEntities.length,
+    };
+  }, [documents, entityCounts]);
 
   // Notify parent when stats change
   React.useEffect(() => {
     onStatsChange?.(stats);
-  }, [stats.pending, stats.failed, stats.processing, stats.completed, stats.total, onStatsChange]);
+  }, [stats.pending, stats.failed, stats.processing, stats.completed, stats.total, stats.noEntities, onStatsChange]);
   const handleDeleteConfirm = async () => {
     if (!documentToDelete) return;
     
@@ -267,6 +280,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                   </CardTitle>
                   <CardDescription className="text-xs mt-0.5">
                     {stats.completed} procesados
+                    {stats.noEntities > 0 && ` · ${stats.noEntities} sin datos`}
                     {stats.pending > 0 && ` · ${stats.pending} pendientes`}
                     {stats.processing > 0 && ` · ${stats.processing} procesando`}
                     {stats.failed > 0 && ` · ${stats.failed} con error`}
@@ -288,9 +302,15 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                   </Badge>
                 )}
                 {stats.failed > 0 && (
-                  <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-200">
+                  <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
                     <XCircle className="h-3 w-3 mr-1" />
                     {stats.failed}
+                  </Badge>
+                )}
+                {stats.noEntities > 0 && (
+                  <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-200">
+                    <FileQuestion className="h-3 w-3 mr-1" />
+                    {stats.noEntities}
                   </Badge>
                 )}
                 {isOpen ? (
@@ -311,21 +331,26 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                   <TableRow>
                     <TableHead>Documento</TableHead>
                     <TableHead className="w-[100px]">Estado</TableHead>
-                    <TableHead className="w-[100px] text-right">Tamaño</TableHead>
+                    <TableHead className="w-[70px] text-center">Contratos</TableHead>
+                    <TableHead className="w-[70px] text-center">Facturas</TableHead>
+                    <TableHead className="w-[80px] text-right">Tamaño</TableHead>
                     <TableHead className="w-[100px] text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {documents.map((doc) => {
+                {documents.map((doc) => {
                     const statusConfig = getStatusConfig(doc.extraction_status);
                     const StatusIcon = statusConfig.icon;
+                    const docCounts = getDocumentCounts(entityCounts, doc.id);
+                    const hasNoEntities = doc.extraction_status === 'completed' && 
+                      docCounts.contracts === 0 && docCounts.invoices === 0;
                     
                     return (
                       <TableRow key={doc.id}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                            <span className="truncate max-w-[300px]" title={doc.filename}>
+                            <span className="truncate max-w-[250px]" title={doc.filename}>
                               {doc.filename}
                             </span>
                             {doc.file_type && doc.file_type !== 'otro' && (
@@ -335,9 +360,23 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                                  doc.file_type}
                               </Badge>
                             )}
+                            {hasNoEntities && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="text-xs shrink-0 bg-orange-500/10 text-orange-600 border-orange-200">
+                                      Sin datos
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Este documento fue procesado pero no generó contratos ni facturas
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                           {doc.extraction_error && (
-                            <p className="text-xs text-red-500 mt-1 ml-6 truncate max-w-[400px]" title={doc.extraction_error}>
+                            <p className="text-xs text-destructive mt-1 ml-6 truncate max-w-[400px]" title={doc.extraction_error}>
                               {doc.extraction_error}
                             </p>
                           )}
@@ -364,6 +403,24 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {doc.extraction_status === 'completed' ? (
+                            <span className={docCounts.contracts > 0 ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+                              {docCounts.contracts}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {doc.extraction_status === 'completed' ? (
+                            <span className={docCounts.invoices > 0 ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+                              {docCounts.invoices}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
                           {formatFileSize(doc.file_size)}
@@ -451,12 +508,12 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
               </Table>
             </div>
 
-            {/* Warning if there are unprocessed documents */}
-            {(stats.pending > 0 || stats.failed > 0) && (
-              <div className="mt-4 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800">
-                <div className="flex items-start gap-2 text-sm text-yellow-700 dark:text-yellow-400">
+            {/* Warning if there are unprocessed documents or documents without entities */}
+            {(stats.pending > 0 || stats.failed > 0 || stats.noEntities > 0) && (
+              <div className="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                <div className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <div>
+                  <div className="space-y-1">
                     {stats.pending > 0 && (
                       <p>
                         <strong>{stats.pending}</strong> documento{stats.pending > 1 ? 's' : ''} pendiente{stats.pending > 1 ? 's' : ''} de procesamiento.
@@ -467,7 +524,13 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                         <strong>{stats.failed}</strong> documento{stats.failed > 1 ? 's' : ''} con error. Usa "Re-extraer" para volver a procesar.
                       </p>
                     )}
-                    <p className="mt-1 text-xs opacity-80">
+                    {stats.noEntities > 0 && (
+                      <p>
+                        <strong>{stats.noEntities}</strong> documento{stats.noEntities > 1 ? 's' : ''} procesado{stats.noEntities > 1 ? 's' : ''} sin contratos ni facturas.
+                        <span className="opacity-80"> Pueden ser anexos técnicos, catálogos u otros documentos de soporte.</span>
+                      </p>
+                    )}
+                    <p className="text-xs opacity-80">
                       El botón naranja re-ejecuta el pipeline LLM para extraer contratos/facturas.
                     </p>
                   </div>
