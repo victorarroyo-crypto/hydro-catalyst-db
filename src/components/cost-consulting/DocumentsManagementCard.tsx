@@ -86,11 +86,16 @@ export const DocumentsManagementCard: React.FC<DocumentsManagementCardProps> = (
     queryFn: async () => {
       const { data, error } = await externalSupabase
         .from('cost_project_documents')
-        .select('id, filename, status, chunk_count, created_at, error_message')
+        .select('id, filename, extraction_status, chunk_count, created_at, extraction_error')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []) as CostProjectDocument[];
+      // Map extraction_status to status for component compatibility
+      return (data || []).map(doc => ({
+        ...doc,
+        status: doc.extraction_status || 'pending',
+        error_message: doc.extraction_error
+      })) as CostProjectDocument[];
     },
     refetchInterval: (query) => {
       const data = query.state.data as CostProjectDocument[] | undefined;

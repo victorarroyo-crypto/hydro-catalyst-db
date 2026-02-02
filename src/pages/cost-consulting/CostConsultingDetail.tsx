@@ -518,9 +518,6 @@ const CostConsultingDetail = () => {
     processing: 0 
   });
   
-  // Derived: show re-extract button/alert when there are pending or failed documents
-  const hasPendingDocuments = documentStats.pending > 0 || documentStats.failed > 0;
-  
   // States for edit modals
   const [editingContract, setEditingContract] = useState<CostContract | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<CostInvoice | null>(null);
@@ -542,6 +539,12 @@ const CostConsultingDetail = () => {
   const { data: invoices = [] } = useInvoicesWithDocuments(id);
   const { data: opportunities = [] } = useCostOpportunities(id);
   const { data: documents = [] } = useCostDocuments(id);
+  
+  // Derived: show re-extract button/alert when:
+  // 1. There are pending or failed documents
+  // 2. OR the project failed during extraction (documents OK but entities not extracted)
+  const projectFailedDuringExtraction = project?.status === 'failed';
+  const hasExtractionIssues = documentStats.pending > 0 || documentStats.failed > 0 || projectFailedDuringExtraction;
   
   // Fetch suppliers for edit modals
   const { data: suppliers = [] } = useQuery({
@@ -972,7 +975,7 @@ const CostConsultingDetail = () => {
               Subir más documentos
             </Button>
             
-            {hasPendingDocuments && (
+            {hasExtractionIssues && (
               <Button 
                 onClick={handleReExtract}
                 disabled={isReExtracting}
@@ -993,20 +996,24 @@ const CostConsultingDetail = () => {
           </div>
 
           {/* Pending re-extraction alert */}
-          {hasPendingDocuments && (
+          {hasExtractionIssues && (
             <Alert className="bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800">
               <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
               <AlertTitle className="text-yellow-800 dark:text-yellow-300">
-                Documentos pendientes
+                {projectFailedDuringExtraction && documentStats.pending === 0 && documentStats.failed === 0
+                  ? 'Extracción fallida'
+                  : 'Documentos pendientes'}
               </AlertTitle>
               <AlertDescription className="text-yellow-700 dark:text-yellow-400">
-                {documentStats.pending > 0 && documentStats.failed > 0 
-                  ? `${documentStats.pending} documentos pendientes y ${documentStats.failed} con error.`
-                  : documentStats.pending > 0 
-                    ? `${documentStats.pending} documentos pendientes de extracción.`
-                    : `${documentStats.failed} documentos con error de extracción.`
+                {projectFailedDuringExtraction && documentStats.pending === 0 && documentStats.failed === 0
+                  ? 'La extracción de datos falló (timeout o error). Los documentos están procesados pero no se generaron contratos/facturas. '
+                  : documentStats.pending > 0 && documentStats.failed > 0 
+                    ? `${documentStats.pending} documentos pendientes y ${documentStats.failed} con error. `
+                    : documentStats.pending > 0 
+                      ? `${documentStats.pending} documentos pendientes de extracción. `
+                      : `${documentStats.failed} documentos con error de extracción. `
                 }
-                {' '}Ejecuta "Re-extraer documentos" para procesarlos.
+                Ejecuta "Re-extraer documentos" para procesarlos.
               </AlertDescription>
             </Alert>
           )}
@@ -1223,7 +1230,7 @@ const CostConsultingDetail = () => {
               Subir más documentos
             </Button>
             
-            {hasPendingDocuments && (
+            {hasExtractionIssues && (
               <Button 
                 onClick={handleReExtract}
                 disabled={isReExtracting}
@@ -1244,20 +1251,24 @@ const CostConsultingDetail = () => {
           </div>
 
           {/* Pending re-extraction alert */}
-          {hasPendingDocuments && (
+          {hasExtractionIssues && (
             <Alert className="bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800">
               <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
               <AlertTitle className="text-yellow-800 dark:text-yellow-300">
-                Documentos pendientes
+                {projectFailedDuringExtraction && documentStats.pending === 0 && documentStats.failed === 0
+                  ? 'Extracción fallida'
+                  : 'Documentos pendientes'}
               </AlertTitle>
               <AlertDescription className="text-yellow-700 dark:text-yellow-400">
-                {documentStats.pending > 0 && documentStats.failed > 0 
-                  ? `${documentStats.pending} documentos pendientes y ${documentStats.failed} con error.`
-                  : documentStats.pending > 0 
-                    ? `${documentStats.pending} documentos pendientes de extracción.`
-                    : `${documentStats.failed} documentos con error de extracción.`
+                {projectFailedDuringExtraction && documentStats.pending === 0 && documentStats.failed === 0
+                  ? 'La extracción de datos falló (timeout o error). Los documentos están procesados pero no se generaron contratos/facturas. '
+                  : documentStats.pending > 0 && documentStats.failed > 0 
+                    ? `${documentStats.pending} documentos pendientes y ${documentStats.failed} con error. `
+                    : documentStats.pending > 0 
+                      ? `${documentStats.pending} documentos pendientes de extracción. `
+                      : `${documentStats.failed} documentos con error de extracción. `
                 }
-                {' '}Ejecuta "Re-extraer documentos" para procesarlos.
+                Ejecuta "Re-extraer documentos" para procesarlos.
               </AlertDescription>
             </Alert>
           )}
