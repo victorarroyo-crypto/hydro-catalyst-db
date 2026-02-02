@@ -62,7 +62,7 @@ const getStatusConfig = (status: string) => {
       return {
         icon: Loader2,
         label: 'Procesando',
-        className: 'text-blue-600 dark:text-blue-400 animate-spin',
+        className: 'text-blue-600 dark:text-blue-400',
         bgClassName: 'bg-blue-500/10',
       };
     case 'failed':
