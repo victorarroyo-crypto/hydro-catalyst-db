@@ -305,6 +305,21 @@ export const reprocessDocument = async (projectId: string, documentId: string) =
   return response.json();
 };
 
+/**
+ * Delete a document and its associated data (chunks, storage file)
+ */
+export const deleteDocument = async (projectId: string, documentId: string) => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${documentId}`,
+    { method: 'DELETE' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error deleting document' }));
+    throw new Error(error.detail || 'Error deleting document');
+  }
+  return response.json();
+};
+
 // ============================================================
 // EXTRACTION & ANALYSIS API
 // ============================================================

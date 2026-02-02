@@ -3,6 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { FileSpreadsheet } from 'lucide-react';
 import { Eye, Pencil, Check, ArrowRightLeft, AlertTriangle, ChevronDown, ChevronRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -134,6 +135,28 @@ const getConfidenceBadge = (confidence: number | null | undefined) => {
     return <Badge variant="outline" className="text-yellow-600 border-yellow-300">Media ({Math.round(confidence * 100)}%)</Badge>;
   }
   return <Badge variant="outline" className="text-red-600 border-red-300">Baja ({Math.round(confidence * 100)}%)</Badge>;
+};
+
+// Check if invoice comes from Excel ledger (synthetic invoice)
+const isExcelInvoice = (invoiceNumber: string | undefined): boolean => {
+  return invoiceNumber?.startsWith('EXCEL-') ?? false;
+};
+
+const getSourceBadge = (invoiceNumber: string | undefined) => {
+  if (isExcelInvoice(invoiceNumber)) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 gap-1">
+            <FileSpreadsheet className="h-3 w-3" />
+            Excel
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>Factura sintética generada desde Excel</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return null;
 };
 
 export function InvoicesReviewTable({
@@ -270,7 +293,12 @@ export function InvoicesReviewTable({
                       ))}
                   </TableCell>
                   <TableCell>{getValidationBadge(invoice)}</TableCell>
-                  <TableCell className="font-medium">{invoice.invoice_number || '-'}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{invoice.invoice_number || '-'}</span>
+                      {getSourceBadge(invoice.invoice_number)}
+                    </div>
+                  </TableCell>
                   <TableCell>{formatDate(invoice.invoice_date)}</TableCell>
                   <TableCell>{invoice.supplier_name_raw || 'Sin nombre'}</TableCell>
                   <TableCell className="text-right font-medium">
