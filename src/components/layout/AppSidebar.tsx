@@ -87,6 +87,12 @@ const costConsultingSubItems = [
   { title: 'Mis Análisis', url: '/cost-consulting', icon: FileText },
   { title: 'Nuevo Análisis', url: '/cost-consulting/new', icon: Rocket },
   { title: 'Proveedores', url: '/cost-consulting/suppliers', icon: Building2 },
+  { title: 'Benchmarks', url: '/cost-consulting/benchmarks', icon: BarChart3 },
+];
+
+const costConsultingAdminSubItems = [
+  { title: 'Gestión Proveedores', url: '/cost-consulting/admin/suppliers', icon: ShieldCheck },
+  { title: 'Gestión Benchmarks', url: '/cost-consulting/admin/benchmarks', icon: ShieldCheck },
 ];
 
 const scoutingSubItems = [
@@ -448,25 +454,30 @@ export function AppSidebar() {
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
-                      {/* Benchmarks - Solo Admin */}
+                      {/* Admin Items - Solo Admin */}
                       {profile?.role === 'admin' && (
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={isActive('/cost-consulting/benchmarks')}
-                            className={cn(
-                              'transition-all duration-200',
-                              isActive('/cost-consulting/benchmarks')
-                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                            )}
-                          >
-                            <Link to="/cost-consulting/benchmarks" className="flex items-center gap-2">
-                              <BarChart3 className="w-4 h-4" />
-                              <span>Benchmarks</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
+                        <>
+                          <div className="my-1 mx-2 border-t border-sidebar-border/50" />
+                          {costConsultingAdminSubItems.map((item) => (
+                            <SidebarMenuSubItem key={item.title}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={isActive(item.url)}
+                                className={cn(
+                                  'transition-all duration-200',
+                                  isActive(item.url)
+                                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                    : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                                )}
+                              >
+                                <Link to={item.url} className="flex items-center gap-2">
+                                  <item.icon className="w-4 h-4" />
+                                  <span>{item.title}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </>
                       )}
                     </SidebarMenuSub>
                   </CollapsibleContent>
