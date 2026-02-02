@@ -10,9 +10,19 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Upload, FileText, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+
+type DocumentType = 'contrato' | 'factura' | 'otro';
 
 interface UploadMoreDocumentsModalProps {
   open: boolean;
@@ -37,6 +47,7 @@ export function UploadMoreDocumentsModal({
   onUploadComplete,
 }: UploadMoreDocumentsModalProps) {
   const [files, setFiles] = useState<File[]>([]);
+  const [documentType, setDocumentType] = useState<DocumentType>('otro');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadComplete, setUploadComplete] = useState(false);
@@ -68,6 +79,7 @@ export function UploadMoreDocumentsModal({
         const formData = new FormData();
         formData.append('file', file);
         formData.append('project_id', projectId);
+        formData.append('file_type', documentType);
 
         const { data, error } = await supabase.functions.invoke('cost-consulting-upload', {
           body: formData,
@@ -110,6 +122,7 @@ export function UploadMoreDocumentsModal({
   const handleClose = () => {
     if (!isUploading) {
       setFiles([]);
+      setDocumentType('otro');
       setUploadProgress(0);
       setUploadComplete(false);
       onOpenChange(false);
@@ -127,6 +140,25 @@ export function UploadMoreDocumentsModal({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Document Type Selector */}
+          <div className="space-y-2">
+            <Label htmlFor="document-type">Tipo de documento</Label>
+            <Select 
+              value={documentType} 
+              onValueChange={(value) => setDocumentType(value as DocumentType)}
+              disabled={isUploading}
+            >
+              <SelectTrigger id="document-type" className="w-full">
+                <SelectValue placeholder="Selecciona el tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contrato">Contrato</SelectItem>
+                <SelectItem value="factura">Factura</SelectItem>
+                <SelectItem value="otro">Otro documento</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Dropzone */}
           <div
             {...getRootProps()}
