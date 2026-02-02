@@ -33,7 +33,9 @@ import {
   Play,
   Pencil,
   FileSearch,
-  Eye
+  Eye,
+  Upload,
+  RefreshCw
 } from 'lucide-react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ReportGeneratorModal } from '@/components/cost-consulting/ReportGeneratorModal';
@@ -49,6 +51,7 @@ import {
 import { useContractsWithDocuments, useInvoicesWithDocuments } from '@/hooks/useCostEntitiesWithDocuments';
 import { useDocumentReview } from '@/hooks/useDocumentReview';
 import { DocumentsManagementCard } from '@/components/cost-consulting/DocumentsManagementCard';
+import { UploadMoreDocumentsModal } from '@/components/cost-consulting/UploadMoreDocumentsModal';
 import { ContractFormModal } from '@/components/cost-consulting/ContractFormModal';
 import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
 import { toast } from 'sonner';
@@ -503,6 +506,11 @@ const CostConsultingDetail = () => {
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
   const [showReviewTable, setShowReviewTable] = useState(false);
   
+  // States for upload more documents
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [pendingReExtraction, setPendingReExtraction] = useState(false);
+  const [isReExtracting, setIsReExtracting] = useState(false);
+  
   // States for edit modals
   const [editingContract, setEditingContract] = useState<CostContract | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<CostInvoice | null>(null);
@@ -752,6 +760,41 @@ const CostConsultingDetail = () => {
     }
   };
 
+  // Function to re-extract after uploading more documents
+  const handleReExtract = async () => {
+    if (!project?.id) return;
+
+    setIsReExtracting(true);
+    try {
+      const response = await fetch(
+        `${RAILWAY_URL}/api/cost-consulting/projects/${project.id}/extract`,
+        { method: 'POST' }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Error al re-extraer');
+      }
+
+      toast.success('Re-extracción iniciada');
+      setPendingReExtraction(false);
+      // Refetch to see the new "extracting" status
+      queryClient.invalidateQueries({ queryKey: ['cost-project', id] });
+
+    } catch (error) {
+      console.error('Error re-extracting:', error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo iniciar la re-extracción');
+    } finally {
+      setIsReExtracting(false);
+    }
+  };
+
+  // Handle upload complete
+  const handleUploadComplete = () => {
+    setPendingReExtraction(true);
+    queryClient.invalidateQueries({ queryKey: ['cost-documents', id] });
+  };
+
   if (isLoadingProject) {
     return (
       <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
@@ -872,6 +915,47 @@ const CostConsultingDetail = () => {
               y valida los documentos antes de ejecutar el análisis.
             </AlertDescription>
           </Alert>
+
+          {/* Action buttons row */}
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setUploadModalOpen(true)}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Subir más documentos
+            </Button>
+            
+            {pendingReExtraction && (
+              <Button 
+                onClick={handleReExtract}
+                disabled={isReExtracting}
+              >
+                {isReExtracting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Re-extrayendo...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Re-extraer documentos
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+
+          {/* Pending re-extraction alert */}
+          {pendingReExtraction && (
+            <Alert className="bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800">
+              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+              <AlertTitle className="text-yellow-800 dark:text-yellow-300">Documentos pendientes</AlertTitle>
+              <AlertDescription className="text-yellow-700 dark:text-yellow-400">
+                Has subido nuevos documentos. Ejecuta "Re-extraer documentos" para procesarlos.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Review Summary Card - Document validation status */}
           <ReviewSummaryCard
@@ -1061,6 +1145,47 @@ const CostConsultingDetail = () => {
       {/* Completed State - Show dashboard only when analysis is done */}
       {!isActivelyProcessing && !isExtracting && !isReview && !isAnalyzing && (
         <>
+          {/* Actions for completed state */}
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setUploadModalOpen(true)}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Subir más documentos
+            </Button>
+            
+            {pendingReExtraction && (
+              <Button 
+                onClick={handleReExtract}
+                disabled={isReExtracting}
+              >
+                {isReExtracting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Re-extrayendo...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Re-extraer documentos
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+
+          {/* Pending re-extraction alert */}
+          {pendingReExtraction && (
+            <Alert className="bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800">
+              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+              <AlertTitle className="text-yellow-800 dark:text-yellow-300">Documentos pendientes</AlertTitle>
+              <AlertDescription className="text-yellow-700 dark:text-yellow-400">
+                Has subido nuevos documentos. Ejecuta "Re-extraer documentos" para procesarlos.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Alerts */}
           <AlertsSection alerts={alerts} />
 
@@ -1227,6 +1352,14 @@ const CostConsultingDetail = () => {
         document={changeTypeDoc?.doc || null}
         currentType={changeTypeDoc?.type || 'contract'}
         isLoading={isChangingType}
+      />
+
+      {/* Upload More Documents Modal */}
+      <UploadMoreDocumentsModal
+        open={uploadModalOpen}
+        onOpenChange={setUploadModalOpen}
+        projectId={project?.id || ''}
+        onUploadComplete={handleUploadComplete}
       />
     </div>
   );
