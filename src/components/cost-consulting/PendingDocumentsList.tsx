@@ -40,6 +40,7 @@ import {
   getProjectDocuments, 
   deleteDocument, 
   reprocessDocument,
+  reExtractDocument,
   ProjectDocument 
 } from '@/services/costConsultingApi';
 
@@ -97,6 +98,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
   const [isOpen, setIsOpen] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [reExtractingId, setReExtractingId] = useState<string | null>(null);
   const { data: documents = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['project-documents-list', projectId],
     queryFn: () => getProjectDocuments(projectId),
@@ -141,6 +143,37 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
       toast.error('Error al reprocesar el documento');
     } finally {
       setReprocessingId(null);
+    }
+  };
+
+  const handleReExtract = async (doc: ProjectDocument) => {
+    setReExtractingId(doc.id);
+    try {
+      const result = await reExtractDocument(projectId, doc.id);
+      
+      // Mostrar información sobre registros borrados
+      const deletedInfo = [];
+      if (result.deleted_contracts > 0) {
+        deletedInfo.push(`${result.deleted_contracts} contratos`);
+      }
+      if (result.deleted_invoices > 0) {
+        deletedInfo.push(`${result.deleted_invoices} facturas`);
+      }
+      
+      const deletedMsg = deletedInfo.length > 0 
+        ? ` (eliminados: ${deletedInfo.join(', ')})` 
+        : '';
+      
+      toast.success(`Re-extracción iniciada para "${doc.filename}"${deletedMsg}`);
+      
+      queryClient.invalidateQueries({ queryKey: ['project-documents-list', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['cost-contracts', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['cost-invoices', projectId] });
+    } catch (error) {
+      console.error('Error re-extracting document:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al re-extraer el documento');
+    } finally {
+      setReExtractingId(null);
     }
   };
 
@@ -301,7 +334,7 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
-                            {/* Reprocess button - only for failed or pending */}
+                            {/* Reprocess button - only for failed or pending (embeddings only) */}
                             {(doc.extraction_status === 'failed' || doc.extraction_status === 'pending') && (
                               <TooltipProvider>
                                 <Tooltip>
@@ -320,7 +353,35 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                                       )}
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Reprocesar documento</TooltipContent>
+                                  <TooltipContent>Reprocesar embeddings</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            {/* Re-extract button - for failed or completed (to retry LLM extraction) */}
+                            {(doc.extraction_status === 'failed' || doc.extraction_status === 'completed') && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-orange-600"
+                                      onClick={() => handleReExtract(doc)}
+                                      disabled={reExtractingId === doc.id}
+                                    >
+                                      {reExtractingId === doc.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <RefreshCw className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {doc.extraction_status === 'failed' 
+                                      ? 'Re-extraer datos (pipeline LLM)' 
+                                      : 'Re-extraer (corregir datos)'
+                                    }
+                                  </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             )}
@@ -367,11 +428,11 @@ export const PendingDocumentsList: React.FC<PendingDocumentsListProps> = ({
                     )}
                     {stats.failed > 0 && (
                       <p>
-                        <strong>{stats.failed}</strong> documento{stats.failed > 1 ? 's' : ''} con error. Puedes eliminarlos y volverlos a subir.
+                        <strong>{stats.failed}</strong> documento{stats.failed > 1 ? 's' : ''} con error. Usa "Re-extraer" para volver a procesar.
                       </p>
                     )}
                     <p className="mt-1 text-xs opacity-80">
-                      Ejecuta "Re-extraer documentos" para procesar los documentos pendientes.
+                      El botón naranja re-ejecuta el pipeline LLM para extraer contratos/facturas.
                     </p>
                   </div>
                 </div>

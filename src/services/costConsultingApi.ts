@@ -306,6 +306,23 @@ export const reprocessDocument = async (projectId: string, documentId: string) =
 };
 
 /**
+ * Re-extract data (contracts/invoices) from a document using LLM pipeline.
+ * Unlike reprocess (which only regenerates embeddings), this re-runs the full extraction.
+ * Returns info about deleted records before re-extraction.
+ */
+export const reExtractDocument = async (projectId: string, documentId: string) => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/documents/${documentId}/re-extract`,
+    { method: 'POST' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error re-extracting document' }));
+    throw new Error(error.detail || 'Error re-extracting document');
+  }
+  return response.json();
+};
+
+/**
  * Delete a document and its associated data (chunks, storage file)
  */
 export const deleteDocument = async (projectId: string, documentId: string) => {
