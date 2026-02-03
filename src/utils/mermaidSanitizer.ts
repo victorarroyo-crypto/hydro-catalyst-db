@@ -31,6 +31,68 @@ function stripMarkdownFromLabels(content: string): string {
     .replace(/`([^`]+)`/g, '$1');
 }
 
+/**
+ * Converts Unicode arrows to Mermaid arrow syntax.
+ * LLMs often use → instead of --> which breaks parsing.
+ */
+function convertUnicodeArrows(content: string): string {
+  return content
+    // → becomes -->
+    .replace(/\s*→\s*/g, ' --> ')
+    // ← becomes <--
+    .replace(/\s*←\s*/g, ' <-- ')
+    // ↔ becomes <-->
+    .replace(/\s*↔\s*/g, ' <--> ')
+    // ⟶ (long arrow) becomes -->
+    .replace(/\s*⟶\s*/g, ' --> ')
+    // ⟵ becomes <--
+    .replace(/\s*⟵\s*/g, ' <-- ');
+}
+
+/**
+ * Reformats inline Mermaid diagrams that are all on one line.
+ * LLMs sometimes send: flowchart TD A[x] --> B[y] --> C[z]
+ * This needs to be split into multiple lines.
+ */
+function reformatInlineDiagram(content: string): string {
+  // Check if the entire diagram is on one or two lines
+  const lines = content.trim().split('\n');
+  
+  if (lines.length > 3) {
+    // Already multi-line, no need to reformat
+    return content;
+  }
+  
+  // Check if first line contains both diagram type AND node definitions
+  const firstLine = lines[0];
+  const diagramTypeMatch = firstLine.match(/^(flowchart|graph)\s+(LR|RL|TD|TB|BT)?\s*/i);
+  
+  if (diagramTypeMatch) {
+    const afterType = firstLine.slice(diagramTypeMatch[0].length);
+    
+    // If there's content after the diagram type, we need to split
+    if (afterType.trim()) {
+      const diagramDeclaration = diagramTypeMatch[0].trim();
+      const nodeContent = afterType.trim();
+      
+      // Split node definitions: look for patterns like "A[...] --> B[...]"
+      // Add newline before each node ID that follows an edge
+      let reformatted = nodeContent
+        // Add newline after closing bracket followed by space and ID
+        .replace(/(\]|\)|\})\s+([A-Za-z0-9_]+)\s*(-->|---|\.->>|==>|<-->)/g, '$1\n$2 $3')
+        // Add newline before node ID that follows edge
+        .replace(/(-->|---|\.->>|==>|<-->)\s*([A-Za-z0-9_]+)/g, '$1 $2\n')
+        // Clean up: remove trailing newline after last node
+        .replace(/\n+$/, '');
+      
+      // Reconstruct with proper newlines
+      return `${diagramDeclaration}\n${reformatted}`;
+    }
+  }
+  
+  return content;
+}
+
 // Valid Mermaid diagram type declarations
 const MERMAID_DIAGRAM_TYPES = [
   'flowchart', 'graph', 'sequenceDiagram', 'classDiagram',
@@ -152,14 +214,20 @@ export function sanitizeMermaidContent(content: string): string {
   
   let cleaned = content;
   
-  // Step 0: Strip Markdown formatting from node labels (critical for LLM output)
+  // Step 0a: Strip Markdown formatting from node labels (critical for LLM output)
   cleaned = stripMarkdownFromLabels(cleaned);
+  
+  // Step 0b: Convert Unicode arrows to Mermaid syntax
+  cleaned = convertUnicodeArrows(cleaned);
   
   // Step 1: Remove any fence markers at the start
   cleaned = cleaned.replace(/^```\s*\w*\s*\n?/, '');
   
   // Step 2: Remove any fence markers at the end
   cleaned = cleaned.replace(/\n?```\s*$/, '');
+  
+  // Step 2b: Reformat inline diagrams (all on one line)
+  cleaned = reformatInlineDiagram(cleaned);
   
   // Step 3: Handle malformed fences with content attached (e.g., "```###", "``###")
   // Split on any backtick sequence followed by non-backtick content

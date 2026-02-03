@@ -121,12 +121,24 @@ function aggressiveFenceFixer(text: string): string {
 /**
  * Normalizes Mermaid code fence variations to standard format.
  * Handles: ```Mermaid, ``` mermaid, ```  mermaid, MERMAID, etc.
+ * Also handles inline Mermaid (all content on one line).
  */
 function normalizeMermaidFences(text: string): string {
   // First apply aggressive fence fixing
   let result = aggressiveFenceFixer(text);
   
-  // Normalize case and spacing variations of mermaid fences
+  // Handle inline mermaid blocks (no newline after ```mermaid)
+  // Pattern: ```mermaid flowchart TD A[x] --> B[y]```
+  result = result.replace(
+    /```\s*[Mm][Ee][Rr][Mm][Aa][Ii][Dd]\s+([^\n`]+)```/g,
+    (match, inlineContent) => {
+      // Clean and reformat the inline content
+      const cleanedContent = sanitizeMermaidContent(inlineContent);
+      return `\`\`\`mermaid\n${cleanedContent}\n\`\`\``;
+    }
+  );
+  
+  // Normalize case and spacing variations of mermaid fences (multi-line)
   result = result.replace(
     /```\s*[Mm][Ee][Rr][Mm][Aa][Ii][Dd]\s*\n([\s\S]*?)```/g,
     (match, content) => {
