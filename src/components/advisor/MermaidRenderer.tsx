@@ -82,7 +82,15 @@ export function MermaidRenderer({ content, className, onError }: MermaidRenderer
         setIsLoading(false);
       }
     } catch (err) {
-      console.warn('Mermaid render error:', err);
+      // Enhanced logging for debugging
+      const cleanContent = sanitizeMermaidContent(content);
+      console.warn('Mermaid render error:', {
+        error: err,
+        originalLength: content.length,
+        cleanedLength: cleanContent.length,
+        cleanedPreview: cleanContent.slice(0, 200),
+        hadMarkdownFormatting: content !== cleanContent
+      });
       
       // Only update if this is still the latest render request
       if (currentRenderId === renderIdRef.current) {
