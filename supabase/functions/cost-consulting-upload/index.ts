@@ -6,6 +6,49 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Retry helper with exponential backoff
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error: unknown) {
+      const err = error as Error;
+      lastError = err;
+      console.error(`Attempt ${attempt + 1}/${maxRetries} failed:`, err.message);
+      
+      // Don't retry on abort (timeout)
+      if (err.name === 'AbortError') {
+        throw new Error(`Request timeout after 30 seconds`);
+      }
+      
+      // Wait before retrying with exponential backoff
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError || new Error('All retry attempts failed');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -102,7 +145,7 @@ serve(async (req) => {
       console.log('File uploaded to Storage:', fileUrl);
     }
 
-    // 4. Forward to Railway backend
+    // 4. Forward to Railway backend with retry logic
     const railwayUrl = Deno.env.get('RAILWAY_API_URL');
     const syncSecret = Deno.env.get('RAILWAY_SYNC_SECRET');
 
@@ -133,51 +176,75 @@ serve(async (req) => {
       railwayHeaders['X-Sync-Secret'] = syncSecret;
     }
 
-    const response = await fetch(
-      `${railwayUrl}/api/cost-consulting/projects/${projectId}/documents`,
-      {
-        method: 'POST',
-        headers: railwayHeaders,
-        body: railwayFormData,
-      }
-    );
+    const targetUrl = `${railwayUrl}/api/cost-consulting/projects/${projectId}/documents`;
+    console.log(`Sending to Railway: ${targetUrl}`);
 
-    const responseText = await response.text();
-    console.log(`Railway response (${response.status}):`, responseText);
-
-    let responseData;
     try {
-      responseData = JSON.parse(responseText);
-    } catch {
-      responseData = { raw: responseText };
-    }
+      const response = await fetchWithRetry(
+        targetUrl,
+        {
+          method: 'POST',
+          headers: railwayHeaders,
+          body: railwayFormData,
+        },
+        3, // max retries
+        1000 // base delay 1s
+      );
 
-    // Handle 409 (duplicate) as success - document already exists and is ready to process
-    if (response.status === 409) {
-      console.log('Document already exists in Railway, treating as success');
+      const responseText = await response.text();
+      console.log(`Railway response (${response.status}):`, responseText);
+
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { raw: responseText };
+      }
+
+      // Handle 409 (duplicate) as success - document already exists and is ready to process
+      if (response.status === 409) {
+        console.log('Document already exists in Railway, treating as success');
+        return new Response(JSON.stringify({
+          success: true,
+          status: 200,
+          file_url: fileUrl,
+          already_exists: true,
+          message: 'Documento ya registrado previamente',
+          ...responseData,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Always return 200 to avoid FunctionsHttpError - include success/error in body
       return new Response(JSON.stringify({
-        success: true,
-        status: 200,
+        success: response.ok,
+        status: response.status,
         file_url: fileUrl,
-        already_exists: true,
-        message: 'Documento ya registrado previamente',
         ...responseData,
       }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-    }
 
-    // Always return 200 to avoid FunctionsHttpError - include success/error in body
-    return new Response(JSON.stringify({
-      success: response.ok,
-      status: response.status,
-      file_url: fileUrl,
-      ...responseData,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    } catch (networkError) {
+      // Network error after all retries failed
+      console.error('Network error after retries:', networkError);
+      
+      // Return partial success - file was uploaded to storage even if Railway failed
+      return new Response(JSON.stringify({
+        success: false,
+        status: 503,
+        file_url: fileUrl,
+        error: 'El servidor de procesamiento no está disponible. El archivo se guardó pero no se pudo procesar.',
+        network_error: networkError instanceof Error ? networkError.message : 'Connection failed',
+        retry_suggestion: true,
+      }), {
+        status: 200, // Return 200 to avoid FunctionsHttpError
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
   } catch (error) {
     console.error('Upload proxy error:', error);
