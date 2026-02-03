@@ -7,7 +7,29 @@
  * - Missing newlines between fences and content
  * - Markdown content leaking into Mermaid blocks
  * - Invalid syntax at the end of blocks
+ * - Markdown formatting inside node labels (**bold**, *italic*, etc.)
  */
+
+/**
+ * Removes Markdown formatting from inside Mermaid node labels.
+ * Handles: **bold**, *italic*, `code`, __underline__
+ * 
+ * This is critical because LLMs often send diagrams like:
+ *   F{**¿Origen identificable?**}
+ * which Mermaid cannot parse (it interprets * as MULT token).
+ */
+function stripMarkdownFromLabels(content: string): string {
+  return content
+    // **bold** → bold (must come before single *)
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    // *italic* → italic (careful: don't match Mermaid arrows like -->)
+    .replace(/\*([^*\s][^*]*[^*\s])\*/g, '$1')
+    .replace(/\*([^*\s])\*/g, '$1')
+    // __underline__ → underline
+    .replace(/__([^_]+)__/g, '$1')
+    // `code` → code
+    .replace(/`([^`]+)`/g, '$1');
+}
 
 // Valid Mermaid diagram type declarations
 const MERMAID_DIAGRAM_TYPES = [
@@ -129,6 +151,9 @@ export function sanitizeMermaidContent(content: string): string {
   if (!content) return '';
   
   let cleaned = content;
+  
+  // Step 0: Strip Markdown formatting from node labels (critical for LLM output)
+  cleaned = stripMarkdownFromLabels(cleaned);
   
   // Step 1: Remove any fence markers at the start
   cleaned = cleaned.replace(/^```\s*\w*\s*\n?/, '');
