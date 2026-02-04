@@ -59,6 +59,7 @@ import { UploadMoreDocumentsModal } from '@/components/cost-consulting/UploadMor
 import { PendingDocumentsList } from '@/components/cost-consulting/PendingDocumentsList';
 import { ContractFormModal } from '@/components/cost-consulting/ContractFormModal';
 import { ExtractionStatsCard } from '@/components/cost-consulting/ExtractionStatsCard';
+import { ExecutiveSummaryCard } from '@/components/cost-consulting/ExecutiveSummaryCard';
 import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -1353,6 +1354,11 @@ const CostConsultingDetail = () => {
             },
             updated_at: project.created_at
           }} />
+
+          {/* Executive Summary for Completed Projects */}
+          {project?.status === 'completed' && (
+            <ExecutiveSummaryCard project={project} opportunities={opportunities} />
+          )}
 
           {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
