@@ -8,10 +8,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  Area,
   AreaChart,
+  Area,
   Cell,
 } from 'recharts';
 import { Euro, TrendingDown, Lightbulb, AlertTriangle, RefreshCw } from 'lucide-react';
@@ -23,9 +21,9 @@ import { Button } from '@/components/ui/button';
 import {
   getDashboard,
   type DashboardData,
-  type SpendByCategory,
   type SpendBySupplier,
 } from '@/services/costConsultingApi';
+import { SpendByCategoryChart } from './SpendByCategoryChart';
 
 // ============================================================
 // CONSTANTS
@@ -39,19 +37,6 @@ const BRAND_COLORS = {
   danger: '#ef4444',
 };
 
-const BENCHMARK_COLORS: Record<SpendByCategory['benchmark_comparison'], string> = {
-  excellent: '#8cb63c',
-  good: '#32b4cd',
-  average: '#ffa720',
-  above_market: '#ef4444',
-};
-
-const BENCHMARK_LABELS: Record<SpendByCategory['benchmark_comparison'], string> = {
-  excellent: 'Excelente',
-  good: 'Bueno',
-  average: 'Promedio',
-  above_market: 'Por encima',
-};
 
 // ============================================================
 // HELPER FUNCTIONS
@@ -158,72 +143,6 @@ const DashboardKPICards: React.FC<DashboardKPICardsProps> = ({ data }) => (
 // ============================================================
 // CHART COMPONENTS
 // ============================================================
-
-interface CategoryTooltipProps {
-  active?: boolean;
-  payload?: Array<{ payload: SpendByCategory }>;
-}
-
-const CategoryTooltip: React.FC<CategoryTooltipProps> = ({ active, payload }) => {
-  if (!active || !payload?.length) return null;
-  const item = payload[0].payload;
-  return (
-    <div className="bg-background border rounded-lg shadow-lg p-3 text-sm">
-      <p className="font-semibold mb-1">{item.category_name}</p>
-      <p className="text-muted-foreground">
-        Gasto: <span className="font-medium text-foreground">{formatCurrency(item.total_spend)}</span>
-      </p>
-      <p className="text-muted-foreground">
-        % Total: <span className="font-medium text-foreground">{formatPercent(item.pct_of_total)}</span>
-      </p>
-      <p className="flex items-center gap-1.5 mt-1">
-        <span
-          className="w-2 h-2 rounded-full"
-          style={{ backgroundColor: BENCHMARK_COLORS[item.benchmark_comparison] }}
-        />
-        <span className="text-muted-foreground">
-          Benchmark: <span className="font-medium">{BENCHMARK_LABELS[item.benchmark_comparison]}</span>
-        </span>
-      </p>
-    </div>
-  );
-};
-
-interface SpendByCategoryChartProps {
-  data: SpendByCategory[];
-}
-
-const SpendByCategoryChart: React.FC<SpendByCategoryChartProps> = ({ data }) => {
-  if (!data?.length) {
-    return (
-      <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-        No hay datos de categorías
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} layout="vertical" margin={{ left: 80, right: 20, top: 10, bottom: 10 }}>
-        <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} />
-        <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} fontSize={12} />
-        <YAxis
-          type="category"
-          dataKey="category_name"
-          fontSize={12}
-          width={75}
-          tickLine={false}
-        />
-        <Tooltip content={<CategoryTooltip />} />
-        <Bar dataKey="total_spend" radius={[0, 4, 4, 0]}>
-          {data.map((entry, index) => (
-            <Cell key={index} fill={BENCHMARK_COLORS[entry.benchmark_comparison]} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
-  );
-};
 
 interface SupplierTooltipProps {
   active?: boolean;
