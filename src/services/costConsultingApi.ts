@@ -666,3 +666,42 @@ export const getOpportunityMatrix = async (projectId: string): Promise<Opportuni
   }
   return response.json();
 };
+
+// ============================================================
+// TIMELINE ANALYTICS API
+// ============================================================
+
+export type TimelineGranularity = 'day' | 'week' | 'month' | 'quarter';
+
+export interface TimelineDataPoint {
+  period: string;
+  period_label: string;
+  total_spend: number;
+  invoice_count: number;
+  top_category: string;
+  avg_invoice_value?: number;
+}
+
+export interface TimelineAnalyticsData {
+  data: TimelineDataPoint[];
+  granularity: TimelineGranularity;
+  total_spend: number;
+  period_count: number;
+}
+
+/**
+ * Get timeline analytics data for a project
+ */
+export const getTimelineAnalytics = async (
+  projectId: string,
+  granularity: TimelineGranularity = 'month'
+): Promise<TimelineAnalyticsData> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/analytics/timeline?granularity=${granularity}`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error fetching timeline data' }));
+    throw new Error(error.detail || 'Error fetching timeline analytics');
+  }
+  return response.json();
+};
