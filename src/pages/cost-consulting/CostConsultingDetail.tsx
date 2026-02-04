@@ -58,6 +58,7 @@ import { DocumentsManagementCard } from '@/components/cost-consulting/DocumentsM
 import { UploadMoreDocumentsModal } from '@/components/cost-consulting/UploadMoreDocumentsModal';
 import { PendingDocumentsList } from '@/components/cost-consulting/PendingDocumentsList';
 import { ContractFormModal } from '@/components/cost-consulting/ContractFormModal';
+import { ExtractionStatsCard } from '@/components/cost-consulting/ExtractionStatsCard';
 import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -1125,44 +1126,16 @@ const CostConsultingDetail = () => {
             }}
           />
 
-          {/* Extraction Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                  <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{contracts.length}</p>
-                  <p className="text-sm text-muted-foreground">Contratos extraídos</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
-                  <Receipt className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{invoices.length}</p>
-                  <p className="text-sm text-muted-foreground">Facturas extraídas</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
-                  <Building2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{suppliersCount}</p>
-                  <p className="text-sm text-muted-foreground">Proveedores detectados</p>
-                </div>
-              </div>
-            </Card>
-          </div>
+          {/* Extraction Stats Card */}
+          <ExtractionStatsCard project={{
+            extraction_status: {
+              contracts_found: contracts.length,
+              invoices_found: invoices.length,
+              suppliers_found: suppliersCount,
+              errors: project.extraction_status?.errors || []
+            },
+            updated_at: project.created_at
+          }} />
 
           {/* Document Review Table - Shown when user clicks "Revisar documentos" */}
           {showReviewTable && (
@@ -1369,6 +1342,17 @@ const CostConsultingDetail = () => {
 
           {/* Alerts */}
           <AlertsSection alerts={alerts} />
+
+          {/* Extraction Stats Card for Completed State */}
+          <ExtractionStatsCard project={{
+            extraction_status: {
+              contracts_found: contracts.length,
+              invoices_found: invoices.length,
+              suppliers_found: suppliersCount,
+              errors: project.extraction_status?.errors || []
+            },
+            updated_at: project.created_at
+          }} />
 
           {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
