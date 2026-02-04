@@ -63,6 +63,7 @@ import { ContractFormModal } from '@/components/cost-consulting/ContractFormModa
 import { ExtractionStatsCard } from '@/components/cost-consulting/ExtractionStatsCard';
 import { ExecutiveSummaryCard } from '@/components/cost-consulting/ExecutiveSummaryCard';
 import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
+import { ReanalyzeButton } from '@/components/cost-consulting/ReanalyzeButton';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getDuplicateStats } from '@/services/costConsultingApi';
@@ -593,9 +594,6 @@ const CostConsultingDetail = () => {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [isReExtracting, setIsReExtracting] = useState(false);
   
-  // State for re-analyze
-  const [isReanalyzing, setIsReanalyzing] = useState(false);
-  
   // Document stats from PendingDocumentsList - for data-driven pending detection
   const [documentStats, setDocumentStats] = useState<{ 
     pending: number; 
@@ -946,48 +944,6 @@ const CostConsultingDetail = () => {
     queryClient.invalidateQueries({ queryKey: ['project-documents-list', id] });
   };
 
-  // Handle re-analyze (for completed or failed projects)
-  const handleReanalyze = async () => {
-    if (!project?.id) return;
-
-    setIsReanalyzing(true);
-    try {
-      // First call reanalyze to clear old opportunities
-      const reanalyzeResponse = await fetch(
-        `${RAILWAY_URL}/api/cost-consulting/projects/${project.id}/reanalyze`,
-        { method: 'POST' }
-      );
-
-      if (!reanalyzeResponse.ok) {
-        const error = await reanalyzeResponse.json();
-        throw new Error(error.detail || 'Error al preparar re-análisis');
-      }
-
-      // Then call run-analysis to start the analysis
-      const runResponse = await fetch(
-        `${RAILWAY_URL}/api/cost-consulting/projects/${project.id}/run-analysis`,
-        { method: 'POST' }
-      );
-
-      if (!runResponse.ok) {
-        const error = await runResponse.json();
-        throw new Error(error.detail || 'Error al iniciar análisis');
-      }
-
-      toast.success('Análisis iniciado');
-      
-      // Refresh project to see status change
-      queryClient.invalidateQueries({ queryKey: ['cost-project', id] });
-      queryClient.invalidateQueries({ queryKey: ['cost-opportunities', id] });
-
-    } catch (error) {
-      console.error('Error re-analyzing:', error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo iniciar el re-análisis');
-    } finally {
-      setIsReanalyzing(false);
-    }
-  };
-
   if (isLoadingProject) {
     return (
       <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
@@ -1044,38 +1000,14 @@ const CostConsultingDetail = () => {
           <div className="flex gap-2">
             {/* Re-analyze button - only for completed or failed projects */}
             {(project.status === 'completed' || project.status === 'failed') && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" disabled={isReanalyzing}>
-                    {isReanalyzing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Re-analizando...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Re-analizar
-                      </>
-                    )}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>¿Re-ejecutar análisis?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esto eliminará las oportunidades actuales y volverá a analizar todos los documentos. 
-                      El proceso puede tardar varios minutos.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleReanalyze}>
-                      Confirmar
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <ReanalyzeButton
+                projectId={project.id}
+                projectName={project.name || 'Proyecto'}
+                onReanalyzeComplete={() => {
+                  queryClient.invalidateQueries({ queryKey: ['cost-project', id] });
+                  queryClient.invalidateQueries({ queryKey: ['cost-opportunities', id] });
+                }}
+              />
             )}
             <Button 
               variant="outline" 
