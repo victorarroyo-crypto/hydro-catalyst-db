@@ -38,7 +38,9 @@ import {
   RefreshCw,
   FileEdit,
   Brain,
-  CheckCircle
+  CheckCircle,
+  BarChart3,
+  Copy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link, useParams, useNavigate } from 'react-router-dom';
@@ -63,6 +65,7 @@ import { ExecutiveSummaryCard } from '@/components/cost-consulting/ExecutiveSumm
 import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getDuplicateStats } from '@/services/costConsultingApi';
 import { CostContract, CostInvoice, CostSupplier } from '@/hooks/useCostConsultingData';
 import {
   ContractsReviewTable,
@@ -636,6 +639,14 @@ const CostConsultingDetail = () => {
     },
     enabled: !!id,
   });
+
+  // Fetch duplicate stats for badge indicator
+  const { data: duplicateStats } = useQuery({
+    queryKey: ['duplicate-stats', id],
+    queryFn: () => getDuplicateStats(id!),
+    enabled: !!id && project?.status === 'completed',
+  });
+  const pendingDuplicates = duplicateStats?.pending ?? 0;
   
   // Document review hook for validation workflow
   const {
@@ -1425,7 +1436,7 @@ const CostConsultingDetail = () => {
 
           {/* Navigation Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList>
+            <TabsList className="flex-wrap h-auto gap-1">
               <TabsTrigger value="overview">Resumen</TabsTrigger>
               <TabsTrigger value="contracts" asChild>
                 <Link to={`/cost-consulting/${id}/contracts`}>Contratos</Link>
@@ -1438,6 +1449,23 @@ const CostConsultingDetail = () => {
               </TabsTrigger>
               <TabsTrigger value="opportunities" asChild>
                 <Link to={`/cost-consulting/${id}/opportunities`}>Oportunidades</Link>
+              </TabsTrigger>
+              <TabsTrigger value="dashboard" asChild>
+                <Link to={`/cost-consulting/${id}/dashboard`} className="flex items-center gap-1.5">
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  Dashboard
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger value="duplicates" asChild>
+                <Link to={`/cost-consulting/${id}/duplicates`} className="flex items-center gap-1.5">
+                  <Copy className="h-3.5 w-3.5" />
+                  Duplicados
+                  {pendingDuplicates > 0 && (
+                    <Badge variant="destructive" className="ml-1 h-5 min-w-5 px-1.5 text-xs">
+                      {pendingDuplicates}
+                    </Badge>
+                  )}
+                </Link>
               </TabsTrigger>
               <TabsTrigger value="simulator" asChild>
                 <Link to={`/cost-consulting/${id}/simulator`}>Simulador</Link>
