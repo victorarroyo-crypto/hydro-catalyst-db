@@ -705,3 +705,120 @@ export const getTimelineAnalytics = async (
   }
   return response.json();
 };
+
+// ============================================================
+// DUPLICATE DETECTION API
+// ============================================================
+
+export type DuplicateMatchType = 'exact_number' | 'exact_amount' | 'fuzzy_match' | 'semantic_match';
+export type DuplicateResolution = 'pending' | 'confirmed' | 'false_positive';
+
+export interface DuplicateInvoiceSummary {
+  id: string;
+  invoice_number: string;
+  supplier_name: string;
+  total: number;
+  invoice_date: string;
+}
+
+export interface DuplicateCandidate {
+  id: string;
+  project_id: string;
+  invoice_a: DuplicateInvoiceSummary;
+  invoice_b: DuplicateInvoiceSummary;
+  similarity_score: number;
+  match_type: DuplicateMatchType;
+  match_details: {
+    number_match: boolean;
+    amount_diff: number;
+    amount_diff_pct: number;
+    date_diff_days: number;
+    supplier_match: boolean;
+  };
+  resolution: DuplicateResolution;
+  resolved_by?: string;
+  resolved_at?: string;
+  potential_savings: number;
+  created_at: string;
+}
+
+export interface DuplicateStats {
+  total_candidates: number;
+  pending: number;
+  confirmed: number;
+  false_positives: number;
+  total_potential_savings: number;
+  confirmed_savings: number;
+  last_scan_at?: string;
+}
+
+export interface DetectDuplicatesResult {
+  success: boolean;
+  candidates_found: number;
+  scan_duration_ms: number;
+}
+
+/**
+ * Run duplicate detection scan for a project
+ */
+export const detectDuplicates = async (projectId: string): Promise<DetectDuplicatesResult> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/detect-duplicates`,
+    { method: 'POST' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error running duplicate detection' }));
+    throw new Error(error.detail || 'Error running duplicate detection');
+  }
+  return response.json();
+};
+
+/**
+ * Get list of duplicate candidates for a project
+ */
+export const getDuplicateCandidates = async (projectId: string): Promise<DuplicateCandidate[]> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/duplicate-candidates`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error fetching duplicate candidates' }));
+    throw new Error(error.detail || 'Error fetching duplicate candidates');
+  }
+  return response.json();
+};
+
+/**
+ * Get duplicate detection statistics for a project
+ */
+export const getDuplicateStats = async (projectId: string): Promise<DuplicateStats> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/duplicate-stats`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error fetching duplicate stats' }));
+    throw new Error(error.detail || 'Error fetching duplicate stats');
+  }
+  return response.json();
+};
+
+/**
+ * Resolve a duplicate candidate (confirm or mark as false positive)
+ */
+export const resolveDuplicate = async (
+  candidateId: string,
+  resolution: 'confirmed' | 'false_positive',
+  userId?: string
+): Promise<{ success: boolean }> => {
+  const params = new URLSearchParams({ resolution });
+  if (userId) params.append('user_id', userId);
+  
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/duplicates/${candidateId}/resolve?${params}`,
+    { method: 'POST' }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error resolving duplicate' }));
+    throw new Error(error.detail || 'Error resolving duplicate');
+  }
+  return response.json();
+};
