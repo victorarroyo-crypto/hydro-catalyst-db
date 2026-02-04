@@ -36,6 +36,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Separator } from '@/components/ui/separator';
 import { 
   ArrowLeft,
@@ -52,7 +59,10 @@ import {
   Loader2,
   Plus,
   Pencil,
-  Trash2
+  Trash2,
+  Skull,
+  RefreshCw,
+  Info
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -61,22 +71,40 @@ import { ContractFormModal } from '@/components/cost-consulting/ContractFormModa
 import { FailedDocumentsAlert } from '@/components/cost-consulting/FailedDocumentsAlert';
 import { deleteContract } from '@/services/costConsultingApi';
 import { useQueryClient } from '@tanstack/react-query';
+import { cn } from '@/lib/utils';
+
+// Helper function to calculate days until contract end/renewal
+const getDaysToRenewal = (endDate: string | null): number => {
+  if (!endDate) return Infinity;
+  const end = new Date(endDate);
+  const now = new Date();
+  const diffTime = end.getTime() - now.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
 
 // Type for mapped contract display
 interface DisplayContract {
   id: string;
   supplier: string;
+  contractNumber: string | null;
   category: string;
   subcategory: string;
   annualValue: number;
   endDate: string | null;
   startDate: string | null;
   riskScore: number;
+  riskFlags: string[];
   alertsCount: number;
   autoRenewal: boolean;
+  paymentDays: number | null;
   paymentTerms: string;
   indexation: string;
+  earlyPaymentDiscount: number;
   penalty: string;
+  isZombie: boolean;
+  benchmarkComparison: {
+    price_difference_pct?: number;
+  } | null;
   products: Array<{
     name: string;
     price: number;
@@ -108,21 +136,30 @@ const mapContractToDisplay = (contract: CostContract): DisplayContract => {
   const contractAny = contract as unknown as Record<string, unknown>;
   const firstPrice = prices[0] as Record<string, unknown> | undefined;
   const extractedCategory = (contractAny.category as string) || (firstPrice?.category as string) || 'Contrato';
+  
+  // Determine if contract is zombie (high risk + no activity)
+  const isZombie = (contract.risk_score || 0) >= 8 || riskFlags.includes('zombie');
 
   return {
     id: contract.id,
     supplier: contract.supplier_name_raw || contract.cost_suppliers?.name || 'Sin nombre',
+    contractNumber: contract.contract_number,
     category: extractedCategory,
     subcategory: '',
     annualValue: contract.total_annual_value || 0,
     endDate: contract.end_date,
     startDate: contract.start_date,
     riskScore: contract.risk_score || 0,
+    riskFlags,
     alertsCount: riskFlags.length,
     autoRenewal: contract.auto_renewal || false,
+    paymentDays: contract.payment_days,
     paymentTerms: contract.payment_days ? `${contract.payment_days} días` : 'No especificado',
-    indexation: 'Ver contrato',
+    indexation: (contractAny.indexation_type as string) || 'Fijo',
+    earlyPaymentDiscount: (contractAny.early_payment_discount as number) || 0,
     penalty: 'Ver contrato',
+    isZombie,
+    benchmarkComparison: contract.benchmark_comparison as { price_difference_pct?: number } | null,
     products,
     alerts: riskFlags,
     recommendations: [],
@@ -168,6 +205,7 @@ const CostConsultingContracts = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [riskFilter, setRiskFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('risk');
   const [selectedContract, setSelectedContract] = useState<DisplayContract | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -188,12 +226,32 @@ const CostConsultingContracts = () => {
   // Filter and sort
   const filteredContracts = mappedContracts
     .filter(contract => {
-      const matchesSearch = contract.supplier.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = contract.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (contract.contractNumber?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
       const matchesCategory = categoryFilter === 'all' || contract.category === categoryFilter;
-      const matchesStatus = statusFilter === 'all' || 
-        (statusFilter === 'alerts' && contract.alertsCount > 0) ||
-        (statusFilter === 'zombies' && contract.riskScore >= 90);
-      return matchesSearch && matchesCategory && matchesStatus;
+      
+      // Status filter
+      let matchesStatus = true;
+      if (statusFilter === 'active') {
+        matchesStatus = !contract.isZombie && getDaysToRenewal(contract.endDate) >= 90;
+      } else if (statusFilter === 'zombies') {
+        matchesStatus = contract.isZombie;
+      } else if (statusFilter === 'expiring') {
+        const daysToEnd = getDaysToRenewal(contract.endDate);
+        matchesStatus = daysToEnd < 90 && daysToEnd > 0;
+      }
+      
+      // Risk filter
+      let matchesRisk = true;
+      if (riskFilter === 'high') {
+        matchesRisk = contract.riskScore >= 8;
+      } else if (riskFilter === 'medium') {
+        matchesRisk = contract.riskScore >= 5 && contract.riskScore < 8;
+      } else if (riskFilter === 'low') {
+        matchesRisk = contract.riskScore < 5;
+      }
+      
+      return matchesSearch && matchesCategory && matchesStatus && matchesRisk;
     })
     .sort((a, b) => {
       switch (sortBy) {
@@ -322,14 +380,15 @@ const CostConsultingContracts = () => {
 
       {/* Filters */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="pt-6 space-y-4">
+          {/* Search and category */}
           <div className="flex flex-wrap gap-4">
             <div className="flex-1 min-w-[200px]">
-              <Label className="sr-only">Buscar proveedor</Label>
+              <Label className="sr-only">Buscar proveedor o nº contrato</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar proveedor..."
+                  placeholder="Buscar proveedor o nº contrato..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -352,19 +411,6 @@ const CostConsultingContracts = () => {
             </div>
             
             <div className="w-[180px]">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Estado" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="alerts">Con alertas</SelectItem>
-                  <SelectItem value="zombies">Zombies</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="w-[180px]">
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger>
                   <SelectValue placeholder="Ordenar por" />
@@ -377,74 +423,210 @@ const CostConsultingContracts = () => {
               </Select>
             </div>
           </div>
+          
+          {/* Toggle filters */}
+          <div className="flex flex-wrap gap-4 items-center">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Estado</Label>
+              <ToggleGroup 
+                type="single" 
+                value={statusFilter} 
+                onValueChange={(v) => v && setStatusFilter(v)}
+                className="justify-start"
+              >
+                <ToggleGroupItem value="all" size="sm">Todos</ToggleGroupItem>
+                <ToggleGroupItem value="active" size="sm">Activos</ToggleGroupItem>
+                <ToggleGroupItem value="zombies" size="sm" className="text-red-600">
+                  <Skull className="h-3 w-3 mr-1" />
+                  Zombies
+                </ToggleGroupItem>
+                <ToggleGroupItem value="expiring" size="sm" className="text-amber-600">
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Por vencer
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+            
+            <Separator orientation="vertical" className="h-8" />
+            
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Riesgo</Label>
+              <ToggleGroup 
+                type="single" 
+                value={riskFilter} 
+                onValueChange={(v) => v && setRiskFilter(v)}
+                className="justify-start"
+              >
+                <ToggleGroupItem value="all" size="sm">Todos</ToggleGroupItem>
+                <ToggleGroupItem value="high" size="sm" className="text-red-600">Alto (≥8)</ToggleGroupItem>
+                <ToggleGroupItem value="medium" size="sm" className="text-amber-600">Medio (5-7)</ToggleGroupItem>
+                <ToggleGroupItem value="low" size="sm" className="text-green-600">Bajo (&lt;5)</ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       {/* Contracts Table */}
       <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Proveedor</TableHead>
-                <TableHead>Categoría</TableHead>
-                <TableHead className="text-right">Valor Anual</TableHead>
-                <TableHead>Fin</TableHead>
-                <TableHead>Riesgo</TableHead>
-                <TableHead className="text-center">Alertas</TableHead>
-                <TableHead className="w-[80px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredContracts.map((contract) => (
-                <TableRow 
-                  key={contract.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                >
-                  <TableCell 
-                    className="font-medium" 
-                    onClick={() => handleViewContract(contract)}
-                  >
-                    {contract.supplier}
-                  </TableCell>
-                  <TableCell onClick={() => handleViewContract(contract)}>
-                    <Badge variant="outline">{contract.category}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium" onClick={() => handleViewContract(contract)}>
-                    {contract.annualValue.toLocaleString('es-ES')}€
-                  </TableCell>
-                  <TableCell onClick={() => handleViewContract(contract)}>
-                    <span className={!contract.endDate ? 'text-muted-foreground' : ''}>
-                      {formatDate(contract.endDate)}
-                    </span>
-                  </TableCell>
-                  <TableCell onClick={() => handleViewContract(contract)}>{getRiskBadge(contract.riskScore)}</TableCell>
-                  <TableCell className="text-center" onClick={() => handleViewContract(contract)}>
-                    {contract.alertsCount > 0 ? (
-                      <Badge variant="destructive" className="min-w-[24px]">
-                        {contract.alertsCount}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">0</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => handleViewContract(contract)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={(e) => handleEditContract(contract.id, e)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={(e) => handleDeleteContract(contract.id, e)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
+        <CardContent className="p-0 overflow-x-auto">
+          <TooltipProvider>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Proveedor</TableHead>
+                  <TableHead>Nº Contrato</TableHead>
+                  <TableHead>Vigencia</TableHead>
+                  <TableHead className="text-right">Valor Anual</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Riesgo</TableHead>
+                  <TableHead>Pago</TableHead>
+                  <TableHead>Indexación</TableHead>
+                  <TableHead>Benchmark</TableHead>
+                  <TableHead className="w-[100px]"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredContracts.map((contract) => {
+                  const daysToRenewal = getDaysToRenewal(contract.endDate);
+                  const benchmarkDiff = contract.benchmarkComparison?.price_difference_pct;
+                  
+                  return (
+                    <TableRow 
+                      key={contract.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                    >
+                      {/* Proveedor */}
+                      <TableCell 
+                        className="font-medium" 
+                        onClick={() => handleViewContract(contract)}
+                      >
+                        {contract.supplier}
+                      </TableCell>
+                      
+                      {/* Nº Contrato */}
+                      <TableCell onClick={() => handleViewContract(contract)}>
+                        <span className="text-sm text-muted-foreground">
+                          {contract.contractNumber || '-'}
+                        </span>
+                      </TableCell>
+                      
+                      {/* Vigencia */}
+                      <TableCell onClick={() => handleViewContract(contract)}>
+                        <span className="text-sm">
+                          {formatDate(contract.startDate)} - {formatDate(contract.endDate)}
+                        </span>
+                      </TableCell>
+                      
+                      {/* Valor Anual */}
+                      <TableCell className="text-right font-medium" onClick={() => handleViewContract(contract)}>
+                        {contract.annualValue.toLocaleString('es-ES')}€
+                      </TableCell>
+                      
+                      {/* Estado */}
+                      <TableCell onClick={() => handleViewContract(contract)}>
+                        <div className="flex flex-wrap gap-1">
+                          {contract.isZombie && (
+                            <Badge variant="destructive" className="text-xs">
+                              <Skull className="h-3 w-3 mr-1" />
+                              Zombie
+                            </Badge>
+                          )}
+                          {contract.autoRenewal && daysToRenewal < 90 && daysToRenewal > 0 && (
+                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 text-xs">
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                              Renueva en {daysToRenewal}d
+                            </Badge>
+                          )}
+                          {!contract.isZombie && (!contract.autoRenewal || daysToRenewal >= 90) && (
+                            <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Activo
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      
+                      {/* Riesgo */}
+                      <TableCell onClick={() => handleViewContract(contract)}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className={cn(
+                              "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold cursor-help",
+                              contract.riskScore >= 8 && "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400",
+                              contract.riskScore >= 5 && contract.riskScore < 8 && "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400",
+                              contract.riskScore < 5 && "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400"
+                            )}>
+                              {contract.riskScore}
+                            </div>
+                          </TooltipTrigger>
+                          {contract.riskFlags.length > 0 && (
+                            <TooltipContent side="left" className="max-w-xs">
+                              <div className="space-y-1">
+                                {contract.riskFlags.map((flag, i) => (
+                                  <p key={i} className="text-xs">• {flag}</p>
+                                ))}
+                              </div>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TableCell>
+                      
+                      {/* Pago */}
+                      <TableCell onClick={() => handleViewContract(contract)}>
+                        <div className="text-sm">
+                          <span>{contract.paymentDays || '-'} días</span>
+                          {contract.earlyPaymentDiscount > 0 && (
+                            <span className="block text-xs text-green-600 dark:text-green-400">
+                              (-{contract.earlyPaymentDiscount}% pronto pago)
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      
+                      {/* Indexación */}
+                      <TableCell onClick={() => handleViewContract(contract)}>
+                        <Badge variant="outline" className="text-xs">
+                          {contract.indexation}
+                        </Badge>
+                      </TableCell>
+                      
+                      {/* Benchmark */}
+                      <TableCell onClick={() => handleViewContract(contract)}>
+                        {benchmarkDiff != null ? (
+                          <span className={cn(
+                            "font-medium text-sm",
+                            benchmarkDiff > 0 && "text-red-600 dark:text-red-400",
+                            benchmarkDiff < 0 && "text-green-600 dark:text-green-400",
+                            benchmarkDiff === 0 && "text-muted-foreground"
+                          )}>
+                            {benchmarkDiff > 0 ? '+' : ''}{benchmarkDiff.toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      
+                      {/* Actions */}
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handleViewContract(contract)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={(e) => handleEditContract(contract.id, e)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={(e) => handleDeleteContract(contract.id, e)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TooltipProvider>
         </CardContent>
       </Card>
 
