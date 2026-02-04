@@ -35,8 +35,12 @@ import {
   FileSearch,
   Eye,
   Upload,
-  RefreshCw
+  RefreshCw,
+  FileEdit,
+  Brain,
+  CheckCircle
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ReportGeneratorModal } from '@/components/cost-consulting/ReportGeneratorModal';
 import { ReviewSummaryCard } from '@/components/cost-consulting/ReviewSummaryCard';
@@ -321,6 +325,68 @@ const AnalyzingState = ({ currentPhase, progressPct }: { currentPhase: number; p
         </p>
       </CardContent>
     </Card>
+  );
+};
+
+// Project Phases Timeline Component
+const PROJECT_PHASES = [
+  { id: 'draft', label: 'Borrador', icon: FileEdit },
+  { id: 'uploading', label: 'Subiendo', icon: Upload },
+  { id: 'extracting', label: 'Extrayendo', icon: FileSearch },
+  { id: 'review', label: 'Revisión', icon: Eye },
+  { id: 'analyzing', label: 'Analizando', icon: Brain },
+  { id: 'completed', label: 'Completado', icon: CheckCircle },
+];
+
+const ProjectPhasesTimeline = ({ status }: { status: string }) => {
+  // Map 'processing' to 'analyzing' for display purposes
+  const normalizedStatus = status === 'processing' ? 'analyzing' : status;
+  const currentIndex = PROJECT_PHASES.findIndex(p => p.id === normalizedStatus);
+
+  return (
+    <div className="flex items-center justify-between w-full px-4 py-3 bg-muted/30 rounded-lg border">
+      {PROJECT_PHASES.map((phase, index) => {
+        const Icon = phase.icon;
+        const isCompleted = index < currentIndex;
+        const isCurrent = index === currentIndex;
+        const isPending = index > currentIndex;
+
+        return (
+          <React.Fragment key={phase.id}>
+            <div className="flex flex-col items-center gap-1">
+              <div className={cn(
+                "rounded-full p-2 transition-colors",
+                isCompleted && "bg-green-100 text-green-600 dark:bg-green-900/50 dark:text-green-400",
+                isCurrent && "bg-blue-100 text-blue-600 ring-2 ring-blue-400 dark:bg-blue-900/50 dark:text-blue-400",
+                isPending && "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500"
+              )}>
+                <Icon className="h-5 w-5" />
+              </div>
+              <span className={cn(
+                "text-xs font-medium",
+                isCompleted && "text-green-600 dark:text-green-400",
+                isCurrent && "text-blue-600 dark:text-blue-400",
+                isPending && "text-gray-400 dark:text-gray-500"
+              )}>
+                {phase.label}
+              </span>
+              {isCurrent && status !== 'completed' && status !== 'failed' && (
+                <span className="text-[10px] text-blue-500 animate-pulse">
+                  En progreso...
+                </span>
+              )}
+            </div>
+
+            {index < PROJECT_PHASES.length - 1 && (
+              <div className={cn(
+                "flex-1 h-0.5 mx-2",
+                index < currentIndex ? "bg-green-400 dark:bg-green-500" : "bg-gray-200 dark:bg-gray-700"
+              )} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
   );
 };
 
@@ -920,7 +986,10 @@ const CostConsultingDetail = () => {
               Archivar
             </Button>
           </div>
-        </div>
+      </div>
+
+      {/* Project Phases Timeline */}
+      <ProjectPhasesTimeline status={project.status || 'draft'} />
 
       {/* Report Generator Modal */}
         <ReportGeneratorModal
