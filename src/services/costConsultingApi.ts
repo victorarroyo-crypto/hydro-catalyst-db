@@ -553,3 +553,67 @@ export const getProjectDocuments = async (projectId: string): Promise<ProjectDoc
   // Handle both array response and object wrapper responses
   return Array.isArray(data) ? data : (data.documents || data.data || []);
 };
+
+// ============================================================
+// DASHBOARD API
+// ============================================================
+
+export interface DashboardSummary {
+  total_spend: number;
+  total_savings_identified: number;
+  savings_pct: number;
+  opportunities_count: number;
+  quick_wins_count: number;
+  invoice_count: number;
+  supplier_count: number;
+  duplicate_candidates: number;
+  potential_duplicate_savings: number;
+}
+
+export interface SpendByCategory {
+  category_name: string;
+  total_spend: number;
+  pct_of_total: number;
+  benchmark_comparison: 'excellent' | 'good' | 'average' | 'above_market';
+}
+
+export interface SpendBySupplier {
+  supplier_name: string;
+  total_spend: number;
+  pct_of_total: number;
+  invoice_count: number;
+  risk_flags: {
+    single_source: boolean;
+    no_contract: boolean;
+    high_concentration: boolean;
+  };
+}
+
+export interface TimelinePoint {
+  period: string;
+  total_spend: number;
+  invoice_count: number;
+  top_category: string;
+}
+
+export interface DashboardData {
+  summary: DashboardSummary;
+  spend_by_category: SpendByCategory[];
+  spend_by_supplier: SpendBySupplier[];
+  timeline: TimelinePoint[];
+  opportunity_matrix?: Array<Record<string, unknown>>;
+}
+
+/**
+ * Get dashboard analytics data for a project
+ */
+export const getDashboard = async (projectId: string): Promise<DashboardData> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/dashboard`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error fetching dashboard' }));
+    throw new Error(error.detail || 'Error fetching dashboard data');
+  }
+  return response.json();
+};
