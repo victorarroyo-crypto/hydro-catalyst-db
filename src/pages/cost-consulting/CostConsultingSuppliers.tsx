@@ -35,6 +35,9 @@ import {
   Loader2
 } from 'lucide-react';
 import { useCostAllSuppliers, CostSupplier } from '@/hooks/useCostConsultingData';
+import { createSupplier, updateSupplier, deleteSupplier } from '@/services/costConsultingApi';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 const categories = [
   'Químicos - Coagulantes',
@@ -73,9 +76,9 @@ const mapSupplierToDisplay = (supplier: CostSupplier): DisplaySupplier => ({
   id: supplier.id,
   name: supplier.name,
   cif: supplier.tax_id,
-  categories: [], // Would need category field
+  categories: [],
   verified: supplier.verified,
-  projects: 0, // Would need relation
+  projects: 0,
   reputation: supplier.reputation_score || 0,
   region: supplier.region,
   web: null,
@@ -87,11 +90,15 @@ const mapSupplierToDisplay = (supplier: CostSupplier): DisplaySupplier => ({
 });
 
 const CostConsultingSuppliers = () => {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [selectedSupplier, setSelectedSupplier] = useState<DisplaySupplier | null>(null);
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [supplierToVerify, setSupplierToVerify] = useState<DisplaySupplier | null>(null);
   
   // Form state for verification
   const [verifyForm, setVerifyForm] = useState({
@@ -104,11 +111,24 @@ const CostConsultingSuppliers = () => {
     notes: ''
   });
 
-  const { data: rawSuppliers = [], isLoading } = useCostAllSuppliers();
+  // Form state for adding new supplier
+  const [addForm, setAddForm] = useState({
+    name: '',
+    tradeName: '',
+    cif: '',
+    country: 'España',
+    region: '',
+    web: '',
+    email: '',
+    phone: '',
+    contactPerson: '',
+    size: 'pyme'
+  });
+
+  const { data: rawSuppliers = [], isLoading, refetch } = useCostAllSuppliers();
   
   // Map to display format
   const suppliers: DisplaySupplier[] = rawSuppliers.map(mapSupplierToDisplay);
-  // For now, pending suppliers is empty - would need a separate table or status field
   const pendingSuppliers: DisplaySupplier[] = suppliers.filter(s => !s.verified);
 
   const toggleCategory = (category: string) => {
@@ -161,77 +181,176 @@ const CostConsultingSuppliers = () => {
     });
   });
 
+  // === HANDLERS ===
+  
+  const handleAddSupplier = async () => {
+    if (!addForm.name.trim()) {
+      toast.error('El nombre del proveedor es obligatorio');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    try {
+      await createSupplier({
+        name: addForm.name,
+        trade_name: addForm.tradeName || undefined,
+        tax_id: addForm.cif || undefined,
+        country: addForm.country,
+        region: addForm.region || undefined,
+        web: addForm.web || undefined,
+        email: addForm.email || undefined,
+        phone: addForm.phone || undefined,
+        contact_person: addForm.contactPerson || undefined,
+        company_size: addForm.size || undefined,
+      });
+      
+      toast.success('Proveedor añadido correctamente');
+      setAddModalOpen(false);
+      setAddForm({
+        name: '',
+        tradeName: '',
+        cif: '',
+        country: 'España',
+        region: '',
+        web: '',
+        email: '',
+        phone: '',
+        contactPerson: '',
+        size: 'pyme'
+      });
+      queryClient.invalidateQueries({ queryKey: ['cost-all-suppliers'] });
+      refetch();
+    } catch (error) {
+      console.error('Error adding supplier:', error);
+      toast.error('Error al añadir el proveedor');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleVerifySupplier = async () => {
+    if (!supplierToVerify) return;
+    
+    setIsSubmitting(true);
+    try {
+      await updateSupplier(supplierToVerify.id, {
+        name: verifyForm.name,
+        tax_id: verifyForm.cif || undefined,
+        region: verifyForm.region || undefined,
+        web: verifyForm.web || undefined,
+        company_size: verifyForm.size || undefined,
+      });
+      
+      toast.success('Proveedor verificado correctamente');
+      setVerifyModalOpen(false);
+      setSupplierToVerify(null);
+      queryClient.invalidateQueries({ queryKey: ['cost-all-suppliers'] });
+      refetch();
+    } catch (error) {
+      console.error('Error verifying supplier:', error);
+      toast.error('Error al verificar el proveedor');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRejectSupplier = async (supplierId: string) => {
+    setIsSubmitting(true);
+    try {
+      await deleteSupplier(supplierId);
+      toast.success('Proveedor rechazado y eliminado');
+      setVerifyModalOpen(false);
+      setSupplierToVerify(null);
+      queryClient.invalidateQueries({ queryKey: ['cost-all-suppliers'] });
+      refetch();
+    } catch (error) {
+      console.error('Error rejecting supplier:', error);
+      toast.error('Error al rechazar el proveedor');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openVerifyModal = (supplier: DisplaySupplier) => {
+    setSupplierToVerify(supplier);
+    setVerifyForm({
+      name: supplier.name,
+      cif: supplier.cif || '',
+      region: supplier.region || '',
+      web: supplier.web || '',
+      size: supplier.size || 'pyme',
+      certifications: supplier.certifications,
+      notes: ''
+    });
+    setVerifyModalOpen(true);
+  };
+
   const SupplierTable = ({ suppliers }: { suppliers: DisplaySupplier[] }) => (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Nombre</TableHead>
-          <TableHead>Categorías</TableHead>
+          <TableHead>CIF</TableHead>
           <TableHead className="text-center">Verificado</TableHead>
-          <TableHead className="text-center">Proyectos</TableHead>
+          <TableHead className="text-center">Región</TableHead>
           <TableHead className="text-center">Reputación</TableHead>
           <TableHead className="text-center">vs Benchmark</TableHead>
           <TableHead></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {suppliers.map(supplier => (
-          <TableRow 
-            key={supplier.id} 
-            className="cursor-pointer hover:bg-muted/50"
-            onClick={() => setSelectedSupplier(supplier)}
-          >
-            <TableCell className="font-medium">{supplier.name}</TableCell>
-            <TableCell>
-              <div className="flex flex-wrap gap-1">
-                {supplier.categories.slice(0, 2).map(cat => (
-                  <Badge key={cat} variant="outline" className="text-xs">
-                    {cat.split(' - ')[0]}
-                  </Badge>
-                ))}
-                {supplier.categories.length > 2 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{supplier.categories.length - 2}
-                  </Badge>
-                )}
-              </div>
-            </TableCell>
-            <TableCell className="text-center">
-              {supplier.verified ? (
-                <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto" />
-              ) : (
-                <Clock className="h-5 w-5 text-yellow-600 mx-auto" />
-              )}
-            </TableCell>
-            <TableCell className="text-center">{supplier.projects}</TableCell>
-            <TableCell className="text-center">
-              {supplier.reputation > 0 ? renderStars(supplier.reputation) : '-'}
-            </TableCell>
-            <TableCell className="text-center">
-              {supplier.avgPriceVsBenchmark < 0 ? (
-                <span className="text-green-600 dark:text-green-400 font-medium flex items-center justify-center gap-1">
-                  <TrendingDown className="h-4 w-4" />
-                  {supplier.avgPriceVsBenchmark}%
-                </span>
-              ) : supplier.avgPriceVsBenchmark > 0 ? (
-                <span className="text-red-600 dark:text-red-400 font-medium flex items-center justify-center gap-1">
-                  <TrendingUp className="h-4 w-4" />
-                  +{supplier.avgPriceVsBenchmark}%
-                </span>
-              ) : (
-                <span className="text-muted-foreground">-</span>
-              )}
-            </TableCell>
-            <TableCell>
-              <Button variant="ghost" size="sm" onClick={(e) => {
-                e.stopPropagation();
-                setSelectedSupplier(supplier);
-              }}>
-                Ver
-              </Button>
+        {suppliers.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+              No hay proveedores que mostrar
             </TableCell>
           </TableRow>
-        ))}
+        ) : (
+          suppliers.map(supplier => (
+            <TableRow 
+              key={supplier.id} 
+              className="cursor-pointer hover:bg-muted/50"
+              onClick={() => setSelectedSupplier(supplier)}
+            >
+              <TableCell className="font-medium">{supplier.name}</TableCell>
+              <TableCell className="text-muted-foreground">{supplier.cif || '-'}</TableCell>
+              <TableCell className="text-center">
+                {supplier.verified ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto" />
+                ) : (
+                  <Clock className="h-5 w-5 text-yellow-600 mx-auto" />
+                )}
+              </TableCell>
+              <TableCell className="text-center">{supplier.region || '-'}</TableCell>
+              <TableCell className="text-center">
+                {supplier.reputation > 0 ? renderStars(supplier.reputation) : '-'}
+              </TableCell>
+              <TableCell className="text-center">
+                {supplier.avgPriceVsBenchmark < 0 ? (
+                  <span className="text-green-600 dark:text-green-400 font-medium flex items-center justify-center gap-1">
+                    <TrendingDown className="h-4 w-4" />
+                    {supplier.avgPriceVsBenchmark}%
+                  </span>
+                ) : supplier.avgPriceVsBenchmark > 0 ? (
+                  <span className="text-red-600 dark:text-red-400 font-medium flex items-center justify-center gap-1">
+                    <TrendingUp className="h-4 w-4" />
+                    +{supplier.avgPriceVsBenchmark}%
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <Button variant="ghost" size="sm" onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedSupplier(supplier);
+                }}>
+                  Ver
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))
+        )}
       </TableBody>
     </Table>
   );
@@ -254,7 +373,7 @@ const CostConsultingSuppliers = () => {
             Gestiona y compara proveedores de servicios de agua
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setAddModalOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Añadir Proveedor
         </Button>
@@ -287,9 +406,6 @@ const CostConsultingSuppliers = () => {
             {pendingSuppliers.length > 0 && (
               <span className="absolute -top-1 -right-1 h-2 w-2 bg-yellow-500 rounded-full" />
             )}
-          </TabsTrigger>
-          <TabsTrigger value="category">
-            Por Categoría
           </TabsTrigger>
         </TabsList>
 
@@ -324,86 +440,209 @@ const CostConsultingSuppliers = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 space-y-4">
-              {pendingSuppliers.map(supplier => (
-                <Card key={supplier.id} className="border-yellow-200 dark:border-yellow-900">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-5 w-5 text-muted-foreground" />
-                          <h3 className="font-semibold">{supplier.name}</h3>
+              {pendingSuppliers.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No hay proveedores pendientes de verificación
+                </p>
+              ) : (
+                pendingSuppliers.map(supplier => (
+                  <Card key={supplier.id} className="border-yellow-200 dark:border-yellow-900">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-5 w-5 text-muted-foreground" />
+                            <h3 className="font-semibold">{supplier.name}</h3>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Región: </span>
+                              <span className="font-medium">{supplier.region || 'Sin especificar'}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">CIF: </span>
+                              <span className="font-medium">{supplier.cif || 'Sin CIF'}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Tamaño: </span>
+                              <Badge variant="outline">{supplier.size || 'Sin especificar'}</Badge>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Web: </span>
+                              {supplier.web ? (
+                                <a href={`https://${supplier.web}`} target="_blank" rel="noopener noreferrer" 
+                                   className="text-primary hover:underline inline-flex items-center gap-1">
+                                  {supplier.web}
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground italic">No encontrada</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Región: </span>
-                            <span className="font-medium">{supplier.region || 'Sin especificar'}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">CIF: </span>
-                            <span className="font-medium">{supplier.cif || 'Sin CIF'}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Tamaño: </span>
-                            <Badge variant="outline">{supplier.size || 'Sin especificar'}</Badge>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Web: </span>
-                            {supplier.web ? (
-                              <a href={`https://${supplier.web}`} target="_blank" rel="noopener noreferrer" 
-                                 className="text-primary hover:underline inline-flex items-center gap-1">
-                                {supplier.web}
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground italic">No encontrada</span>
-                            )}
-                          </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => openVerifyModal(supplier)}>
+                            Verificar
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => handleRejectSupplier(supplier.id)}
+                            disabled={isSubmitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={() => {
-                          setVerifyForm({
-                            name: supplier.name,
-                            cif: supplier.cif || '',
-                            region: supplier.region || '',
-                            web: supplier.web || '',
-                            size: supplier.size || 'pyme',
-                            certifications: supplier.certifications,
-                            notes: ''
-                          });
-                          setVerifyModalOpen(true);
-                        }}>
-                          Verificar
-                        </Button>
-                        <Button size="sm" variant="ghost">
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </CardContent>
           </Card>
         </TabsContent>
-
-        {/* By Category */}
-        <TabsContent value="category" className="mt-4 space-y-4">
-          {Object.entries(suppliersByCategory).map(([category, suppliers]) => (
-            <Card key={category}>
-              <CardHeader className="py-3">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span>{category}</span>
-                  <Badge variant="secondary">{suppliers.length} proveedores</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <SupplierTable suppliers={suppliers} />
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
       </Tabs>
+
+      {/* Add Supplier Modal */}
+      <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Añadir nuevo proveedor</DialogTitle>
+            <DialogDescription>
+              Introduce los datos del proveedor para añadirlo a la base de datos
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Nombre *</Label>
+                <Input 
+                  value={addForm.name} 
+                  onChange={(e) => setAddForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Nombre del proveedor"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Nombre comercial</Label>
+                <Input 
+                  value={addForm.tradeName} 
+                  onChange={(e) => setAddForm(prev => ({ ...prev, tradeName: e.target.value }))}
+                  placeholder="Nombre comercial"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>CIF</Label>
+                <Input 
+                  value={addForm.cif} 
+                  onChange={(e) => setAddForm(prev => ({ ...prev, cif: e.target.value }))}
+                  placeholder="B12345678"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>País</Label>
+                <Input 
+                  value={addForm.country} 
+                  onChange={(e) => setAddForm(prev => ({ ...prev, country: e.target.value }))}
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Región</Label>
+                <Select 
+                  value={addForm.region} 
+                  onValueChange={(value) => setAddForm(prev => ({ ...prev, region: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="andalucia">Andalucía</SelectItem>
+                    <SelectItem value="cataluna">Cataluña</SelectItem>
+                    <SelectItem value="madrid">Madrid</SelectItem>
+                    <SelectItem value="valencia">C. Valenciana</SelectItem>
+                    <SelectItem value="pais_vasco">País Vasco</SelectItem>
+                    <SelectItem value="galicia">Galicia</SelectItem>
+                    <SelectItem value="castilla_leon">Castilla y León</SelectItem>
+                    <SelectItem value="otro">Otro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Web</Label>
+                <Input 
+                  value={addForm.web} 
+                  onChange={(e) => setAddForm(prev => ({ ...prev, web: e.target.value }))}
+                  placeholder="www.ejemplo.es"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input 
+                  type="email"
+                  value={addForm.email} 
+                  onChange={(e) => setAddForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="contacto@ejemplo.es"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Teléfono</Label>
+                <Input 
+                  value={addForm.phone} 
+                  onChange={(e) => setAddForm(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="+34 900 000 000"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Persona de contacto</Label>
+                <Input 
+                  value={addForm.contactPerson} 
+                  onChange={(e) => setAddForm(prev => ({ ...prev, contactPerson: e.target.value }))}
+                  placeholder="Nombre del contacto"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Tamaño</Label>
+                <Select 
+                  value={addForm.size} 
+                  onValueChange={(value) => setAddForm(prev => ({ ...prev, size: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="micro">Micro (&lt;10 empleados)</SelectItem>
+                    <SelectItem value="pyme">PYME (10-250 empleados)</SelectItem>
+                    <SelectItem value="grande">Grande (&gt;250 empleados)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleAddSupplier} disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Añadir proveedor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Verify Modal */}
       <Dialog open={verifyModalOpen} onOpenChange={setVerifyModalOpen}>
@@ -520,11 +759,11 @@ const CostConsultingSuppliers = () => {
                   {['ISO 9001', 'ISO 14001', 'OHSAS 18001'].map(cert => (
                     <div key={cert} className="flex items-center space-x-2">
                       <Checkbox 
-                        id={cert} 
+                        id={`verify-${cert}`} 
                         checked={verifyForm.certifications.includes(cert)}
                         onCheckedChange={() => toggleCertification(cert)}
                       />
-                      <Label htmlFor={cert} className="text-sm font-normal cursor-pointer">
+                      <Label htmlFor={`verify-${cert}`} className="text-sm font-normal cursor-pointer">
                         {cert}
                       </Label>
                     </div>
@@ -549,10 +788,15 @@ const CostConsultingSuppliers = () => {
             <Button variant="outline" onClick={() => setVerifyModalOpen(false)}>
               Cancelar
             </Button>
-            <Button variant="destructive">
+            <Button 
+              variant="destructive" 
+              onClick={() => supplierToVerify && handleRejectSupplier(supplierToVerify.id)}
+              disabled={isSubmitting}
+            >
               Rechazar
             </Button>
-            <Button>
+            <Button onClick={handleVerifySupplier} disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Verificar y guardar
             </Button>
           </DialogFooter>
@@ -583,7 +827,7 @@ const CostConsultingSuppliers = () => {
                   {selectedSupplier.name}
                 </SheetTitle>
                 <SheetDescription>
-                  CIF: {selectedSupplier.cif}
+                  CIF: {selectedSupplier.cif || 'No especificado'}
                 </SheetDescription>
               </SheetHeader>
 
@@ -596,95 +840,49 @@ const CostConsultingSuppliers = () => {
                   <CardContent className="space-y-3 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Región:</span>
-                      <span className="font-medium">{selectedSupplier.region}</span>
+                      <span className="font-medium">{selectedSupplier.region || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Tamaño:</span>
-                      <Badge variant="outline">{selectedSupplier.size === 'grande' ? 'Grande' : 'PYME'}</Badge>
+                      <Badge variant="outline">{selectedSupplier.size === 'grande' ? 'Grande' : selectedSupplier.size === 'micro' ? 'Micro' : 'PYME'}</Badge>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Web:</span>
-                      {selectedSupplier.web && (
+                      {selectedSupplier.web ? (
                         <a href={`https://${selectedSupplier.web}`} target="_blank" rel="noopener noreferrer"
                            className="text-primary hover:underline inline-flex items-center gap-1">
                           {selectedSupplier.web}
                           <ExternalLink className="h-3 w-3" />
                         </a>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Reputación:</span>
-                      {renderStars(selectedSupplier.reputation)}
+                      {selectedSupplier.reputation > 0 ? renderStars(selectedSupplier.reputation) : <span className="text-muted-foreground">Sin valorar</span>}
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Certificaciones:</span>
                       <div className="flex gap-1">
-                        {selectedSupplier.certifications.map(cert => (
-                          <Badge key={cert} variant="secondary" className="text-xs">{cert}</Badge>
-                        ))}
+                        {selectedSupplier.certifications.length > 0 ? (
+                          selectedSupplier.certifications.map(cert => (
+                            <Badge key={cert} variant="secondary" className="text-xs">{cert}</Badge>
+                          ))
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Categories */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Categorías que Sirve</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedSupplier.categories.map(cat => (
-                        <Badge key={cat} variant="outline">{cat}</Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Projects */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      Proyectos donde Aparece
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {['Proyecto Lácteos Norte', 'Proyecto Química Levante', 'Proyecto Alimentaria Sur']
-                        .slice(0, selectedSupplier.projects)
-                        .map((project, i) => (
-                          <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                            <span className="text-sm">{project}</span>
-                            <Button variant="ghost" size="sm">Ver</Button>
-                          </div>
-                        ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Price History */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <BarChart3 className="h-4 w-4" />
-                      Historial de Precios
-                    </CardTitle>
-                    <CardDescription>
-                      Basado en {selectedSupplier.invoiceCount} facturas analizadas
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      Historial de precios no disponible para este proveedor.
-                    </p>
                   </CardContent>
                 </Card>
 
                 {/* Benchmark */}
                 <Card className={selectedSupplier.avgPriceVsBenchmark < 0 
                   ? 'border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30' 
-                  : 'border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/30'
+                  : selectedSupplier.avgPriceVsBenchmark > 0
+                    ? 'border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/30'
+                    : ''
                 }>
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
@@ -693,23 +891,44 @@ const CostConsultingSuppliers = () => {
                         <div className={`text-2xl font-bold ${
                           selectedSupplier.avgPriceVsBenchmark < 0 
                             ? 'text-green-600 dark:text-green-400' 
-                            : 'text-red-600 dark:text-red-400'
+                            : selectedSupplier.avgPriceVsBenchmark > 0
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-muted-foreground'
                         }`}>
-                          {selectedSupplier.avgPriceVsBenchmark < 0 ? '' : '+'}
-                          {selectedSupplier.avgPriceVsBenchmark}%
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Gasto total: {selectedSupplier.totalSpend.toLocaleString()}€
+                          {selectedSupplier.avgPriceVsBenchmark === 0 
+                            ? 'Sin datos' 
+                            : `${selectedSupplier.avgPriceVsBenchmark < 0 ? '' : '+'}${selectedSupplier.avgPriceVsBenchmark}%`
+                          }
                         </div>
                       </div>
-                      {selectedSupplier.avgPriceVsBenchmark < 0 ? (
-                        <TrendingDown className="h-10 w-10 text-green-600 dark:text-green-400" />
-                      ) : (
-                        <TrendingUp className="h-10 w-10 text-red-600 dark:text-red-400" />
+                      {selectedSupplier.avgPriceVsBenchmark !== 0 && (
+                        selectedSupplier.avgPriceVsBenchmark < 0 ? (
+                          <TrendingDown className="h-10 w-10 text-green-600 dark:text-green-400" />
+                        ) : (
+                          <TrendingUp className="h-10 w-10 text-red-600 dark:text-red-400" />
+                        )
                       )}
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Actions */}
+                {!selectedSupplier.verified && (
+                  <div className="flex gap-2">
+                    <Button className="flex-1" onClick={() => openVerifyModal(selectedSupplier)}>
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Verificar
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => handleRejectSupplier(selectedSupplier.id)}
+                      disabled={isSubmitting}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Rechazar
+                    </Button>
+                  </div>
+                )}
               </div>
             </>
           )}
