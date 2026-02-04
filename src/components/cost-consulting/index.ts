@@ -16,3 +16,4 @@ export { OpportunityMatrix } from './OpportunityMatrix';
 export { SpendTimelineChart } from './SpendTimelineChart';
 export { DuplicateDetectionPanel } from './DuplicateDetectionPanel';
 export { BenchmarkComparisonTable } from './BenchmarkComparisonTable';
+export { DuplicateAlertWidget } from './DuplicateAlertWidget';
