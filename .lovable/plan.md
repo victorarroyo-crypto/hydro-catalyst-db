@@ -1,200 +1,99 @@
 
-# Plan: Documentación Completa del Schema de Base de Datos Interna
+# Plan: Agregar enlace para ver PDF/Excel en la página de Facturas y Contratos
 
-## Resumen del Análisis
+## Problema Identificado
 
-He analizado exhaustivamente la base de datos interna de Supabase y encontré:
+La página de análisis de facturas (`/cost-consulting/{id}/invoices`) no muestra el botón para ver/descargar el PDF original de cada factura. Esto ocurre porque:
 
-| Métrica | Valor Actual |
-|---------|--------------|
-| Total Tablas | 46 |
-| Funciones RPC | 12 |
-| Enums | 2 |
-| Filas totales (aprox) | ~8,000 |
+1. **Página de Revisión** (`CostConsultingDetail.tsx`): Usa el hook `useInvoicesWithDocuments()` que enriquece cada factura con `cost_project_documents.file_url`
+2. **Página de Análisis** (`CostConsultingInvoices.tsx`): Usa el hook `useCostInvoices()` directamente, **sin** acceso a las URLs de documentos
 
-### Tablas Nuevas (vs documentación anterior)
-- `cost_consulting_projects` - Proyectos de consultoría de costos
-- `cost_verticals` - Verticales/categorías de costos
+## Solución Propuesta
+
+### Cambio 1: Actualizar `CostConsultingInvoices.tsx`
+
+Reemplazar el hook `useCostInvoices()` por `useInvoicesWithDocuments()` para tener acceso a la URL del documento PDF.
+
+```typescript
+// Antes
+import { useCostInvoices, useCostContracts, ... } from '@/hooks/useCostConsultingData';
+const { data: rawInvoices = [], isLoading, refetch } = useCostInvoices(id);
+
+// Después
+import { useInvoicesWithDocuments, EnrichedInvoice } from '@/hooks/useCostEntitiesWithDocuments';
+import { useCostContracts, ... } from '@/hooks/useCostConsultingData';
+const { data: rawInvoices = [], isLoading, refetch } = useInvoicesWithDocuments(id);
+```
+
+### Cambio 2: Agregar columna "Documento" a la tabla de facturas
+
+Añadir una columna con un botón para descargar/ver el PDF:
+
+```typescript
+// En la tabla de facturas
+<TableHead>PDF</TableHead>
+
+// En cada fila
+<TableCell>
+  {invoice.cost_project_documents?.file_url && (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={(e) => {
+        e.stopPropagation();
+        openDocumentUrl(invoice.cost_project_documents?.file_url);
+      }}
+    >
+      <FileDown className="h-4 w-4" />
+    </Button>
+  )}
+</TableCell>
+```
+
+### Cambio 3: Actualizar el tipo DisplayInvoice
+
+Extender la interfaz para incluir la información del documento:
+
+```typescript
+interface DisplayInvoice {
+  // ... campos existentes
+  documentUrl?: string | null;
+  documentFilename?: string;
+}
+```
+
+### Cambio 4: Agregar link en el panel de detalle (Sheet)
+
+En el panel lateral que muestra el detalle de la factura, agregar un botón prominente para ver el documento original:
+
+```typescript
+{selectedInvoice.documentUrl && (
+  <Button 
+    onClick={() => openDocumentUrl(selectedInvoice.documentUrl)}
+    className="w-full"
+  >
+    <FileDown className="h-4 w-4 mr-2" />
+    Ver documento original
+  </Button>
+)}
+```
 
 ---
 
-## Archivo a Crear
+## Archivos a Modificar
 
-**`docs/SUPABASE_INTERNAL_SCHEMA.md`**
+| Archivo | Cambios |
+|---------|---------|
+| `src/pages/cost-consulting/CostConsultingInvoices.tsx` | Cambiar hook, agregar columna PDF, actualizar tipos, agregar botón en Sheet |
 
-Contendrá una versión actualizada y estructurada de la documentación con:
+## Beneficios
 
-### 1. Resumen Ejecutivo
-- Estadísticas generales
-- Fecha de actualización
-- Distribución de filas por módulo
+- Trazabilidad completa: cada factura muestra el documento original del que se extrajo
+- Verificación fácil: el usuario puede comparar los datos extraídos con el PDF original
+- Consistencia: mismo comportamiento que en la página de revisión
 
-### 2. Diagrama de Relaciones (Mermaid)
-```text
-erDiagram
-    advisor_users ||--o{ advisor_chats : "has"
-    advisor_users ||--o{ advisor_credits : "has"
-    advisor_chats ||--o{ advisor_messages : "contains"
-    ...etc
-```
+## Notas Técnicas
 
-### 3. Tablas por Módulo Funcional
-
-| Módulo | Tablas |
-|--------|--------|
-| **Advisor (AI Chat)** | advisor_users, advisor_chats, advisor_messages, advisor_credits, advisor_callback_requests |
-| **Auth/Usuarios** | profiles, user_roles, user_invitations, user_favorites |
-| **Tecnologías** | technologies, technology_edits, technology_tipos, technology_subcategorias |
-| **Taxonomía** | taxonomy_tipos, taxonomy_subcategorias, taxonomy_sectores |
-| **Scouting** | scouting_queue, scouting_sessions, scouting_session_logs, scouting_sources, scouting_run_requests |
-| **Estudios** | scouting_studies, study_sessions, study_longlist, study_shortlist, study_evaluations, study_solutions, study_research, study_reports, study_session_logs |
-| **Casos de Estudio** | casos_de_estudio, case_study_jobs, case_study_technologies |
-| **Knowledge Base** | knowledge_documents, knowledge_chunks |
-| **Proyectos** | projects, project_technologies |
-| **Cost Consulting** | cost_consulting_projects, cost_verticals |
-| **Sistema** | ai_model_settings, ai_usage_logs, audit_logs, sync_queue, technological_trends, rejected_technologies, saved_ai_searches |
-
-### 4. Detalle por Tabla
-Para cada tabla:
-- Descripción y propósito
-- Columnas con tipos y nullability
-- Primary keys y Foreign keys
-- Índices
-- Conteo de filas actual
-
-### 5. Funciones RPC
-| Función | Args | Returns | Descripción |
-|---------|------|---------|-------------|
-| `approve_scouting_to_technologies` | scouting_id | uuid | Aprueba tecnología de cola a tabla principal |
-| `check_scouting_duplicate` | p_name, p_provider | table | Verifica duplicados en scouting |
-| `check_technology_duplicate` | p_name, p_provider | table | Verifica duplicados en technologies |
-| `close_zombie_jobs` | max_age_minutes | integer | Cierra jobs zombie de scouting |
-| `close_zombie_case_study_jobs` | max_age_minutes | integer | Cierra jobs zombie de case studies |
-| `deduct_advisor_credits` | p_user_id, p_amount, p_model, p_description | json | Deduce créditos del advisor |
-| `force_close_scouting_job` | job_id, close_reason | boolean | Fuerza cierre de job |
-| `has_role` | _user_id, _role | boolean | Verifica si usuario tiene rol |
-| `normalize_source_url` | url | text | Normaliza URLs de fuentes |
-| `normalize_tech_name` | input_text | text | Normaliza nombres de tecnologías |
-| `reject_scouting_to_rejected` | scouting_id, reason, category | uuid | Rechaza tecnología a tabla rejected |
-| `search_technologies_by_keywords` | p_keywords, p_min_trl, p_max_results | table | Búsqueda por keywords |
-| `search_technologies_by_keywords_v2` | p_keywords, filters... | table | Búsqueda avanzada con filtros |
-
-### 6. Enums
-```sql
-app_role: admin | supervisor | analyst | client_basic | client_professional | client_enterprise
-edit_status: pending | approved | rejected
-```
-
-### 7. Notas de Seguridad
-- Linter warnings detectados (19 issues)
-- RLS policies permisivas identificadas
-- Recomendaciones de mejora
-
----
-
-## Datos de Filas por Tabla (snapshot actual)
-
-| Tabla | Filas |
-|-------|-------|
-| technologies | 2,551 |
-| sync_queue | 1,774 |
-| knowledge_documents | 915 |
-| scouting_session_logs | 703 |
-| study_session_logs | 578 |
-| knowledge_chunks | 386 |
-| scouting_sources | 210 |
-| scouting_queue | 149 |
-| taxonomy_subcategorias | 142 |
-| project_technologies | 125 |
-| ai_usage_logs | 118 |
-| advisor_messages | 94 |
-| case_study_jobs | 77 |
-| study_sessions | 62 |
-| advisor_credits | 47 |
-| study_research | 40 |
-| study_longlist | 31 |
-| scouting_sessions | 27 |
-| advisor_chats | 23 |
-| case_study_technologies | 22 |
-| technology_tipos | 19 |
-| study_solutions | 15 |
-| scouting_run_requests | 14 |
-| technology_subcategorias | 11 |
-| study_evaluations | 10 |
-| study_shortlist | 10 |
-| taxonomy_tipos | 9 |
-| cost_verticals | 7 |
-| study_reports | 7 |
-| audit_logs | 5 |
-| ai_model_settings | 4 |
-| casos_de_estudio | 3 |
-| projects | 3 |
-| taxonomy_sectores | 3 |
-| technological_trends | 2 |
-| advisor_users | 1 |
-| profiles | 1 |
-| scouting_studies | 1 |
-| user_roles | 1 |
-| (8 tablas vacías) | 0 |
-
----
-
-## Sección Técnica
-
-### Estructura del archivo de salida
-
-```markdown
-# Supabase Internal Schema - Vandarum Platform
-
-> Generado: 2026-02-03
-> Total Tablas: 46
-> Proyecto Supabase: bdmpshiqspkxcisnnlyr
-
-## Resumen por Módulo
-[Tabla con módulos y sus tablas]
-
-## Diagrama ER
-[Diagrama Mermaid de relaciones]
-
-## Tablas
-
-### 1. advisor_callback_requests
-**Módulo:** Advisor
-**Filas:** 0
-**Descripción:** Solicitudes de callback comercial
-
-| Columna | Tipo | Nullable | Default | FK |
-|---------|------|----------|---------|-----|
-| id | uuid | NO | gen_random_uuid() | PK |
-| user_id | uuid | YES | - | advisor_users.id |
-...
-
-### 2. advisor_chats
-[etc...]
-
-## Funciones RPC
-[Lista detallada de funciones]
-
-## Enums
-[Definiciones de enums]
-
-## Índices
-[Lista de índices por tabla]
-
-## Notas de Seguridad
-[Warnings del linter y recomendaciones]
-```
-
-### Diferencias con archivo existente
-El archivo actual `docs/DATABASE_SCHEMA.md`:
-- Fecha: 2026-01-22 (12 días atrás)
-- 44 tablas documentadas
-- Faltan: cost_consulting_projects, cost_verticals
-- Algunos campos desactualizados
-
-El nuevo archivo será una versión completamente actualizada con:
-- 46 tablas
-- Conteos de filas actuales
-- Módulos funcionales claramente identificados
-- Diagrama ER actualizado
-- Funciones RPC completas
+- El hook `useInvoicesWithDocuments` ya existe y hace un JOIN entre facturas y documentos usando `document_id`
+- La función `openDocumentUrl` ya maneja la conversión de URLs `storage://` a URLs públicas de Supabase Storage
+- Soporte para PDFs y Excels (el helper es agnóstico al tipo de archivo)
