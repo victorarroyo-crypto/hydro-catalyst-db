@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { 
   ArrowLeft, 
   Lightbulb,
@@ -31,7 +33,8 @@ import {
   BarChart3,
   Crosshair,
   Search,
-  User
+  User,
+  RotateCcw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link, useParams } from 'react-router-dom';
@@ -235,14 +238,28 @@ const mapOpportunityToDisplay = (opp: CostOpportunity): DisplayOpportunity => {
   };
 };
 
+// Filter state type
+interface OpportunityFilters {
+  horizon: string;
+  origin: string;
+  status: string;
+  savingsRange: string;
+  hasRecovery: boolean;
+}
+
+const defaultFilters: OpportunityFilters = {
+  horizon: 'all',
+  origin: 'all',
+  status: 'all',
+  savingsRange: 'all',
+  hasRecovery: false,
+};
+
 const CostConsultingOpportunities = () => {
   const { id } = useParams();
   const [viewMode, setViewMode] = useState<'matrix' | 'list'>('list');
   const [selectedOpportunity, setSelectedOpportunity] = useState<DisplayOpportunity | null>(null);
-  const [horizonFilter, setHorizonFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [filters, setFilters] = useState<OpportunityFilters>(defaultFilters);
   const [expandedSections, setExpandedSections] = useState<string[]>(['quick_win', 'short', 'medium']);
 
   const { data: project } = useCostProject(id);
@@ -252,17 +269,55 @@ const CostConsultingOpportunities = () => {
   const opportunities: DisplayOpportunity[] = rawOpportunities.map(mapOpportunityToDisplay);
 
   // Calculate metrics
-  const totalSavings = opportunities.reduce((sum, o) => sum + o.savings, 0);
-  const quickWins = opportunities.filter(o => o.horizon === 'quick_win');
+  const totalSavingsAll = opportunities.reduce((sum, o) => sum + o.savings, 0);
+  const totalRecoveryAll = opportunities.reduce((sum, o) => sum + o.oneTimeRecovery, 0);
+  const quickWins = opportunities.filter(o => o.horizon === 'quick_win' || o.horizon === 'quick-win');
   const quickWinSavings = quickWins.reduce((sum, o) => sum + o.savings, 0);
 
+  // Helper to match savings range
+  const matchesSavingsRange = (savings: number, range: string): boolean => {
+    switch (range) {
+      case '50k+': return savings >= 50000;
+      case '20-50k': return savings >= 20000 && savings < 50000;
+      case '10-20k': return savings >= 10000 && savings < 20000;
+      case '5-10k': return savings >= 5000 && savings < 10000;
+      case '<5k': return savings < 5000;
+      default: return true;
+    }
+  };
+
+  // Helper to normalize horizon
+  const normalizeHorizon = (horizon: string): string => {
+    if (horizon === 'quick-win') return 'quick_win';
+    if (horizon === 'short') return 'short_term';
+    if (horizon === 'medium') return 'medium_term';
+    if (horizon === 'long') return 'long_term';
+    return horizon;
+  };
+
   // Filter opportunities
-  const filteredOpportunities = opportunities.filter(o => {
-    if (horizonFilter !== 'all' && o.horizon !== horizonFilter) return false;
-    if (statusFilter !== 'all' && o.status !== statusFilter) return false;
-    if (categoryFilter !== 'all' && o.category !== categoryFilter) return false;
-    return true;
-  });
+  const filteredOpportunities = useMemo(() => {
+    return opportunities.filter(o => {
+      // Horizon filter
+      if (filters.horizon !== 'all') {
+        const normalizedHorizon = normalizeHorizon(o.horizon);
+        if (normalizedHorizon !== filters.horizon) return false;
+      }
+      // Origin filter
+      if (filters.origin !== 'all' && o.identifiedBy !== filters.origin) return false;
+      // Status filter
+      if (filters.status !== 'all' && o.status !== filters.status) return false;
+      // Savings range filter
+      if (filters.savingsRange !== 'all' && !matchesSavingsRange(o.savings, filters.savingsRange)) return false;
+      // Has recovery filter
+      if (filters.hasRecovery && o.oneTimeRecovery <= 0) return false;
+      return true;
+    });
+  }, [opportunities, filters]);
+
+  // Filtered totals
+  const totalSavings = filteredOpportunities.reduce((sum, o) => sum + o.savings, 0);
+  const totalRecovery = filteredOpportunities.reduce((sum, o) => sum + o.oneTimeRecovery, 0);
 
   // Group by horizon - handle both DB values (quick_win, short_term, medium_term, long_term)
   // and legacy values (short, medium, long, corto, medio, largo)
@@ -796,75 +851,111 @@ const CostConsultingOpportunities = () => {
         </Card>
       </div>
 
-      {/* Filters and View Toggle */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Select value={horizonFilter} onValueChange={setHorizonFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Horizonte" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="quick_win">Quick Win</SelectItem>
-              <SelectItem value="short">Corto plazo</SelectItem>
-              <SelectItem value="medium">Medio plazo</SelectItem>
-              <SelectItem value="long">Largo plazo</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="renegotiation">Renegociación</SelectItem>
-              <SelectItem value="change_supplier">Cambio proveedor</SelectItem>
-              <SelectItem value="consolidation">Consolidación</SelectItem>
-              <SelectItem value="elimination">Eliminación</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="identified">Identificada</SelectItem>
-              <SelectItem value="validated">Validada</SelectItem>
-              <SelectItem value="in_progress">En progreso</SelectItem>
-              <SelectItem value="implemented">Implementada</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Categoría" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="Químicos">Químicos</SelectItem>
-              <SelectItem value="Residuos">Residuos</SelectItem>
-              <SelectItem value="O&M">O&M</SelectItem>
-              <SelectItem value="Energía">Energía</SelectItem>
-              <SelectItem value="General">General</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* Filters Bar */}
+      <div className="flex flex-wrap gap-2 mb-4 p-4 bg-muted/30 rounded-lg">
+        {/* Horizonte */}
+        <Select value={filters.horizon} onValueChange={(v) => setFilters({...filters, horizon: v})}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Horizonte" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="quick_win">⚡ Quick Wins</SelectItem>
+            <SelectItem value="short_term">📅 Corto (3-6m)</SelectItem>
+            <SelectItem value="medium_term">📆 Medio (6-12m)</SelectItem>
+            <SelectItem value="long_term">🗓️ Largo (&gt;12m)</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Origen */}
+        <Select value={filters.origin} onValueChange={(v) => setFilters({...filters, origin: v})}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Identificado por" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los orígenes</SelectItem>
+            <SelectItem value="agent_contracts">📄 Análisis Contratos</SelectItem>
+            <SelectItem value="agent_invoices">🧾 Auditoría Facturas</SelectItem>
+            <SelectItem value="agent_benchmarks">📊 Benchmark</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Estado */}
+        <Select value={filters.status} onValueChange={(v) => setFilters({...filters, status: v})}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="identified">🔍 Identificada</SelectItem>
+            <SelectItem value="validated">✅ Validada</SelectItem>
+            <SelectItem value="in_progress">🔄 En progreso</SelectItem>
+            <SelectItem value="implemented">✨ Implementada</SelectItem>
+            <SelectItem value="dismissed">❌ Descartada</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Rango de ahorro */}
+        <Select value={filters.savingsRange} onValueChange={(v) => setFilters({...filters, savingsRange: v})}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Ahorro" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Cualquier €</SelectItem>
+            <SelectItem value="50k+">€50K+ /año</SelectItem>
+            <SelectItem value="20-50k">€20K-50K /año</SelectItem>
+            <SelectItem value="10-20k">€10K-20K /año</SelectItem>
+            <SelectItem value="5-10k">€5K-10K /año</SelectItem>
+            <SelectItem value="<5k">Menos de €5K</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Solo con recuperación */}
+        <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-background">
+          <Checkbox
+            id="hasRecovery"
+            checked={filters.hasRecovery}
+            onCheckedChange={(v) => setFilters({...filters, hasRecovery: v === true})}
+          />
+          <Label htmlFor="hasRecovery" className="text-sm cursor-pointer">
+            Con recuperación única
+          </Label>
         </div>
-        
-        <ToggleGroup 
-          type="single" 
-          value={viewMode} 
-          onValueChange={(value) => value && setViewMode(value as 'matrix' | 'list')}
-        >
-          <ToggleGroupItem value="list" aria-label="Vista lista">
-            <List className="h-4 w-4" />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="matrix" aria-label="Vista matriz">
-            <LayoutGrid className="h-4 w-4" />
-          </ToggleGroupItem>
-        </ToggleGroup>
+
+        {/* Reset */}
+        <Button variant="ghost" size="sm" onClick={() => setFilters(defaultFilters)}>
+          <RotateCcw className="h-4 w-4 mr-1" />
+          Limpiar
+        </Button>
+
+        {/* View toggle */}
+        <div className="ml-auto">
+          <ToggleGroup 
+            type="single" 
+            value={viewMode} 
+            onValueChange={(value) => value && setViewMode(value as 'matrix' | 'list')}
+          >
+            <ToggleGroupItem value="list" aria-label="Vista lista">
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="matrix" aria-label="Vista matriz">
+              <LayoutGrid className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+      </div>
+
+      {/* Results counter */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-muted-foreground">
+          Mostrando {filteredOpportunities.length} de {opportunities.length} oportunidades
+        </p>
+        <p className="text-sm font-medium">
+          Total ahorro: <span className="text-green-600 dark:text-green-400">{formatCurrency(totalSavings)}</span>
+          {totalRecovery > 0 && (
+            <span className="text-amber-600 dark:text-amber-400 ml-2">+ {formatCurrency(totalRecovery)} recuperación</span>
+          )}
+        </p>
       </div>
 
       {/* Content */}
