@@ -45,7 +45,93 @@ interface DisplayOpportunity {
   rating: number;
   description: string;
   actions: string[];
+  // Extended fields
+  impactScore: number;
+  effortScore: number;
+  riskScore: number;
+  priorityScore: number;
+  oneTimeRecovery: number;
+  rootCause: string | null;
+  identifiedBy: string | null;
+  identifiedAt: string | null;
+  validatedAt: string | null;
+  implementedAt: string | null;
+  notes: string | null;
 }
+
+// Helper functions
+const formatCurrency = (value: number): string => {
+  return value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0 });
+};
+
+const formatDate = (dateStr: string | null): string => {
+  if (!dateStr) return '-';
+  try {
+    return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return '-';
+  }
+};
+
+const getHorizonLabel = (horizon: string): string => {
+  const labels: Record<string, string> = {
+    'quick_win': '⚡ Quick Win',
+    'quick-win': '⚡ Quick Win',
+    'short': '🕐 Corto Plazo',
+    'short_term': '🕐 Corto Plazo',
+    'medium': '📅 Medio Plazo',
+    'medium_term': '📅 Medio Plazo',
+    'long': '🎯 Largo Plazo',
+    'long_term': '🎯 Largo Plazo',
+  };
+  return labels[horizon] || horizon;
+};
+
+const getAgentLabel = (agentId: string | null): string => {
+  if (!agentId) return '👤 Manual';
+  const labels: Record<string, string> = {
+    'agent_contracts': '📄 Análisis de Contratos',
+    'agent_invoices': '🧾 Auditoría de Facturas',
+    'agent_benchmarks': '📊 Benchmark de Proveedores',
+    'agent_ranker': '🎯 Priorizador',
+    'text_extraction': '🔍 Extracción Automática',
+  };
+  return labels[agentId] || agentId;
+};
+
+// Metric Badge component
+const MetricBadge = ({ 
+  label, 
+  value, 
+  max = 10, 
+  color 
+}: { 
+  label: string; 
+  value: number; 
+  max?: number; 
+  color: 'green' | 'blue' | 'red' | 'purple' 
+}) => {
+  const percentage = Math.min(100, (value / max) * 100);
+  const colorClasses = {
+    green: 'bg-green-500',
+    blue: 'bg-blue-500',
+    red: 'bg-red-500',
+    purple: 'bg-purple-500',
+  };
+  
+  return (
+    <div className="text-center">
+      <div className="text-xs text-muted-foreground mb-1">{label}</div>
+      <div className="relative h-2 bg-muted rounded-full overflow-hidden">
+        <div 
+          className={`absolute left-0 top-0 h-full ${colorClasses[color]} rounded-full transition-all`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+      <div className="text-sm font-semibold mt-1">{value}/{max}</div>
+    </div>
+  );
+};
 
 const mapOpportunityToDisplay = (opp: CostOpportunity): DisplayOpportunity => {
   const savingsPercent = opp.current_annual_cost && opp.savings_annual 
@@ -67,7 +153,19 @@ const mapOpportunityToDisplay = (opp: CostOpportunity): DisplayOpportunity => {
     status: opp.status,
     rating: Math.min(5, Math.ceil((opp.priority_score || 50) / 20)),
     description: opp.description || '',
-    actions: opp.recommended_actions?.map((a: any) => typeof a === 'string' ? a : a.action || a.description || '') || []
+    actions: opp.recommended_actions?.map((a: any) => typeof a === 'string' ? a : a.action || a.description || '') || [],
+    // Extended fields
+    impactScore: opp.impact_score || 0,
+    effortScore: opp.effort_score || 0,
+    riskScore: opp.risk_score || 0,
+    priorityScore: opp.priority_score || 0,
+    oneTimeRecovery: 0, // Field not in current CostOpportunity type
+    rootCause: null, // Field not in current CostOpportunity type
+    identifiedBy: null, // Field not in current CostOpportunity type
+    identifiedAt: null, // Field not in current CostOpportunity type
+    validatedAt: null, // Field not in current CostOpportunity type
+    implementedAt: null, // Field not in current CostOpportunity type
+    notes: null, // Field not in current CostOpportunity type
   };
 };
 
@@ -691,94 +789,158 @@ const CostConsultingOpportunities = () => {
 
       {/* Detail Sheet */}
       <Sheet open={!!selectedOpportunity} onOpenChange={() => setSelectedOpportunity(null)}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
           {selectedOpportunity && (
             <>
               <SheetHeader>
-                <div className="flex items-center gap-2 mb-2">
-                  {renderStars(selectedOpportunity.rating)}
+                <div className="flex items-center justify-between">
+                  <SheetTitle className="text-lg">{selectedOpportunity.title}</SheetTitle>
+                  <Badge variant="secondary" className="ml-2">
+                    {getHorizonLabel(selectedOpportunity.horizon)}
+                  </Badge>
                 </div>
-                <SheetTitle>{selectedOpportunity.title}</SheetTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mt-2">
                   <Badge variant="outline">{selectedOpportunity.category}</Badge>
                   {getStatusBadge(selectedOpportunity.status)}
                 </div>
               </SheetHeader>
 
               <div className="space-y-6 mt-6">
-                {/* Supplier */}
-                <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-1">Proveedor</h4>
-                  <p className="font-medium">{selectedOpportunity.supplier}</p>
-                </div>
-
-                {/* Metrics */}
+                {/* 1. RESUMEN FINANCIERO */}
                 <div className="grid grid-cols-2 gap-4">
                   <Card>
-                    <CardContent className="p-4">
-                      <div className="text-sm text-muted-foreground">Ahorro estimado</div>
-                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {selectedOpportunity.savings.toLocaleString()}€/año
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        ({selectedOpportunity.savingsPercent}% del gasto)
-                      </div>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Ahorro Anual</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {formatCurrency(selectedOpportunity.savings)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedOpportunity.savingsPercent}% del gasto en esta categoría
+                      </p>
                     </CardContent>
                   </Card>
-                  
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="text-sm text-muted-foreground mb-1">Esfuerzo</div>
-                      {getEffortIndicator(selectedOpportunity.effort)}
-                      <div className="text-sm text-muted-foreground mt-2">
-                        {selectedOpportunity.effort === 'low' ? 'Bajo' : 
-                         selectedOpportunity.effort === 'medium' ? 'Medio' : 'Alto'}
+
+                  {selectedOpportunity.oneTimeRecovery > 0 && (
+                    <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Recuperación Inmediata</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                          {formatCurrency(selectedOpportunity.oneTimeRecovery)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Cobro único (facturas erróneas, duplicados)
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                {/* 2. ORIGEN Y CAUSA */}
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-sm">Origen del Hallazgo</h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline">{getAgentLabel(selectedOpportunity.identifiedBy)}</Badge>
+                    {selectedOpportunity.supplier !== 'Varios' && (
+                      <span className="text-sm text-muted-foreground">
+                        Proveedor: <span className="font-medium text-foreground">{selectedOpportunity.supplier}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedOpportunity.rootCause && (
+                    <div className="mt-2 p-3 bg-muted rounded-md">
+                      <p className="text-sm font-medium">Causa Raíz:</p>
+                      <p className="text-sm text-muted-foreground">{selectedOpportunity.rootCause}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. DESCRIPCIÓN */}
+                {selectedOpportunity.description && (
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">Descripción</h4>
+                    <p className="text-sm text-muted-foreground">{selectedOpportunity.description}</p>
+                  </div>
+                )}
+
+                {/* 4. ACCIONES RECOMENDADAS */}
+                {selectedOpportunity.actions.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">Acciones Recomendadas</h4>
+                    <ol className="list-decimal list-inside space-y-1">
+                      {selectedOpportunity.actions.map((action, i) => (
+                        <li key={i} className="text-sm text-muted-foreground">{action}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {/* 5. MÉTRICAS */}
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-sm">Métricas de Evaluación</h4>
+                  <div className="grid grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg">
+                    <MetricBadge label="Impacto" value={selectedOpportunity.impactScore} max={10} color="green" />
+                    <MetricBadge label="Esfuerzo" value={selectedOpportunity.effortScore} max={10} color="blue" />
+                    <MetricBadge label="Riesgo" value={selectedOpportunity.riskScore} max={10} color="red" />
+                    <MetricBadge label="Prioridad" value={selectedOpportunity.priorityScore} max={10} color="purple" />
+                  </div>
+                </div>
+
+                {/* 6. TIMELINE */}
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-sm">Timeline</h4>
+                  <div className="flex flex-wrap items-center gap-4 text-xs">
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <span>Identificada: {formatDate(selectedOpportunity.identifiedAt) || 'Reciente'}</span>
+                    </div>
+                    {selectedOpportunity.validatedAt && (
+                      <div className="flex items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                        <span>Validada: {formatDate(selectedOpportunity.validatedAt)}</span>
                       </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Confidence & Risk */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Confianza</h4>
-                    <p className="font-medium">{getConfidenceBadge(selectedOpportunity.confidence)}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Riesgo</h4>
-                    <p className="font-medium">{getRiskBadge(selectedOpportunity.risk)}</p>
+                    )}
+                    {selectedOpportunity.implementedAt && (
+                      <div className="flex items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4 text-purple-500" />
+                        <span>Implementada: {formatDate(selectedOpportunity.implementedAt)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Description */}
-                <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Descripción</h4>
-                  <p className="text-sm">{selectedOpportunity.description}</p>
-                </div>
+                {/* 7. NOTAS */}
+                {selectedOpportunity.notes && (
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">Notas</h4>
+                    <p className="text-sm text-muted-foreground italic">{selectedOpportunity.notes}</p>
+                  </div>
+                )}
 
-                {/* Actions */}
-                <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Acciones recomendadas</h4>
-                  <ul className="space-y-2">
-                    {selectedOpportunity.actions.map((action, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                        <span>{action}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Action Buttons */}
+                {/* ACTION BUTTONS */}
                 <div className="flex gap-2 pt-4 border-t">
-                  <Button className="flex-1">
-                    <Play className="h-4 w-4 mr-2" />
-                    Simular escenarios
-                  </Button>
-                  <Button variant="outline" className="flex-1">
-                    <ArrowRight className="h-4 w-4 mr-2" />
-                    Marcar en progreso
-                  </Button>
+                  {selectedOpportunity.status === 'identified' && (
+                    <Button className="flex-1" variant="default">
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Validar Oportunidad
+                    </Button>
+                  )}
+                  {(selectedOpportunity.status === 'identified' || selectedOpportunity.status === 'validated') && (
+                    <Button className="flex-1" variant="outline">
+                      <Play className="h-4 w-4 mr-2" />
+                      Iniciar Implementación
+                    </Button>
+                  )}
+                  {selectedOpportunity.status === 'in_progress' && (
+                    <Button className="flex-1" variant="default">
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Marcar como Implementada
+                    </Button>
+                  )}
                 </div>
               </div>
             </>
