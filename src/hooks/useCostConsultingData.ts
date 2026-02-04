@@ -306,35 +306,119 @@ export const useCostAllSuppliers = () => {
 // HOOKS - ESTADÍSTICAS
 // ============================================================
 
+export interface CostStatsDetailed {
+  projects: number;
+  projectsInProgress: number;
+  projectsCompleted: number;
+  savings: number;
+  totalSpend: number;
+  savingsPercent: number;
+  suppliers: number;
+  suppliersVerified: number;
+  suppliersPending: number;
+  quickWins: number;
+  quickWinsSavings: number;
+  oneTimeRecovery: number;
+  contractsAtRisk: number;
+  contractsZombie: number;
+}
+
 export const useCostStats = (userId?: string) => {
   return useQuery({
     queryKey: ['cost-stats', userId],
-    queryFn: async () => {
-      if (!userId) return { projects: 0, savings: 0, suppliers: 0, quickWins: 0 };
+    queryFn: async (): Promise<CostStatsDetailed> => {
+      if (!userId) return {
+        projects: 0,
+        projectsInProgress: 0,
+        projectsCompleted: 0,
+        savings: 0,
+        totalSpend: 0,
+        savingsPercent: 0,
+        suppliers: 0,
+        suppliersVerified: 0,
+        suppliersPending: 0,
+        quickWins: 0,
+        quickWinsSavings: 0,
+        oneTimeRecovery: 0,
+        contractsAtRisk: 0,
+        contractsZombie: 0,
+      };
       
+      // Fetch projects with status
       const { data: projects } = await externalSupabase
         .from('cost_consulting_projects')
-        .select('total_savings_identified, quick_wins_count')
+        .select('id, status, total_savings_identified, total_spend_analyzed, quick_wins_count')
         .eq('user_id', userId);
       
-      const { count: suppliersCount } = await externalSupabase
+      const projectIds = (projects || []).map(p => p.id);
+      
+      // Fetch suppliers
+      const { data: suppliers } = await externalSupabase
         .from('cost_suppliers')
-        .select('*', { count: 'exact', head: true })
-        .eq('verified', true);
+        .select('verified');
+      
+      // Fetch opportunities for quick wins and one-time recovery
+      let opportunities: { effort_level: string | null; savings_annual: number | null; one_time_recovery: number | null }[] = [];
+      if (projectIds.length > 0) {
+        const { data: opps } = await externalSupabase
+          .from('cost_project_opportunities')
+          .select('effort_level, savings_annual, one_time_recovery')
+          .in('project_id', projectIds);
+        opportunities = opps || [];
+      }
+      
+      // Fetch contracts for risk analysis
+      let contracts: { risk_score: number | null; risk_flags: string[] | null }[] = [];
+      if (projectIds.length > 0) {
+        const { data: conts } = await externalSupabase
+          .from('cost_project_contracts')
+          .select('risk_score, risk_flags')
+          .in('project_id', projectIds);
+        contracts = conts || [];
+      }
+      
+      // Calculate stats
+      const projectsInProgress = (projects || []).filter(p => 
+        ['processing', 'analyzing', 'extracting', 'review'].includes(p.status)
+      ).length;
+      const projectsCompleted = (projects || []).filter(p => p.status === 'completed').length;
       
       const totalSavings = (projects || []).reduce(
         (sum, p) => sum + (p.total_savings_identified || 0), 0
       );
-      
-      const totalQuickWins = (projects || []).reduce(
-        (sum, p) => sum + (p.quick_wins_count || 0), 0
+      const totalSpend = (projects || []).reduce(
+        (sum, p) => sum + (p.total_spend_analyzed || 0), 0
       );
+      const savingsPercent = totalSpend > 0 ? (totalSavings / totalSpend) * 100 : 0;
+      
+      const suppliersVerified = (suppliers || []).filter(s => s.verified).length;
+      const suppliersPending = (suppliers || []).filter(s => !s.verified).length;
+      
+      const quickWinOpps = opportunities.filter(o => o.effort_level === 'low');
+      const quickWinsSavings = quickWinOpps.reduce((sum, o) => sum + (o.savings_annual || 0), 0);
+      
+      const oneTimeRecovery = opportunities.reduce((sum, o) => sum + (o.one_time_recovery || 0), 0);
+      
+      const contractsAtRisk = contracts.filter(c => (c.risk_score || 0) >= 7).length;
+      const contractsZombie = contracts.filter(c => 
+        c.risk_flags?.includes('zombie') || c.risk_flags?.includes('contract_zombie')
+      ).length;
       
       return {
         projects: projects?.length || 0,
+        projectsInProgress,
+        projectsCompleted,
         savings: totalSavings,
-        suppliers: suppliersCount || 0,
-        quickWins: totalQuickWins,
+        totalSpend,
+        savingsPercent,
+        suppliers: (suppliers || []).length,
+        suppliersVerified,
+        suppliersPending,
+        quickWins: quickWinOpps.length,
+        quickWinsSavings,
+        oneTimeRecovery,
+        contractsAtRisk,
+        contractsZombie,
       };
     },
     enabled: !!userId,
