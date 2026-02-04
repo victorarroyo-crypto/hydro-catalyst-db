@@ -2,13 +2,38 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, TrendingDown, Building2, BarChart3, Coins, Loader2, StopCircle, Trash2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { 
+  Plus, 
+  FileSearch, 
+  PiggyBank, 
+  RotateCcw, 
+  Zap, 
+  Building2, 
+  AlertTriangle,
+  Coins, 
+  Loader2, 
+  StopCircle, 
+  Trash2,
+  TrendingUp,
+  ChevronRight
+} from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCostProjects, useCostStats } from '@/hooks/useCostConsultingData';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { format, parseISO, isValid } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 const RAILWAY_API_URL = import.meta.env.VITE_RAILWAY_COST_API_URL || 'https://cost-consulting-api.up.railway.app';
 import {
@@ -31,6 +56,25 @@ const formatCurrency = (value: number | null): string => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
+};
+
+const formatCompactCurrency = (value: number): string => {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M €`;
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}K €`;
+  }
+  return `${value.toFixed(0)} €`;
+};
+
+const safeFormatDate = (dateStr: string | null | undefined, pattern: string) => {
+  if (!dateStr) return '-';
+  const iso = parseISO(dateStr);
+  if (isValid(iso)) return format(iso, pattern, { locale: es });
+  const fallback = new Date(dateStr);
+  if (!isValid(fallback)) return '-';
+  return format(fallback, pattern, { locale: es });
 };
 
 const getStatusBadge = (status: string) => {
@@ -183,9 +227,7 @@ const CostConsultingList = () => {
   };
 
   const hasProjects = projects.length > 0;
-
-  // Calculate quick wins from projects
-  const totalQuickWins = projects.reduce((sum, p) => sum + (p.quick_wins_count || 0), 0);
+  const recentProjects = projects.slice(0, 3);
 
   if (isLoading) {
     return (
@@ -212,48 +254,170 @@ const CostConsultingList = () => {
         </Button>
       </div>
 
-      {/* Stats Cards - only show if there are projects */}
-      {hasProjects && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Enhanced Stats Cards - 6 cards grid */}
+      {hasProjects && stats && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* 1. Análisis Activos */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Análisis Activos</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <FileSearch className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.projects || 0}</div>
+              <div className="text-2xl font-bold">{stats.projects}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.projectsInProgress} en progreso, {stats.projectsCompleted} completados
+              </p>
+              {stats.projectsInProgress > 0 && (
+                <div className="flex items-center gap-1 mt-1 text-xs text-primary">
+                  <TrendingUp className="h-3 w-3" />
+                  <span>Procesando</span>
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* 2. Ahorro Total Identificado */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ahorro Identificado</CardTitle>
-              <TrendingDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <CardTitle className="text-sm font-medium">Ahorro Total Identificado</CardTitle>
+              <PiggyBank className="h-4 w-4 text-emerald-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                {formatCurrency(stats?.savings || 0)}
+              <div className="text-2xl font-bold text-emerald-600">
+                {formatCompactCurrency(stats.savings)}
               </div>
+              <p className="text-xs text-muted-foreground">
+                {stats.savingsPercent.toFixed(1)}% del gasto analizado
+              </p>
+              <Progress 
+                value={Math.min(stats.savingsPercent, 100)} 
+                className="h-1.5 mt-2" 
+              />
             </CardContent>
           </Card>
+
+          {/* 3. Recuperaciones Inmediatas (NUEVO) */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Proveedores</CardTitle>
+              <CardTitle className="text-sm font-medium">Recuperaciones Inmediatas</CardTitle>
+              <RotateCcw className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {formatCompactCurrency(stats.oneTimeRecovery)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Facturas erróneas, duplicados
+              </p>
+              {stats.oneTimeRecovery > 0 && (
+                <Badge variant="outline" className="mt-2 bg-blue-500/10 text-blue-600 border-blue-200">
+                  Acción inmediata
+                </Badge>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 4. Quick Wins */}
+          <Card className="border-green-200 dark:border-green-800">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Quick Wins</CardTitle>
+              <Zap className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-500">{stats.quickWins}</div>
+              <p className="text-xs text-muted-foreground">
+                {formatCompactCurrency(stats.quickWinsSavings)} ahorro en &lt;3 meses
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* 5. Proveedores Analizados */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Proveedores Analizados</CardTitle>
               <Building2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.suppliers || 0}</div>
+              <div className="text-2xl font-bold">{stats.suppliers}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.suppliersVerified} verificados, {stats.suppliersPending} pendientes
+              </p>
             </CardContent>
           </Card>
-          <Card>
+
+          {/* 6. Contratos en Riesgo (NUEVO) */}
+          <Card className={stats.contractsAtRisk > 0 ? 'border-amber-300 dark:border-amber-700' : ''}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Quick Wins</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Contratos en Riesgo</CardTitle>
+              <AlertTriangle className={`h-4 w-4 ${stats.contractsAtRisk > 0 ? 'text-amber-500' : 'text-muted-foreground'}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalQuickWins}</div>
+              <div className={`text-2xl font-bold ${stats.contractsAtRisk > 0 ? 'text-amber-500' : ''}`}>
+                {stats.contractsAtRisk}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {stats.contractsZombie} contratos zombie
+              </p>
+              {stats.contractsAtRisk >= 3 && (
+                <Badge variant="destructive" className="mt-2">
+                  Requiere atención
+                </Badge>
+              )}
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Mini-tabla con los 3 proyectos más recientes */}
+      {hasProjects && recentProjects.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Proyectos Recientes</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/cost-consulting" className="text-muted-foreground hover:text-foreground">
+                  Ver todos
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Proyecto</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Ahorro</TableHead>
+                  <TableHead className="text-right">Fecha</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentProjects.map((project) => (
+                  <TableRow 
+                    key={project.id} 
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/cost-consulting/${project.id}`)}
+                  >
+                    <TableCell className="font-medium">{project.name}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {project.client_name || '-'}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(project.status)}</TableCell>
+                    <TableCell className="text-right text-emerald-600 font-medium">
+                      {formatCurrency(project.total_savings_identified)}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {safeFormatDate(project.created_at, 'dd MMM')}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       {/* Empty State */}
