@@ -56,6 +56,7 @@ import {
   CostConsultingSuppliers,
   CostConsultingBenchmarks,
   CostConsultingDuplicates,
+  CostConsultingDashboard,
   CostSuppliersAdmin,
   CostBenchmarksAdmin,
 } from "./pages/cost-consulting";
@@ -127,6 +128,7 @@ const App = () => (
               <Route path="/cost-consulting/:id/opportunities" element={<CostConsultingOpportunities />} />
               <Route path="/cost-consulting/:id/simulator" element={<CostConsultingSimulator />} />
               <Route path="/cost-consulting/:id/duplicates" element={<CostConsultingDuplicates />} />
+              <Route path="/cost-consulting/:id/dashboard" element={<CostConsultingDashboard />} />
               
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/data-quality" element={<DataQualityControl />} />
