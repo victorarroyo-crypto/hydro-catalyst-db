@@ -617,3 +617,52 @@ export const getDashboard = async (projectId: string): Promise<DashboardData> =>
   }
   return response.json();
 };
+
+// ============================================================
+// OPPORTUNITY MATRIX API
+// ============================================================
+
+export type QuadrantKey = 'quick_wins' | 'major_projects' | 'fill_ins' | 'low_priority';
+
+export interface MatrixOpportunity {
+  id: string;
+  title: string;
+  type: string;
+  annual_savings: number;
+  one_time_recovery?: number;
+  status: string;
+  impact_score: number;
+  effort_score: number;
+  identified_by?: string;
+}
+
+export interface MatrixQuadrant {
+  key: QuadrantKey;
+  label: string;
+  opportunities: MatrixOpportunity[];
+  total_savings: number;
+  count: number;
+}
+
+export interface OpportunityMatrixData {
+  quick_wins: MatrixQuadrant;
+  major_projects: MatrixQuadrant;
+  fill_ins: MatrixQuadrant;
+  low_priority: MatrixQuadrant;
+  total_opportunities: number;
+  total_savings: number;
+}
+
+/**
+ * Get opportunity matrix data for a project
+ */
+export const getOpportunityMatrix = async (projectId: string): Promise<OpportunityMatrixData> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/analytics/opportunity-matrix`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error fetching opportunity matrix' }));
+    throw new Error(error.detail || 'Error fetching opportunity matrix');
+  }
+  return response.json();
+};
