@@ -6,9 +6,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { 
   ArrowLeft, 
-  Lightbulb, 
+  Lightbulb,
   TrendingUp, 
   Zap, 
   Target,
@@ -262,41 +263,102 @@ const CostConsultingOpportunities = () => {
       return filteredOpportunities.filter(o => o.impact === impact && o.effort === effort);
     };
 
+    // Color gradient based on savings
+    const getSavingsColor = (savings: number) => {
+      if (savings >= 50000) return 'bg-green-700 text-white';
+      if (savings >= 10000) return 'bg-green-500 text-white';
+      if (savings >= 5000) return 'bg-yellow-500 text-white';
+      return 'bg-gray-400 text-white';
+    };
+
+    const formatCompactCurrency = (value: number): string => {
+      if (value >= 1000) return `${(value / 1000).toFixed(1)}K€`;
+      return `${value.toFixed(0)}€`;
+    };
+
+    // Quadrant labels and styles
+    const getQuadrantInfo = (impact: string, effort: string) => {
+      if (impact === 'high' && effort === 'low') return { 
+        label: '⚡ QUICK WINS', 
+        bg: 'bg-green-50 dark:bg-green-950', 
+        border: 'border-green-300 dark:border-green-700',
+        highlight: true
+      };
+      if (impact === 'high' && effort === 'high') return { 
+        label: '📅 Planificar', 
+        bg: 'bg-blue-50 dark:bg-blue-950', 
+        border: 'border-blue-200 dark:border-blue-800' 
+      };
+      if (impact === 'low' && effort === 'low') return { 
+        label: '📋 Si hay tiempo', 
+        bg: 'bg-muted/30', 
+        border: 'border-border' 
+      };
+      if (impact === 'low' && effort === 'high') return { 
+        label: '🚫 Evitar', 
+        bg: 'bg-red-50 dark:bg-red-950', 
+        border: 'border-red-200 dark:border-red-800' 
+      };
+      return { label: '', bg: 'bg-muted/30', border: 'border-border' };
+    };
+
     const CellContent = ({ impact, effort }: { impact: string; effort: string }) => {
       const opps = getOpportunitiesForCell(impact, effort);
-      const isQuickWin = impact === 'high' && effort === 'low';
-      const isAvoid = impact === 'low' && effort === 'high';
+      const quadrant = getQuadrantInfo(impact, effort);
+      const totalSavings = opps.reduce((sum, o) => sum + o.savings, 0);
       
       return (
-        <div className={`p-3 h-full min-h-[100px] rounded-lg border ${
-          isQuickWin ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800' :
-          isAvoid ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800' :
-          'bg-muted/30 border-border'
-        }`}>
-          {isQuickWin && (
-            <div className="text-xs font-medium text-green-700 dark:text-green-400 mb-2 flex items-center gap-1">
-              <Star className="h-3 w-3 fill-current" /> Quick Win
-            </div>
-          )}
-          {isAvoid && (
-            <div className="text-xs font-medium text-red-700 dark:text-red-400 mb-2 flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" /> Evitar
+        <div className={`p-3 h-full min-h-[140px] rounded-lg border-2 ${quadrant.bg} ${quadrant.border} ${quadrant.highlight ? 'ring-2 ring-green-400 dark:ring-green-600' : ''}`}>
+          {/* Quadrant label */}
+          {quadrant.label && (
+            <div className={`text-xs font-semibold mb-2 ${quadrant.highlight ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
+              {quadrant.label}
             </div>
           )}
           
-          <div className="space-y-2">
-            {opps.map(opp => (
-              <div
-                key={opp.id}
-                className="p-2 bg-background rounded border cursor-pointer hover:shadow-sm transition-shadow"
-                onClick={() => setSelectedOpportunity(opp)}
-              >
-                <div className="text-xs font-medium truncate">{opp.title}</div>
-                <div className="text-xs text-green-600 dark:text-green-400 font-medium">
-                  {opp.savings.toLocaleString()}€
-                </div>
-              </div>
-            ))}
+          {/* Counter per quadrant */}
+          {opps.length > 0 && (
+            <div className="text-[10px] text-muted-foreground mb-2">
+              {opps.length} oportunidades · {formatCompactCurrency(totalSavings)}
+            </div>
+          )}
+          
+          <div className="flex flex-wrap gap-2">
+            {opps.map(opp => {
+              const confidencePercent = opp.confidence === 'high' ? 90 : opp.confidence === 'medium' ? 60 : 30;
+              
+              return (
+                <HoverCard key={opp.id} openDelay={200} closeDelay={100}>
+                  <HoverCardTrigger asChild>
+                    <div
+                      className={`p-2 rounded-lg cursor-pointer hover:scale-105 transition-transform shadow-sm ${getSavingsColor(opp.savings)}`}
+                      onClick={() => setSelectedOpportunity(opp)}
+                    >
+                      <div className="flex flex-col items-center">
+                        <span className="text-xs font-bold">{formatCompactCurrency(opp.savings)}</span>
+                        <span className="text-[10px] opacity-80 truncate max-w-[80px] text-center">
+                          {opp.title}
+                        </span>
+                      </div>
+                    </div>
+                  </HoverCardTrigger>
+                  <HoverCardContent className="w-72" side="top">
+                    <div className="space-y-2">
+                      <p className="font-semibold">{opp.title}</p>
+                      <p className="text-sm text-muted-foreground line-clamp-2">{opp.description}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                          Ahorro: {opp.savings.toLocaleString()}€/año
+                        </Badge>
+                        <Badge variant="outline">
+                          Confianza: {confidencePercent}%
+                        </Badge>
+                      </div>
+                    </div>
+                  </HoverCardContent>
+                </HoverCard>
+              );
+            })}
           </div>
         </div>
       );
@@ -306,18 +368,18 @@ const CostConsultingOpportunities = () => {
       <Card>
         <CardHeader>
           <CardTitle>Matriz Impacto vs Esfuerzo</CardTitle>
-          <CardDescription>Priorización visual de oportunidades</CardDescription>
+          <CardDescription>Priorización visual de oportunidades - hover para detalles</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="relative">
+          <div className="relative pb-6">
             {/* Y-axis label */}
             <div className="absolute -left-6 top-1/2 -translate-y-1/2 -rotate-90 text-xs font-medium text-muted-foreground whitespace-nowrap">
-              IMPACTO
+              IMPACTO ↑
             </div>
             
             {/* X-axis label */}
-            <div className="absolute bottom-[-24px] left-1/2 -translate-x-1/2 text-xs font-medium text-muted-foreground">
-              ESFUERZO
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-xs font-medium text-muted-foreground">
+              ESFUERZO →
             </div>
             
             <div className="ml-8">
@@ -331,8 +393,8 @@ const CostConsultingOpportunities = () => {
               {/* Matrix grid */}
               <div className="space-y-2">
                 {/* High impact row */}
-                <div className="flex items-center gap-2">
-                  <div className="w-6 text-xs font-medium text-muted-foreground text-right">Alto</div>
+                <div className="flex items-stretch gap-2">
+                  <div className="w-8 flex items-center justify-end text-xs font-medium text-muted-foreground">Alto</div>
                   <div className="flex-1 grid grid-cols-3 gap-2">
                     <CellContent impact="high" effort="low" />
                     <CellContent impact="high" effort="medium" />
@@ -341,8 +403,8 @@ const CostConsultingOpportunities = () => {
                 </div>
                 
                 {/* Medium impact row */}
-                <div className="flex items-center gap-2">
-                  <div className="w-6 text-xs font-medium text-muted-foreground text-right">Medio</div>
+                <div className="flex items-stretch gap-2">
+                  <div className="w-8 flex items-center justify-end text-xs font-medium text-muted-foreground">Medio</div>
                   <div className="flex-1 grid grid-cols-3 gap-2">
                     <CellContent impact="medium" effort="low" />
                     <CellContent impact="medium" effort="medium" />
@@ -351,13 +413,33 @@ const CostConsultingOpportunities = () => {
                 </div>
                 
                 {/* Low impact row */}
-                <div className="flex items-center gap-2">
-                  <div className="w-6 text-xs font-medium text-muted-foreground text-right">Bajo</div>
+                <div className="flex items-stretch gap-2">
+                  <div className="w-8 flex items-center justify-end text-xs font-medium text-muted-foreground">Bajo</div>
                   <div className="flex-1 grid grid-cols-3 gap-2">
                     <CellContent impact="low" effort="low" />
                     <CellContent impact="low" effort="medium" />
                     <CellContent impact="low" effort="high" />
                   </div>
+                </div>
+              </div>
+              
+              {/* Legend */}
+              <div className="mt-4 flex flex-wrap gap-3 text-xs">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-green-700"></div>
+                  <span>&gt;50K€</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-green-500"></div>
+                  <span>10-50K€</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-yellow-500"></div>
+                  <span>5-10K€</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-gray-400"></div>
+                  <span>&lt;5K€</span>
                 </div>
               </div>
             </div>
