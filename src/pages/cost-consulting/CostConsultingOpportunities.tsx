@@ -37,8 +37,9 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useCostOpportunities, useCostProject, CostOpportunity } from '@/hooks/useCostConsultingData';
+import { toast } from 'sonner';
 
 // Map DB opportunity to UI display
 interface DisplayOpportunity {
@@ -257,10 +258,21 @@ const defaultFilters: OpportunityFilters = {
 
 const CostConsultingOpportunities = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'matrix' | 'list'>('list');
   const [selectedOpportunity, setSelectedOpportunity] = useState<DisplayOpportunity | null>(null);
   const [filters, setFilters] = useState<OpportunityFilters>(defaultFilters);
   const [expandedSections, setExpandedSections] = useState<string[]>(['quick_win', 'short', 'medium']);
+
+  // Handlers for opportunity actions
+  const handleSimulate = (opportunity: DisplayOpportunity) => {
+    navigate(`/cost-consulting/${id}/simulator?opp=${opportunity.id}`);
+    toast.info(`Abriendo simulador para: ${opportunity.title}`);
+  };
+
+  const handleStartProgress = (opportunity: DisplayOpportunity) => {
+    toast.success(`Oportunidad "${opportunity.title}" marcada como En Progreso`);
+  };
 
   const { data: project } = useCostProject(id);
   const { data: rawOpportunities = [], isLoading } = useCostOpportunities(id);
@@ -480,11 +492,27 @@ const CostConsultingOpportunities = () => {
           
           {/* Action buttons */}
           <div className="flex gap-2 pt-1">
-            <Button size="sm" variant="outline" className="text-xs h-7">
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="text-xs h-7"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSimulate(opportunity);
+              }}
+            >
               <Play className="h-3 w-3 mr-1" />
               Simular
             </Button>
-            <Button size="sm" variant="outline" className="text-xs h-7">
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="text-xs h-7"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleStartProgress(opportunity);
+              }}
+            >
               <Clock className="h-3 w-3 mr-1" />
               En progreso
             </Button>
