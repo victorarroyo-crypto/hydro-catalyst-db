@@ -23,8 +23,17 @@ import {
   Clock,
   AlertTriangle,
   ArrowRight,
-  Loader2
+  Loader2,
+  Building2,
+  Bot,
+  FileText,
+  Receipt,
+  BarChart3,
+  Crosshair,
+  Search,
+  User
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Link, useParams } from 'react-router-dom';
 import { useCostOpportunities, useCostProject, CostOpportunity } from '@/hooks/useCostConsultingData';
 
@@ -88,15 +97,72 @@ const getHorizonLabel = (horizon: string): string => {
 };
 
 const getAgentLabel = (agentId: string | null): string => {
-  if (!agentId) return '👤 Manual';
+  if (!agentId) return 'Manual';
   const labels: Record<string, string> = {
-    'agent_contracts': '📄 Análisis de Contratos',
-    'agent_invoices': '🧾 Auditoría de Facturas',
-    'agent_benchmarks': '📊 Benchmark de Proveedores',
-    'agent_ranker': '🎯 Priorizador',
-    'text_extraction': '🔍 Extracción Automática',
+    'agent_contracts': 'Análisis de Contratos',
+    'agent_invoices': 'Auditoría de Facturas',
+    'agent_benchmarks': 'Benchmark de Proveedores',
+    'agent_ranker': 'Priorizador',
+    'text_extraction': 'Extracción Automática',
   };
   return labels[agentId] || agentId;
+};
+
+const getOriginIcon = (agentId: string | null) => {
+  if (!agentId) return User;
+  const icons: Record<string, any> = {
+    'agent_contracts': FileText,
+    'agent_invoices': Receipt,
+    'agent_benchmarks': BarChart3,
+    'agent_ranker': Crosshair,
+    'text_extraction': Search,
+  };
+  return icons[agentId] || Bot;
+};
+
+const getHorizonBadgeStyle = (horizon: string) => {
+  if (horizon === 'quick_win' || horizon === 'quick-win') {
+    return 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400';
+  }
+  if (horizon === 'short' || horizon === 'short_term') {
+    return 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400';
+  }
+  if (horizon === 'medium' || horizon === 'medium_term') {
+    return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-400';
+  }
+  return 'bg-muted text-muted-foreground';
+};
+
+// MetricBar component for visual metrics
+const MetricBar = ({ 
+  label, 
+  value, 
+  color 
+}: { 
+  label: string; 
+  value: number; 
+  color: 'green' | 'blue' | 'red' 
+}) => {
+  const colorClasses = {
+    green: 'bg-green-500',
+    blue: 'bg-blue-500',
+    red: 'bg-red-500',
+  };
+  
+  return (
+    <div className="flex-1">
+      <div className="flex justify-between text-[10px] text-muted-foreground mb-0.5">
+        <span>{label}</span>
+        <span>{value}/10</span>
+      </div>
+      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+        <div 
+          className={cn("h-full rounded-full transition-all", colorClasses[color])}
+          style={{ width: `${value * 10}%` }}
+        />
+      </div>
+    </div>
+  );
 };
 
 // Metric Badge component
@@ -295,66 +361,83 @@ const CostConsultingOpportunities = () => {
     );
   };
 
-  const OpportunityCard = ({ opportunity }: { opportunity: DisplayOpportunity }) => (
-    <Card 
-      className="cursor-pointer hover:shadow-md transition-shadow"
-      onClick={() => setSelectedOpportunity(opportunity)}
-    >
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-2">
-            {renderStars(opportunity.rating)}
-            <span className="font-medium">{opportunity.title}</span>
+  const OpportunityCard = ({ opportunity }: { opportunity: DisplayOpportunity }) => {
+    const OriginIcon = getOriginIcon(opportunity.identifiedBy);
+    
+    return (
+      <Card 
+        className="cursor-pointer hover:shadow-md transition-shadow"
+        onClick={() => setSelectedOpportunity(opportunity)}
+      >
+        <CardContent className="p-4 space-y-3">
+          {/* Title */}
+          <h4 className="font-semibold text-base leading-tight">{opportunity.title}</h4>
+          
+          {/* Badges row */}
+          <div className="flex flex-wrap gap-2">
+            {/* Origin badge */}
+            <Badge variant="outline" className="flex items-center gap-1 text-xs">
+              <OriginIcon className="h-3 w-3" />
+              {getAgentLabel(opportunity.identifiedBy)}
+            </Badge>
+            
+            {/* Horizon badge */}
+            <Badge className={cn("text-xs", getHorizonBadgeStyle(opportunity.horizon))}>
+              {getHorizonLabel(opportunity.horizon)}
+            </Badge>
           </div>
-          {getStatusBadge(opportunity.status)}
-        </div>
-        
-        <div className="text-sm text-muted-foreground mb-3">
-          {opportunity.category} · {opportunity.supplier}
-        </div>
-        
-        <div className="grid grid-cols-2 gap-4 mb-3">
-          <div>
-            <div className="text-sm text-muted-foreground">Ahorro</div>
-            <div className="font-semibold text-lg text-green-600 dark:text-green-400">
-              {opportunity.savings.toLocaleString()}€/año
-              <span className="text-sm font-normal ml-1">({opportunity.savingsPercent}%)</span>
+          
+          {/* Description */}
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {opportunity.description}
+          </p>
+          
+          {/* Financial info */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                {formatCurrency(opportunity.savings)}
+              </span>
+              <span className="text-xs text-muted-foreground">/año</span>
             </div>
+            
+            {opportunity.oneTimeRecovery > 0 && (
+              <Badge variant="secondary" className="text-amber-600 dark:text-amber-400">
+                + {formatCurrency(opportunity.oneTimeRecovery)} único
+              </Badge>
+            )}
           </div>
-          <div>
-            <div className="text-sm text-muted-foreground">Esfuerzo</div>
-            {getEffortIndicator(opportunity.effort)}
+          
+          {/* Visual metrics */}
+          <div className="flex gap-3">
+            <MetricBar label="Impacto" value={opportunity.impactScore} color="green" />
+            <MetricBar label="Esfuerzo" value={opportunity.effortScore} color="blue" />
+            <MetricBar label="Riesgo" value={opportunity.riskScore} color="red" />
           </div>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
-          <div>
-            <span className="text-muted-foreground">Confianza: </span>
-            {getConfidenceBadge(opportunity.confidence)}
+          
+          {/* Supplier if exists */}
+          {opportunity.supplier && opportunity.supplier !== 'Varios' && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              <span>{opportunity.supplier}</span>
+            </div>
+          )}
+          
+          {/* Action buttons */}
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" variant="outline" className="text-xs h-7">
+              <Play className="h-3 w-3 mr-1" />
+              Simular
+            </Button>
+            <Button size="sm" variant="outline" className="text-xs h-7">
+              <Clock className="h-3 w-3 mr-1" />
+              En progreso
+            </Button>
           </div>
-          <div>
-            <span className="text-muted-foreground">Riesgo: </span>
-            {getRiskBadge(opportunity.risk)}
-          </div>
-        </div>
-        
-        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-          {opportunity.description}
-        </p>
-        
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline">
-            <Play className="h-3 w-3 mr-1" />
-            Simular escenarios
-          </Button>
-          <Button size="sm" variant="outline">
-            <Clock className="h-3 w-3 mr-1" />
-            Marcar en progreso
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   const MatrixView = () => {
     const getOpportunitiesForCell = (impact: string, effort: string) => {
