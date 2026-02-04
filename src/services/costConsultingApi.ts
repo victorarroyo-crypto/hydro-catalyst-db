@@ -822,3 +822,44 @@ export const resolveDuplicate = async (
   }
   return response.json();
 };
+
+// ============================================================
+// BENCHMARK COMPARISON API
+// ============================================================
+
+export type BenchmarkPosition = 'excellent' | 'good' | 'average' | 'above_market';
+
+export interface BenchmarkCategoryData {
+  category_id: string;
+  category_name: string;
+  your_price: number;
+  benchmark_p25: number;
+  benchmark_median: number;
+  benchmark_p75: number;
+  position: BenchmarkPosition;
+  potential_savings: number;
+  invoice_count: number;
+  unit?: string;
+}
+
+export interface BenchmarkComparisonData {
+  categories: BenchmarkCategoryData[];
+  total_potential_savings: number;
+  categories_above_median: number;
+  categories_excellent: number;
+  last_updated?: string;
+}
+
+/**
+ * Get benchmark comparison data for a project
+ */
+export const getBenchmarkComparison = async (projectId: string): Promise<BenchmarkComparisonData> => {
+  const response = await fetch(
+    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/analytics/benchmark-comparison`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Error fetching benchmark data' }));
+    throw new Error(error.detail || 'Error fetching benchmark comparison');
+  }
+  return response.json();
+};
