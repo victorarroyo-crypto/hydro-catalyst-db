@@ -60,7 +60,8 @@ import {
   Loader2,
   Plus,
   Pencil,
-  Trash2
+  Trash2,
+  FileDown
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { format, isValid, parseISO } from 'date-fns';
@@ -68,12 +69,14 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart } from 'recharts';
-import { useCostInvoices, useCostContracts, useCostAllSuppliers, CostInvoice } from '@/hooks/useCostConsultingData';
+import { useCostContracts, useCostAllSuppliers, CostInvoice } from '@/hooks/useCostConsultingData';
+import { useInvoicesWithDocuments } from '@/hooks/useCostEntitiesWithDocuments';
 import { useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { InvoiceFormModal } from '@/components/cost-consulting/InvoiceFormModal';
 import { FailedDocumentsAlert } from '@/components/cost-consulting/FailedDocumentsAlert';
 import { deleteInvoice } from '@/services/costConsultingApi';
+import { openDocumentUrl } from '@/utils/storageUrlHelper';
 
 // Types for mapped invoice data
 interface InvoiceIssue {
@@ -103,6 +106,8 @@ interface DisplayInvoice {
   linkedContract: string | null;
   issues: InvoiceIssue[];
   recoverableAmount: number;
+  documentUrl?: string | null;
+  documentFilename?: string;
 }
 
 const safeFormatDate = (dateStr: string | null | undefined, pattern: string) => {
@@ -156,7 +161,7 @@ const getComplianceBadge = (compliance: string, issuesCount: number) => {
 const CostConsultingInvoices = () => {
   const { id } = useParams();
   const queryClient = useQueryClient();
-  const { data: rawInvoices = [], isLoading, refetch } = useCostInvoices(id);
+  const { data: rawInvoices = [], isLoading, refetch } = useInvoicesWithDocuments(id);
   const { data: contracts = [] } = useCostContracts(id);
   const { data: suppliers = [] } = useCostAllSuppliers();
   
@@ -262,6 +267,8 @@ const CostConsultingInvoices = () => {
     recoverableAmount: (inv.compliance_issues || []).reduce(
       (sum: number, i: Record<string, unknown>) => sum + ((i.amount as number) || 0), 0
     ),
+    documentUrl: inv.cost_project_documents?.file_url,
+    documentFilename: inv.cost_project_documents?.filename,
   }));
 
   // Derive supplier names and categories from actual data
@@ -653,6 +660,7 @@ const CostConsultingInvoices = () => {
                 <TableHead>Categoría</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Compliance</TableHead>
+                <TableHead className="w-[50px]">PDF</TableHead>
                 <TableHead className="w-[80px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -676,6 +684,21 @@ const CostConsultingInvoices = () => {
                   </TableCell>
                   <TableCell>
                     {getComplianceBadge(invoice.compliance, invoice.issuesCount)}
+                  </TableCell>
+                  <TableCell>
+                    {invoice.documentUrl && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDocumentUrl(invoice.documentUrl);
+                        }}
+                        title={invoice.documentFilename || 'Ver documento'}
+                      >
+                        <FileDown className="h-4 w-4" />
+                      </Button>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm">
@@ -815,6 +838,21 @@ const CostConsultingInvoices = () => {
                         Importe cuestionable: {selectedInvoice.recoverableAmount.toLocaleString('es-ES')}€
                       </p>
                     </div>
+                  </>
+                )}
+
+                {/* Document Link */}
+                {selectedInvoice.documentUrl && (
+                  <>
+                    <Separator />
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => openDocumentUrl(selectedInvoice.documentUrl)}
+                    >
+                      <FileDown className="h-4 w-4 mr-2" />
+                      Ver documento original
+                    </Button>
                   </>
                 )}
 
