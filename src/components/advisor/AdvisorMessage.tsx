@@ -301,10 +301,14 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
             }
             
             // Handle ```flow blocks
+            // NOTE: Some LLMs incorrectly label Mermaid flowcharts as ```flow.
+            // If the content looks like Mermaid, render with Mermaid for a reliable, professional result.
             if (codeClassName.includes('language-flow')) {
+              if (isMermaidContent(codeContent) || /^\s*(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|mindmap|timeline|sankey|xychart|block)\b/i.test(codeContent)) {
+                return <MermaidRenderer content={codeContent} />;
+              }
               return <FlowDiagramRenderer content={codeContent} />;
             }
-            
             // Handle ```chem or ```equation blocks
             if (codeClassName.includes('language-chem') || codeClassName.includes('language-equation')) {
               return <ChemEquation content={codeContent} />;
