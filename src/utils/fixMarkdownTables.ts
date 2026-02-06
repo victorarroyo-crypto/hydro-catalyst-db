@@ -229,20 +229,20 @@ export function formatFlowDiagrams(text: string): string {
   return text;
 }
 
-import { normalizeMarkdownDiagrams } from './normalizeMarkdownDiagrams';
 import { applyContentQualityControl } from './contentQualityControl';
 
 /**
  * Clean and normalize markdown content for better rendering.
  * Uses the centralized quality control pipeline.
+ * 
+ * NOTE: This function does NOT call normalizeMarkdownDiagrams.
+ * Diagram normalization and extraction should be done ONCE in the render pipeline
+ * (in AdvisorMessage or StreamingResponse) to avoid double-processing.
  */
 export function cleanMarkdownContent(text: string): string {
   if (!text) return text;
   
   let cleaned = text;
-  
-  // Step 0: Pre-process diagrams (normalize Mermaid fences, detect unfenced diagrams)
-  cleaned = normalizeMarkdownDiagrams(cleaned);
   
   // Step 1: Apply centralized quality control pipeline
   // This handles: equations, checklists, wide tables, HTML sanitization

@@ -501,8 +501,70 @@ function normalizeReactFlowBlocks(text: string): string {
 }
 
 /**
+ * Extracts ReactFlow blocks from content and returns placeholders.
+ * Similar to extractMermaidBlocks - this makes rendering resilient to Markdown parsing issues.
+ */
+export function extractReactFlowBlocks(text: string): { 
+  processedContent: string; 
+  reactflowBlocks: string[] 
+} {
+  const reactflowBlocks: string[] = [];
+  
+  // Pattern 1: Properly fenced blocks (including indented ones - common in lists)
+  // Handles: ```reactflow, ` ```reactflow, indented fences
+  let processedContent = text.replace(
+    /^[ \t]*```reactflow\s*\n([\s\S]*?)\n[ \t]*```/gim,
+    (match, content) => {
+      const trimmedContent = content.trim();
+      // Validate it looks like JSON with nodes/edges
+      if (trimmedContent.includes('"nodes"') || trimmedContent.includes('"edges"')) {
+        const index = reactflowBlocks.length;
+        reactflowBlocks.push(trimmedContent);
+        return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
+      }
+      return match; // Not valid ReactFlow, keep as-is
+    }
+  );
+  
+  // Pattern 2: Raw JSON blocks with nodes and edges (not inside fences)
+  // Only if we haven't already extracted it
+  if (reactflowBlocks.length === 0) {
+    const jsonPattern = /(?:^|\n)\s*(\{[\s\S]*?"nodes"\s*:\s*\[[\s\S]*?"edges"\s*:\s*\[[\s\S]*?\})\s*(?=\n|$)/g;
+    processedContent = processedContent.replace(jsonPattern, (match, jsonContent) => {
+      try {
+        const parsed = JSON.parse(jsonContent.trim());
+        if (parsed.nodes && Array.isArray(parsed.nodes) && parsed.edges && Array.isArray(parsed.edges)) {
+          const index = reactflowBlocks.length;
+          reactflowBlocks.push(jsonContent.trim());
+          return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
+        }
+      } catch (e) {
+        // Not valid JSON, ignore
+      }
+      return match;
+    });
+  }
+  
+  return { processedContent, reactflowBlocks };
+}
+
+/**
+ * Checks if text is a ReactFlow placeholder and returns the index.
+ */
+export function isReactFlowPlaceholder(text: string): { isPlaceholder: boolean; index: number } {
+  const match = text.match(/^:::reactflow-placeholder-(\d+):::$/);
+  if (match) {
+    return { isPlaceholder: true, index: parseInt(match[1], 10) };
+  }
+  return { isPlaceholder: false, index: -1 };
+}
+
+/**
  * Main pre-processor: normalizes all diagram syntax in Markdown content.
  * Should be called BEFORE passing content to ReactMarkdown.
+ * 
+ * NOTE: This function normalizes raw/malformed diagrams. Extraction of blocks
+ * for placeholder rendering should happen AFTER this in the render pipeline.
  */
 export function normalizeMarkdownDiagrams(text: string): string {
   if (!text) return text;
@@ -512,11 +574,19 @@ export function normalizeMarkdownDiagrams(text: string): string {
   // Step 0: Clean stray backticks FIRST (protects valid fences)
   result = cleanStrayBackticks(result);
   
-  // Step 1: Check if content already has valid reactflow fences
+  // Step 1: De-indent fenced blocks that are inside lists (common LLM issue)
+  // Convert "   ```reactflow" to "```reactflow"
+  result = result.replace(/^([ \t]{1,4})(```(?:reactflow|mermaid|flow|chem|equation))/gim, '$2');
+  result = result.replace(/^([ \t]{1,4})(```)$/gim, '$2');
+  
+  // Step 2: Ensure blank lines around fences for proper Markdown parsing
+  result = result.replace(/([^\n])(```reactflow)/g, '$1\n\n$2');
+  result = result.replace(/(```)\n([^\n])/g, '$1\n\n$2');
+  
+  // Step 3: Check if content already has valid reactflow fences
   const hasValidReactFlow = hasValidReactFlowFences(result);
   
-  // Step 2: Normalize ReactFlow blocks (only if no valid fences)
-  // This function also calls cleanStrayBackticks internally for safety
+  // Step 4: Normalize ReactFlow blocks (only if no valid fences)
   if (!hasValidReactFlow) {
     result = normalizeReactFlowBlocks(result);
   } else {
@@ -531,13 +601,13 @@ export function normalizeMarkdownDiagrams(text: string): string {
     );
   }
   
-  // Step 3: Aggressive fence fixing for Mermaid (handles malformed backticks)
+  // Step 5: Aggressive fence fixing for Mermaid (handles malformed backticks)
   result = aggressiveFenceFixer(result);
   
-  // Step 4: Normalize existing Mermaid fences (case variations, spacing)
+  // Step 6: Normalize existing Mermaid fences (case variations, spacing)
   result = normalizeMermaidFences(result);
   
-  // Step 5: Detect and wrap unfenced Mermaid diagrams
+  // Step 7: Detect and wrap unfenced Mermaid diagrams
   result = wrapUnfencedMermaid(result);
   
   return result;

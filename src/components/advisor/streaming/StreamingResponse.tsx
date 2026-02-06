@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { cn } from '@/lib/utils';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
-import { normalizeMarkdownDiagrams, extractMermaidBlocks } from '@/utils/normalizeMarkdownDiagrams';
+import { normalizeMarkdownDiagrams, extractMermaidBlocks, extractReactFlowBlocks, isReactFlowPlaceholder } from '@/utils/normalizeMarkdownDiagrams';
 import { isMermaidPlaceholder } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from '../FlowDiagramRenderer';
 import { MermaidBlock } from './MermaidBlock';
@@ -35,19 +35,30 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
   const [showCursor, setShowCursor] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const mermaidBlocksRef = useRef<string[]>([]);
+  const reactflowBlocksRef = useRef<string[]>([]);
 
-  // Pre-process: clean markdown, normalize diagrams, then extract mermaid blocks
+  // Pre-process: clean markdown, normalize diagrams, then extract blocks for placeholder rendering
   const processedData = useMemo(() => {
+    // Step 1: Clean markdown content (NO diagram normalization here - moved to next step)
     const cleaned = cleanMarkdownContent(content);
+    
+    // Step 2: Normalize diagrams (only once!)
     const normalized = normalizeMarkdownDiagrams(cleaned);
-    const { processedContent, mermaidBlocks } = extractMermaidBlocks(normalized);
-    return { processedContent, mermaidBlocks };
+    
+    // Step 3: Extract ReactFlow blocks FIRST (they're more specific)
+    const { processedContent: afterReactFlow, reactflowBlocks } = extractReactFlowBlocks(normalized);
+    
+    // Step 4: Extract Mermaid blocks
+    const { processedContent, mermaidBlocks } = extractMermaidBlocks(afterReactFlow);
+    
+    return { processedContent, mermaidBlocks, reactflowBlocks };
   }, [content]);
 
-  // Store mermaid blocks in ref for access in render
+  // Store blocks in refs for access in render
   useEffect(() => {
     mermaidBlocksRef.current = processedData.mermaidBlocks;
-  }, [processedData.mermaidBlocks]);
+    reactflowBlocksRef.current = processedData.reactflowBlocks;
+  }, [processedData.mermaidBlocks, processedData.reactflowBlocks]);
 
   // Update displayed content
   useEffect(() => {
@@ -201,13 +212,33 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
     h3: ({ children }: { children?: React.ReactNode }) => (
       <h3 className="text-base font-semibold text-foreground mt-4 mb-2">{children}</h3>
     ),
-    // Paragraph - check for mermaid placeholders
+    // Paragraph - check for mermaid and reactflow placeholders
     p: ({ children }: { children?: React.ReactNode }) => {
       // Extract text to check for placeholder
       const textContent = React.Children.toArray(children)
         .map(child => (typeof child === 'string' ? child : ''))
         .join('')
         .trim();
+      
+      // Check if this is a ReactFlow placeholder
+      const reactflowCheck = isReactFlowPlaceholder(textContent);
+      if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+        try {
+          const data: ReactFlowData = JSON.parse(reactflowBlocksRef.current[reactflowCheck.index]);
+          return (
+            <ReactFlowProvider>
+              <ReactFlowDiagram data={data} />
+            </ReactFlowProvider>
+          );
+        } catch (e) {
+          console.warn('Invalid ReactFlow JSON in placeholder:', e);
+          return (
+            <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
+              Error en diagrama: {(e as Error).message}
+            </div>
+          );
+        }
+      }
       
       // Check if this is a mermaid placeholder
       const { isPlaceholder, index } = isMermaidPlaceholder(textContent);
