@@ -6,6 +6,7 @@ import { ExternalLink, Wrench, FileText, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
+import { normalizeMarkdownDiagrams } from '@/utils/normalizeMarkdownDiagrams';
 import { isMermaidContent, extractTextFromChildren } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from './FlowDiagramRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
@@ -163,7 +164,7 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
   const [isTyping, setIsTyping] = useState(isStreaming);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  const cleanedContent = cleanMarkdownContent(content);
+  const cleanedContent = normalizeMarkdownDiagrams(cleanMarkdownContent(content));
   
   // Post-processor to catch any missed Mermaid diagrams after render
   useMermaidPostProcessor(containerRef, displayedText, isTyping);
