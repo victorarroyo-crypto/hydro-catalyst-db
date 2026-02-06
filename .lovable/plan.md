@@ -1,40 +1,42 @@
 
+# Plan: Detectar JSON de ReactFlow sin marcador
 
-# Plan: Corregir Renderizado de Diagramas ReactFlow
+## Problema Identificado
 
-## Diagnóstico
-
-El problema es que el LLM está enviando los diagramas ReactFlow en un formato incorrecto:
+El LLM envía el JSON de diagramas **sin ningún prefijo "reactflow"** y sin backticks:
 
 ```
-reactflow { "title": "Tren de tratamiento con segregación...
+2.1 Decisión Estratégica: ¿Segregar o No Segregar?
+
+{
+  "title": "Arbol de decision tecnologica",
+  "direction": "TD",
+  "nodes": [...],
+  "edges": [...]
+}
 ```
 
-Cuando debería enviar:
-```
-```reactflow
-{ "title": "Tren de tratamiento con segregación...
-```
-```
+El normalizador actual solo busca `reactflow { ... }` pero el contenido llega como JSON crudo.
 
-El sistema tiene normalizadores para Mermaid pero **no para ReactFlow**, por lo que el contenido llega como texto plano y ReactMarkdown no lo reconoce como un bloque de código.
+---
 
 ## Solución
 
-Añadir un normalizador que detecte bloques `reactflow` malformados y los convierta al formato correcto.
+Añadir un nuevo patrón que detecte **JSON con estructura de ReactFlow** (objetos que contengan `"nodes"` y `"edges"`) y los envuelva automáticamente en bloques de código.
+
+---
 
 ## Cambios Técnicos
 
-### 1. Modificar `src/utils/normalizeMarkdownDiagrams.ts`
+### Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
 
-Añadir función para detectar y normalizar bloques ReactFlow:
+Actualizar la función `normalizeReactFlowBlocks`:
 
 ```typescript
 function normalizeReactFlowBlocks(text: string): string {
   let result = text;
   
-  // Patrón 1: "reactflow { ... }" todo en una línea o múltiples líneas
-  // sin backticks
+  // Pattern 1: "reactflow { ... }" without backticks
   result = result.replace(
     /(?:^|\n)reactflow\s*(\{[\s\S]*?\})\s*(?=\n|$)/gi,
     (match, jsonContent) => {
@@ -42,12 +44,32 @@ function normalizeReactFlowBlocks(text: string): string {
     }
   );
   
-  // Patrón 2: Bloques con backticks incorrectos (1, 2 o 4 en lugar de 3)
+  // NEW Pattern 2: Raw JSON with ReactFlow structure (has "nodes" and "edges")
+  // This catches JSON objects that look like ReactFlow diagrams but have no prefix
   result = result.replace(
-    /`{1,2}reactflow\s*\n?([\s\S]*?)`{1,2}/gi,
+    /(?:^|\n)(\{\s*\n?\s*"(?:title|direction|nodes)"[\s\S]*?"nodes"\s*:\s*\[[\s\S]*?"edges"\s*:\s*\[[\s\S]*?\]\s*\})/gi,
+    (match, jsonContent) => {
+      // Verify it's valid ReactFlow JSON before wrapping
+      try {
+        const parsed = JSON.parse(jsonContent.trim());
+        if (parsed.nodes && Array.isArray(parsed.nodes) && 
+            parsed.edges && Array.isArray(parsed.edges)) {
+          return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
+        }
+      } catch (e) {
+        // Not valid JSON, return as-is
+      }
+      return match;
+    }
+  );
+  
+  // Pattern 3: Incorrect backtick counts (1, 2)
+  result = result.replace(
+    /`{1,2}reactflow\s*\n?([\s\S]*?)`{1,2}(?!`)/gi,
     (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
   );
   
+  // Pattern 4: Too many backticks (4+)
   result = result.replace(
     /`{4,}reactflow\s*\n?([\s\S]*?)`{4,}/gi,
     (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
@@ -57,54 +79,31 @@ function normalizeReactFlowBlocks(text: string): string {
 }
 ```
 
-Actualizar la función `normalizeMarkdownDiagrams` para incluir ReactFlow:
+---
 
-```typescript
-export function normalizeMarkdownDiagrams(text: string): string {
-  if (!text) return text;
-  
-  let result = text;
-  
-  // Step 1: Aggressive fence fixing
-  result = aggressiveFenceFixer(result);
-  
-  // Step 2: Normalize ReactFlow blocks (NEW)
-  result = normalizeReactFlowBlocks(result);
-  
-  // Step 3: Normalize existing Mermaid fences
-  result = normalizeMermaidFences(result);
-  
-  // Step 4: Detect and wrap unfenced Mermaid diagrams
-  result = wrapUnfencedMermaid(result);
-  
-  return result;
-}
-```
+## Lógica de Detección
 
-### 2. Actualizar `src/components/advisor/AdvisorMessage.tsx`
+La regex busca objetos JSON que:
+1. Empiezan con `{`
+2. Contienen `"nodes": [` 
+3. Contienen `"edges": [`
+4. Terminan con `}`
 
-Asegurar que el contenido pase por el normalizador antes de ser procesado:
+Antes de envolver, se valida que sea JSON válido con la estructura correcta para evitar falsos positivos.
 
-```typescript
-import { normalizeMarkdownDiagrams } from '@/utils/normalizeMarkdownDiagrams';
-
-// En el componente:
-const cleanedContent = cleanMarkdownContent(content);
-const normalizedContent = normalizeMarkdownDiagrams(cleanedContent);
-```
-
-## Resultado Esperado
-
-1. El texto `reactflow { "title": ... }` será detectado
-2. Se convertirá automáticamente a un bloque de código con triple backtick
-3. ReactMarkdown lo reconocerá como `language-reactflow`
-4. El componente `ReactFlowDiagram` lo renderizará correctamente
+---
 
 ## Archivos a Modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/utils/normalizeMarkdownDiagrams.ts` | Añadir `normalizeReactFlowBlocks()` y actualizar función principal |
-| `src/components/advisor/AdvisorMessage.tsx` | Aplicar normalización al contenido |
-| `src/components/advisor/streaming/StreamingResponse.tsx` | Verificar que ya aplica normalización (ya lo hace) |
+| `src/utils/normalizeMarkdownDiagrams.ts` | Añadir patrón para detectar JSON crudo con estructura ReactFlow |
 
+---
+
+## Resultado Esperado
+
+1. El JSON crudo `{ "title": ..., "nodes": [...], "edges": [...] }` será detectado
+2. Se validará que tiene la estructura de ReactFlow
+3. Se envolverá en bloques ` ```reactflow `
+4. ReactMarkdown lo reconocerá y renderizará el diagrama interactivo
