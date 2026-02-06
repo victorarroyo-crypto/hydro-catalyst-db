@@ -501,48 +501,121 @@ function normalizeReactFlowBlocks(text: string): string {
 }
 
 /**
+ * Validates if parsed JSON is a valid ReactFlow structure.
+ */
+function isValidReactFlowStructure(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== 'object') return false;
+  const obj = parsed as Record<string, unknown>;
+  
+  // Must have nodes array
+  if (!Array.isArray(obj.nodes)) return false;
+  
+  // Must have edges array
+  if (!Array.isArray(obj.edges)) return false;
+  
+  // Nodes must have id (basic validation)
+  if (obj.nodes.length > 0) {
+    const firstNode = obj.nodes[0] as Record<string, unknown>;
+    if (!firstNode || typeof firstNode.id === 'undefined') return false;
+  }
+  
+  return true;
+}
+
+/**
  * Extracts ReactFlow blocks from content and returns placeholders.
- * Similar to extractMermaidBlocks - this makes rendering resilient to Markdown parsing issues.
+ * Detects ReactFlow in:
+ * - ```reactflow fences
+ * - ```json fences with valid ReactFlow structure
+ * - ``` fences (no language) with valid ReactFlow structure  
+ * - Raw JSON with nodes/edges structure
+ * 
+ * This makes rendering resilient to Markdown parsing issues.
  */
 export function extractReactFlowBlocks(text: string): { 
   processedContent: string; 
   reactflowBlocks: string[] 
 } {
   const reactflowBlocks: string[] = [];
+  let processedContent = text;
   
-  // Pattern 1: Properly fenced blocks (including indented ones - common in lists)
-  // Handles: ```reactflow, ` ```reactflow, indented fences
-  let processedContent = text.replace(
+  // Pattern 1: Explicit ```reactflow fences (including indented)
+  processedContent = processedContent.replace(
     /^[ \t]*```reactflow\s*\n([\s\S]*?)\n[ \t]*```/gim,
     (match, content) => {
       const trimmedContent = content.trim();
-      // Validate it looks like JSON with nodes/edges
       if (trimmedContent.includes('"nodes"') || trimmedContent.includes('"edges"')) {
         const index = reactflowBlocks.length;
         reactflowBlocks.push(trimmedContent);
+        if (import.meta.env.DEV) {
+          console.debug(`[ReactFlow] Extracted from \`\`\`reactflow fence, index=${index}`);
+        }
         return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
       }
-      return match; // Not valid ReactFlow, keep as-is
+      return match;
     }
   );
   
-  // Pattern 2: Raw JSON blocks with nodes and edges (not inside fences)
-  // Only if we haven't already extracted it
-  if (reactflowBlocks.length === 0) {
-    const jsonPattern = /(?:^|\n)\s*(\{[\s\S]*?"nodes"\s*:\s*\[[\s\S]*?"edges"\s*:\s*\[[\s\S]*?\})\s*(?=\n|$)/g;
-    processedContent = processedContent.replace(jsonPattern, (match, jsonContent) => {
+  // Pattern 2: Generic fences (```json, ```, ```javascript) containing ReactFlow JSON
+  // Match any fenced code block and check if content is valid ReactFlow
+  processedContent = processedContent.replace(
+    /^[ \t]*```([a-zA-Z0-9_-]*)\s*\n([\s\S]*?)\n[ \t]*```/gim,
+    (match, lang, content) => {
+      const trimmedContent = content.trim();
+      
+      // Skip if already processed as reactflow
+      if (lang?.toLowerCase() === 'reactflow') return match;
+      
+      // Quick filter: must contain "nodes" and "edges" as substrings
+      if (!trimmedContent.includes('"nodes"') || !trimmedContent.includes('"edges"')) {
+        return match;
+      }
+      
+      // Try to parse and validate
       try {
-        const parsed = JSON.parse(jsonContent.trim());
-        if (parsed.nodes && Array.isArray(parsed.nodes) && parsed.edges && Array.isArray(parsed.edges)) {
+        const parsed = JSON.parse(trimmedContent);
+        if (isValidReactFlowStructure(parsed)) {
           const index = reactflowBlocks.length;
-          reactflowBlocks.push(jsonContent.trim());
+          reactflowBlocks.push(trimmedContent);
+          if (import.meta.env.DEV) {
+            console.debug(`[ReactFlow] Extracted from \`\`\`${lang || '(no lang)'} fence, index=${index}`);
+          }
           return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
         }
       } catch (e) {
-        // Not valid JSON, ignore
+        // Not valid JSON, keep as-is
       }
       return match;
-    });
+    }
+  );
+  
+  // Pattern 3: Raw JSON blocks with nodes and edges (not inside fences)
+  // Runs regardless of previous extractions to catch multiple diagrams
+  const jsonPattern = /(?:^|\n)\s*(\{[\s\S]*?"nodes"\s*:\s*\[[\s\S]*?"edges"\s*:\s*\[[\s\S]*?\})\s*(?=\n|$)/g;
+  processedContent = processedContent.replace(jsonPattern, (match, jsonContent) => {
+    const trimmedJson = jsonContent.trim();
+    
+    // Skip if already inside a placeholder
+    if (match.includes(':::reactflow-placeholder-')) return match;
+    
+    try {
+      const parsed = JSON.parse(trimmedJson);
+      if (isValidReactFlowStructure(parsed)) {
+        const index = reactflowBlocks.length;
+        reactflowBlocks.push(trimmedJson);
+        if (import.meta.env.DEV) {
+          console.debug(`[ReactFlow] Extracted raw JSON, index=${index}`);
+        }
+        return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
+      }
+    } catch (e) {
+      // Not valid JSON, ignore
+    }
+    return match;
+  });
+  
+  if (import.meta.env.DEV && reactflowBlocks.length > 0) {
+    console.debug(`[ReactFlow] Total blocks extracted: ${reactflowBlocks.length}`);
   }
   
   return { processedContent, reactflowBlocks };
