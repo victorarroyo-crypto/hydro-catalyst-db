@@ -6,7 +6,7 @@ import { ExternalLink, Wrench, FileText, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/advisorChat';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
-import { normalizeMarkdownDiagrams } from '@/utils/normalizeMarkdownDiagrams';
+import { normalizeMarkdownDiagrams, extractReactFlowBlocks, isReactFlowPlaceholder } from '@/utils/normalizeMarkdownDiagrams';
 import { isMermaidContent, extractTextFromChildren } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from './FlowDiagramRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
@@ -163,16 +163,23 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(isStreaming);
   const containerRef = useRef<HTMLDivElement>(null);
+  const reactflowBlocksRef = useRef<string[]>([]);
   
-  const cleanedContent = normalizeMarkdownDiagrams(cleanMarkdownContent(content));
+  // Pre-process content: clean, normalize, then extract ReactFlow blocks
+  const { cleanedContent, reactflowBlocks } = React.useMemo(() => {
+    const cleaned = cleanMarkdownContent(content);
+    const normalized = normalizeMarkdownDiagrams(cleaned);
+    const { processedContent, reactflowBlocks } = extractReactFlowBlocks(normalized);
+    return { cleanedContent: processedContent, reactflowBlocks };
+  }, [content]);
+  
+  // Store ReactFlow blocks in ref for access during render
+  React.useEffect(() => {
+    reactflowBlocksRef.current = reactflowBlocks;
+  }, [reactflowBlocks]);
   
   // Post-processor to catch any missed Mermaid diagrams after render
   useMermaidPostProcessor(containerRef, displayedText, isTyping);
-  
-  // Extract water balance sections for special rendering
-  const contentSegments = React.useMemo(() => {
-    return extractWaterBalanceSections(displayedText);
-  }, [displayedText]);
   
   // Simulated typing effect
   useEffect(() => {
@@ -199,6 +206,11 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
     
     return () => clearInterval(interval);
   }, [cleanedContent, isStreaming]);
+  
+  // Extract water balance sections for special rendering
+  const contentSegments = React.useMemo(() => {
+    return extractWaterBalanceSections(displayedText);
+  }, [displayedText]);
   
   // Render function for markdown content (used for non-water-balance segments)
   const renderMarkdownContent = (text: string, key?: string) => (
@@ -229,9 +241,29 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
           </h4>
         ),
         // Normal paragraphs with better spacing and line-height
-        // Also detect unformatted Mermaid diagrams
+        // Also detect ReactFlow placeholders and unformatted Mermaid diagrams
         p: ({ children }) => {
           const textContent = extractTextFromChildren(children);
+          
+          // Check if this is a ReactFlow placeholder
+          const reactflowCheck = isReactFlowPlaceholder(textContent.trim());
+          if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+            try {
+              const data: ReactFlowData = JSON.parse(reactflowBlocksRef.current[reactflowCheck.index]);
+              return (
+                <ReactFlowProvider>
+                  <ReactFlowDiagram data={data} />
+                </ReactFlowProvider>
+              );
+            } catch (e) {
+              console.warn('Invalid ReactFlow JSON in placeholder:', e);
+              return (
+                <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
+                  Error en diagrama: {(e as Error).message}
+                </div>
+              );
+            }
+          }
           
           // Check if this paragraph contains a Mermaid diagram without code fences
           if (isMermaidContent(textContent)) {
