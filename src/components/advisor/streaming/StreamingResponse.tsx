@@ -8,6 +8,8 @@ import { normalizeMarkdownDiagrams, extractMermaidBlocks } from '@/utils/normali
 import { isMermaidPlaceholder } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from '../FlowDiagramRenderer';
 import { MermaidBlock } from './MermaidBlock';
+import { ReactFlowDiagram, type ReactFlowData } from '../diagrams/ReactFlowDiagram';
+import { ReactFlowProvider } from '@xyflow/react';
 
 interface StreamingResponseProps {
   content: string;
@@ -112,7 +114,7 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
         {children}
       </a>
     ),
-    // Custom code block styling - detect flow and chem types
+    // Custom code block styling - detect reactflow, flow and chem types
     pre: ({ children }: { children?: React.ReactNode }) => {
       // Extract the code element
       const codeElement = React.Children.toArray(children).find(
@@ -123,6 +125,25 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
       if (codeElement) {
         const codeClassName = codeElement.props?.className || '';
         const codeContent = String(codeElement.props?.children || '').trim();
+        
+        // Handle ```reactflow blocks - Professional interactive diagrams
+        if (codeClassName.includes('language-reactflow')) {
+          try {
+            const data: ReactFlowData = JSON.parse(codeContent);
+            return (
+              <ReactFlowProvider>
+                <ReactFlowDiagram data={data} />
+              </ReactFlowProvider>
+            );
+          } catch (e) {
+            console.warn('Invalid reactflow JSON:', e);
+            return (
+              <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
+                Error en diagrama: {(e as Error).message}
+              </div>
+            );
+          }
+        }
         
         // Handle ```mermaid blocks (shouldn't reach here due to extraction, but just in case)
         if (codeClassName.includes('language-mermaid')) {
