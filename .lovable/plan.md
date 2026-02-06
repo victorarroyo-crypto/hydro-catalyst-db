@@ -1,109 +1,123 @@
 
-# Plan: Detectar JSON de ReactFlow sin marcador
+
+# Plan: Proteger bloques ReactFlow bien formateados
 
 ## Problema Identificado
 
-El LLM envía el JSON de diagramas **sin ningún prefijo "reactflow"** y sin backticks:
-
+La imagen muestra que el LLM envía el bloque correctamente:
 ```
-2.1 Decisión Estratégica: ¿Segregar o No Segregar?
-
+```reactflow
 {
-  "title": "Arbol de decision tecnologica",
-  "direction": "TD",
+  "title": "...",
   "nodes": [...],
   "edges": [...]
 }
 ```
+```
 
-El normalizador actual solo busca `reactflow { ... }` pero el contenido llega como JSON crudo.
+Pero aparece como **texto plano** en el chat. Esto ocurre porque:
 
----
+1. Hay un backtick suelto antes del bloque (puede venir del LLM)
+2. El `aggressiveFenceFixer` está procesando backticks de forma muy agresiva y puede estar rompiendo bloques válidos
+3. El normalizador no protege bloques ReactFlow que ya están correctamente formateados
 
 ## Solución
 
-Añadir un nuevo patrón que detecte **JSON con estructura de ReactFlow** (objetos que contengan `"nodes"` y `"edges"`) y los envuelva automáticamente en bloques de código.
+Modificar la lógica para:
+1. Detectar y limpiar backticks sueltos antes de bloques de codigo
+2. Proteger bloques ReactFlow ya bien formateados (que ya tienen ` ```reactflow `)
+3. Solo aplicar normalización a bloques malformados
 
----
-
-## Cambios Técnicos
+## Cambios Tecnicos
 
 ### Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
 
-Actualizar la función `normalizeReactFlowBlocks`:
+#### 1. Agregar funcion para limpiar backticks sueltos
 
 ```typescript
-function normalizeReactFlowBlocks(text: string): string {
+function cleanStrayBackticks(text: string): string {
+  // Remove isolated backticks that appear before code fences
+  // Pattern: single backtick on its own line followed by a code fence
   let result = text;
   
-  // Pattern 1: "reactflow { ... }" without backticks
-  result = result.replace(
-    /(?:^|\n)reactflow\s*(\{[\s\S]*?\})\s*(?=\n|$)/gi,
-    (match, jsonContent) => {
-      return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
-    }
-  );
+  // Single backtick on its own line before a fence
+  result = result.replace(/^`\s*\n(```)/gm, '$1');
+  result = result.replace(/\n`\s*\n(```)/g, '\n$1');
   
-  // NEW Pattern 2: Raw JSON with ReactFlow structure (has "nodes" and "edges")
-  // This catches JSON objects that look like ReactFlow diagrams but have no prefix
-  result = result.replace(
-    /(?:^|\n)(\{\s*\n?\s*"(?:title|direction|nodes)"[\s\S]*?"nodes"\s*:\s*\[[\s\S]*?"edges"\s*:\s*\[[\s\S]*?\]\s*\})/gi,
-    (match, jsonContent) => {
-      // Verify it's valid ReactFlow JSON before wrapping
-      try {
-        const parsed = JSON.parse(jsonContent.trim());
-        if (parsed.nodes && Array.isArray(parsed.nodes) && 
-            parsed.edges && Array.isArray(parsed.edges)) {
-          return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
-        }
-      } catch (e) {
-        // Not valid JSON, return as-is
-      }
-      return match;
-    }
-  );
-  
-  // Pattern 3: Incorrect backtick counts (1, 2)
-  result = result.replace(
-    /`{1,2}reactflow\s*\n?([\s\S]*?)`{1,2}(?!`)/gi,
-    (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
-  );
-  
-  // Pattern 4: Too many backticks (4+)
-  result = result.replace(
-    /`{4,}reactflow\s*\n?([\s\S]*?)`{4,}/gi,
-    (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
-  );
+  // Single/double backticks immediately before fence (no newline)
+  result = result.replace(/`{1,2}(```(?:reactflow|mermaid|flow|chem|equation))/gi, '$1');
   
   return result;
 }
 ```
 
----
+#### 2. Modificar normalizeReactFlowBlocks para NO procesar bloques ya validos
 
-## Lógica de Detección
+```typescript
+function normalizeReactFlowBlocks(text: string): string {
+  let result = text;
+  
+  // First: clean stray backticks
+  result = cleanStrayBackticks(result);
+  
+  // Skip if there are already valid reactflow fences
+  // (they will be handled by ReactMarkdown correctly)
+  const hasValidFences = /```reactflow\s*\n[\s\S]*?\n```/gi.test(result);
+  
+  // Pattern 1: Only apply if no valid fences exist
+  if (!hasValidFences) {
+    result = result.replace(
+      /(?:^|\n)reactflow\s*(\{[\s\S]*?\})\s*(?=\n|$)/gi,
+      (match, jsonContent) => {
+        return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
+      }
+    );
+  }
+  
+  // Pattern 2: Raw JSON detection - only if no valid fences
+  if (!hasValidFences) {
+    // ... existing JSON detection logic
+  }
+  
+  // ... rest of patterns
+}
+```
 
-La regex busca objetos JSON que:
-1. Empiezan con `{`
-2. Contienen `"nodes": [` 
-3. Contienen `"edges": [`
-4. Terminan con `}`
+#### 3. Actualizar orden de operaciones en normalizeMarkdownDiagrams
 
-Antes de envolver, se valida que sea JSON válido con la estructura correcta para evitar falsos positivos.
-
----
+```typescript
+export function normalizeMarkdownDiagrams(text: string): string {
+  if (!text) return text;
+  
+  let result = text;
+  
+  // Step 0: Clean stray backticks FIRST (NEW)
+  result = cleanStrayBackticks(result);
+  
+  // Step 1: Check if content already has valid reactflow fences
+  const hasValidReactFlow = /```reactflow\s*\n[\s\S]*?\n```/gi.test(result);
+  
+  // Step 2: Only normalize ReactFlow if no valid fences
+  if (!hasValidReactFlow) {
+    result = normalizeReactFlowBlocks(result);
+  }
+  
+  // Step 3: Aggressive fence fixing (for Mermaid, etc)
+  result = aggressiveFenceFixer(result);
+  
+  // ... rest of steps
+}
+```
 
 ## Archivos a Modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/utils/normalizeMarkdownDiagrams.ts` | Añadir patrón para detectar JSON crudo con estructura ReactFlow |
-
----
+| `src/utils/normalizeMarkdownDiagrams.ts` | Agregar limpieza de backticks sueltos y proteger bloques validos |
 
 ## Resultado Esperado
 
-1. El JSON crudo `{ "title": ..., "nodes": [...], "edges": [...] }` será detectado
-2. Se validará que tiene la estructura de ReactFlow
-3. Se envolverá en bloques ` ```reactflow `
-4. ReactMarkdown lo reconocerá y renderizará el diagrama interactivo
+1. Backticks sueltos antes de bloques seran eliminados
+2. Bloques ReactFlow correctamente formateados pasaran intactos a ReactMarkdown
+3. Solo se aplicara normalizacion cuando realmente sea necesario (JSON crudo sin cercas)
+
