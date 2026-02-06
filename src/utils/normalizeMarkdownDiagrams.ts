@@ -82,6 +82,26 @@ function isMermaidContent(line: string): boolean {
 }
 
 /**
+ * Cleans stray backticks that appear before code fences.
+ * LLMs sometimes emit isolated backticks that break parsing.
+ */
+function cleanStrayBackticks(text: string): string {
+  let result = text;
+  
+  // Single backtick on its own line before a fence
+  result = result.replace(/^`\s*\n(```)/gm, '$1');
+  result = result.replace(/\n`\s*\n(```)/g, '\n$1');
+  
+  // Single/double backticks immediately before fence (no newline)
+  result = result.replace(/`{1,2}(```(?:reactflow|mermaid|flow|chem|equation))/gi, '$1');
+  
+  // Backtick followed by space/newline then fence
+  result = result.replace(/`\s+(```(?:reactflow|mermaid|flow|chem|equation))/gi, '$1');
+  
+  return result;
+}
+
+/**
  * AGGRESSIVE fence fixer - handles ALL malformed backtick patterns.
  * This is the first line of defense.
  */
@@ -357,93 +377,115 @@ function findJsonEnd(text: string, startIndex: number): number {
 }
 
 /**
+ * Checks if text already contains valid ReactFlow fences.
+ */
+function hasValidReactFlowFences(text: string): boolean {
+  // Match properly fenced reactflow blocks with balanced opening/closing
+  return /```reactflow\s*\n[\s\S]*?\n```/gi.test(text);
+}
+
+/**
  * Normalizes malformed ReactFlow blocks to proper fenced format.
  * Handles: unfenced "reactflow { ... }" and incorrect backtick counts.
+ * IMPORTANT: Does NOT process blocks that are already correctly fenced.
  */
 function normalizeReactFlowBlocks(text: string): string {
   let result = text;
   
+  // First: Clean stray backticks that could break parsing
+  result = cleanStrayBackticks(result);
+  
+  // If there are already valid ReactFlow fences, skip most normalization
+  // to avoid breaking well-formatted content
+  const hasValidFences = hasValidReactFlowFences(result);
+  
   // Pattern 1: "reactflow { ... }" without backticks (single or multi-line JSON)
-  result = result.replace(
-    /(?:^|\n)reactflow\s*(\{[\s\S]*?\})\s*(?=\n|$)/gi,
-    (match, jsonContent) => {
-      return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
-    }
-  );
+  // Only apply if no valid fences exist
+  if (!hasValidFences) {
+    result = result.replace(
+      /(?:^|\n)reactflow\s*(\{[\s\S]*?\})\s*(?=\n|$)/gi,
+      (match, jsonContent) => {
+        return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
+      }
+    );
+  }
   
   // Pattern 2: Raw JSON with ReactFlow structure (has "nodes" and "edges")
-  // Find JSON objects that start at the beginning of a line
-  const lines = result.split('\n');
-  const newLines: string[] = [];
-  let i = 0;
-  
-  while (i < lines.length) {
-    const line = lines[i];
-    const trimmed = line.trim();
+  // Only apply if no valid fences exist
+  if (!hasValidFences) {
+    const lines = result.split('\n');
+    const newLines: string[] = [];
+    let i = 0;
     
-    // Check if this line starts a JSON object (just "{" or "{ ...")
-    if (trimmed === '{' || trimmed.startsWith('{"')) {
-      // Find the rest of the JSON by looking for balanced braces
-      const startLineIndex = i;
-      let jsonText = '';
-      let foundEnd = false;
+    while (i < lines.length) {
+      const line = lines[i];
+      const trimmed = line.trim();
       
-      for (let j = i; j < lines.length && !foundEnd; j++) {
-        jsonText += (j > i ? '\n' : '') + lines[j];
+      // Check if this line starts a JSON object (just "{" or "{ ...")
+      if (trimmed === '{' || trimmed.startsWith('{"')) {
+        // Find the rest of the JSON by looking for balanced braces
+        const startLineIndex = i;
+        let jsonText = '';
+        let foundEnd = false;
         
-        // Check if we have balanced braces
-        const endIndex = findJsonEnd(jsonText, 0);
-        if (endIndex !== -1) {
-          foundEnd = true;
-          const possibleJson = jsonText.substring(0, endIndex + 1);
+        for (let j = i; j < lines.length && !foundEnd; j++) {
+          jsonText += (j > i ? '\n' : '') + lines[j];
           
-          // Check if this looks like ReactFlow
-          if (possibleJson.includes('"nodes"') && possibleJson.includes('"edges"')) {
-            try {
-              const parsed = JSON.parse(possibleJson);
-              if (parsed.nodes && Array.isArray(parsed.nodes) && 
-                  parsed.edges && Array.isArray(parsed.edges)) {
-                // It's ReactFlow! Wrap it
-                newLines.push('```reactflow');
-                newLines.push(possibleJson);
-                newLines.push('```');
-                
-                // Add any remaining content after the JSON on the same line
-                const remaining = jsonText.substring(endIndex + 1).trim();
-                if (remaining) {
-                  newLines.push(remaining);
+          // Check if we have balanced braces
+          const endIndex = findJsonEnd(jsonText, 0);
+          if (endIndex !== -1) {
+            foundEnd = true;
+            const possibleJson = jsonText.substring(0, endIndex + 1);
+            
+            // Check if this looks like ReactFlow
+            if (possibleJson.includes('"nodes"') && possibleJson.includes('"edges"')) {
+              try {
+                const parsed = JSON.parse(possibleJson);
+                if (parsed.nodes && Array.isArray(parsed.nodes) && 
+                    parsed.edges && Array.isArray(parsed.edges)) {
+                  // It's ReactFlow! Wrap it
+                  newLines.push('```reactflow');
+                  newLines.push(possibleJson);
+                  newLines.push('```');
+                  
+                  // Add any remaining content after the JSON on the same line
+                  const remaining = jsonText.substring(endIndex + 1).trim();
+                  if (remaining) {
+                    newLines.push(remaining);
+                  }
+                  
+                  i = j + 1;
+                  continue;
                 }
-                
-                i = j + 1;
-                continue;
+              } catch (e) {
+                // Not valid JSON
               }
-            } catch (e) {
-              // Not valid JSON
             }
+            
+            // Not ReactFlow, add lines as-is
+            for (let k = startLineIndex; k <= j; k++) {
+              newLines.push(lines[k]);
+            }
+            i = j + 1;
           }
-          
-          // Not ReactFlow, add lines as-is
-          for (let k = startLineIndex; k <= j; k++) {
-            newLines.push(lines[k]);
-          }
-          i = j + 1;
         }
-      }
-      
-      if (!foundEnd) {
-        // No balanced JSON found, just add the line
+        
+        if (!foundEnd) {
+          // No balanced JSON found, just add the line
+          newLines.push(line);
+          i++;
+        }
+      } else {
         newLines.push(line);
         i++;
       }
-    } else {
-      newLines.push(line);
-      i++;
     }
+    
+    result = newLines.join('\n');
   }
   
-  result = newLines.join('\n');
-  
   // Pattern 3: Incorrect backtick counts (1, 2 instead of 3)
+  // Always fix these as they're clearly malformed
   result = result.replace(
     /`{1,2}reactflow\s*\n?([\s\S]*?)`{1,2}(?!`)/gi,
     (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
@@ -467,16 +509,35 @@ export function normalizeMarkdownDiagrams(text: string): string {
   
   let result = text;
   
-  // Step 1: Aggressive fence fixing (handles ALL malformed backtick patterns)
+  // Step 0: Clean stray backticks FIRST (protects valid fences)
+  result = cleanStrayBackticks(result);
+  
+  // Step 1: Check if content already has valid reactflow fences
+  const hasValidReactFlow = hasValidReactFlowFences(result);
+  
+  // Step 2: Normalize ReactFlow blocks (only if no valid fences)
+  // This function also calls cleanStrayBackticks internally for safety
+  if (!hasValidReactFlow) {
+    result = normalizeReactFlowBlocks(result);
+  } else {
+    // Still fix backtick counts even if valid fences exist
+    result = result.replace(
+      /`{1,2}reactflow\s*\n?([\s\S]*?)`{1,2}(?!`)/gi,
+      (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
+    );
+    result = result.replace(
+      /`{4,}reactflow\s*\n?([\s\S]*?)`{4,}/gi,
+      (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
+    );
+  }
+  
+  // Step 3: Aggressive fence fixing for Mermaid (handles malformed backticks)
   result = aggressiveFenceFixer(result);
   
-  // Step 2: Normalize ReactFlow blocks (unfenced or malformed)
-  result = normalizeReactFlowBlocks(result);
-  
-  // Step 3: Normalize existing Mermaid fences (case variations, spacing)
+  // Step 4: Normalize existing Mermaid fences (case variations, spacing)
   result = normalizeMermaidFences(result);
   
-  // Step 4: Detect and wrap unfenced Mermaid diagrams
+  // Step 5: Detect and wrap unfenced Mermaid diagrams
   result = wrapUnfencedMermaid(result);
   
   return result;
