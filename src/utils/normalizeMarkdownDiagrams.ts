@@ -318,6 +318,45 @@ export function extractMermaidBlocks(text: string): {
 }
 
 /**
+ * Finds the end of a JSON object by balancing braces.
+ * Returns the index of the closing brace, or -1 if not found.
+ */
+function findJsonEnd(text: string, startIndex: number): number {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  
+  for (let i = startIndex; i < text.length; i++) {
+    const char = text[i];
+    
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    
+    if (char === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    
+    if (inString) continue;
+    
+    if (char === '{') depth++;
+    if (char === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  
+  return -1;
+}
+
+/**
  * Normalizes malformed ReactFlow blocks to proper fenced format.
  * Handles: unfenced "reactflow { ... }" and incorrect backtick counts.
  */
@@ -333,23 +372,76 @@ function normalizeReactFlowBlocks(text: string): string {
   );
   
   // Pattern 2: Raw JSON with ReactFlow structure (has "nodes" and "edges")
-  // This catches JSON objects that look like ReactFlow diagrams but have no prefix
-  result = result.replace(
-    /(?:^|\n)(\{\s*\n?\s*"(?:title|direction|nodes)"[\s\S]*?"nodes"\s*:\s*\[[\s\S]*?"edges"\s*:\s*\[[\s\S]*?\]\s*\})/gi,
-    (match, jsonContent) => {
-      // Verify it's valid ReactFlow JSON before wrapping
-      try {
-        const parsed = JSON.parse(jsonContent.trim());
-        if (parsed.nodes && Array.isArray(parsed.nodes) && 
-            parsed.edges && Array.isArray(parsed.edges)) {
-          return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
+  // Find JSON objects that start at the beginning of a line
+  const lines = result.split('\n');
+  const newLines: string[] = [];
+  let i = 0;
+  
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    // Check if this line starts a JSON object (just "{" or "{ ...")
+    if (trimmed === '{' || trimmed.startsWith('{"')) {
+      // Find the rest of the JSON by looking for balanced braces
+      const startLineIndex = i;
+      let jsonText = '';
+      let foundEnd = false;
+      
+      for (let j = i; j < lines.length && !foundEnd; j++) {
+        jsonText += (j > i ? '\n' : '') + lines[j];
+        
+        // Check if we have balanced braces
+        const endIndex = findJsonEnd(jsonText, 0);
+        if (endIndex !== -1) {
+          foundEnd = true;
+          const possibleJson = jsonText.substring(0, endIndex + 1);
+          
+          // Check if this looks like ReactFlow
+          if (possibleJson.includes('"nodes"') && possibleJson.includes('"edges"')) {
+            try {
+              const parsed = JSON.parse(possibleJson);
+              if (parsed.nodes && Array.isArray(parsed.nodes) && 
+                  parsed.edges && Array.isArray(parsed.edges)) {
+                // It's ReactFlow! Wrap it
+                newLines.push('```reactflow');
+                newLines.push(possibleJson);
+                newLines.push('```');
+                
+                // Add any remaining content after the JSON on the same line
+                const remaining = jsonText.substring(endIndex + 1).trim();
+                if (remaining) {
+                  newLines.push(remaining);
+                }
+                
+                i = j + 1;
+                continue;
+              }
+            } catch (e) {
+              // Not valid JSON
+            }
+          }
+          
+          // Not ReactFlow, add lines as-is
+          for (let k = startLineIndex; k <= j; k++) {
+            newLines.push(lines[k]);
+          }
+          i = j + 1;
         }
-      } catch (e) {
-        // Not valid JSON, return as-is
       }
-      return match;
+      
+      if (!foundEnd) {
+        // No balanced JSON found, just add the line
+        newLines.push(line);
+        i++;
+      }
+    } else {
+      newLines.push(line);
+      i++;
     }
-  );
+  }
+  
+  result = newLines.join('\n');
   
   // Pattern 3: Incorrect backtick counts (1, 2 instead of 3)
   result = result.replace(
