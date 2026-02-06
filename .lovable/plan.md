@@ -1,216 +1,110 @@
 
-# Plan: Componente CostDashboard - Dashboard Analítico Completo
 
-## Resumen
+# Plan: Corregir Renderizado de Diagramas ReactFlow
 
-Crear un componente `CostDashboard` que visualice los datos analíticos de un proyecto de Cost Consulting usando gráficos de Recharts. El dashboard consumirá el endpoint `GET /api/cost-consulting/projects/{projectId}/dashboard` y mostrará KPIs principales junto con tres vistas de gráficos intercambiables.
+## Diagnóstico
 
----
+El problema es que el LLM está enviando los diagramas ReactFlow en un formato incorrecto:
 
-## Estructura de Archivos
-
-```text
-src/
-├── components/cost-consulting/
-│   └── CostDashboard.tsx           ← Componente principal (CREAR)
-├── services/
-│   └── costConsultingApi.ts        ← Añadir función getDashboard()
+```
+reactflow { "title": "Tren de tratamiento con segregación...
 ```
 
----
+Cuando debería enviar:
+```
+```reactflow
+{ "title": "Tren de tratamiento con segregación...
+```
+```
 
-## Implementación Detallada
+El sistema tiene normalizadores para Mermaid pero **no para ReactFlow**, por lo que el contenido llega como texto plano y ReactMarkdown no lo reconoce como un bloque de código.
 
-### 1. Servicio API (costConsultingApi.ts)
+## Solución
 
-Añadir la función para consumir el endpoint de dashboard:
+Añadir un normalizador que detecte bloques `reactflow` malformados y los convierta al formato correcto.
+
+## Cambios Técnicos
+
+### 1. Modificar `src/utils/normalizeMarkdownDiagrams.ts`
+
+Añadir función para detectar y normalizar bloques ReactFlow:
 
 ```typescript
-// Tipos para Dashboard
-export interface DashboardSummary {
-  total_spend: number;
-  total_savings_identified: number;
-  savings_pct: number;
-  opportunities_count: number;
-  quick_wins_count: number;
-  invoice_count: number;
-  supplier_count: number;
-  duplicate_candidates: number;
-  potential_duplicate_savings: number;
-}
-
-export interface SpendByCategory {
-  category_name: string;
-  total_spend: number;
-  pct_of_total: number;
-  benchmark_comparison: 'excellent' | 'good' | 'average' | 'above_market';
-}
-
-export interface SpendBySupplier {
-  supplier_name: string;
-  total_spend: number;
-  pct_of_total: number;
-  invoice_count: number;
-  risk_flags: { 
-    single_source: boolean; 
-    no_contract: boolean; 
-    high_concentration: boolean; 
-  };
-}
-
-export interface TimelinePoint {
-  period: string;
-  total_spend: number;
-  invoice_count: number;
-  top_category: string;
-}
-
-export interface DashboardData {
-  summary: DashboardSummary;
-  spend_by_category: SpendByCategory[];
-  spend_by_supplier: SpendBySupplier[];
-  timeline: TimelinePoint[];
-  opportunity_matrix?: Array<Record<string, unknown>>;
-}
-
-export const getDashboard = async (projectId: string): Promise<DashboardData> => {
-  const response = await fetch(
-    `${RAILWAY_URL}/api/cost-consulting/projects/${projectId}/dashboard`
+function normalizeReactFlowBlocks(text: string): string {
+  let result = text;
+  
+  // Patrón 1: "reactflow { ... }" todo en una línea o múltiples líneas
+  // sin backticks
+  result = result.replace(
+    /(?:^|\n)reactflow\s*(\{[\s\S]*?\})\s*(?=\n|$)/gi,
+    (match, jsonContent) => {
+      return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
+    }
   );
-  if (!response.ok) throw new Error('Error fetching dashboard data');
-  return response.json();
-};
-```
-
----
-
-### 2. Componente CostDashboard
-
-#### 2.1 Estructura del Componente
-
-```typescript
-interface CostDashboardProps {
-  projectId: string;
+  
+  // Patrón 2: Bloques con backticks incorrectos (1, 2 o 4 en lugar de 3)
+  result = result.replace(
+    /`{1,2}reactflow\s*\n?([\s\S]*?)`{1,2}/gi,
+    (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
+  );
+  
+  result = result.replace(
+    /`{4,}reactflow\s*\n?([\s\S]*?)`{4,}/gi,
+    (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
+  );
+  
+  return result;
 }
-
-export const CostDashboard: React.FC<CostDashboardProps> = ({ projectId }) => {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['cost-dashboard', projectId],
-    queryFn: () => getDashboard(projectId),
-    enabled: !!projectId,
-  });
-
-  // ... render
-};
 ```
 
-#### 2.2 Subcomponentes Internos
-
-| Componente | Función |
-|------------|---------|
-| `DashboardKPICards` | 4 tarjetas: Gasto Total, Ahorro Potencial, % Ahorro, Oportunidades |
-| `SpendByCategoryChart` | Gráfico de barras horizontales con indicador de benchmark |
-| `SpendBySupplierChart` | Gráfico de barras verticales con flags de riesgo en tooltip |
-| `SpendTimelineChart` | Gráfico de líneas temporal con área |
-
-#### 2.3 Layout Visual
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                    ANÁLISIS DE COSTES                       │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │
-│  │ €425,000 │ │ €38,500  │ │   9.1%   │ │    12    │       │
-│  │  Gasto   │ │  Ahorro  │ │ % Ahorro │ │ Oportunid│       │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘       │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ [Categorías] [Proveedores] [Timeline]               │   │
-│  ├─────────────────────────────────────────────────────┤   │
-│  │                                                     │   │
-│  │            < Gráfico activo aquí >                  │   │
-│  │                                                     │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-### 3. Detalles de Gráficos (Recharts)
-
-#### 3.1 SpendByCategoryChart
-- **Tipo**: `BarChart` horizontal (layout="vertical")
-- **Color de barras**: Dinámico según `benchmark_comparison`:
-  - `excellent`: #8cb63c (verde)
-  - `good`: #32b4cd (azul acento)
-  - `average`: #ffa720 (warning)
-  - `above_market`: #ef4444 (rojo)
-- **Tooltip**: Muestra % del total y comparación benchmark
-
-#### 3.2 SpendBySupplierChart
-- **Tipo**: `BarChart` vertical
-- **Color**: #307177 (principal)
-- **Tooltip personalizado**: Muestra flags de riesgo con iconos
-
-#### 3.3 SpendTimelineChart
-- **Tipo**: `LineChart` con `Area` para el relleno
-- **Eje X**: Periodos (meses)
-- **Eje Y**: Gasto total
-- **Color área**: #32b4cd con opacidad 0.3
-- **Línea**: #307177
-
----
-
-### 4. Paleta de Colores (Constantes)
+Actualizar la función `normalizeMarkdownDiagrams` para incluir ReactFlow:
 
 ```typescript
-const BRAND_COLORS = {
-  primary: '#307177',
-  accent: '#32b4cd',
-  positive: '#8cb63c',
-  warning: '#ffa720',
-  danger: '#ef4444',
-};
-
-const BENCHMARK_COLORS = {
-  excellent: '#8cb63c',
-  good: '#32b4cd',
-  average: '#ffa720',
-  above_market: '#ef4444',
-};
+export function normalizeMarkdownDiagrams(text: string): string {
+  if (!text) return text;
+  
+  let result = text;
+  
+  // Step 1: Aggressive fence fixing
+  result = aggressiveFenceFixer(result);
+  
+  // Step 2: Normalize ReactFlow blocks (NEW)
+  result = normalizeReactFlowBlocks(result);
+  
+  // Step 3: Normalize existing Mermaid fences
+  result = normalizeMermaidFences(result);
+  
+  // Step 4: Detect and wrap unfenced Mermaid diagrams
+  result = wrapUnfencedMermaid(result);
+  
+  return result;
+}
 ```
 
----
+### 2. Actualizar `src/components/advisor/AdvisorMessage.tsx`
 
-### 5. Estados de UI
+Asegurar que el contenido pase por el normalizador antes de ser procesado:
 
-| Estado | Comportamiento |
-|--------|----------------|
-| `isLoading` | Skeleton loaders para KPIs y área de gráfico |
-| `error` | Alert con mensaje y botón de reintentar |
-| `data vacío` | EmptyState con mensaje informativo |
-| `data válido` | Render completo del dashboard |
+```typescript
+import { normalizeMarkdownDiagrams } from '@/utils/normalizeMarkdownDiagrams';
 
----
+// En el componente:
+const cleanedContent = cleanMarkdownContent(content);
+const normalizedContent = normalizeMarkdownDiagrams(cleanedContent);
+```
 
-### 6. Dependencias Utilizadas
+## Resultado Esperado
 
-- `recharts` (ya instalado)
-- `@tanstack/react-query` (ya instalado)
-- Componentes UI: Card, Tabs, Badge, Skeleton
-- Iconos: Euro, TrendingDown, Lightbulb, PieChart, BarChart3, Calendar
+1. El texto `reactflow { "title": ... }` será detectado
+2. Se convertirá automáticamente a un bloque de código con triple backtick
+3. ReactMarkdown lo reconocerá como `language-reactflow`
+4. El componente `ReactFlowDiagram` lo renderizará correctamente
 
----
+## Archivos a Modificar
 
-## Secuencia de Tareas
+| Archivo | Cambio |
+|---------|--------|
+| `src/utils/normalizeMarkdownDiagrams.ts` | Añadir `normalizeReactFlowBlocks()` y actualizar función principal |
+| `src/components/advisor/AdvisorMessage.tsx` | Aplicar normalización al contenido |
+| `src/components/advisor/streaming/StreamingResponse.tsx` | Verificar que ya aplica normalización (ya lo hace) |
 
-1. **Añadir tipos y función `getDashboard` a `costConsultingApi.ts`**
-2. **Crear componente `CostDashboard.tsx`** con:
-   - Hook useQuery para fetch de datos
-   - Componente KPICards (4 tarjetas de métricas)
-   - Tabs con 3 vistas de gráficos
-   - Gráfico de categorías (barras horizontales)
-   - Gráfico de proveedores (barras verticales)
-   - Gráfico de timeline (líneas con área)
-   - Estados de loading/error
-3. **Exportar desde index.ts** del directorio cost-consulting
