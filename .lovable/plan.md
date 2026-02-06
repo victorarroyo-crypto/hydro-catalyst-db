@@ -1,123 +1,90 @@
 
+Objetivo: que los diagramas ReactFlow se rendericen siempre aunque el LLM los devuelva “bien”, pero el Markdown termine mostrándolos como texto (como en tu captura, donde aparece el JSON “pelado”).
 
-# Plan: Proteger bloques ReactFlow bien formateados
+## Diagnóstico (con lo que veo en el repo)
+1. El render de ReactFlow depende de que ReactMarkdown detecte un bloque de código con `language-reactflow` (en `AdvisorMessage.tsx` y `StreamingResponse.tsx`, dentro del handler de `pre`).
+2. Si por cualquier motivo el bloque no se parsea como fence de Markdown (por ejemplo: fence dentro de lista sin línea en blanco, fence indentado, fence “pegado” a texto, o el pre-procesado lo deforma), ReactMarkdown no genera `pre > code.language-reactflow`, y entonces:
+   - o bien el contenido cae en texto normal (tu síntoma),
+   - o cae en `pre` sin `language-reactflow` y nunca se intenta `JSON.parse`.
+3. Hay doble pre-procesado: `cleanMarkdownContent()` ya llama `normalizeMarkdownDiagrams()`, pero luego `AdvisorMessage` y `StreamingResponse` vuelven a llamar `normalizeMarkdownDiagrams(cleanMarkdownContent(...))`. Esto aumenta el riesgo de que alguna regla “agresiva” afecte a fences que ya estaban correctas.
 
-## Problema Identificado
+## Enfoque de solución (más robusto)
+Dejar de depender únicamente de “que el Markdown reconozca el fence” y, en su lugar:
+- Extraer (antes de ReactMarkdown) los bloques ReactFlow del texto, igual que ya se hace con Mermaid (`extractMermaidBlocks`).
+- Reemplazarlos por placeholders tipo `:::reactflow-placeholder-N:::` y renderizar el diagrama al detectar ese placeholder.
+- Mantener el normalizador para casos de JSON crudo, pero evitar “doble normalización”.
 
-La imagen muestra que el LLM envía el bloque correctamente:
-```
-```reactflow
-{
-  "title": "...",
-  "nodes": [...],
-  "edges": [...]
-}
-```
-```
+Esto hace que incluso si el Markdown decide tratar el fence como texto, nosotros igualmente detectemos y rendericemos el diagrama.
 
-Pero aparece como **texto plano** en el chat. Esto ocurre porque:
+## Cambios propuestos (código)
 
-1. Hay un backtick suelto antes del bloque (puede venir del LLM)
-2. El `aggressiveFenceFixer` está procesando backticks de forma muy agresiva y puede estar rompiendo bloques válidos
-3. El normalizador no protege bloques ReactFlow que ya están correctamente formateados
+### 1) Añadir extracción de ReactFlow por placeholders (similar a Mermaid)
+**Archivo:** `src/utils/normalizeMarkdownDiagrams.ts`
+- Crear una función nueva:
+  - `extractReactFlowBlocks(text): { processedContent: string; reactflowBlocks: string[] }`
+- Qué debe reconocer:
+  1) Bloques correctamente fenced:
+     - ` ```reactflow\n ... \n``` `
+     - y también variantes con indentación común (por ejemplo `   ```reactflow`)
+  2) Casos “semi-rotos” frecuentes:
+     - fence sin línea en blanco antes/después
+     - fence indentado dentro de listas (hasta 3-4 espacios típicamente)
+- Qué debe guardar:
+  - Guardar el JSON “tal cual” (sin backticks) en `reactflowBlocks[]`
+  - Reemplazar en el texto por `\n\n:::reactflow-placeholder-i:::\n\n`
 
-## Solución
+Además:
+- Opcional: si encontramos JSON crudo con `"nodes"` y `"edges"` fuera de fences, seguir envolviéndolo (lo que ya existe), pero idealmente hacerlo antes de extraer.
 
-Modificar la lógica para:
-1. Detectar y limpiar backticks sueltos antes de bloques de codigo
-2. Proteger bloques ReactFlow ya bien formateados (que ya tienen ` ```reactflow `)
-3. Solo aplicar normalización a bloques malformados
+### 2) Usar placeholders en el render del chat (no depender de fences)
+**Archivo:** `src/components/advisor/streaming/StreamingResponse.tsx`
+- En el pre-procesado `processedData`:
+  1) `cleanMarkdownContent(content)`
+  2) (solo una vez) normalizar diagramas
+  3) `extractReactFlowBlocks(...)`
+  4) `extractMermaidBlocks(...)`
+- Guardar `reactflowBlocks` en un `useRef` igual que `mermaidBlocksRef`.
+- En el renderer de `p` (ya intercepta placeholders de Mermaid):
+  - Detectar `:::reactflow-placeholder-N:::`
+  - `JSON.parse(reactflowBlocksRef.current[N])`
+  - Render:
+    - `<ReactFlowProvider><ReactFlowDiagram data={parsed}/></ReactFlowProvider>`
+  - Si falla el parse: mostrar caja de error amigable.
 
-## Cambios Tecnicos
+**Archivo:** `src/components/advisor/AdvisorMessage.tsx`
+- Misma idea, pero teniendo cuidado con el “typing effect”:
+  - Importante: durante streaming carácter a carácter, un placeholder podría aparecer “a medias”.
+  - Estrategia:
+    - Solo intentar render placeholder si el texto del párrafo coincide exactamente con el patrón completo `^:::reactflow-placeholder-(\d+):::$`
+    - Si está incompleto, renderizarlo como texto normal hasta que el placeholder esté completo.
 
-### Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
+### 3) Eliminar doble normalización (reducir riesgo de corrupción)
+Opciones (elegir una y aplicar consistente):
+- Opción A (recomendada): `cleanMarkdownContent()` NO debería llamar `normalizeMarkdownDiagrams()`; que lo haga solo el “render pipeline” de AdvisorMessage/StreamingResponse una única vez.
+- Opción B: mantenerlo en `cleanMarkdownContent()`, y quitar `normalizeMarkdownDiagrams(...)` extra en los componentes que renderizan.
 
-#### 1. Agregar funcion para limpiar backticks sueltos
+Implementaremos una sola fuente de verdad para no procesar dos veces.
 
-```typescript
-function cleanStrayBackticks(text: string): string {
-  // Remove isolated backticks that appear before code fences
-  // Pattern: single backtick on its own line followed by a code fence
-  let result = text;
-  
-  // Single backtick on its own line before a fence
-  result = result.replace(/^`\s*\n(```)/gm, '$1');
-  result = result.replace(/\n`\s*\n(```)/g, '\n$1');
-  
-  // Single/double backticks immediately before fence (no newline)
-  result = result.replace(/`{1,2}(```(?:reactflow|mermaid|flow|chem|equation))/gi, '$1');
-  
-  return result;
-}
-```
+### 4) Normalizar fences indentados (pequeño refuerzo)
+Aunque el placeholder lo hará mucho más robusto, añadiremos un refuerzo en el normalizador:
+- Si hay líneas como `^\s+```reactflow` o `^\s+```$` (cierre), “desindentar” a ` ```reactflow` / ` ``` `
+- Asegurar que haya saltos de línea alrededor del bloque para que el resto del markdown no se “pegue”.
 
-#### 2. Modificar normalizeReactFlowBlocks para NO procesar bloques ya validos
+## Validación (pasos de prueba)
+1. En `/advisor/chat`, provocar una respuesta que contenga un bloque ` ```reactflow ... ``` `.
+2. Confirmar que:
+   - si el Markdown lo parsea bien: se renderiza diagrama (como ahora).
+   - si el Markdown lo rompe (lista/indentación): igual se renderiza, porque el placeholder lo “rescata”.
+3. Probar también con:
+   - 2 diagramas en el mismo mensaje.
+   - un diagrama seguido de tabla/lista.
+   - streaming (deep advisor polling y chat normal).
 
-```typescript
-function normalizeReactFlowBlocks(text: string): string {
-  let result = text;
-  
-  // First: clean stray backticks
-  result = cleanStrayBackticks(result);
-  
-  // Skip if there are already valid reactflow fences
-  // (they will be handled by ReactMarkdown correctly)
-  const hasValidFences = /```reactflow\s*\n[\s\S]*?\n```/gi.test(result);
-  
-  // Pattern 1: Only apply if no valid fences exist
-  if (!hasValidFences) {
-    result = result.replace(
-      /(?:^|\n)reactflow\s*(\{[\s\S]*?\})\s*(?=\n|$)/gi,
-      (match, jsonContent) => {
-        return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
-      }
-    );
-  }
-  
-  // Pattern 2: Raw JSON detection - only if no valid fences
-  if (!hasValidFences) {
-    // ... existing JSON detection logic
-  }
-  
-  // ... rest of patterns
-}
-```
+## Archivos a tocar
+- `src/utils/normalizeMarkdownDiagrams.ts` (añadir `extractReactFlowBlocks`, mejorar normalización de indentación)
+- `src/components/advisor/streaming/StreamingResponse.tsx` (pipeline + render placeholder)
+- `src/components/advisor/AdvisorMessage.tsx` (pipeline + render placeholder)
+- `src/utils/fixMarkdownTables.ts` (ajustar para evitar doble normalización, según opción elegida)
 
-#### 3. Actualizar orden de operaciones en normalizeMarkdownDiagrams
-
-```typescript
-export function normalizeMarkdownDiagrams(text: string): string {
-  if (!text) return text;
-  
-  let result = text;
-  
-  // Step 0: Clean stray backticks FIRST (NEW)
-  result = cleanStrayBackticks(result);
-  
-  // Step 1: Check if content already has valid reactflow fences
-  const hasValidReactFlow = /```reactflow\s*\n[\s\S]*?\n```/gi.test(result);
-  
-  // Step 2: Only normalize ReactFlow if no valid fences
-  if (!hasValidReactFlow) {
-    result = normalizeReactFlowBlocks(result);
-  }
-  
-  // Step 3: Aggressive fence fixing (for Mermaid, etc)
-  result = aggressiveFenceFixer(result);
-  
-  // ... rest of steps
-}
-```
-
-## Archivos a Modificar
-
-| Archivo | Cambio |
-|---------|--------|
-| `src/utils/normalizeMarkdownDiagrams.ts` | Agregar limpieza de backticks sueltos y proteger bloques validos |
-
-## Resultado Esperado
-
-1. Backticks sueltos antes de bloques seran eliminados
-2. Bloques ReactFlow correctamente formateados pasaran intactos a ReactMarkdown
-3. Solo se aplicara normalizacion cuando realmente sea necesario (JSON crudo sin cercas)
-
+## Por qué esto debería arreglar tu captura
+En tu foto el JSON aparece como texto (sin activarse el handler `language-reactflow`). Con placeholders, aunque el Markdown falle interpretando fences, nosotros extraemos el bloque y lo renderizamos fuera del parser, así que deja de depender del formato exacto en el markdown.
