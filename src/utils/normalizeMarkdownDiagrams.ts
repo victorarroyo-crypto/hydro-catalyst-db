@@ -325,7 +325,6 @@ function normalizeReactFlowBlocks(text: string): string {
   let result = text;
   
   // Pattern 1: "reactflow { ... }" without backticks (single or multi-line JSON)
-  // Match "reactflow" followed by JSON object, being careful with nested braces
   result = result.replace(
     /(?:^|\n)reactflow\s*(\{[\s\S]*?\})\s*(?=\n|$)/gi,
     (match, jsonContent) => {
@@ -333,13 +332,32 @@ function normalizeReactFlowBlocks(text: string): string {
     }
   );
   
-  // Pattern 2: Incorrect backtick counts (1, 2 instead of 3)
+  // Pattern 2: Raw JSON with ReactFlow structure (has "nodes" and "edges")
+  // This catches JSON objects that look like ReactFlow diagrams but have no prefix
+  result = result.replace(
+    /(?:^|\n)(\{\s*\n?\s*"(?:title|direction|nodes)"[\s\S]*?"nodes"\s*:\s*\[[\s\S]*?"edges"\s*:\s*\[[\s\S]*?\]\s*\})/gi,
+    (match, jsonContent) => {
+      // Verify it's valid ReactFlow JSON before wrapping
+      try {
+        const parsed = JSON.parse(jsonContent.trim());
+        if (parsed.nodes && Array.isArray(parsed.nodes) && 
+            parsed.edges && Array.isArray(parsed.edges)) {
+          return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
+        }
+      } catch (e) {
+        // Not valid JSON, return as-is
+      }
+      return match;
+    }
+  );
+  
+  // Pattern 3: Incorrect backtick counts (1, 2 instead of 3)
   result = result.replace(
     /`{1,2}reactflow\s*\n?([\s\S]*?)`{1,2}(?!`)/gi,
     (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
   );
   
-  // Pattern 3: Too many backticks (4+)
+  // Pattern 4: Too many backticks (4+)
   result = result.replace(
     /`{4,}reactflow\s*\n?([\s\S]*?)`{4,}/gi,
     (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
