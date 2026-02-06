@@ -11,6 +11,8 @@ import { FlowDiagramRenderer } from './FlowDiagramRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
 import { useMermaidPostProcessor } from '@/hooks/useMermaidPostProcessor';
 import { WaterBalanceBlockDiagram, isWaterBalanceContent } from './WaterBalanceBlockDiagram';
+import { ReactFlowDiagram, type ReactFlowData } from './diagrams/ReactFlowDiagram';
+import { ReactFlowProvider } from '@xyflow/react';
 interface AdvisorMessageProps {
   content: string;
   sources?: Source[];
@@ -283,7 +285,7 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
           // Inline code - render as completely normal text, no styling
           return <span>{children}</span>;
         },
-        // Pre blocks - detect flow, chem, and mermaid types
+        // Pre blocks - detect reactflow, flow, chem, and mermaid types
         pre: ({ children }) => {
           // Extract the code element
           const codeElement = React.Children.toArray(children).find(
@@ -294,6 +296,25 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
           if (codeElement) {
             const codeClassName = codeElement.props?.className || '';
             const codeContent = String(codeElement.props?.children || '').trim();
+            
+            // Handle ```reactflow blocks - NEW: Professional interactive diagrams
+            if (codeClassName.includes('language-reactflow')) {
+              try {
+                const data: ReactFlowData = JSON.parse(codeContent);
+                return (
+                  <ReactFlowProvider>
+                    <ReactFlowDiagram data={data} />
+                  </ReactFlowProvider>
+                );
+              } catch (e) {
+                console.warn('Invalid reactflow JSON:', e);
+                return (
+                  <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
+                    Error en diagrama: {(e as Error).message}
+                  </div>
+                );
+              }
+            }
             
             // Handle ```mermaid blocks
             if (codeClassName.includes('language-mermaid')) {
