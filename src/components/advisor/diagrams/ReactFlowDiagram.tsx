@@ -11,7 +11,7 @@ import {
   type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import Dagre from '@dagrejs/dagre';
+import dagre from 'dagre';
 
 const NODE_STYLES: Record<string, { background: string; border: string; color: string }> = {
   input:    { background: '#32b4cd', border: '#2a96ab', color: '#ffffff' },
@@ -31,7 +31,7 @@ export interface ReactFlowData {
 }
 
 function getLayoutedElements(nodes: Node[], edges: Edge[], direction: 'LR' | 'TD' = 'LR') {
-  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  const g = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   g.setGraph({
     rankdir: direction === 'LR' ? 'LR' : 'TB',
     nodesep: 60,
@@ -42,7 +42,7 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction: 'LR' | 'TD
 
   nodes.forEach((node) => g.setNode(node.id, { width: 160, height: 60 }));
   edges.forEach((edge) => g.setEdge(edge.source, edge.target));
-  Dagre.layout(g);
+  dagre.layout(g);
 
   const isHorizontal = direction === 'LR';
   const layoutedNodes = nodes.map((node) => {
