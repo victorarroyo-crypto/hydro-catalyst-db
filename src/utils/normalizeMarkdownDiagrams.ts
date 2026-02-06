@@ -318,6 +318,37 @@ export function extractMermaidBlocks(text: string): {
 }
 
 /**
+ * Normalizes malformed ReactFlow blocks to proper fenced format.
+ * Handles: unfenced "reactflow { ... }" and incorrect backtick counts.
+ */
+function normalizeReactFlowBlocks(text: string): string {
+  let result = text;
+  
+  // Pattern 1: "reactflow { ... }" without backticks (single or multi-line JSON)
+  // Match "reactflow" followed by JSON object, being careful with nested braces
+  result = result.replace(
+    /(?:^|\n)reactflow\s*(\{[\s\S]*?\})\s*(?=\n|$)/gi,
+    (match, jsonContent) => {
+      return `\n\`\`\`reactflow\n${jsonContent.trim()}\n\`\`\`\n`;
+    }
+  );
+  
+  // Pattern 2: Incorrect backtick counts (1, 2 instead of 3)
+  result = result.replace(
+    /`{1,2}reactflow\s*\n?([\s\S]*?)`{1,2}(?!`)/gi,
+    (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
+  );
+  
+  // Pattern 3: Too many backticks (4+)
+  result = result.replace(
+    /`{4,}reactflow\s*\n?([\s\S]*?)`{4,}/gi,
+    (match, content) => `\`\`\`reactflow\n${content.trim()}\n\`\`\``
+  );
+  
+  return result;
+}
+
+/**
  * Main pre-processor: normalizes all diagram syntax in Markdown content.
  * Should be called BEFORE passing content to ReactMarkdown.
  */
@@ -329,10 +360,13 @@ export function normalizeMarkdownDiagrams(text: string): string {
   // Step 1: Aggressive fence fixing (handles ALL malformed backtick patterns)
   result = aggressiveFenceFixer(result);
   
-  // Step 2: Normalize existing Mermaid fences (case variations, spacing)
+  // Step 2: Normalize ReactFlow blocks (unfenced or malformed)
+  result = normalizeReactFlowBlocks(result);
+  
+  // Step 3: Normalize existing Mermaid fences (case variations, spacing)
   result = normalizeMermaidFences(result);
   
-  // Step 3: Detect and wrap unfenced Mermaid diagrams
+  // Step 4: Detect and wrap unfenced Mermaid diagrams
   result = wrapUnfencedMermaid(result);
   
   return result;
