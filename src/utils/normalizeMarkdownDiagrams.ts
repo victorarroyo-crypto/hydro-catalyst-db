@@ -714,3 +714,72 @@ export function normalizeMarkdownDiagrams(text: string): string {
   
   return result;
 }
+
+/**
+ * Robustly parse ReactFlow JSON from LLM output.
+ * Handles cases where the LLM adds trailing text/comments after the JSON object.
+ * Uses incremental brace counting to find the end of the JSON object.
+ */
+export function parseReactFlowJSON(content: string): { nodes: any[]; edges: any[]; [key: string]: any } | null {
+  const trimmed = content.trim();
+
+  // Strategy 1: Direct parse (works for clean JSON)
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+      return parsed;
+    }
+  } catch (e) {
+    // Fall through to Strategy 2
+  }
+
+  // Strategy 2: Extract JSON object by tracking brace depth
+  // Handles trailing text/comments the LLM adds after the JSON
+  const startIdx = trimmed.indexOf('{');
+  if (startIdx === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = startIdx; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === '{') depth++;
+    if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        // Found the matching closing brace - extract just the JSON
+        const jsonOnly = trimmed.substring(startIdx, i + 1);
+        try {
+          const parsed = JSON.parse(jsonOnly);
+          if (parsed && Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+            return parsed;
+          }
+        } catch (e) {
+          // Not valid JSON even after extraction
+        }
+        break;
+      }
+    }
+  }
+
+  return null;
+}
