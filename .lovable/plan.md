@@ -1,81 +1,170 @@
 
-Objetivo
-- Que cualquier diagrama ReactFlow se renderice como diagrama aunque llegue:
-  - dentro de fences incorrectos (por ejemplo ```json o ``` sin lenguaje),
-  - como JSON “pelado”,
-  - o con indentaciones/listas que rompen el parser de Markdown.
+# Plan: Fix ReactFlow JSON Extraction - Usar findJsonEnd() para Cortar JSON Limpio
 
-Qué está pasando (según tu captura)
-- En la pantalla se ve el JSON formateado como bloque (pero no se convierte a diagrama).
-- Con el sistema de placeholders, esto solo puede ocurrir si `extractReactFlowBlocks()` NO está detectando ese contenido como ReactFlow.
-- La causa más probable: el JSON está llegando dentro de un bloque de código que NO es ` ```reactflow ` (por ejemplo ` ```json ` o ` ``` `), por lo que:
-  - No coincide con el patrón 1 (solo captura fences `reactflow`)
-  - Y el patrón 2 (JSON crudo) no se dispara porque el JSON está “dentro” de un fence genérico, no como texto plano.
+## Resumen del Problema
+El sistema de placeholders está funcionando (el bloque se detecta y se reemplaza por `:::reactflow-placeholder-N:::`), pero el **contenido guardado en `reactflowBlocks[]` incluye texto basura** después del cierre del JSON (`}`). Esto causa `JSON.parse()` a fallar con "Unexpected non-whitespace character after JSON".
 
-Plan de cambios (código)
-1) Hacer que `extractReactFlowBlocks()` detecte ReactFlow también dentro de fences genéricos
-   Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
-   - Ampliar la extracción para que capture también:
-     - ` ```json ... ``` `
-     - ` ``` ... ``` ` (sin lenguaje)
-     - (opcional) ` ```javascript ... ``` ` si a veces viene así
-   - Lógica recomendada:
-     - Buscar fences genéricos con regex multiline (incluyendo indentación):
-       - `^[ \t]*```([a-zA-Z0-9_-]+)?\s*\n([\s\S]*?)\n[ \t]*````
-     - Para cada bloque:
-       - Intentar `JSON.parse(content)`
-       - Validar estructura mínima ReactFlow:
-         - `parsed.nodes` array
-         - `parsed.edges` array
-         - y que los nodos tengan al menos `{ id, label }` (o lo mínimo que tu renderer necesita)
-       - Si valida: reemplazar ese fence completo por `:::reactflow-placeholder-N:::` y guardar `content` en `reactflowBlocks[]`
-       - Si NO valida: dejar el bloque intacto
-   - Mantener el comportamiento actual para ` ```reactflow ` (debe seguir funcionando igual o mejor).
+## Causa Raíz
+La función `extractReactFlowBlocks()` guarda `content.trim()` directamente sin validar que sea JSON puro. Si el LLM incluye texto extra dentro del fence (común cuando no separa bien), ese texto queda en el bloque almacenado.
 
-2) Permitir extracción de múltiples bloques ReactFlow en el mismo mensaje
-   Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
-   - Ahora mismo, el patrón 2 (JSON crudo) solo corre si `reactflowBlocks.length === 0`.
-   - Ajuste:
-     - Permitir que el patrón 2 corra aunque ya exista 1 bloque extraído, para capturar “más de uno” si el LLM manda varios (o mezcle un fenced + un crudo).
+## Solución
+Usar la función existente `findJsonEnd()` para extraer SOLO el JSON válido antes de guardarlo.
 
-3) Añadir instrumentación de debug (solo en desarrollo) para confirmar detección
-   Archivos:
-   - `src/utils/normalizeMarkdownDiagrams.ts`
-   - `src/components/advisor/AdvisorMessage.tsx`
-   - `src/components/advisor/streaming/StreamingResponse.tsx`
-   Cambios:
-   - Loggear (en `console.debug`) cuando:
-     - se extrae un bloque y su índice
-     - falla el parseo de un placeholder
-     - el placeholder aparece “fragmentado” durante streaming (para confirmar si está llegando partido)
-   - Importante: que estos logs estén detrás de una bandera tipo `if (import.meta.env.DEV)` para no ensuciar producción.
+---
 
-4) Robustez extra: extracción aunque el fence no tenga cierre perfecto
-   Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
-   - Si detectamos ` ```json ` (o ``` sin lenguaje) y el cierre no aparece, intentar “cerrar” el bloque cuando aparezca un patrón claro de markdown (similar a la lógica de Mermaid) o al final del texto.
-   - Esto es opcional, pero útil si el modelo/railway a veces trunca.
+## Cambios de Código
 
-Validación (cómo sabremos que quedó)
-1) Reproducir exactamente el caso de tu captura:
-   - Forzar respuesta del advisor que incluya el JSON (como el screenshot).
-   - Confirmar que ya no aparece el JSON como texto, sino el diagrama ReactFlow.
-2) Probar variantes:
-   - Caso A: ` ```reactflow { ... } ``` ` (debe seguir funcionando)
-   - Caso B: ` ```json { ... } ``` ` (debe convertirse a diagrama)
-   - Caso C: ` ``` { ... } ``` ` (debe convertirse a diagrama)
-   - Caso D: JSON crudo sin fence (debe convertirse a diagrama)
-   - Caso E: 2 diagramas en un mismo mensaje (deben salir ambos)
-3) Verificar en consola (con los nuevos `console.debug`) que:
-   - `extractReactFlowBlocks` está extrayendo y creando placeholders
-   - `AdvisorMessage`/`StreamingResponse` están resolviendo placeholders a diagramas sin errores de JSON
+### Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
 
-Riesgos / consideraciones
-- Falsos positivos: un bloque ` ```json ` que tenga `nodes` y `edges` pero no sea ReactFlow.
-  - Mitigación: validación más estricta (ej. `nodes` como array de objetos con `id` string, `edges` con `source/target`).
-- Rendimiento: parsear muchos fences con JSON.parse.
-  - Mitigación: solo intentar parse si el contenido incluye `"nodes"` y `"edges"` como substring antes de JSON.parse (filtro rápido).
+#### Cambio 1: Nueva función helper `extractPureJson()`
+Añadir después de `findJsonEnd()` (alrededor de línea 378):
 
-Archivos involucrados
-- `src/utils/normalizeMarkdownDiagrams.ts` (principal: ampliar extracción + múltiples bloques + robustez)
-- (opcional solo debug) `src/components/advisor/AdvisorMessage.tsx`
-- (opcional solo debug) `src/components/advisor/streaming/StreamingResponse.tsx`
+```typescript
+/**
+ * Extracts pure JSON from text that may contain trailing content.
+ * Uses brace-balancing to find where the JSON object ends.
+ */
+function extractPureJson(text: string): string | null {
+  const trimmed = text.trim();
+  
+  // Must start with {
+  const startIndex = trimmed.indexOf('{');
+  if (startIndex === -1) return null;
+  
+  // Find the balanced closing brace
+  const endIndex = findJsonEnd(trimmed, startIndex);
+  if (endIndex === -1) return null;
+  
+  return trimmed.substring(startIndex, endIndex + 1);
+}
+```
+
+#### Cambio 2: Modificar Pattern 1 (líneas 543-557)
+Antes:
+```typescript
+if (trimmedContent.includes('"nodes"') || trimmedContent.includes('"edges"')) {
+  const index = reactflowBlocks.length;
+  reactflowBlocks.push(trimmedContent);
+  // ...
+}
+```
+
+Después:
+```typescript
+if (trimmedContent.includes('"nodes"') || trimmedContent.includes('"edges"')) {
+  const pureJson = extractPureJson(trimmedContent);
+  if (pureJson) {
+    const index = reactflowBlocks.length;
+    reactflowBlocks.push(pureJson);
+    // ...
+  }
+}
+```
+
+#### Cambio 3: Modificar Pattern 2 (líneas 561-590)
+Antes:
+```typescript
+try {
+  const parsed = JSON.parse(trimmedContent);
+  if (isValidReactFlowStructure(parsed)) {
+    const index = reactflowBlocks.length;
+    reactflowBlocks.push(trimmedContent);
+    // ...
+  }
+} catch (e) {
+  // Not valid JSON, keep as-is
+}
+```
+
+Después:
+```typescript
+// First, extract pure JSON (removes trailing garbage)
+const pureJson = extractPureJson(trimmedContent);
+if (!pureJson) return match;
+
+try {
+  const parsed = JSON.parse(pureJson);
+  if (isValidReactFlowStructure(parsed)) {
+    const index = reactflowBlocks.length;
+    reactflowBlocks.push(pureJson);
+    // ...
+  }
+} catch (e) {
+  // Still not valid JSON, keep as-is
+}
+```
+
+#### Cambio 4: Modificar Pattern 3 (líneas 594-615)
+Aplicar la misma lógica: usar `extractPureJson()` antes de guardar.
+
+---
+
+## Flujo de Datos Corregido
+
+```text
+LLM Output:
+```reactflow
+{ "nodes": [...], "edges": [...] }
+
+Aquí hay más texto que no debería estar
+```
+
+                      ↓
+             extractReactFlowBlocks()
+                      ↓
+    findJsonEnd() encuentra el } correcto
+                      ↓
+          extractPureJson() devuelve:
+    { "nodes": [...], "edges": [...] }
+              (SIN el texto extra)
+                      ↓
+        reactflowBlocks[0] = JSON limpio
+                      ↓
+   JSON.parse() funciona correctamente
+                      ↓
+        ReactFlowDiagram se renderiza
+```
+
+---
+
+## Verificación Post-Implementación
+
+1. Enviar consulta que genere diagrama ReactFlow
+2. En consola de desarrollo, buscar:
+   - `[ReactFlow] Extracted from...` → confirma detección
+   - NO debe aparecer "Invalid ReactFlow JSON in placeholder"
+3. El diagrama debe renderizarse como gráfico interactivo, no como JSON ni error
+
+---
+
+## Alternativa Desde Railway (Backend)
+
+Si prefieres arreglar en el backend en lugar del frontend:
+
+1. **Asegurar que el JSON del diagrama esté aislado**:
+   - El contenido dentro de ` ```reactflow ... ``` ` debe ser SOLO el objeto JSON
+   - Sin texto explicativo antes ni después del JSON dentro del fence
+
+2. **Formato correcto**:
+```markdown
+Texto explicativo previo.
+
+```reactflow
+{
+  "title": "Diagrama de proceso",
+  "nodes": [
+    { "id": "1", "label": "Paso 1", "type": "input" }
+  ],
+  "edges": [
+    { "source": "1", "target": "2" }
+  ]
+}
+```
+
+Texto explicativo posterior.
+```
+
+3. **Evitar**:
+   - Comentarios dentro del JSON
+   - Texto explicativo dentro del fence
+   - Backticks anidados o malformados
