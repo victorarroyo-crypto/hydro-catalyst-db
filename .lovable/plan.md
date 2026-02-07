@@ -1,170 +1,242 @@
 
-# Plan: Fix ReactFlow JSON Extraction - Usar findJsonEnd() para Cortar JSON Limpio
+# Plan: Fix ReactFlow Placeholder Detection in All Handlers
 
-## Resumen del Problema
-El sistema de placeholders está funcionando (el bloque se detecta y se reemplaza por `:::reactflow-placeholder-N:::`), pero el **contenido guardado en `reactflowBlocks[]` incluye texto basura** después del cierre del JSON (`}`). Esto causa `JSON.parse()` a fallar con "Unexpected non-whitespace character after JSON".
+## Problema Confirmado
+El placeholder `:::reactflow-placeholder-0:::` solo se detecta en el handler `p`. Cuando el LLM genera backticks sueltos (ej: `` `chem 2 CrO₄²⁻ ` ``), ReactMarkdown interpreta el placeholder como **inline code** y lo envía al handler `code`, que NO lo detecta.
 
-## Causa Raíz
-La función `extractReactFlowBlocks()` guarda `content.trim()` directamente sin validar que sea JSON puro. Si el LLM incluye texto extra dentro del fence (común cuando no separa bien), ese texto queda en el bloque almacenado.
+## Estado Actual del Código
 
-## Solución
-Usar la función existente `findJsonEnd()` para extraer SOLO el JSON válido antes de guardarlo.
+| Archivo | Handler | Detecta Placeholder? |
+|---------|---------|---------------------|
+| `AdvisorMessage.tsx` | `p` | ✅ Sí (líneas 248-265) |
+| `AdvisorMessage.tsx` | `code` | ❌ No (líneas 309-317) |
+| `AdvisorMessage.tsx` | `pre` fallback | ❌ No (líneas 373-382) |
+| `StreamingResponse.tsx` | `p` | ✅ Sí (líneas 227-244) |
+| `StreamingResponse.tsx` | `code` | ❌ No (líneas 181-198) |
+| `StreamingResponse.tsx` | `pre` fallback | ❌ No (líneas 174-179) |
 
----
+## Cambios Requeridos
 
-## Cambios de Código
+### Cambio 1: `AdvisorMessage.tsx` - Handler `code` con detección de placeholder
 
-### Archivo: `src/utils/normalizeMarkdownDiagrams.ts`
+**Líneas afectadas**: 309-317
 
-#### Cambio 1: Nueva función helper `extractPureJson()`
-Añadir después de `findJsonEnd()` (alrededor de línea 378):
+**Cambio**: Añadir detección de placeholder ReactFlow antes de la lógica existente.
 
 ```typescript
-/**
- * Extracts pure JSON from text that may contain trailing content.
- * Uses brace-balancing to find where the JSON object ends.
- */
-function extractPureJson(text: string): string | null {
-  const trimmed = text.trim();
-  
-  // Must start with {
-  const startIndex = trimmed.indexOf('{');
-  if (startIndex === -1) return null;
-  
-  // Find the balanced closing brace
-  const endIndex = findJsonEnd(trimmed, startIndex);
-  if (endIndex === -1) return null;
-  
-  return trimmed.substring(startIndex, endIndex + 1);
-}
-```
+code: ({ children, className }) => {
+  const textContent = String(children || '').trim();
 
-#### Cambio 2: Modificar Pattern 1 (líneas 543-557)
-Antes:
-```typescript
-if (trimmedContent.includes('"nodes"') || trimmedContent.includes('"edges"')) {
-  const index = reactflowBlocks.length;
-  reactflowBlocks.push(trimmedContent);
-  // ...
-}
-```
-
-Después:
-```typescript
-if (trimmedContent.includes('"nodes"') || trimmedContent.includes('"edges"')) {
-  const pureJson = extractPureJson(trimmedContent);
-  if (pureJson) {
-    const index = reactflowBlocks.length;
-    reactflowBlocks.push(pureJson);
-    // ...
+  // Check if this inline code is actually a ReactFlow placeholder
+  // This happens when stray backticks in LLM output wrap the placeholder
+  const reactflowCheck = isReactFlowPlaceholder(textContent);
+  if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+    const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
+    if (data) {
+      return (
+        <ReactFlowProvider>
+          <ReactFlowDiagram data={data} />
+        </ReactFlowProvider>
+      );
+    }
+    console.warn('Invalid ReactFlow JSON in code placeholder');
   }
-}
-```
 
-#### Cambio 3: Modificar Pattern 2 (líneas 561-590)
-Antes:
-```typescript
-try {
-  const parsed = JSON.parse(trimmedContent);
-  if (isValidReactFlowStructure(parsed)) {
-    const index = reactflowBlocks.length;
-    reactflowBlocks.push(trimmedContent);
-    // ...
+  // Block code: preserve <code> with className for pre handler
+  if (className?.includes('language-')) {
+    return <code className={className}>{children}</code>;
   }
-} catch (e) {
-  // Not valid JSON, keep as-is
-}
+  // Inline code
+  return <span>{children}</span>;
+},
 ```
 
-Después:
+### Cambio 2: `AdvisorMessage.tsx` - Handler `pre` fallback con detección
+
+**Líneas afectadas**: 373-382
+
+**Cambio**: Añadir verificación de placeholder antes del return final.
+
 ```typescript
-// First, extract pure JSON (removes trailing garbage)
-const pureJson = extractPureJson(trimmedContent);
-if (!pureJson) return match;
-
-try {
-  const parsed = JSON.parse(pureJson);
-  if (isValidReactFlowStructure(parsed)) {
-    const index = reactflowBlocks.length;
-    reactflowBlocks.push(pureJson);
-    // ...
-  }
-} catch (e) {
-  // Still not valid JSON, keep as-is
+// Also check raw pre content for Mermaid (when no code element)
+const textContent = extractTextFromChildren(children);
+if (isMermaidContent(textContent)) {
+  return <MermaidRenderer content={textContent} />;
 }
+
+// Check if this pre block contains a ReactFlow placeholder
+const reactflowCheck = isReactFlowPlaceholder(textContent.trim());
+if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+  const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
+  if (data) {
+    return (
+      <ReactFlowProvider>
+        <ReactFlowDiagram data={data} />
+      </ReactFlowProvider>
+    );
+  }
+  console.warn('Invalid ReactFlow JSON in pre placeholder');
+}
+
+// Regular pre block
+return (
+  <p className="mb-5 last:mb-0 leading-[1.8] text-foreground/90">{children}</p>
+);
 ```
 
-#### Cambio 4: Modificar Pattern 3 (líneas 594-615)
-Aplicar la misma lógica: usar `extractPureJson()` antes de guardar.
+### Cambio 3: `AdvisorMessage.tsx` - Handler `pre` buscar `code` O `span`
 
----
+**Líneas afectadas**: 321-324
 
-## Flujo de Datos Corregido
+**Cambio**: Permitir que el handler `pre` detecte tanto `code` como `span` con className.
+
+```typescript
+pre: ({ children }) => {
+  // Extract the code element (check both 'code' and 'span' since handlers may convert)
+  const codeElement = React.Children.toArray(children).find(
+    (child): child is React.ReactElement =>
+      React.isValidElement(child) && (child.type === 'code' || (child.type === 'span' && child.props?.className?.includes('language-')))
+  );
+```
+
+### Cambio 4: `StreamingResponse.tsx` - Handler `code` con detección de placeholder
+
+**Líneas afectadas**: 181-198
+
+**Cambio**: Añadir detección de placeholder (mismo patrón que Cambio 1).
+
+```typescript
+code: ({ className: codeClassName, children, ...props }: { className?: string; children?: React.ReactNode; node?: any }) => {
+  const textContent = String(children || '').trim();
+
+  // Check if this inline code is actually a ReactFlow placeholder
+  const reactflowCheck = isReactFlowPlaceholder(textContent);
+  if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+    const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
+    if (data) {
+      return (
+        <ReactFlowProvider>
+          <ReactFlowDiagram data={data} />
+        </ReactFlowProvider>
+      );
+    }
+    console.warn('Invalid ReactFlow JSON in code placeholder');
+  }
+
+  // Check if this is an inline code (no className usually means inline)
+  const isInline = !codeClassName && !props.node?.position;
+  
+  if (isInline) {
+    return (
+      <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground" {...props}>
+        {children}
+      </code>
+    );
+  }
+  
+  // Block code (will be wrapped by pre)
+  return (
+    <code className={cn('font-mono', codeClassName)} {...props}>
+      {children}
+    </code>
+  );
+},
+```
+
+### Cambio 5: `StreamingResponse.tsx` - Handler `pre` fallback con detección
+
+**Líneas afectadas**: 174-179
+
+**Cambio**: Añadir verificación de placeholder antes del return final.
+
+```typescript
+// Check if this pre block contains a ReactFlow placeholder
+const textContent = extractTextFromChildren(children);
+
+// Check for ReactFlow placeholder in pre fallback
+const reactflowCheck = isReactFlowPlaceholder(textContent.trim());
+if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+  const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
+  if (data) {
+    return (
+      <ReactFlowProvider>
+        <ReactFlowDiagram data={data} />
+      </ReactFlowProvider>
+    );
+  }
+  console.warn('Invalid ReactFlow JSON in pre placeholder');
+}
+
+// Default pre styling
+return (
+  <pre className="bg-card text-card-foreground p-4 rounded-lg overflow-x-auto my-4 text-sm">
+    {children}
+  </pre>
+);
+```
+
+### Cambio 6: `StreamingResponse.tsx` - Handler `pre` buscar `code` O `span`
+
+**Líneas afectadas**: 131-134
+
+**Cambio**: Permitir detección de span con className.
+
+```typescript
+pre: ({ children }: { children?: React.ReactNode }) => {
+  // Extract the code element (check both 'code' and 'span')
+  const codeElement = React.Children.toArray(children).find(
+    (child): child is React.ReactElement => 
+      React.isValidElement(child) && (child.type === 'code' || (child.type === 'span' && child.props?.className?.includes('language-')))
+  );
+```
+
+### Cambio 7: `StreamingResponse.tsx` - Añadir helper `extractTextFromChildren`
+
+El archivo `StreamingResponse.tsx` no tiene este helper que sí existe en `AdvisorMessage.tsx`. Necesitamos añadirlo o crear una versión local.
+
+```typescript
+// Helper function to extract text from React children (needed for pre fallback)
+const extractTextFromChildren = (children: React.ReactNode): string => {
+  const extractText = (node: React.ReactNode): string => {
+    if (typeof node === 'string') return node;
+    if (typeof node === 'number') return String(node);
+    if (React.isValidElement(node) && node.props?.children) {
+      return React.Children.toArray(node.props.children).map(extractText).join('');
+    }
+    return '';
+  };
+  return React.Children.toArray(children).map(extractText).join('').trim();
+};
+```
+
+## Resumen de Archivos
+
+| Archivo | Cambios |
+|---------|---------|
+| `src/components/advisor/AdvisorMessage.tsx` | Handler `code` + `pre` fallback + búsqueda `code/span` |
+| `src/components/advisor/streaming/StreamingResponse.tsx` | Handler `code` + `pre` fallback + búsqueda `code/span` + helper |
+
+## Flujo Corregido
 
 ```text
-LLM Output:
-```reactflow
-{ "nodes": [...], "edges": [...] }
+LLM genera: `chem CrO₄²⁻` :::reactflow-placeholder-0:::
 
-Aquí hay más texto que no debería estar
+ReactMarkdown interpreta placeholder como inline code
+              ↓
+         Handler `code`
+              ↓
+  isReactFlowPlaceholder(":::reactflow-placeholder-0:::") 
+              ↓
+        { isPlaceholder: true, index: 0 }
+              ↓
+    parseReactFlowJSON(reactflowBlocksRef.current[0])
+              ↓
+        ReactFlowDiagram renderiza ✓
 ```
-
-                      ↓
-             extractReactFlowBlocks()
-                      ↓
-    findJsonEnd() encuentra el } correcto
-                      ↓
-          extractPureJson() devuelve:
-    { "nodes": [...], "edges": [...] }
-              (SIN el texto extra)
-                      ↓
-        reactflowBlocks[0] = JSON limpio
-                      ↓
-   JSON.parse() funciona correctamente
-                      ↓
-        ReactFlowDiagram se renderiza
-```
-
----
 
 ## Verificación Post-Implementación
 
-1. Enviar consulta que genere diagrama ReactFlow
-2. En consola de desarrollo, buscar:
-   - `[ReactFlow] Extracted from...` → confirma detección
-   - NO debe aparecer "Invalid ReactFlow JSON in placeholder"
-3. El diagrama debe renderizarse como gráfico interactivo, no como JSON ni error
-
----
-
-## Alternativa Desde Railway (Backend)
-
-Si prefieres arreglar en el backend en lugar del frontend:
-
-1. **Asegurar que el JSON del diagrama esté aislado**:
-   - El contenido dentro de ` ```reactflow ... ``` ` debe ser SOLO el objeto JSON
-   - Sin texto explicativo antes ni después del JSON dentro del fence
-
-2. **Formato correcto**:
-```markdown
-Texto explicativo previo.
-
-```reactflow
-{
-  "title": "Diagrama de proceso",
-  "nodes": [
-    { "id": "1", "label": "Paso 1", "type": "input" }
-  ],
-  "edges": [
-    { "source": "1", "target": "2" }
-  ]
-}
-```
-
-Texto explicativo posterior.
-```
-
-3. **Evitar**:
-   - Comentarios dentro del JSON
-   - Texto explicativo dentro del fence
-   - Backticks anidados o malformados
+1. El placeholder `:::reactflow-placeholder-N:::` NUNCA debe aparecer como texto visible
+2. Los diagramas deben renderizarse como gráficos interactivos incluso cuando hay backticks sueltos en el contenido previo
+3. Los bloques ` ```reactflow ``` ` normales deben seguir funcionando
+4. El código inline normal debe seguir renderizándose sin styling especial
