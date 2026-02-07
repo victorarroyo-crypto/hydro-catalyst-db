@@ -85,6 +85,31 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
 
   // Create components that have access to mermaid blocks
   const components = {
+    // ReactFlow diagram embedded as base64 JSON in data attribute
+    div: ({ node, children, ...props }: { node?: any; children?: React.ReactNode }) => {
+      const rfData = (props as any)['data-reactflow-diagram'];
+      if (rfData) {
+        try {
+          const json = atob(rfData);
+          const data = JSON.parse(json);
+          if (data && Array.isArray(data.nodes) && Array.isArray(data.edges)) {
+            return (
+              <ReactFlowProvider>
+                <ReactFlowDiagram data={data as ReactFlowData} />
+              </ReactFlowProvider>
+            );
+          }
+        } catch (e) {
+          console.warn('Failed to decode ReactFlow diagram:', e);
+          return (
+            <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
+              Error en diagrama: {(e as Error).message}
+            </div>
+          );
+        }
+      }
+      return <div {...props}>{children}</div>;
+    },
     // Custom table styling
     table: ({ children }: { children?: React.ReactNode }) => (
       <div className="overflow-x-auto my-4">

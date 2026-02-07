@@ -219,6 +219,31 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeRaw]}
       components={{
+        // ReactFlow diagram embedded as base64 JSON in data attribute
+        div: ({ node, children, ...props }) => {
+          const rfData = (props as any)['data-reactflow-diagram'];
+          if (rfData) {
+            try {
+              const json = atob(rfData);
+              const data = JSON.parse(json);
+              if (data && Array.isArray(data.nodes) && Array.isArray(data.edges)) {
+                return (
+                  <ReactFlowProvider>
+                    <ReactFlowDiagram data={data as ReactFlowData} />
+                  </ReactFlowProvider>
+                );
+              }
+            } catch (e) {
+              console.warn('Failed to decode ReactFlow diagram:', e);
+              return (
+                <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
+                  Error en diagrama: {(e as Error).message}
+                </div>
+              );
+            }
+          }
+          return <div {...props}>{children}</div>;
+        },
         // Subtle headers - more spacing for professional look
         h1: ({ children }) => (
           <h1 className="text-xl font-bold text-foreground mt-8 mb-4 first:mt-0 pb-2 border-b border-border/50">
