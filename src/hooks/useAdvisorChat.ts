@@ -260,6 +260,19 @@ export function useAdvisorChat(userId: string | undefined) {
                 if (json.credits_remaining !== undefined) {
                   setCreditsRemaining(json.credits_remaining);
                 }
+                // When streaming is done, use sanitized full_content from backend
+                // (contains <div data-reactflow-diagram="BASE64"> for diagram rendering)
+                if (json.done && json.full_content) {
+                  fullResponse = json.full_content;
+                  setMessages(prev => {
+                    const newMessages = [...prev];
+                    newMessages[newMessages.length - 1] = {
+                      ...newMessages[newMessages.length - 1],
+                      content: fullResponse
+                    };
+                    return newMessages;
+                  });
+                }
               } catch {
                 // Skip malformed JSON
               }
