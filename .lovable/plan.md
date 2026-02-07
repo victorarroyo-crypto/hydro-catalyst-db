@@ -1,111 +1,108 @@
 
-# Plan: Corregir Estructura de Datos en Exportación Word de ReactFlow
+
+# Plan: Corregir Exportación Inconsistente de Diagramas ReactFlow a Word
 
 ## Problema Identificado
 
-El error ocurre porque hay una **discrepancia en la estructura de datos**:
+Algunos diagramas ReactFlow se muestran correctamente en pantalla pero no aparecen en el documento Word exportado.
 
-| Componente | Estructura esperada | Dónde busca label |
-|------------|---------------------|-------------------|
-| `ReactFlowDiagram.tsx` (frontend) | `{ id, label, type }` | `node.label` |
-| `reactflowToImage.ts` (Word export) | `{ id, data: { label }, type }` | `node.data.label` |
+### Causa Raíz
 
-El backend envía nodos con `label` directamente en el nodo, pero el código de exportación a Word busca `node.data.label`, que es `undefined`.
+El problema está en el archivo `src/lib/reactflowToImage.ts`, específicamente en el uso de `btoa()` para generar claves base64:
 
-**Error en consola:**
+```typescript
+// Líneas 133, 161, 197
+const base64 = btoa(jsonContent);  // ❌ FALLA con caracteres Unicode
 ```
-TypeError: Cannot read properties of undefined (reading 'label')
-at line 83: label: node.data.label
+
+**¿Por qué falla?**
+- `btoa()` solo funciona con caracteres ASCII (0-255)
+- Cuando el JSON contiene labels con tildes (`"Tratamiento Biológico"`), ñ, u otros caracteres Unicode, `btoa()` lanza un error `DOMException`
+- El error se captura silenciosamente en el `catch`, y el diagrama nunca se añade al array `blocks`
+- Resultado: el diagrama se renderiza en pantalla (porque usa otra función) pero no se exporta a Word
+
+### Diagrama del Flujo de Error
+
+```text
+JSON con Unicode ("Desnitrificación")
+           ↓
+    btoa(jsonContent)
+           ↓
+   DOMException: Invalid character
+           ↓
+      catch (e) { }  ← Error silenciado
+           ↓
+   Diagrama NO se añade a blocks[]
+           ↓
+   Word generado SIN ese diagrama
 ```
 
 ## Solución
 
-Actualizar `reactflowToImage.ts` para manejar **ambas estructuras**:
-- Formato simplificado: `{ id, label, type }` (lo que envía el backend)
-- Formato ReactFlow nativo: `{ id, data: { label }, type }` (por si cambia en el futuro)
+Reemplazar `btoa()` con una función segura para Unicode que primero codifica el texto a UTF-8 antes de convertir a base64.
 
-## Cambios Requeridos
+### Cambios Requeridos
 
-### Archivo: `src/lib/reactflowToImage.ts`
+#### Archivo: `src/lib/reactflowToImage.ts`
 
-**1. Actualizar interfaz `ReactFlowData` (líneas 7-22)**
+**1. Añadir función helper para base64 seguro (antes de `extractReactFlowBlocks`)**
 
-```typescript
-export interface ReactFlowData {
-  title?: string;
-  direction?: 'LR' | 'TD';
-  nodes: Array<{
-    id: string;
-    type?: string;
-    // Support both formats: direct label or nested in data
-    label?: string;
-    data?: { label: string };
-    position?: { x: number; y: number };
-  }>;
-  edges: Array<{
-    id: string;
-    source: string;
-    target: string;
-    label?: string;
-    animated?: boolean;
-  }>;
-}
-```
-
-**2. Crear función helper para extraer label (nueva, antes de `createReactFlowSvg`)**
-
+Nueva función `safeBase64Encode`:
 ```typescript
 /**
- * Extract label from node, supporting both formats
+ * Safely encode string to base64, handling Unicode characters.
+ * Standard btoa() fails on non-ASCII characters.
  */
-function getNodeLabel(node: ReactFlowData['nodes'][0]): string {
-  // Format 1: Direct label (from backend)
-  if (typeof node.label === 'string') {
-    return node.label;
+function safeBase64Encode(str: string): string {
+  try {
+    // First encode to UTF-8, then to base64
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+      (_, p1) => String.fromCharCode(parseInt(p1, 16))
+    ));
+  } catch (e) {
+    // Fallback: generate a unique hash from the string
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return `rf_${Math.abs(hash).toString(36)}_${str.length}`;
   }
-  // Format 2: Nested in data (ReactFlow native format)
-  if (node.data && typeof node.data.label === 'string') {
-    return node.data.label;
-  }
-  // Fallback: use node id
-  return node.id;
 }
 ```
 
-**3. Actualizar `createReactFlowSvg` para usar el helper**
+**2. Reemplazar todas las llamadas a `btoa()` con `safeBase64Encode()`**
 
-Línea 83 (dentro de `nodes.forEach`):
+Hay 3 lugares donde se usa `btoa()`:
+
+| Línea | Código actual | Código nuevo |
+|-------|---------------|--------------|
+| 133 | `const base64 = btoa(jsonContent);` | `const base64 = safeBase64Encode(jsonContent);` |
+| 161 | `const base64 = btoa(jsonContent);` | `const base64 = safeBase64Encode(jsonContent);` |
+| 197 | `const base64 = btoa(jsonText);` | `const base64 = safeBase64Encode(jsonText);` |
+
+**3. Añadir logging mejorado para diagnóstico**
+
+Actualizar los mensajes de warning para incluir más contexto:
+
 ```typescript
-// Antes:
-label: node.data.label,
-
-// Después:
-label: getNodeLabel(node),
-```
-
-Líneas 192-194 (renderizado del label):
-```typescript
-// Antes:
-const label = node.data.label.length > 20 
-  ? node.data.label.substring(0, 18) + '...' 
-  : node.data.label;
-
-// Después:
-const nodeLabel = getNodeLabel(node);
-const label = nodeLabel.length > 20 
-  ? nodeLabel.substring(0, 18) + '...' 
-  : nodeLabel;
+} catch (e) {
+  console.warn('Failed to parse ReactFlow from ```reactflow fence:', e, 
+    'Content preview:', jsonContent.substring(0, 100));
+}
 ```
 
 ## Resumen de Cambios
 
-| Archivo | Cambio |
+| Archivo | Acción |
 |---------|--------|
-| `src/lib/reactflowToImage.ts` | Actualizar interfaz + añadir `getNodeLabel()` + usar en 2 lugares |
+| `src/lib/reactflowToImage.ts` | Añadir `safeBase64Encode()` + Reemplazar 3 usos de `btoa()` |
 
 ## Verificación
 
-1. Los diagramas ReactFlow deben aparecer en el Word (no espacios en blanco)
-2. Los nodos deben mostrar sus labels correctamente
-3. No debe haber errores en consola al exportar
-4. El chat debe seguir renderizando los diagramas correctamente
+Después de implementar:
+1. Exportar a Word un informe con diagramas que contengan texto en español (tildes, ñ)
+2. Verificar que TODOS los diagramas aparecen en el documento
+3. Comprobar que no hay errores en la consola durante la exportación
+
