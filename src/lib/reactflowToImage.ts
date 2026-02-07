@@ -25,8 +25,63 @@ export interface ReactFlowData {
 }
 
 /**
+ * Find the end of a JSON object by balancing braces.
+ */
+function findJsonEnd(text: string, startIndex: number): number {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  
+  for (let i = startIndex; i < text.length; i++) {
+    const char = text[i];
+    
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    
+    if (char === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    
+    if (inString) continue;
+    
+    if (char === '{') depth++;
+    if (char === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  
+  return -1;
+}
+
+/**
+ * Validates if parsed JSON is a valid ReactFlow structure.
+ */
+function isValidReactFlowStructure(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== 'object') return false;
+  const obj = parsed as Record<string, unknown>;
+  
+  if (!Array.isArray(obj.nodes)) return false;
+  if (!Array.isArray(obj.edges)) return false;
+  
+  return true;
+}
+
+/**
  * Extract ReactFlow diagram blocks from content
- * Detects: <div data-reactflow-diagram="BASE64">
+ * Detects:
+ * - <div data-reactflow-diagram="BASE64">
+ * - ```reactflow fenced code blocks
+ * - ```json/``` fences with ReactFlow structure
+ * - Raw JSON with nodes/edges structure
  */
 export function extractReactFlowBlocks(content: string): { 
   data: ReactFlowData; 
@@ -35,12 +90,17 @@ export function extractReactFlowBlocks(content: string): {
   base64: string;
 }[] {
   const blocks: { data: ReactFlowData; startIndex: number; endIndex: number; base64: string }[] = [];
+  const processedRanges: Array<{start: number; end: number}> = [];
   
-  // Match <div data-reactflow-diagram="..."></div> or self-closing
-  const regex = /<div\s+data-reactflow-diagram="([^"]+)"[^>]*>(?:<\/div>)?/gi;
+  // Helper to check if a range overlaps with already processed ranges
+  const isOverlapping = (start: number, end: number) => 
+    processedRanges.some(r => !(end < r.start || start > r.end));
+  
+  // Pattern 1: Match <div data-reactflow-diagram="..."></div> or self-closing
+  const divRegex = /<div\s+data-reactflow-diagram="([^"]+)"[^>]*>(?:<\/div>)?/gi;
   let match;
   
-  while ((match = regex.exec(content)) !== null) {
+  while ((match = divRegex.exec(content)) !== null) {
     try {
       const base64 = match[1];
       const json = atob(base64);
@@ -53,12 +113,103 @@ export function extractReactFlowBlocks(content: string): {
           endIndex: match.index + match[0].length,
           base64,
         });
+        processedRanges.push({ start: match.index, end: match.index + match[0].length });
       }
     } catch (e) {
-      console.warn('Failed to parse ReactFlow diagram:', e);
+      console.warn('Failed to parse ReactFlow diagram from div:', e);
     }
   }
   
+  // Pattern 2: ```reactflow fenced code blocks
+  const reactflowFenceRegex = /```reactflow\s*\n([\s\S]*?)\n```/gi;
+  while ((match = reactflowFenceRegex.exec(content)) !== null) {
+    if (isOverlapping(match.index, match.index + match[0].length)) continue;
+    
+    try {
+      const jsonContent = match[1].trim();
+      const data = JSON.parse(jsonContent) as ReactFlowData;
+      
+      if (isValidReactFlowStructure(data)) {
+        const base64 = btoa(jsonContent);
+        blocks.push({
+          data,
+          startIndex: match.index,
+          endIndex: match.index + match[0].length,
+          base64,
+        });
+        processedRanges.push({ start: match.index, end: match.index + match[0].length });
+      }
+    } catch (e) {
+      console.warn('Failed to parse ReactFlow from ```reactflow fence:', e);
+    }
+  }
+  
+  // Pattern 3: Generic fences (```json, ```, ```javascript) containing ReactFlow JSON
+  const genericFenceRegex = /```([a-zA-Z0-9_-]*)\s*\n([\s\S]*?)\n```/gi;
+  while ((match = genericFenceRegex.exec(content)) !== null) {
+    const lang = match[1]?.toLowerCase();
+    if (lang === 'reactflow') continue; // Already processed
+    if (isOverlapping(match.index, match.index + match[0].length)) continue;
+    
+    const jsonContent = match[2].trim();
+    if (!jsonContent.includes('"nodes"') || !jsonContent.includes('"edges"')) continue;
+    
+    try {
+      const data = JSON.parse(jsonContent) as ReactFlowData;
+      
+      if (isValidReactFlowStructure(data)) {
+        const base64 = btoa(jsonContent);
+        blocks.push({
+          data,
+          startIndex: match.index,
+          endIndex: match.index + match[0].length,
+          base64,
+        });
+        processedRanges.push({ start: match.index, end: match.index + match[0].length });
+      }
+    } catch (e) {
+      // Not valid JSON
+    }
+  }
+  
+  // Pattern 4: Raw JSON with nodes and edges (not inside fences)
+  const jsonStartPattern = /\{/g;
+  let jsonMatch;
+  
+  while ((jsonMatch = jsonStartPattern.exec(content)) !== null) {
+    const jsonStart = jsonMatch.index;
+    
+    if (isOverlapping(jsonStart, jsonStart + 1)) continue;
+    
+    const endIdx = findJsonEnd(content, jsonStart);
+    if (endIdx === -1) continue;
+    
+    const jsonText = content.substring(jsonStart, endIdx + 1);
+    
+    // Quick checks
+    if (jsonText.length < 50) continue;
+    if (!jsonText.includes('"nodes"') || !jsonText.includes('"edges"')) continue;
+    
+    try {
+      const data = JSON.parse(jsonText) as ReactFlowData;
+      
+      if (isValidReactFlowStructure(data)) {
+        const base64 = btoa(jsonText);
+        blocks.push({
+          data,
+          startIndex: jsonStart,
+          endIndex: endIdx + 1,
+          base64,
+        });
+        processedRanges.push({ start: jsonStart, end: endIdx + 1 });
+        jsonStartPattern.lastIndex = endIdx + 1;
+      }
+    } catch (e) {
+      // Not valid JSON
+    }
+  }
+  
+  console.log(`[reactflowToImage] extractReactFlowBlocks found ${blocks.length} diagram(s)`);
   return blocks;
 }
 
