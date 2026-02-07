@@ -495,14 +495,22 @@ export default function AdvisorChat() {
       if (deepJob.status?.result?.content) {
         const { generateDeepAdvisorDocument } = await import('@/lib/generateDeepAdvisorDocument');
         const { renderAllMermaidDiagrams } = await import('@/lib/mermaidToImage');
+        const { renderAllReactFlowDiagrams } = await import('@/lib/reactflowToImage');
         
-        // Render Mermaid diagrams to images before generating the document
+        // Render Mermaid and ReactFlow diagrams to images before generating the document
         const content = deepJob.status.result.content;
-        let diagramImages: Map<string, ArrayBuffer> | undefined;
+        let diagramImages: Map<string, ArrayBuffer> = new Map();
         
         try {
-          diagramImages = await renderAllMermaidDiagrams(content);
-          console.log(`[AdvisorChat] Rendered ${diagramImages.size} diagram(s) for Word export`);
+          // Render Mermaid diagrams
+          const mermaidImages = await renderAllMermaidDiagrams(content);
+          mermaidImages.forEach((value, key) => diagramImages.set(key, value));
+          console.log(`[AdvisorChat] Rendered ${mermaidImages.size} Mermaid diagram(s) for Word export`);
+          
+          // Render ReactFlow diagrams
+          const reactFlowImages = await renderAllReactFlowDiagrams(content);
+          reactFlowImages.forEach((value, key) => diagramImages.set(key, value));
+          console.log(`[AdvisorChat] Rendered ${reactFlowImages.size} ReactFlow diagram(s) for Word export`);
         } catch (diagramError) {
           console.warn('[AdvisorChat] Failed to render diagrams, will use text fallback:', diagramError);
         }
@@ -572,6 +580,7 @@ export default function AdvisorChat() {
     try {
       const { generateDeepAdvisorDocument } = await import('@/lib/generateDeepAdvisorDocument');
       const { renderAllMermaidDiagrams } = await import('@/lib/mermaidToImage');
+      const { renderAllReactFlowDiagrams } = await import('@/lib/reactflowToImage');
       
       // Parse sources - may come as JSON string from DB or as array
       let parsedSources: Array<{ type: string; name: string; url?: string }> = [];
@@ -595,10 +604,15 @@ export default function AdvisorChat() {
         }
       }
       
-      // Render Mermaid diagrams to images
-      let diagramImages: Map<string, ArrayBuffer> | undefined;
+      // Render Mermaid and ReactFlow diagrams to images
+      let diagramImages: Map<string, ArrayBuffer> = new Map();
       try {
-        diagramImages = await renderAllMermaidDiagrams(message.content);
+        const mermaidImages = await renderAllMermaidDiagrams(message.content);
+        mermaidImages.forEach((value, key) => diagramImages.set(key, value));
+        
+        const reactFlowImages = await renderAllReactFlowDiagrams(message.content);
+        reactFlowImages.forEach((value, key) => diagramImages.set(key, value));
+        
         console.log(`[AdvisorChat] Rendered ${diagramImages.size} diagram(s) for historic message export`);
       } catch (diagramError) {
         console.warn('[AdvisorChat] Failed to render diagrams for historic message:', diagramError);
