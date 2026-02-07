@@ -188,6 +188,66 @@ function sanitizeHTML(text: string): string {
 }
 
 /**
+ * Close unclosed code fences.
+ * When the LLM opens a ``` block but forgets to close it,
+ * all subsequent content is interpreted as code and rendered literally.
+ * This function detects and closes orphaned fences.
+ */
+function closeUnclosedCodeFences(text: string): string {
+  const lines = text.split('\n');
+  const result: string[] = [];
+  let openFenceCount = 0;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    // Detect fence opening: ``` or ```language
+    const openMatch = trimmed.match(/^```(\w*)$/);
+    if (openMatch && openFenceCount === 0) {
+      openFenceCount++;
+      result.push(line);
+      continue;
+    }
+    
+    // Detect fence closing: ```
+    if (trimmed === '```' && openFenceCount > 0) {
+      openFenceCount--;
+      result.push(line);
+      continue;
+    }
+    
+    // If we're inside an unclosed fence and hit markdown content,
+    // close the fence before this line
+    if (openFenceCount > 0) {
+      // Check if this line looks like markdown that escaped the fence
+      const looksLikeEscapedMarkdown = 
+        /^#{1,6}\s/.test(trimmed) ||           // Headers
+        /^>\s/.test(trimmed) ||                 // Blockquotes
+        /^---+\s*$/.test(trimmed) ||            // Horizontal rules
+        /^\*\*[A-Za-z]/.test(trimmed) ||        // Bold start
+        /^>\s*\*\*/.test(trimmed);              // Blockquote with bold
+      
+      if (looksLikeEscapedMarkdown) {
+        // Close the orphaned fence
+        result.push('```');
+        openFenceCount--;
+      }
+    }
+    
+    result.push(line);
+  }
+  
+  // If still unclosed at end of content, close it
+  while (openFenceCount > 0) {
+    result.push('```');
+    openFenceCount--;
+  }
+  
+  return result.join('\n');
+}
+
+/**
  * Fix common markdown formatting issues
  */
 function fixMarkdownFormatting(text: string): string {
@@ -246,16 +306,19 @@ export function applyContentQualityControl(rawContent: string): QualityResult {
   // Step 1: Sanitize HTML first (prevents parsing issues)
   content = sanitizeHTML(content);
   
-  // Step 2: Normalize chemical equations
+  // Step 2: Close unclosed code fences (NEW STEP)
+  content = closeUnclosedCodeFences(content);
+  
+  // Step 3: Normalize chemical equations
   content = normalizeChemicalEquations(content);
   
-  // Step 3: Normalize checklists
+  // Step 4: Normalize checklists
   content = normalizeChecklists(content);
   
-  // Step 4: Process wide tables
+  // Step 5: Process wide tables
   content = processWideTables(content, warnings);
   
-  // Step 5: Fix general markdown formatting
+  // Step 6: Fix general markdown formatting
   content = fixMarkdownFormatting(content);
   
   return {
