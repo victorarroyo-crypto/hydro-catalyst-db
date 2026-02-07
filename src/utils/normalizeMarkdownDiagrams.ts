@@ -82,7 +82,7 @@ function isMermaidContent(line: string): boolean {
 }
 
 /**
- * Cleans stray backticks that appear before code fences.
+ * Cleans stray backticks that appear before code fences or JSON blocks.
  * LLMs sometimes emit isolated backticks that break parsing.
  */
 function cleanStrayBackticks(text: string): string {
@@ -97,6 +97,14 @@ function cleanStrayBackticks(text: string): string {
   
   // Backtick followed by space/newline then fence
   result = result.replace(/`\s+(```(?:reactflow|mermaid|flow|chem|equation))/gi, '$1');
+  
+  // CRITICAL: Single stray backtick immediately before JSON (very common LLM error)
+  // Pattern: `\n{ or ` { (backtick then space/newline then opening brace)
+  result = result.replace(/`\s*\n(\s*\{)/g, '\n$1');
+  result = result.replace(/`\s+(\{)/g, ' $1');
+  
+  // Backtick at end of line before JSON on next line
+  result = result.replace(/`\s*$\n(\s*\{)/gm, '\n$1');
   
   return result;
 }
@@ -618,30 +626,53 @@ export function extractReactFlowBlocks(text: string): {
   
   // Pattern 3: Raw JSON blocks with nodes and edges (not inside fences)
   // Runs regardless of previous extractions to catch multiple diagrams
-  const jsonPattern = /(?:^|\n)\s*(\{[\s\S]*?"nodes"\s*:\s*\[[\s\S]*?"edges"\s*:\s*\[[\s\S]*?\})\s*(?=\n|$)/g;
-  processedContent = processedContent.replace(jsonPattern, (match, jsonContent) => {
-    // Skip if already inside a placeholder
-    if (match.includes(':::reactflow-placeholder-')) return match;
+  // More flexible pattern: finds JSON starting with { that contains "nodes" and "edges"
+  // Uses iterative approach to find balanced JSON objects
+  const jsonStartPattern = /(?:^|\n)[`\s]*(\{)/g;
+  let jsonMatch;
+  const replacements: Array<{start: number; end: number; replacement: string}> = [];
+  
+  while ((jsonMatch = jsonStartPattern.exec(processedContent)) !== null) {
+    const matchStart = jsonMatch.index;
+    const jsonStart = matchStart + jsonMatch[0].indexOf('{');
     
-    // Extract pure JSON to remove any trailing garbage
-    const pureJson = extractPureJson(jsonContent);
-    if (!pureJson) return match;
+    // Find the balanced end of this JSON
+    const endIdx = findJsonEnd(processedContent, jsonStart);
+    if (endIdx === -1) continue;
+    
+    const jsonText = processedContent.substring(jsonStart, endIdx + 1);
+    
+    // Must contain nodes and edges
+    if (!jsonText.includes('"nodes"') || !jsonText.includes('"edges"')) continue;
+    
+    // Skip if this section is already a placeholder
+    if (processedContent.substring(matchStart, endIdx + 10).includes(':::reactflow-placeholder-')) continue;
     
     try {
-      const parsed = JSON.parse(pureJson);
+      const parsed = JSON.parse(jsonText);
       if (isValidReactFlowStructure(parsed)) {
         const index = reactflowBlocks.length;
-        reactflowBlocks.push(pureJson);
+        reactflowBlocks.push(jsonText);
         if (import.meta.env.DEV) {
-          console.debug(`[ReactFlow] Extracted raw JSON, index=${index}, cleaned=${pureJson.length < jsonContent.trim().length}`);
+          console.debug(`[ReactFlow] Extracted raw JSON at offset ${matchStart}, index=${index}`);
         }
-        return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
+        // Track replacement - include any backticks/whitespace before the JSON
+        replacements.push({
+          start: matchStart,
+          end: endIdx + 1,
+          replacement: `\n\n:::reactflow-placeholder-${index}:::\n\n`
+        });
       }
     } catch (e) {
-      // Still not valid JSON after cleanup, ignore
+      // Not valid JSON
     }
-    return match;
-  });
+  }
+  
+  // Apply replacements in reverse order to preserve indices
+  for (let i = replacements.length - 1; i >= 0; i--) {
+    const r = replacements[i];
+    processedContent = processedContent.substring(0, r.start) + r.replacement + processedContent.substring(r.end);
+  }
   
   if (import.meta.env.DEV && reactflowBlocks.length > 0) {
     console.debug(`[ReactFlow] Total blocks extracted: ${reactflowBlocks.length}`);
