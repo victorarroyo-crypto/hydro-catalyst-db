@@ -6,10 +6,13 @@ import { toPng } from 'html-to-image';
 
 export interface ReactFlowData {
   title?: string;
+  direction?: 'LR' | 'TD';
   nodes: Array<{
     id: string;
     type?: string;
-    data: { label: string };
+    // Support both formats: direct label or nested in data
+    label?: string;
+    data?: { label: string };
     position?: { x: number; y: number };
   }>;
   edges: Array<{
@@ -60,6 +63,22 @@ export function extractReactFlowBlocks(content: string): {
 }
 
 /**
+ * Extract label from node, supporting both formats
+ */
+function getNodeLabel(node: ReactFlowData['nodes'][0]): string {
+  // Format 1: Direct label (from backend)
+  if (typeof node.label === 'string') {
+    return node.label;
+  }
+  // Format 2: Nested in data (ReactFlow native format)
+  if (node.data && typeof node.data.label === 'string') {
+    return node.data.label;
+  }
+  // Fallback: use node id
+  return node.id;
+}
+
+/**
  * Create a simple SVG representation of a ReactFlow diagram
  * This is used for Word export since we can't render React components server-side
  */
@@ -80,7 +99,7 @@ function createReactFlowSvg(data: ReactFlowData): string {
   
   nodes.forEach(node => {
     nodeMap.set(node.id, { 
-      label: node.data.label, 
+      label: getNodeLabel(node), 
       x: node.position?.x ?? 0, 
       y: node.position?.y ?? 0,
       type: node.type,
@@ -189,9 +208,10 @@ function createReactFlowSvg(data: ReactFlowData): string {
       svg += `<rect x="${pos.x}" y="${pos.y}" width="${nodeWidth}" height="${nodeHeight}" rx="${radius}" fill="${color}" stroke="#1E293B" stroke-width="1"/>`;
       
       // Node label (truncate if too long)
-      const label = node.data.label.length > 20 
-        ? node.data.label.substring(0, 18) + '...' 
-        : node.data.label;
+      const nodeLabel = getNodeLabel(node);
+      const label = nodeLabel.length > 20 
+        ? nodeLabel.substring(0, 18) + '...' 
+        : nodeLabel;
       svg += `<text x="${pos.x + nodeWidth / 2}" y="${pos.y + nodeHeight / 2 + 4}" text-anchor="middle" font-family="Arial" font-size="11" fill="white" font-weight="500">${escapeXml(label)}</text>`;
     }
   });
