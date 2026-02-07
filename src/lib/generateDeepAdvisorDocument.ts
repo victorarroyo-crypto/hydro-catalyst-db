@@ -1043,16 +1043,37 @@ function parseMarkdownToParagraphs(
   
   // First, process ReactFlow divs and replace them with placeholders
   let processedMarkdown = markdown;
-  const reactFlowRegex = /<div\s+data-reactflow-diagram="([^"]+)"[^>]*>(?:<\/div>)?/gi;
-  const reactFlowMatches: { match: string; base64: string; placeholder: string }[] = [];
+  const reactFlowDivRegex = /<div\s+data-reactflow-diagram="([^"]+)"[^>]*>(?:<\/div>)?/gi;
+  const reactFlowMatches: { match: string; jsonContent: string; placeholder: string }[] = [];
   let rfMatch;
   let rfIndex = 0;
   
-  while ((rfMatch = reactFlowRegex.exec(markdown)) !== null) {
+  // Pattern 1: <div data-reactflow-diagram="BASE64"> format
+  while ((rfMatch = reactFlowDivRegex.exec(markdown)) !== null) {
     const placeholder = `__REACTFLOW_DIAGRAM_${rfIndex}__`;
+    try {
+      const base64 = rfMatch[1];
+      const jsonContent = atob(base64).trim();
+      reactFlowMatches.push({
+        match: rfMatch[0],
+        jsonContent, // Use JSON content as key (consistent with renderAllReactFlowDiagrams)
+        placeholder,
+      });
+      processedMarkdown = processedMarkdown.replace(rfMatch[0], `\n${placeholder}\n`);
+      rfIndex++;
+    } catch (e) {
+      console.warn('Failed to decode ReactFlow base64:', e);
+    }
+  }
+  
+  // Pattern 2: ```reactflow fenced code blocks
+  const reactFlowFenceRegex = /```reactflow\s*\n([\s\S]*?)\n```/gi;
+  while ((rfMatch = reactFlowFenceRegex.exec(markdown)) !== null) {
+    const placeholder = `__REACTFLOW_DIAGRAM_${rfIndex}__`;
+    const jsonContent = rfMatch[1].trim();
     reactFlowMatches.push({
       match: rfMatch[0],
-      base64: rfMatch[1],
+      jsonContent, // Use JSON content as key
       placeholder,
     });
     processedMarkdown = processedMarkdown.replace(rfMatch[0], `\n${placeholder}\n`);
@@ -1161,15 +1182,14 @@ function parseMarkdownToParagraphs(
     // Check for ReactFlow diagram placeholder
     const reactFlowPlaceholder = reactFlowMatches.find(m => trimmedLine === m.placeholder);
     if (reactFlowPlaceholder) {
-      // Try to use pre-rendered image if available
-      const diagramImage = diagramImages?.get(reactFlowPlaceholder.base64);
+      // Try to use pre-rendered image if available (using jsonContent as key)
+      const diagramImage = diagramImages?.get(reactFlowPlaceholder.jsonContent);
       if (diagramImage) {
         elements.push(...createDiagramImageParagraph(diagramImage, 'Diagrama de Proceso'));
       } else {
         // Fallback: try to parse and create simple text representation
         try {
-          const json = atob(reactFlowPlaceholder.base64);
-          const data = JSON.parse(json);
+          const data = JSON.parse(reactFlowPlaceholder.jsonContent);
           if (data && Array.isArray(data.nodes)) {
             elements.push(
               new Paragraph({
