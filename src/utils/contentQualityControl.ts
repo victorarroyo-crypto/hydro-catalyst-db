@@ -199,6 +199,24 @@ function fixMarkdownFormatting(text: string): string {
   // Fix bold/italic without proper spacing
   result = result.replace(/\*{4,}/g, '**');
   
+  // ===== FIX MALFORMED BOLD/ITALIC FROM LLM =====
+  // Common LLM error: `* *text**` instead of `**text**` (space after first asterisk)
+  // Pattern: * *text** at start of line → **text**
+  result = result.replace(/^\* \*([^*]+)\*\*$/gm, '**$1**');
+  
+  // Pattern: * *text** in mid-line (e.g. after bullets) → **text**
+  result = result.replace(/(\s)\* \*([^*\n]+)\*\*/g, '$1**$2**');
+  
+  // Pattern: * *text* * (space before closing asterisk)
+  result = result.replace(/\* \*([^*]+)\* \*/g, '**$1**');
+  
+  // Fix broken separators: `- --` or `- - -` should be `---`
+  result = result.replace(/^-\s+-\s*-?\s*$/gm, '---');
+  result = result.replace(/^-\s*--\s*$/gm, '---');
+  
+  // Fix headers that are malformed like `* *Header**` → **Header**
+  result = result.replace(/^\* \*\*([^*]+)\*\*$/gm, '**$1**');
+  
   // Normalize multiple blank lines
   result = result.replace(/\n{4,}/g, '\n\n\n');
   
@@ -206,7 +224,7 @@ function fixMarkdownFormatting(text: string): string {
   result = result.replace(/[ \t]+$/gm, '');
   
   // Fix list items without space after marker
-  result = result.replace(/^(\s*[-*+])([^\s])/gm, '$1 $2');
+  result = result.replace(/^(\s*[-*+])([^\s*-])/gm, '$1 $2');
   
   return result.trim();
 }
