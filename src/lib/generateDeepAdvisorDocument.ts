@@ -1033,14 +1033,33 @@ function parseMermaidToReadable(mermaidContent: string): Paragraph[] {
 /**
  * Parse markdown content and convert to docx elements (paragraphs and tables)
  * @param markdown - The markdown content to parse
- * @param diagramImages - Optional map of Mermaid code to rendered PNG images
+ * @param diagramImages - Optional map of diagram code/base64 to rendered PNG images
  */
 function parseMarkdownToParagraphs(
   markdown: string,
   diagramImages?: Map<string, ArrayBuffer>
 ): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
-  const lines = markdown.split('\n');
+  
+  // First, process ReactFlow divs and replace them with placeholders
+  let processedMarkdown = markdown;
+  const reactFlowRegex = /<div\s+data-reactflow-diagram="([^"]+)"[^>]*>(?:<\/div>)?/gi;
+  const reactFlowMatches: { match: string; base64: string; placeholder: string }[] = [];
+  let rfMatch;
+  let rfIndex = 0;
+  
+  while ((rfMatch = reactFlowRegex.exec(markdown)) !== null) {
+    const placeholder = `__REACTFLOW_DIAGRAM_${rfIndex}__`;
+    reactFlowMatches.push({
+      match: rfMatch[0],
+      base64: rfMatch[1],
+      placeholder,
+    });
+    processedMarkdown = processedMarkdown.replace(rfMatch[0], `\n${placeholder}\n`);
+    rfIndex++;
+  }
+  
+  const lines = processedMarkdown.split('\n');
   
   let inCodeBlock = false;
   let codeBlockContent: string[] = [];
@@ -1137,6 +1156,52 @@ function parseMarkdownToParagraphs(
       elements.push(parseMarkdownTable(tableLines));
       inTable = false;
       tableLines = [];
+    }
+    
+    // Check for ReactFlow diagram placeholder
+    const reactFlowPlaceholder = reactFlowMatches.find(m => trimmedLine === m.placeholder);
+    if (reactFlowPlaceholder) {
+      // Try to use pre-rendered image if available
+      const diagramImage = diagramImages?.get(reactFlowPlaceholder.base64);
+      if (diagramImage) {
+        elements.push(...createDiagramImageParagraph(diagramImage, 'Diagrama de Proceso'));
+      } else {
+        // Fallback: try to parse and create simple text representation
+        try {
+          const json = atob(reactFlowPlaceholder.base64);
+          const data = JSON.parse(json);
+          if (data && Array.isArray(data.nodes)) {
+            elements.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: data.title || 'Diagrama de Proceso',
+                    bold: true,
+                    size: 24,
+                    font: VANDARUM_FONTS.titulo,
+                    color: VANDARUM_COLORS.verdeOscuro,
+                  }),
+                ],
+                spacing: { before: 150, after: 100 },
+              })
+            );
+            // List nodes as bullet points
+            data.nodes.forEach((node: { data?: { label?: string } }) => {
+              if (node.data?.label) {
+                elements.push(
+                  new Paragraph({
+                    children: createFormattedTextRuns(`• ${node.data.label}`),
+                    spacing: { after: 50 },
+                  })
+                );
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to parse ReactFlow diagram for Word:', e);
+        }
+      }
+      continue;
     }
     
     // Skip empty lines but add spacing
@@ -1525,7 +1590,7 @@ export interface DeepAdvisorReportData {
   query?: string;
   chatId?: string;
   companyName?: string; // Name of the company being studied
-  diagramImages?: Map<string, ArrayBuffer>; // Rendered Mermaid diagrams as PNG images
+  diagramImages?: Map<string, ArrayBuffer>; // Rendered Mermaid and ReactFlow diagrams as PNG images
 }
 
 /**
