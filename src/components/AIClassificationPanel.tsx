@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -61,7 +60,7 @@ export const AIClassificationPanel: React.FC = () => {
   const { data: modelConfig } = useQuery({
     queryKey: ['classification-model'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('ai_model_settings')
         .select('model')
         .eq('action_type', 'classification')
