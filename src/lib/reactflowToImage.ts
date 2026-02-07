@@ -47,6 +47,31 @@ function safeBase64Encode(str: string): string {
 }
 
 /**
+ * Safely decode base64 string to UTF-8, handling Unicode characters.
+ * Standard atob() may produce incorrect results with Unicode content.
+ * This is the inverse of safeBase64Encode.
+ */
+export function safeBase64Decode(base64: string): string {
+  try {
+    // Decode base64 to binary string, then decode UTF-8
+    const binaryString = atob(base64);
+    // Convert binary string to percent-encoded, then decode
+    const percentEncoded = binaryString.split('').map(char => {
+      return '%' + ('00' + char.charCodeAt(0).toString(16)).slice(-2);
+    }).join('');
+    return decodeURIComponent(percentEncoded);
+  } catch (e) {
+    // Fallback: try standard atob
+    try {
+      return atob(base64);
+    } catch {
+      console.warn('[safeBase64Decode] Failed to decode base64:', e);
+      return '';
+    }
+  }
+}
+
+/**
  * Find the end of a JSON object by balancing braces.
  */
 function findJsonEnd(text: string, startIndex: number): number {
@@ -128,7 +153,7 @@ export function extractReactFlowBlocks(content: string): {
   while ((match = divRegex.exec(content)) !== null) {
     try {
       const base64 = match[1];
-      const json = atob(base64);
+      const json = safeBase64Decode(base64); // Use safe decode for Unicode support
       const data = JSON.parse(json) as ReactFlowData;
       
       if (data && Array.isArray(data.nodes) && Array.isArray(data.edges)) {
