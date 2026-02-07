@@ -94,6 +94,9 @@ function createReactFlowSvg(data: ReactFlowData): string {
   const padding = 40;
   const titleHeight = data.title ? 50 : 0;
   
+  // Word-friendly max width (A4 landscape ~700px effective)
+  const maxWordWidth = 680;
+  
   // Build adjacency list for layout
   const nodeMap = new Map<string, { label: string; x: number; y: number; type?: string }>();
   const outgoing = new Map<string, string[]>();
@@ -118,7 +121,7 @@ function createReactFlowSvg(data: ReactFlowData): string {
   // Find root nodes (no incoming edges)
   const roots = nodes.filter(n => (incoming.get(n.id)?.length ?? 0) === 0);
   
-  // Simple left-to-right layout using BFS
+  // Simple BFS to determine levels
   const visited = new Set<string>();
   const levels: string[][] = [];
   let currentLevel = roots.map(n => n.id);
@@ -145,23 +148,48 @@ function createReactFlowSvg(data: ReactFlowData): string {
     }
   });
   
-  // Calculate max nodes per level for centering
-  const maxNodesInLevel = Math.max(...levels.map(l => l.length));
-  const totalHeight = maxNodesInLevel * (nodeHeight + verticalGap) - verticalGap;
+  // Calculate if horizontal layout would be too wide
+  const horizontalWidth = levels.length * (nodeWidth + horizontalGap) - horizontalGap + padding * 2;
+  const useVerticalLayout = horizontalWidth > maxWordWidth || levels.length > 4;
   
-  // Assign positions with vertical centering
+  // Determine layout direction based on explicit direction or auto-detect
+  const isVertical = data.direction === 'TD' || useVerticalLayout;
+  
   const positions = new Map<string, { x: number; y: number }>();
-  levels.forEach((level, levelIndex) => {
-    const levelHeight = level.length * (nodeHeight + verticalGap) - verticalGap;
-    const startY = (totalHeight - levelHeight) / 2;
+  
+  if (isVertical) {
+    // Top-down layout for Word-friendly presentation
+    const maxNodesInLevel = Math.max(...levels.map(l => l.length));
+    const totalWidth = maxNodesInLevel * (nodeWidth + horizontalGap / 2) - horizontalGap / 2;
     
-    level.forEach((nodeId, nodeIndex) => {
-      positions.set(nodeId, {
-        x: levelIndex * (nodeWidth + horizontalGap) + padding,
-        y: startY + nodeIndex * (nodeHeight + verticalGap) + padding + titleHeight,
+    levels.forEach((level, levelIndex) => {
+      const levelWidth = level.length * (nodeWidth + horizontalGap / 2) - horizontalGap / 2;
+      const startX = (totalWidth - levelWidth) / 2;
+      
+      level.forEach((nodeId, nodeIndex) => {
+        positions.set(nodeId, {
+          x: startX + nodeIndex * (nodeWidth + horizontalGap / 2) + padding,
+          y: levelIndex * (nodeHeight + verticalGap) + padding + titleHeight,
+        });
       });
     });
-  });
+  } else {
+    // Left-to-right layout (original)
+    const maxNodesInLevel = Math.max(...levels.map(l => l.length));
+    const totalHeight = maxNodesInLevel * (nodeHeight + verticalGap) - verticalGap;
+    
+    levels.forEach((level, levelIndex) => {
+      const levelHeight = level.length * (nodeHeight + verticalGap) - verticalGap;
+      const startY = (totalHeight - levelHeight) / 2;
+      
+      level.forEach((nodeId, nodeIndex) => {
+        positions.set(nodeId, {
+          x: levelIndex * (nodeWidth + horizontalGap) + padding,
+          y: startY + nodeIndex * (nodeHeight + verticalGap) + padding + titleHeight,
+        });
+      });
+    });
+  }
   
   // Calculate SVG dimensions
   const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + nodeWidth + padding;
@@ -232,22 +260,37 @@ function createReactFlowSvg(data: ReactFlowData): string {
     svg += `<text x="${maxX / 2}" y="${titleHeight / 2 + 6}" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="white" font-weight="600">${escapeXml(data.title)}</text>`;
   }
   
-  // Draw edges with bezier curves
+  // Draw edges with bezier curves (adaptive to layout direction)
   edges.forEach(edge => {
     const sourcePos = positions.get(edge.source);
     const targetPos = positions.get(edge.target);
     if (sourcePos && targetPos) {
-      const x1 = sourcePos.x + nodeWidth;
-      const y1 = sourcePos.y + nodeHeight / 2;
-      const x2 = targetPos.x;
-      const y2 = targetPos.y + nodeHeight / 2;
+      let x1: number, y1: number, x2: number, y2: number;
+      let pathD: string;
       
-      // Calculate control points for smooth bezier curve
-      const dx = x2 - x1;
-      const controlOffset = Math.min(dx * 0.4, 60);
+      if (isVertical) {
+        // Vertical layout: connect bottom of source to top of target
+        x1 = sourcePos.x + nodeWidth / 2;
+        y1 = sourcePos.y + nodeHeight;
+        x2 = targetPos.x + nodeWidth / 2;
+        y2 = targetPos.y;
+        
+        const dy = y2 - y1;
+        const controlOffset = Math.min(dy * 0.4, 40);
+        pathD = `M${x1},${y1} C${x1},${y1 + controlOffset} ${x2},${y2 - controlOffset} ${x2},${y2}`;
+      } else {
+        // Horizontal layout: connect right of source to left of target
+        x1 = sourcePos.x + nodeWidth;
+        y1 = sourcePos.y + nodeHeight / 2;
+        x2 = targetPos.x;
+        y2 = targetPos.y + nodeHeight / 2;
+        
+        const dx = x2 - x1;
+        const controlOffset = Math.min(dx * 0.4, 60);
+        pathD = `M${x1},${y1} C${x1 + controlOffset},${y1} ${x2 - controlOffset},${y2} ${x2},${y2}`;
+      }
       
-      svg += `<path d="M${x1},${y1} C${x1 + controlOffset},${y1} ${x2 - controlOffset},${y2} ${x2},${y2}" 
-        fill="none" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrowhead)"/>`;
+      svg += `<path d="${pathD}" fill="none" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrowhead)"/>`;
       
       // Edge label with background
       if (edge.label) {
