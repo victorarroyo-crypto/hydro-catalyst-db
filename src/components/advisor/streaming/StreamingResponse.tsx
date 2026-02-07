@@ -295,7 +295,7 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
       };
       const textContent = React.Children.toArray(children).map(extractText).join('').trim();
       
-      // Check if this is a ReactFlow placeholder
+      // Check if this is a ReactFlow placeholder (exact match)
       const reactflowCheck = isReactFlowPlaceholder(textContent);
       if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
         const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
@@ -312,6 +312,48 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
             Error en diagrama: No se pudo extraer JSON válido del placeholder
           </div>
         );
+      }
+      
+      // Check if this paragraph CONTAINS a ReactFlow placeholder (mixed with text)
+      const placeholderMatch = textContent.match(/:::reactflow-placeholder-(\d+):::/);
+      if (placeholderMatch) {
+        const index = parseInt(placeholderMatch[1], 10);
+        if (reactflowBlocksRef.current[index]) {
+          const data = parseReactFlowJSON(reactflowBlocksRef.current[index]);
+          if (data) {
+            // Split: render text before, then diagram, then text after
+            const parts = textContent.split(/:::reactflow-placeholder-\d+:::/);
+            const before = parts[0]?.trim();
+            const after = parts[1]?.trim();
+            return (
+              <>
+                {before && <p className="mb-4 last:mb-0 leading-[1.8] text-foreground/90">{before}</p>}
+                <ReactFlowProvider>
+                  <ReactFlowDiagram data={data} />
+                </ReactFlowProvider>
+                {after && <p className="mb-4 last:mb-0 leading-[1.8] text-foreground/90">{after}</p>}
+              </>
+            );
+          }
+        }
+      }
+      
+      // Check if this paragraph contains raw ReactFlow JSON (fallback for edge cases)
+      if (textContent.includes('"nodes"') && textContent.includes('"edges"') && textContent.includes('{')) {
+        const data = parseReactFlowJSON(textContent);
+        if (data) {
+          // Find where JSON starts to extract text before it
+          const jsonStart = textContent.indexOf('{');
+          const textBefore = textContent.substring(0, jsonStart).trim();
+          return (
+            <>
+              {textBefore && <p className="mb-4 last:mb-0 leading-[1.8] text-foreground/90">{textBefore}</p>}
+              <ReactFlowProvider>
+                <ReactFlowDiagram data={data} />
+              </ReactFlowProvider>
+            </>
+          );
+        }
       }
       
       // Check if this is a mermaid placeholder

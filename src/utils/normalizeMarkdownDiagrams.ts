@@ -628,13 +628,17 @@ export function extractReactFlowBlocks(text: string): {
   // Runs regardless of previous extractions to catch multiple diagrams
   // More flexible pattern: finds JSON starting with { that contains "nodes" and "edges"
   // Uses iterative approach to find balanced JSON objects
-  const jsonStartPattern = /(?:^|\n)[`\s]*(\{)/g;
+  // ENHANCED: Also detects inline JSON that doesn't start on a new line
+  const jsonStartPattern = /(\{)/g;
   let jsonMatch;
   const replacements: Array<{start: number; end: number; replacement: string}> = [];
   
   while ((jsonMatch = jsonStartPattern.exec(processedContent)) !== null) {
-    const matchStart = jsonMatch.index;
-    const jsonStart = matchStart + jsonMatch[0].indexOf('{');
+    const jsonStart = jsonMatch.index;
+    
+    // Skip if this { is inside an existing placeholder
+    const beforeJson = processedContent.substring(Math.max(0, jsonStart - 50), jsonStart);
+    if (beforeJson.includes(':::reactflow-placeholder-')) continue;
     
     // Find the balanced end of this JSON
     const endIdx = findJsonEnd(processedContent, jsonStart);
@@ -642,11 +646,14 @@ export function extractReactFlowBlocks(text: string): {
     
     const jsonText = processedContent.substring(jsonStart, endIdx + 1);
     
+    // Quick length check - ReactFlow JSON is usually substantial (at least 50 chars)
+    if (jsonText.length < 50) continue;
+    
     // Must contain nodes and edges
     if (!jsonText.includes('"nodes"') || !jsonText.includes('"edges"')) continue;
     
     // Skip if this section is already a placeholder
-    if (processedContent.substring(matchStart, endIdx + 10).includes(':::reactflow-placeholder-')) continue;
+    if (processedContent.substring(jsonStart, endIdx + 10).includes(':::reactflow-placeholder-')) continue;
     
     try {
       const parsed = JSON.parse(jsonText);
@@ -654,14 +661,27 @@ export function extractReactFlowBlocks(text: string): {
         const index = reactflowBlocks.length;
         reactflowBlocks.push(jsonText);
         if (import.meta.env.DEV) {
-          console.debug(`[ReactFlow] Extracted raw JSON at offset ${matchStart}, index=${index}`);
+          console.debug(`[ReactFlow] Extracted raw JSON at offset ${jsonStart}, index=${index}, length=${jsonText.length}`);
         }
-        // Track replacement - include any backticks/whitespace before the JSON
+        // Track replacement - find where this JSON block effectively starts
+        // (could be preceded by whitespace or text on the same line)
+        // We want to replace just the JSON, preserving text before it
+        let effectiveStart = jsonStart;
+        // If preceded by just whitespace or backtick on same line, include those
+        let charBefore = processedContent[jsonStart - 1];
+        while (effectiveStart > 0 && (charBefore === ' ' || charBefore === '\t' || charBefore === '`')) {
+          effectiveStart--;
+          charBefore = processedContent[effectiveStart - 1];
+        }
+        
         replacements.push({
-          start: matchStart,
+          start: effectiveStart,
           end: endIdx + 1,
           replacement: `\n\n:::reactflow-placeholder-${index}:::\n\n`
         });
+        
+        // Move the search position past this JSON to avoid re-matching nested braces
+        jsonStartPattern.lastIndex = endIdx + 1;
       }
     } catch (e) {
       // Not valid JSON
