@@ -307,8 +307,24 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
         ),
         // Code blocks and inline code
         code: ({ children, className }) => {
-          // Block code (has language-* class) - preserve as <code> with className
-          // so the wrapping `pre` handler can detect the language
+          const textContent = String(children || '').trim();
+
+          // Check if this inline code is actually a ReactFlow placeholder
+          // This happens when stray backticks in LLM output wrap the placeholder
+          const reactflowCheck = isReactFlowPlaceholder(textContent);
+          if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+            const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
+            if (data) {
+              return (
+                <ReactFlowProvider>
+                  <ReactFlowDiagram data={data} />
+                </ReactFlowProvider>
+              );
+            }
+            console.warn('Invalid ReactFlow JSON in code placeholder');
+          }
+
+          // Block code: preserve <code> with className for pre handler
           if (className?.includes('language-')) {
             return <code className={className}>{children}</code>;
           }
@@ -317,10 +333,10 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
         },
         // Pre blocks - detect reactflow, flow, chem, and mermaid types
         pre: ({ children }) => {
-          // Extract the code element
+          // Extract the code element (check both 'code' and 'span' since handlers may convert)
           const codeElement = React.Children.toArray(children).find(
             (child): child is React.ReactElement => 
-              React.isValidElement(child) && child.type === 'code'
+              React.isValidElement(child) && (child.type === 'code' || (child.type === 'span' && child.props?.className?.includes('language-')))
           );
           
           if (codeElement) {
@@ -374,6 +390,20 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
           const textContent = extractTextFromChildren(children);
           if (isMermaidContent(textContent)) {
             return <MermaidRenderer content={textContent} />;
+          }
+          
+          // Check if this pre block contains a ReactFlow placeholder
+          const reactflowCheck = isReactFlowPlaceholder(textContent.trim());
+          if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+            const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
+            if (data) {
+              return (
+                <ReactFlowProvider>
+                  <ReactFlowDiagram data={data} />
+                </ReactFlowProvider>
+              );
+            }
+            console.warn('Invalid ReactFlow JSON in pre placeholder');
           }
           
           // Regular pre block - render as completely normal paragraph text (no special formatting)

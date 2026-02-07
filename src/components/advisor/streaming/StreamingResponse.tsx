@@ -127,10 +127,10 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
     ),
     // Custom code block styling - detect reactflow, flow and chem types
     pre: ({ children }: { children?: React.ReactNode }) => {
-      // Extract the code element
+      // Extract the code element (check both 'code' and 'span' since handlers may convert)
       const codeElement = React.Children.toArray(children).find(
         (child): child is React.ReactElement => 
-          React.isValidElement(child) && child.type === 'code'
+          React.isValidElement(child) && (child.type === 'code' || (child.type === 'span' && child.props?.className?.includes('language-')))
       );
       
       if (codeElement) {
@@ -171,6 +171,35 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
         }
       }
       
+      // Check if this pre block contains a ReactFlow placeholder
+      const textContent = React.Children.toArray(children)
+        .map(child => {
+          const extractText = (node: React.ReactNode): string => {
+            if (typeof node === 'string') return node;
+            if (typeof node === 'number') return String(node);
+            if (React.isValidElement(node) && node.props?.children) {
+              return React.Children.toArray(node.props.children).map(extractText).join('');
+            }
+            return '';
+          };
+          return extractText(child);
+        })
+        .join('')
+        .trim();
+
+      const reactflowCheck = isReactFlowPlaceholder(textContent);
+      if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+        const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
+        if (data) {
+          return (
+            <ReactFlowProvider>
+              <ReactFlowDiagram data={data} />
+            </ReactFlowProvider>
+          );
+        }
+        console.warn('Invalid ReactFlow JSON in pre placeholder');
+      }
+      
       // Default pre styling
       return (
         <pre className="bg-card text-card-foreground p-4 rounded-lg overflow-x-auto my-4 text-sm">
@@ -179,6 +208,23 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
       );
     },
     code: ({ className: codeClassName, children, ...props }: { className?: string; children?: React.ReactNode; node?: any }) => {
+      const textContent = String(children || '').trim();
+
+      // Check if this inline code is actually a ReactFlow placeholder
+      // This happens when stray backticks in LLM output wrap the placeholder
+      const reactflowCheck = isReactFlowPlaceholder(textContent);
+      if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
+        const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
+        if (data) {
+          return (
+            <ReactFlowProvider>
+              <ReactFlowDiagram data={data} />
+            </ReactFlowProvider>
+          );
+        }
+        console.warn('Invalid ReactFlow JSON in code placeholder');
+      }
+
       // Check if this is an inline code (no className usually means inline)
       const isInline = !codeClassName && !props.node?.position;
       
