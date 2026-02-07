@@ -104,14 +104,17 @@ function isValidReactFlowStructure(parsed: unknown): boolean {
  * - ```reactflow fenced code blocks
  * - ```json/``` fences with ReactFlow structure
  * - Raw JSON with nodes/edges structure
+ * 
+ * Returns jsonContent as key for lookup (consistent with Mermaid approach)
  */
 export function extractReactFlowBlocks(content: string): { 
   data: ReactFlowData; 
   startIndex: number; 
   endIndex: number;
-  base64: string;
+  jsonContent: string; // Use JSON content as key (like Mermaid uses code)
+  base64?: string; // Keep for backward compatibility with div format
 }[] {
-  const blocks: { data: ReactFlowData; startIndex: number; endIndex: number; base64: string }[] = [];
+  const blocks: { data: ReactFlowData; startIndex: number; endIndex: number; jsonContent: string; base64?: string }[] = [];
   const processedRanges: Array<{start: number; end: number}> = [];
   
   // Helper to check if a range overlaps with already processed ranges
@@ -133,7 +136,8 @@ export function extractReactFlowBlocks(content: string): {
           data,
           startIndex: match.index,
           endIndex: match.index + match[0].length,
-          base64,
+          jsonContent: json.trim(), // Use JSON content as key
+          base64, // Keep for backward compatibility
         });
         processedRanges.push({ start: match.index, end: match.index + match[0].length });
       }
@@ -152,12 +156,11 @@ export function extractReactFlowBlocks(content: string): {
       const data = JSON.parse(jsonContent) as ReactFlowData;
       
       if (isValidReactFlowStructure(data)) {
-        const base64 = safeBase64Encode(jsonContent);
         blocks.push({
           data,
           startIndex: match.index,
           endIndex: match.index + match[0].length,
-          base64,
+          jsonContent, // Use JSON content as key (like Mermaid)
         });
         processedRanges.push({ start: match.index, end: match.index + match[0].length });
       }
@@ -180,12 +183,11 @@ export function extractReactFlowBlocks(content: string): {
       const data = JSON.parse(jsonContent) as ReactFlowData;
       
       if (isValidReactFlowStructure(data)) {
-        const base64 = safeBase64Encode(jsonContent);
         blocks.push({
           data,
           startIndex: match.index,
           endIndex: match.index + match[0].length,
-          base64,
+          jsonContent, // Use JSON content as key (like Mermaid)
         });
         processedRanges.push({ start: match.index, end: match.index + match[0].length });
       }
@@ -216,12 +218,11 @@ export function extractReactFlowBlocks(content: string): {
       const data = JSON.parse(jsonText) as ReactFlowData;
       
       if (isValidReactFlowStructure(data)) {
-        const base64 = safeBase64Encode(jsonText);
         blocks.push({
           data,
           startIndex: jsonStart,
           endIndex: endIdx + 1,
-          base64,
+          jsonContent: jsonText.trim(), // Use JSON content as key (like Mermaid)
         });
         processedRanges.push({ start: jsonStart, end: endIdx + 1 });
         jsonStartPattern.lastIndex = endIdx + 1;
@@ -623,8 +624,9 @@ export async function renderAllReactFlowDiagrams(
   for (const block of blocks) {
     const png = await renderReactFlowToPng(block.data);
     if (png) {
-      // Use the base64 as key for lookup
-      diagrams.set(block.base64, png);
+      // Use the JSON content as key for lookup (consistent with Mermaid approach)
+      // This avoids btoa() Unicode issues and makes lookup more reliable
+      diagrams.set(block.jsonContent, png);
     }
   }
   
