@@ -25,6 +25,28 @@ export interface ReactFlowData {
 }
 
 /**
+ * Safely encode string to base64, handling Unicode characters.
+ * Standard btoa() fails on non-ASCII characters (tildes, ñ, etc.)
+ */
+function safeBase64Encode(str: string): string {
+  try {
+    // First encode to UTF-8, then to base64
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+      (_, p1) => String.fromCharCode(parseInt(p1, 16))
+    ));
+  } catch (e) {
+    // Fallback: generate a unique hash from the string
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return `rf_${Math.abs(hash).toString(36)}_${str.length}`;
+  }
+}
+
+/**
  * Find the end of a JSON object by balancing braces.
  */
 function findJsonEnd(text: string, startIndex: number): number {
@@ -125,12 +147,12 @@ export function extractReactFlowBlocks(content: string): {
   while ((match = reactflowFenceRegex.exec(content)) !== null) {
     if (isOverlapping(match.index, match.index + match[0].length)) continue;
     
+    const jsonContent = match[1].trim();
     try {
-      const jsonContent = match[1].trim();
       const data = JSON.parse(jsonContent) as ReactFlowData;
       
       if (isValidReactFlowStructure(data)) {
-        const base64 = btoa(jsonContent);
+        const base64 = safeBase64Encode(jsonContent);
         blocks.push({
           data,
           startIndex: match.index,
@@ -140,7 +162,7 @@ export function extractReactFlowBlocks(content: string): {
         processedRanges.push({ start: match.index, end: match.index + match[0].length });
       }
     } catch (e) {
-      console.warn('Failed to parse ReactFlow from ```reactflow fence:', e);
+      console.warn('Failed to parse ReactFlow from ```reactflow fence:', e, 'Content preview:', jsonContent?.substring(0, 100));
     }
   }
   
@@ -158,7 +180,7 @@ export function extractReactFlowBlocks(content: string): {
       const data = JSON.parse(jsonContent) as ReactFlowData;
       
       if (isValidReactFlowStructure(data)) {
-        const base64 = btoa(jsonContent);
+        const base64 = safeBase64Encode(jsonContent);
         blocks.push({
           data,
           startIndex: match.index,
@@ -194,7 +216,7 @@ export function extractReactFlowBlocks(content: string): {
       const data = JSON.parse(jsonText) as ReactFlowData;
       
       if (isValidReactFlowStructure(data)) {
-        const base64 = btoa(jsonText);
+        const base64 = safeBase64Encode(jsonText);
         blocks.push({
           data,
           startIndex: jsonStart,
