@@ -79,18 +79,20 @@ function getNodeLabel(node: ReactFlowData['nodes'][0]): string {
 }
 
 /**
- * Create a simple SVG representation of a ReactFlow diagram
- * This is used for Word export since we can't render React components server-side
+ * Create an optimized SVG representation of a ReactFlow diagram
+ * Professional styling for Word document export
  */
 function createReactFlowSvg(data: ReactFlowData): string {
   const nodes = data.nodes;
   const edges = data.edges;
   
-  // Calculate layout using simple positioning
-  const nodeWidth = 150;
-  const nodeHeight = 50;
-  const horizontalGap = 80;
-  const verticalGap = 60;
+  // Optimized dimensions for better Word presentation
+  const nodeWidth = 180;
+  const nodeHeight = 56;
+  const horizontalGap = 100;
+  const verticalGap = 50;
+  const padding = 40;
+  const titleHeight = data.title ? 50 : 0;
   
   // Build adjacency list for layout
   const nodeMap = new Map<string, { label: string; x: number; y: number; type?: string }>();
@@ -143,40 +145,94 @@ function createReactFlowSvg(data: ReactFlowData): string {
     }
   });
   
-  // Assign positions
+  // Calculate max nodes per level for centering
+  const maxNodesInLevel = Math.max(...levels.map(l => l.length));
+  const totalHeight = maxNodesInLevel * (nodeHeight + verticalGap) - verticalGap;
+  
+  // Assign positions with vertical centering
   const positions = new Map<string, { x: number; y: number }>();
   levels.forEach((level, levelIndex) => {
+    const levelHeight = level.length * (nodeHeight + verticalGap) - verticalGap;
+    const startY = (totalHeight - levelHeight) / 2;
+    
     level.forEach((nodeId, nodeIndex) => {
       positions.set(nodeId, {
-        x: levelIndex * (nodeWidth + horizontalGap) + 20,
-        y: nodeIndex * (nodeHeight + verticalGap) + 20,
+        x: levelIndex * (nodeWidth + horizontalGap) + padding,
+        y: startY + nodeIndex * (nodeHeight + verticalGap) + padding + titleHeight,
       });
     });
   });
   
   // Calculate SVG dimensions
-  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + nodeWidth + 40;
-  const maxY = Math.max(...Array.from(positions.values()).map(p => p.y)) + nodeHeight + 40;
+  const maxX = Math.max(...Array.from(positions.values()).map(p => p.x)) + nodeWidth + padding;
+  const maxY = Math.max(...Array.from(positions.values()).map(p => p.y)) + nodeHeight + padding;
   
-  // Color mapping based on node type
-  const getNodeColor = (type?: string): string => {
+  // Color mapping based on node type - Vandarum brand colors
+  const getNodeColors = (type?: string): { fill: string; stroke: string; gradient: string } => {
     switch (type) {
-      case 'input': return '#307177';
-      case 'output': return '#2D8A4E';
-      case 'storage': return '#5B7FA3';
-      case 'chemical': return '#C97A2B';
+      case 'input': 
+        return { fill: '#307177', stroke: '#245a5f', gradient: 'inputGrad' };
+      case 'output': 
+        return { fill: '#2D8A4E', stroke: '#236b3d', gradient: 'outputGrad' };
+      case 'storage': 
+        return { fill: '#5B7FA3', stroke: '#486585', gradient: 'storageGrad' };
+      case 'chemical': 
+        return { fill: '#C97A2B', stroke: '#a56322', gradient: 'chemicalGrad' };
       case 'split':
-      case 'merge': return '#8B5CF6';
-      default: return '#6B7280';
+      case 'merge': 
+        return { fill: '#8B5CF6', stroke: '#7048d9', gradient: 'splitGrad' };
+      default: 
+        return { fill: '#4B5563', stroke: '#374151', gradient: 'defaultGrad' };
     }
   };
   
-  // Build SVG
+  // Build SVG with professional styling
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${maxX}" height="${maxY}" viewBox="0 0 ${maxX} ${maxY}">`;
-  svg += '<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748B"/></marker></defs>';
-  svg += '<rect width="100%" height="100%" fill="white"/>';
   
-  // Draw edges first (so they appear behind nodes)
+  // Definitions: gradients, shadows, arrows
+  svg += `<defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L12,4 L0,8 L3,4 Z" fill="#64748B"/>
+    </marker>
+    <linearGradient id="inputGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3d8a91"/>
+      <stop offset="100%" style="stop-color:#307177"/>
+    </linearGradient>
+    <linearGradient id="outputGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#38a05e"/>
+      <stop offset="100%" style="stop-color:#2D8A4E"/>
+    </linearGradient>
+    <linearGradient id="storageGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#6e93b8"/>
+      <stop offset="100%" style="stop-color:#5B7FA3"/>
+    </linearGradient>
+    <linearGradient id="chemicalGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#d98f3f"/>
+      <stop offset="100%" style="stop-color:#C97A2B"/>
+    </linearGradient>
+    <linearGradient id="splitGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#a07ef8"/>
+      <stop offset="100%" style="stop-color:#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="defaultGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#6B7280"/>
+      <stop offset="100%" style="stop-color:#4B5563"/>
+    </linearGradient>
+  </defs>`;
+  
+  // Background with subtle gradient
+  svg += `<rect width="100%" height="100%" fill="#FAFBFC"/>`;
+  
+  // Title if present - styled header
+  if (data.title) {
+    svg += `<rect x="0" y="0" width="${maxX}" height="${titleHeight}" fill="#307177"/>`;
+    svg += `<text x="${maxX / 2}" y="${titleHeight / 2 + 6}" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="white" font-weight="600">${escapeXml(data.title)}</text>`;
+  }
+  
+  // Draw edges with bezier curves
   edges.forEach(edge => {
     const sourcePos = positions.get(edge.source);
     const targetPos = positions.get(edge.target);
@@ -186,40 +242,57 @@ function createReactFlowSvg(data: ReactFlowData): string {
       const x2 = targetPos.x;
       const y2 = targetPos.y + nodeHeight / 2;
       
-      svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#64748B" stroke-width="2" marker-end="url(#arrowhead)"/>`;
+      // Calculate control points for smooth bezier curve
+      const dx = x2 - x1;
+      const controlOffset = Math.min(dx * 0.4, 60);
       
-      // Edge label
+      svg += `<path d="M${x1},${y1} C${x1 + controlOffset},${y1} ${x2 - controlOffset},${y2} ${x2},${y2}" 
+        fill="none" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrowhead)"/>`;
+      
+      // Edge label with background
       if (edge.label) {
         const labelX = (x1 + x2) / 2;
-        const labelY = (y1 + y2) / 2 - 8;
-        svg += `<text x="${labelX}" y="${labelY}" text-anchor="middle" font-family="Arial" font-size="10" fill="#64748B">${escapeXml(edge.label)}</text>`;
+        const labelY = (y1 + y2) / 2;
+        const labelWidth = edge.label.length * 6 + 12;
+        svg += `<rect x="${labelX - labelWidth/2}" y="${labelY - 10}" width="${labelWidth}" height="18" rx="9" fill="white" stroke="#E2E8F0"/>`;
+        svg += `<text x="${labelX}" y="${labelY + 4}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#64748B">${escapeXml(edge.label)}</text>`;
       }
     }
   });
   
-  // Draw nodes
+  // Draw nodes with shadows and gradients
   nodes.forEach(node => {
     const pos = positions.get(node.id);
     if (pos) {
       const nodeData = nodeMap.get(node.id);
-      const color = getNodeColor(nodeData?.type);
-      const radius = 6;
+      const colors = getNodeColors(nodeData?.type);
+      const radius = 8;
       
-      svg += `<rect x="${pos.x}" y="${pos.y}" width="${nodeWidth}" height="${nodeHeight}" rx="${radius}" fill="${color}" stroke="#1E293B" stroke-width="1"/>`;
+      // Node with shadow and gradient
+      svg += `<rect x="${pos.x}" y="${pos.y}" width="${nodeWidth}" height="${nodeHeight}" 
+        rx="${radius}" fill="url(#${colors.gradient})" stroke="${colors.stroke}" stroke-width="1.5" filter="url(#shadow)"/>`;
       
-      // Node label (truncate if too long)
+      // Node label with word wrap for long labels
       const nodeLabel = getNodeLabel(node);
-      const label = nodeLabel.length > 20 
-        ? nodeLabel.substring(0, 18) + '...' 
-        : nodeLabel;
-      svg += `<text x="${pos.x + nodeWidth / 2}" y="${pos.y + nodeHeight / 2 + 4}" text-anchor="middle" font-family="Arial" font-size="11" fill="white" font-weight="500">${escapeXml(label)}</text>`;
+      const maxChars = 22;
+      
+      if (nodeLabel.length > maxChars) {
+        // Two-line label
+        const mid = Math.ceil(nodeLabel.length / 2);
+        const breakPoint = nodeLabel.lastIndexOf(' ', mid) > 0 ? nodeLabel.lastIndexOf(' ', mid) : mid;
+        const line1 = nodeLabel.substring(0, breakPoint).trim();
+        const line2 = nodeLabel.substring(breakPoint).trim();
+        
+        const displayLine1 = line1.length > maxChars ? line1.substring(0, maxChars - 2) + '...' : line1;
+        const displayLine2 = line2.length > maxChars ? line2.substring(0, maxChars - 2) + '...' : line2;
+        
+        svg += `<text x="${pos.x + nodeWidth / 2}" y="${pos.y + nodeHeight / 2 - 6}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white" font-weight="500">${escapeXml(displayLine1)}</text>`;
+        svg += `<text x="${pos.x + nodeWidth / 2}" y="${pos.y + nodeHeight / 2 + 10}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white" font-weight="500">${escapeXml(displayLine2)}</text>`;
+      } else {
+        svg += `<text x="${pos.x + nodeWidth / 2}" y="${pos.y + nodeHeight / 2 + 4}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white" font-weight="500">${escapeXml(nodeLabel)}</text>`;
+      }
     }
   });
-  
-  // Title if present
-  if (data.title) {
-    svg += `<text x="${maxX / 2}" y="15" text-anchor="middle" font-family="Arial" font-size="14" fill="#1E293B" font-weight="bold">${escapeXml(data.title)}</text>`;
-  }
   
   svg += '</svg>';
   return svg;
