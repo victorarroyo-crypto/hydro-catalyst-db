@@ -28,6 +28,7 @@ import {
   VANDARUM_SIZES,
 } from './vandarumDocStyles';
 import type { DeepJobSource, DeepJobFact } from './advisorProxy';
+import { safeBase64Decode } from './reactflowToImage';
 
 /**
  * Get image dimensions from PNG ArrayBuffer
@@ -1053,7 +1054,7 @@ function parseMarkdownToParagraphs(
     const placeholder = `__REACTFLOW_DIAGRAM_${rfIndex}__`;
     try {
       const base64 = rfMatch[1];
-      const jsonContent = atob(base64).trim();
+      const jsonContent = safeBase64Decode(base64).trim(); // Use safe decode for Unicode support
       reactFlowMatches.push({
         match: rfMatch[0],
         jsonContent, // Use JSON content as key (consistent with renderAllReactFlowDiagrams)
