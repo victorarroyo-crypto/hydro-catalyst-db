@@ -15,6 +15,7 @@ import Favorites from "./pages/Favorites";
 import Scouting from "./pages/Scouting";
 import ScoutingNew from "./pages/ScoutingNew";
 import Settings from "./pages/Settings";
+import ApiCosts from "./pages/settings/ApiCosts";
 import QualityControl from "./pages/QualityControl";
 import DataQualityControl from "./pages/DataQualityControl";
 import Trends from "./pages/Trends";
@@ -142,6 +143,7 @@ const App = () => (
               <Route path="/ai-usage" element={<AIUsageDashboard />} />
               <Route path="/ai-models" element={<AIModels />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/settings/api-costs" element={<ApiCosts />} />
               <Route path="/taxonomy-admin" element={<TaxonomyAdmin />} />
               <Route path="/taxonomy-audit" element={<TaxonomyAudit />} />
               <Route path="/database-audit" element={<DatabaseAudit />} />
