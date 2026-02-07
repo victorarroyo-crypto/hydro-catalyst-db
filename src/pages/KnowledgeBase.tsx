@@ -580,7 +580,7 @@ export default function KnowledgeBase() {
   const { data: modelConfig } = useQuery({
     queryKey: ['knowledge-base-model'],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
+      const { data, error } = await supabase
         .from('ai_model_settings')
         .select('model')
         .eq('action_type', 'knowledge_base')

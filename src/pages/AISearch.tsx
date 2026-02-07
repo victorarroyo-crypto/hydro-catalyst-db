@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -100,7 +101,7 @@ const AISearch: React.FC = () => {
   const { data: modelConfig } = useQuery({
     queryKey: ['search-model'],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
+      const { data, error } = await supabase
         .from('ai_model_settings')
         .select('model')
         .eq('action_type', 'search')
