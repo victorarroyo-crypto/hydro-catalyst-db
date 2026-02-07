@@ -377,6 +377,25 @@ function findJsonEnd(text: string, startIndex: number): number {
 }
 
 /**
+ * Extracts pure JSON from text that may contain trailing content.
+ * Uses brace-balancing to find where the JSON object ends.
+ * This removes any "garbage" text after the JSON that would cause parsing to fail.
+ */
+function extractPureJson(text: string): string | null {
+  const trimmed = text.trim();
+  
+  // Must start with { (find first occurrence)
+  const startIndex = trimmed.indexOf('{');
+  if (startIndex === -1) return null;
+  
+  // Find the balanced closing brace
+  const endIndex = findJsonEnd(trimmed, startIndex);
+  if (endIndex === -1) return null;
+  
+  return trimmed.substring(startIndex, endIndex + 1);
+}
+
+/**
  * Checks if text already contains valid ReactFlow fences.
  */
 function hasValidReactFlowFences(text: string): boolean {
@@ -545,12 +564,16 @@ export function extractReactFlowBlocks(text: string): {
     (match, content) => {
       const trimmedContent = content.trim();
       if (trimmedContent.includes('"nodes"') || trimmedContent.includes('"edges"')) {
-        const index = reactflowBlocks.length;
-        reactflowBlocks.push(trimmedContent);
-        if (import.meta.env.DEV) {
-          console.debug(`[ReactFlow] Extracted from \`\`\`reactflow fence, index=${index}`);
+        // Extract pure JSON to remove any trailing garbage text
+        const pureJson = extractPureJson(trimmedContent);
+        if (pureJson) {
+          const index = reactflowBlocks.length;
+          reactflowBlocks.push(pureJson);
+          if (import.meta.env.DEV) {
+            console.debug(`[ReactFlow] Extracted from \`\`\`reactflow fence, index=${index}, cleaned=${pureJson.length < trimmedContent.length}`);
+          }
+          return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
         }
-        return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
       }
       return match;
     }
@@ -571,19 +594,23 @@ export function extractReactFlowBlocks(text: string): {
         return match;
       }
       
+      // Extract pure JSON first to remove any trailing garbage
+      const pureJson = extractPureJson(trimmedContent);
+      if (!pureJson) return match;
+      
       // Try to parse and validate
       try {
-        const parsed = JSON.parse(trimmedContent);
+        const parsed = JSON.parse(pureJson);
         if (isValidReactFlowStructure(parsed)) {
           const index = reactflowBlocks.length;
-          reactflowBlocks.push(trimmedContent);
+          reactflowBlocks.push(pureJson);
           if (import.meta.env.DEV) {
-            console.debug(`[ReactFlow] Extracted from \`\`\`${lang || '(no lang)'} fence, index=${index}`);
+            console.debug(`[ReactFlow] Extracted from \`\`\`${lang || '(no lang)'} fence, index=${index}, cleaned=${pureJson.length < trimmedContent.length}`);
           }
           return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
         }
       } catch (e) {
-        // Not valid JSON, keep as-is
+        // Still not valid JSON after cleanup, keep as-is
       }
       return match;
     }
@@ -593,23 +620,25 @@ export function extractReactFlowBlocks(text: string): {
   // Runs regardless of previous extractions to catch multiple diagrams
   const jsonPattern = /(?:^|\n)\s*(\{[\s\S]*?"nodes"\s*:\s*\[[\s\S]*?"edges"\s*:\s*\[[\s\S]*?\})\s*(?=\n|$)/g;
   processedContent = processedContent.replace(jsonPattern, (match, jsonContent) => {
-    const trimmedJson = jsonContent.trim();
-    
     // Skip if already inside a placeholder
     if (match.includes(':::reactflow-placeholder-')) return match;
     
+    // Extract pure JSON to remove any trailing garbage
+    const pureJson = extractPureJson(jsonContent);
+    if (!pureJson) return match;
+    
     try {
-      const parsed = JSON.parse(trimmedJson);
+      const parsed = JSON.parse(pureJson);
       if (isValidReactFlowStructure(parsed)) {
         const index = reactflowBlocks.length;
-        reactflowBlocks.push(trimmedJson);
+        reactflowBlocks.push(pureJson);
         if (import.meta.env.DEV) {
-          console.debug(`[ReactFlow] Extracted raw JSON, index=${index}`);
+          console.debug(`[ReactFlow] Extracted raw JSON, index=${index}, cleaned=${pureJson.length < jsonContent.trim().length}`);
         }
         return `\n\n:::reactflow-placeholder-${index}:::\n\n`;
       }
     } catch (e) {
-      // Not valid JSON, ignore
+      // Still not valid JSON after cleanup, ignore
     }
     return match;
   });
