@@ -1,125 +1,111 @@
 
+# Plan: Corregir Estructura de Datos en Exportación Word de ReactFlow
 
-# Plan: Cerrar Bloques de Código No Balanceados
+## Problema Identificado
 
-## Diagnóstico Confirmado
+El error ocurre porque hay una **discrepancia en la estructura de datos**:
 
-El LLM genera bloques de código con ` ``` ` de apertura pero sin cierre. ReactMarkdown entonces interpreta TODO el contenido subsiguiente como código, mostrando:
-- `> **Disclaimer crítico**:` como texto literal (el `>` y `**` visibles)
-- `- --` o `---` como texto en vez de separador horizontal
-- Headers y bold como asteriscos visibles
+| Componente | Estructura esperada | Dónde busca label |
+|------------|---------------------|-------------------|
+| `ReactFlowDiagram.tsx` (frontend) | `{ id, label, type }` | `node.label` |
+| `reactflowToImage.ts` (Word export) | `{ id, data: { label }, type }` | `node.data.label` |
+
+El backend envía nodos con `label` directamente en el nodo, pero el código de exportación a Word busca `node.data.label`, que es `undefined`.
+
+**Error en consola:**
+```
+TypeError: Cannot read properties of undefined (reading 'label')
+at line 83: label: node.data.label
+```
 
 ## Solución
 
-Añadir una función `closeUnclosedCodeFences` en `contentQualityControl.ts` que:
-1. Cuente los fences de apertura y cierre
-2. Si hay fences sin cerrar, los cierre automáticamente
+Actualizar `reactflowToImage.ts` para manejar **ambas estructuras**:
+- Formato simplificado: `{ id, label, type }` (lo que envía el backend)
+- Formato ReactFlow nativo: `{ id, data: { label }, type }` (por si cambia en el futuro)
 
 ## Cambios Requeridos
 
-### Archivo: `src/utils/contentQualityControl.ts`
+### Archivo: `src/lib/reactflowToImage.ts`
 
-**Ubicación**: Añadir nueva función antes de `applyContentQualityControl` (aproximadamente línea 230)
+**1. Actualizar interfaz `ReactFlowData` (líneas 7-22)**
 
-**Nueva función**:
 ```typescript
-/**
- * Close unclosed code fences.
- * When the LLM opens a ``` block but forgets to close it,
- * all subsequent content is interpreted as code and rendered literally.
- * This function detects and closes orphaned fences.
- */
-function closeUnclosedCodeFences(text: string): string {
-  const lines = text.split('\n');
-  const result: string[] = [];
-  let openFenceCount = 0;
-  let currentFenceLang = '';
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    
-    // Detect fence opening: ``` or ```language
-    const openMatch = trimmed.match(/^```(\w*)$/);
-    if (openMatch && openFenceCount === 0) {
-      openFenceCount++;
-      currentFenceLang = openMatch[1] || '';
-      result.push(line);
-      continue;
-    }
-    
-    // Detect fence closing: ```
-    if (trimmed === '```' && openFenceCount > 0) {
-      openFenceCount--;
-      currentFenceLang = '';
-      result.push(line);
-      continue;
-    }
-    
-    // If we're inside an unclosed fence and hit markdown content,
-    // close the fence before this line
-    if (openFenceCount > 0) {
-      // Check if this line looks like markdown that escaped the fence
-      const looksLikeEscapedMarkdown = 
-        /^#{1,6}\s/.test(trimmed) ||           // Headers
-        /^>\s/.test(trimmed) ||                 // Blockquotes
-        /^---+\s*$/.test(trimmed) ||            // Horizontal rules
-        /^\*\*[A-Za-z]/.test(trimmed) ||        // Bold start
-        /^>\s*\*\*/.test(trimmed);              // Blockquote with bold
-      
-      if (looksLikeEscapedMarkdown) {
-        // Close the orphaned fence
-        result.push('```');
-        openFenceCount--;
-        currentFenceLang = '';
-      }
-    }
-    
-    result.push(line);
-  }
-  
-  // If still unclosed at end of content, close it
-  while (openFenceCount > 0) {
-    result.push('```');
-    openFenceCount--;
-  }
-  
-  return result.join('\n');
+export interface ReactFlowData {
+  title?: string;
+  direction?: 'LR' | 'TD';
+  nodes: Array<{
+    id: string;
+    type?: string;
+    // Support both formats: direct label or nested in data
+    label?: string;
+    data?: { label: string };
+    position?: { x: number; y: number };
+  }>;
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    label?: string;
+    animated?: boolean;
+  }>;
 }
 ```
 
-**Modificar pipeline**: En `applyContentQualityControl`, añadir el paso antes de `fixMarkdownFormatting`:
+**2. Crear función helper para extraer label (nueva, antes de `createReactFlowSvg`)**
 
 ```typescript
-export function applyContentQualityControl(rawContent: string): QualityResult {
-  // ... existing code ...
-  
-  let content = rawContent;
-  
-  // Step 1: Sanitize HTML first
-  content = sanitizeHTML(content);
-  
-  // Step 2: Close unclosed code fences (NEW STEP)
-  content = closeUnclosedCodeFences(content);
-  
-  // Step 3: Normalize chemical equations
-  content = normalizeChemicalEquations(content);
-  
-  // ... rest of steps ...
+/**
+ * Extract label from node, supporting both formats
+ */
+function getNodeLabel(node: ReactFlowData['nodes'][0]): string {
+  // Format 1: Direct label (from backend)
+  if (typeof node.label === 'string') {
+    return node.label;
+  }
+  // Format 2: Nested in data (ReactFlow native format)
+  if (node.data && typeof node.data.label === 'string') {
+    return node.data.label;
+  }
+  // Fallback: use node id
+  return node.id;
 }
+```
+
+**3. Actualizar `createReactFlowSvg` para usar el helper**
+
+Línea 83 (dentro de `nodes.forEach`):
+```typescript
+// Antes:
+label: node.data.label,
+
+// Después:
+label: getNodeLabel(node),
+```
+
+Líneas 192-194 (renderizado del label):
+```typescript
+// Antes:
+const label = node.data.label.length > 20 
+  ? node.data.label.substring(0, 18) + '...' 
+  : node.data.label;
+
+// Después:
+const nodeLabel = getNodeLabel(node);
+const label = nodeLabel.length > 20 
+  ? nodeLabel.substring(0, 18) + '...' 
+  : nodeLabel;
 ```
 
 ## Resumen de Cambios
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/utils/contentQualityControl.ts` | Nueva función `closeUnclosedCodeFences` + integrar en pipeline |
+| `src/lib/reactflowToImage.ts` | Actualizar interfaz + añadir `getNodeLabel()` + usar en 2 lugares |
 
 ## Verificación
 
-1. Los blockquotes `> **text**` deben renderizarse como quotes estilizados (no texto plano)
-2. Los separadores `---` deben renderizarse como líneas horizontales
-3. El bold `**text**` dentro de blockquotes debe renderizarse correctamente
-4. Los bloques de código válidos (con cierre) deben seguir funcionando
-5. No debe haber regresión en los diagramas ReactFlow ni Mermaid
-
+1. Los diagramas ReactFlow deben aparecer en el Word (no espacios en blanco)
+2. Los nodos deben mostrar sus labels correctamente
+3. No debe haber errores en consola al exportar
+4. El chat debe seguir renderizando los diagramas correctamente
