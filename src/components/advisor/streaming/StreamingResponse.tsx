@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { cn } from '@/lib/utils';
 import { cleanMarkdownContent } from '@/utils/fixMarkdownTables';
-import { normalizeMarkdownDiagrams, extractMermaidBlocks, extractReactFlowBlocks, isReactFlowPlaceholder } from '@/utils/normalizeMarkdownDiagrams';
+import { normalizeMarkdownDiagrams, extractMermaidBlocks, extractReactFlowBlocks, isReactFlowPlaceholder, parseReactFlowJSON } from '@/utils/normalizeMarkdownDiagrams';
 import { isMermaidPlaceholder } from '@/utils/mermaidDetection';
 import { FlowDiagramRenderer } from '../FlowDiagramRenderer';
 import { MermaidBlock } from './MermaidBlock';
@@ -139,21 +139,20 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
         
         // Handle ```reactflow blocks - Professional interactive diagrams
         if (codeClassName.includes('language-reactflow')) {
-          try {
-            const data: ReactFlowData = JSON.parse(codeContent);
+          const data = parseReactFlowJSON(codeContent);
+          if (data) {
             return (
               <ReactFlowProvider>
                 <ReactFlowDiagram data={data} />
               </ReactFlowProvider>
             );
-          } catch (e) {
-            console.warn('Invalid reactflow JSON:', e);
-            return (
-              <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
-                Error en diagrama: {(e as Error).message}
-              </div>
-            );
           }
+          console.warn('Invalid reactflow JSON, could not extract valid object from:', codeContent.substring(0, 200));
+          return (
+            <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
+              Error en diagrama: No se pudo extraer JSON válido del bloque reactflow
+            </div>
+          );
         }
         
         // Handle ```mermaid blocks (shouldn't reach here due to extraction, but just in case)
@@ -228,21 +227,20 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
       // Check if this is a ReactFlow placeholder
       const reactflowCheck = isReactFlowPlaceholder(textContent);
       if (reactflowCheck.isPlaceholder && reactflowBlocksRef.current[reactflowCheck.index]) {
-        try {
-          const data: ReactFlowData = JSON.parse(reactflowBlocksRef.current[reactflowCheck.index]);
+        const data = parseReactFlowJSON(reactflowBlocksRef.current[reactflowCheck.index]);
+        if (data) {
           return (
             <ReactFlowProvider>
               <ReactFlowDiagram data={data} />
             </ReactFlowProvider>
           );
-        } catch (e) {
-          console.warn('Invalid ReactFlow JSON in placeholder:', e);
-          return (
-            <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
-              Error en diagrama: {(e as Error).message}
-            </div>
-          );
         }
+        console.warn('Invalid ReactFlow JSON in placeholder, could not extract valid object');
+        return (
+          <div className="my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
+            Error en diagrama: No se pudo extraer JSON válido del placeholder
+          </div>
+        );
       }
       
       // Check if this is a mermaid placeholder
