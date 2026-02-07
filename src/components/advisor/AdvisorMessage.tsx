@@ -306,16 +306,14 @@ export function AdvisorMessage({ content, sources, isStreaming = false }: Adviso
             <ExternalLink className="w-3 h-3 opacity-50" />
           </a>
         ),
-        // Code inline - render as completely normal text (no special styling at all)
+        // Code blocks and inline code
         code: ({ children, className }) => {
-          const isBlock = className?.includes('language-');
-          if (isBlock) {
-            // Block code - render as normal paragraph text
-            return (
-              <span className="whitespace-pre-wrap">{children}</span>
-            );
+          // Block code (has language-* class) - preserve as <code> with className
+          // so the wrapping `pre` handler can detect the language
+          if (className?.includes('language-')) {
+            return <code className={className}>{children}</code>;
           }
-          // Inline code - render as completely normal text, no styling
+          // Inline code - render as normal text
           return <span>{children}</span>;
         },
         // Pre blocks - detect reactflow, flow, chem, and mermaid types

@@ -214,11 +214,16 @@ export function StreamingResponse({ content, isStreaming, className }: Streaming
     ),
     // Paragraph - check for mermaid and reactflow placeholders
     p: ({ children }: { children?: React.ReactNode }) => {
-      // Extract text to check for placeholder
-      const textContent = React.Children.toArray(children)
-        .map(child => (typeof child === 'string' ? child : ''))
-        .join('')
-        .trim();
+      // Recursive text extraction to handle nested elements
+      const extractText = (node: React.ReactNode): string => {
+        if (typeof node === 'string') return node;
+        if (typeof node === 'number') return String(node);
+        if (React.isValidElement(node) && node.props?.children) {
+          return React.Children.toArray(node.props.children).map(extractText).join('');
+        }
+        return '';
+      };
+      const textContent = React.Children.toArray(children).map(extractText).join('').trim();
       
       // Check if this is a ReactFlow placeholder
       const reactflowCheck = isReactFlowPlaceholder(textContent);
