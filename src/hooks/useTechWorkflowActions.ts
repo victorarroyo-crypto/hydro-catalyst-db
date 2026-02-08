@@ -55,11 +55,11 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
 
   const sendToApproval = useMutation({
     mutationFn: async ({ id }: { id: string }) => {
+      // Note: Don't set reviewed_by - external DB has FK constraint and user may not exist there
       const { data, error } = await externalSupabase
         .from('scouting_queue')
         .update({
           status: 'pending_approval',
-          reviewed_by: userId || null,
           reviewed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -204,7 +204,7 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
         comentarios_analista: record.comentarios_analista,
         rejection_reason: reason,
         rejection_category: stage,
-        rejected_by: userId || null,
+        // Note: Don't set rejected_by - external DB has FK constraint and user may not exist there
       };
 
       const { error: insertError } = await externalSupabase
