@@ -59,7 +59,7 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
         .from('scouting_queue')
         .update({
           status: 'pending_approval',
-          reviewed_by: userEmail || userId,
+          reviewed_by: userId || null,
           reviewed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -204,7 +204,7 @@ export function useTechWorkflowActions({ metadata, userId, userEmail }: Workflow
         comentarios_analista: record.comentarios_analista,
         rejection_reason: reason,
         rejection_category: stage,
-        rejected_by: userEmail || userId,
+        rejected_by: userId || null,
       };
 
       const { error: insertError } = await externalSupabase
