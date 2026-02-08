@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Play, AlertCircle, GitMerge } from 'lucide-react';
 import type { ActiveCaseStudyJob } from '@/hooks/useCaseStudyActiveJob';
 
-// Phase labels for display
+// Phase labels for display (v14.0: sin fases de tecnologías visibles)
 const PHASE_LABELS: Record<string, string> = {
   uploading: 'Subiendo archivos',
   classifying: 'Clasificando',
@@ -15,12 +15,14 @@ const PHASE_LABELS: Record<string, string> = {
   extracting_analysis: 'Analizando',
   extracting_results: 'Procesando resultados',
   extracting_lessons: 'Extrayendo lecciones',
-  listing_technologies: 'Listando tecnologías',
-  enriching_technologies: 'Enriqueciendo fichas',
-  matching_technologies: 'Matching con BD',
   saving: 'Guardando',
   accumulating: 'Acumulando documentos',
   similar_found: 'Casos similares encontrados',
+  // Technology phases map to saving (procesando en background)
+  listing_technologies: 'Guardando',
+  enriching_technologies: 'Guardando',
+  matching_technologies: 'Guardando',
+  creating_fichas: 'Guardando',
 };
 
 interface ActiveJobIndicatorProps {
