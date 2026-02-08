@@ -30,8 +30,6 @@ import {
   Loader2,
   Users,
   Globe,
-  Sparkles,
-  SendHorizonal,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -239,8 +237,8 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
   // Review modal state
   const [reviewJobId, setReviewJobId] = useState<string | null>(null);
   
-  // State for sending to scouting queue
-  const [sendingTechId, setSendingTechId] = useState<string | null>(null);
+  // State for sending to scouting queue (legacy - no longer used in v14.0)
+  // const [sendingTechId, setSendingTechId] = useState<string | null>(null);
   
   // Modal states for viewing tech sheets
   const [selectedTechFromDB, setSelectedTechFromDB] = useState<Technology | null>(null);
@@ -500,71 +498,8 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
     }
   };
 
-  // Send technology to scouting queue for review
-  const handleSendToScoutingQueue = async (tech: CaseStudyTechnology) => {
-    if (tech.technology_id || tech.scouting_queue_id) {
-      toast.error('Esta tecnología ya está vinculada o en revisión');
-      return;
-    }
-    
-    setSendingTechId(tech.id);
-    
-    try {
-      // Extract fields using helper
-      const nombre = getTechField(tech, 'nombre');
-      const proveedor = getTechField(tech, 'proveedor');
-      const web = getTechField(tech, 'web');
-      const descripcion = getTechField(tech, 'descripcion');
-      const trl = getTechField(tech, 'trl');
-      const ventaja = getTechField(tech, 'ventaja');
-      
-      // Insert into scouting_queue (BD externa usa snake_case según estructura proporcionada)
-      const { data, error } = await externalSupabase
-        .from('scouting_queue')
-        .insert({
-          nombre: nombre,
-          proveedor: proveedor || 'Desconocido',
-          pais: null,
-          web: web || null,
-          descripcion: descripcion || null,
-          tipo_sugerido: null,
-          subcategoria_sugerida: null,
-          trl_estimado: trl || null,
-          ventaja_competitiva: ventaja || null,
-          relevance_score: 70,
-          relevance_reason: `Tecnología extraída del caso de estudio: ${caseStudy?.name}`,
-          source_url: null,
-          status: 'review',
-          scouting_job_id: null,
-          source: 'case_study',
-          case_study_id: caseStudyId,
-        })
-        .select('id')
-        .single();
-      
-      if (error) throw error;
-      
-      // Update case_study_technologies with the new scouting_queue_id
-      await externalSupabase
-        .from('case_study_technologies')
-        .update({ scouting_queue_id: data.id })
-        .eq('id', tech.id);
-      
-      // Invalidate queries to refresh the UI
-      queryClient.invalidateQueries({ queryKey: ['case-study-technologies', caseStudyId] });
-      queryClient.invalidateQueries({ queryKey: ['scouting-queue'] });
-      queryClient.invalidateQueries({ queryKey: ['scouting-counts'] });
-      
-      toast.success('Tecnología enviada a revisión', {
-        description: `${nombre} está ahora en la cola de scouting`
-      });
-    } catch (error: any) {
-      console.error('Error sending to scouting queue:', error);
-      toast.error('Error al enviar a revisión', { description: error.message });
-    } finally {
-      setSendingTechId(null);
-    }
-  };
+  // v14.0: handleSendToScoutingQueue removed - technologies are saved directly to BD
+  // without interactive review step in UI
 
   // Handle viewing technology sheet
   const handleViewTechSheet = async (tech: CaseStudyTechnology) => {
@@ -1052,23 +987,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                           Ver ficha
                           <ExternalLink className="h-3 w-3" />
                         </Button>
-                        {/* Send to review button for unlinked technologies */}
-                        {!tech.technology_id && !tech.scouting_queue_id && !isTechAlreadyInQueue(tech) && (
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-7 text-xs gap-1"
-                            onClick={() => handleSendToScoutingQueue(tech)}
-                            disabled={sendingTechId === tech.id}
-                          >
-                            {sendingTechId === tech.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <SendHorizonal className="h-3 w-3" />
-                            )}
-                            Enviar a revisión
-                          </Button>
-                        )}
+                        {/* v14.0: Send to review button removed - technologies save directly */}
                       </div>
                     </div>
                   ))}
@@ -1100,23 +1019,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                         >
                           Ver ficha
                         </Button>
-                        {/* Send to review button for unlinked technologies */}
-                        {!tech.technology_id && !tech.scouting_queue_id && !isTechAlreadyInQueue(tech) && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-6 text-xs gap-1"
-                            onClick={() => handleSendToScoutingQueue(tech)}
-                            disabled={sendingTechId === tech.id}
-                          >
-                            {sendingTechId === tech.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <SendHorizonal className="h-3 w-3" />
-                            )}
-                            Revisar
-                          </Button>
-                        )}
+                        {/* v14.0: Send to review button removed */}
                       </div>
                     </div>
                   ))}
@@ -1152,23 +1055,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
                         Ver ficha
                         <ExternalLink className="h-3 w-3" />
                       </Button>
-                      {/* Send to review button for unlinked technologies */}
-                      {!tech.technology_id && !tech.scouting_queue_id && !isTechAlreadyInQueue(tech) && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="h-7 text-xs gap-1 ml-2"
-                          onClick={() => handleSendToScoutingQueue(tech)}
-                          disabled={sendingTechId === tech.id}
-                        >
-                          {sendingTechId === tech.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <SendHorizonal className="h-3 w-3" />
-                          )}
-                          Enviar a revisión
-                        </Button>
-                      )}
+                      {/* v14.0: Send to review button removed */}
                     </div>
                   ))}
                 </div>
@@ -1177,16 +1064,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
 
             {(!technologies || technologies.length === 0) && (
               <div className="text-center py-4">
-                <p className="text-sm text-muted-foreground mb-3">No hay tecnologías asociadas</p>
-                {associatedJob?.jobId && (
-                  <Button 
-                    onClick={() => setReviewJobId(associatedJob.jobId)}
-                    className="gap-2"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Revisar tecnologías extraídas
-                  </Button>
-                )}
+                <p className="text-sm text-muted-foreground">No hay tecnologías asociadas</p>
               </div>
             )}
           </CardContent>
@@ -1329,7 +1207,7 @@ export const CaseStudyDetailView: React.FC<CaseStudyDetailViewProps> = ({
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
+              <Edit className="h-5 w-5 text-primary" />
               Revisar Extracción
             </DialogTitle>
           </DialogHeader>

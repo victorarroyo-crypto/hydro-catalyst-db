@@ -13,9 +13,6 @@ import {
   Scale,
   TrendingUp,
   Lightbulb,
-  List,
-  FileSpreadsheet,
-  Database,
   Save,
   RefreshCw,
   XOctagon,
@@ -28,21 +25,20 @@ import { supabase } from '@/integrations/supabase/client'; // Lovable Supabase f
 import { cn } from '@/lib/utils';
 import { SimilarCasesModal, SimilarCase } from './SimilarCasesModal';
 
-// 9 fases visuales para v13.0 (optimizado)
+// 7 fases visuales para v14.0 (sin fases de tecnologías interactivas)
+// Las tecnologías siguen guardándose en BD pero ya no se muestran como paso en UI
 const PHASES = [
-  { id: 'classifying', label: 'Clasificación', icon: FileSearch, range: [0, 10] },
-  { id: 'extracting_context', label: 'Contexto', icon: Target, range: [10, 20] },
-  { id: 'extracting_methodology', label: 'Metodología', icon: GitBranch, range: [20, 28] },
-  { id: 'extracting_analysis', label: 'Análisis', icon: Scale, range: [28, 40] },
-  { id: 'extracting_results', label: 'Resultados', icon: TrendingUp, range: [40, 50] },
-  { id: 'extracting_lessons', label: 'Lecciones', icon: Lightbulb, range: [50, 58] },
-  // v13.0: Bloque unificado de Tech Matching (reemplaza listing+enriching+matching)
-  { id: 'matching_technologies', label: 'Matching', icon: Database, range: [58, 70] },
-  { id: 'creating_fichas', label: 'Fichas', icon: FileSpreadsheet, range: [70, 90] },
+  { id: 'classifying', label: 'Clasificación', icon: FileSearch, range: [0, 15] },
+  { id: 'extracting_context', label: 'Contexto', icon: Target, range: [15, 30] },
+  { id: 'extracting_methodology', label: 'Metodología', icon: GitBranch, range: [30, 45] },
+  { id: 'extracting_analysis', label: 'Análisis', icon: Scale, range: [45, 60] },
+  { id: 'extracting_results', label: 'Resultados', icon: TrendingUp, range: [60, 75] },
+  { id: 'extracting_lessons', label: 'Lecciones', icon: Lightbulb, range: [75, 90] },
   { id: 'saving', label: 'Guardando', icon: Save, range: [90, 100] },
 ] as const;
 
-// Mapeo de todas las fases webhook a steps visuales (v13.0 + legacy)
+// Mapeo de todas las fases webhook a steps visuales (v14.0 sin tecnologías en UI)
+// Las tecnologías siguen procesándose en backend pero no se muestran como paso
 const PHASE_TO_STEP_MAP: Record<string, string> = {
   // v12: Multi-documento
   'accumulating': 'classifying',
@@ -52,7 +48,7 @@ const PHASE_TO_STEP_MAP: Record<string, string> = {
   'classification_complete': 'extracting_context',
   'extracting_context': 'extracting_context',
   'context_complete': 'extracting_methodology',
-  'similar_found': 'extracting_context', // INFO only in v13.0
+  'similar_found': 'extracting_context',
   'extracting_methodology': 'extracting_methodology',
   'methodology_complete': 'extracting_analysis',
   'extracting_analysis': 'extracting_analysis',
@@ -60,19 +56,17 @@ const PHASE_TO_STEP_MAP: Record<string, string> = {
   'extracting_results': 'extracting_results',
   'results_complete': 'extracting_lessons',
   'extracting_lessons': 'extracting_lessons',
-  'lessons_complete': 'matching_technologies',
+  'lessons_complete': 'saving', // Directo a saving, sin fases de tecnologías en UI
   
-  // LEGACY v12 phases (map to v13.0 equivalents)
-  'listing_technologies': 'matching_technologies',
-  'technologies_listed': 'matching_technologies',
-  'enriching_technologies': 'creating_fichas',
-  'technologies_enriched': 'creating_fichas',
-  
-  // NEW v13.0: Tech Matching por embeddings
-  'matching_technologies': 'matching_technologies',
-  'generating_embeddings': 'matching_technologies',
-  'searching_database': 'matching_technologies',
-  'creating_fichas': 'creating_fichas',
+  // Technology phases (backend sigue procesando, pero UI salta a saving)
+  'listing_technologies': 'saving',
+  'technologies_listed': 'saving',
+  'enriching_technologies': 'saving',
+  'technologies_enriched': 'saving',
+  'matching_technologies': 'saving',
+  'generating_embeddings': 'saving',
+  'searching_database': 'saving',
+  'creating_fichas': 'saving',
   'matching_complete': 'saving',
   
   // Final phases
@@ -88,9 +82,9 @@ const PHASE_TO_STEP_MAP: Record<string, string> = {
   'extraction_complete': 'extracting_analysis',
   'reviewing': 'extracting_analysis',
   'review_complete': 'extracting_results',
-  'checking_technologies': 'matching_technologies',
-  'tech_check_complete': 'creating_fichas',
-  'matching': 'matching_technologies',
+  'checking_technologies': 'saving',
+  'tech_check_complete': 'saving',
+  'matching': 'saving',
   'processing': 'extracting_context',
 };
 
@@ -547,24 +541,10 @@ export const CaseStudyProcessingView: React.FC<CaseStudyProcessingViewProps> = (
             </div>
           )}
 
-          {/* Statistics badges (show when progress > 65%) */}
-          {job.progress_percentage > 65 && (job.technologies_found || job.technologies_new || job.quality_score) && (
+          {/* Quality score badge (show when progress > 65%) - technology stats removed in v14.0 */}
+          {job.progress_percentage > 65 && job.quality_score !== null && job.quality_score !== undefined && (
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
-              {job.technologies_found !== null && job.technologies_found !== undefined && (
-                <Badge variant="outline" className="gap-1">
-                  <Database className="h-3 w-3" />
-                  {job.technologies_found} tecnologías
-                </Badge>
-              )}
-              {job.technologies_new !== null && job.technologies_new !== undefined && job.technologies_new > 0 && (
-                <Badge variant="secondary" className="gap-1">
-                  <FileSpreadsheet className="h-3 w-3" />
-                  {job.technologies_new} nuevas
-                </Badge>
-              )}
-              {job.quality_score !== null && job.quality_score !== undefined && (
-                <QualityScoreBadge score={job.quality_score} />
-              )}
+              <QualityScoreBadge score={job.quality_score} />
             </div>
           )}
 
