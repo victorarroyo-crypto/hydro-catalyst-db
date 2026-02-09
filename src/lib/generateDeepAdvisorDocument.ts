@@ -31,6 +31,16 @@ import type { DeepJobSource, DeepJobFact } from './advisorProxy';
 import { safeBase64Decode } from './reactflowToImage';
 
 /**
+ * Detect if a line is residual base64 data leaked from ReactFlow diagrams
+ */
+function isBase64Residue(line: string): boolean {
+  const trimmed = line.trim();
+  if (trimmed.length < 30) return false;
+  // Base64 characters only (no spaces, no natural language)
+  return /^[A-Za-z0-9+/=]{30,}$/.test(trimmed);
+}
+
+/**
  * Get image dimensions from PNG ArrayBuffer
  * PNG stores width/height in bytes 16-23 of the file (IHDR chunk)
  */
@@ -1044,7 +1054,7 @@ function parseMarkdownToParagraphs(
   
   // First, process ReactFlow divs and replace them with placeholders
   let processedMarkdown = markdown;
-  const reactFlowDivRegex = /<div\s+data-reactflow-diagram="([^"]+)"[^>]*>(?:<\/div>)?/gi;
+  const reactFlowDivRegex = /<div\s+data-reactflow-diagram="([^"]*?)"[^>]*>(?:<\/div>)?/gis;
   const reactFlowMatches: { match: string; jsonContent: string; placeholder: string }[] = [];
   let rfMatch;
   let rfIndex = 0;
@@ -1080,6 +1090,15 @@ function parseMarkdownToParagraphs(
     processedMarkdown = processedMarkdown.replace(rfMatch[0], `\n${placeholder}\n`);
     rfIndex++;
   }
+  
+  // Clean up any partial/unclosed ReactFlow div tags that weren't captured by the regex
+  processedMarkdown = processedMarkdown.replace(/<div\s+data-reactflow-diagram=[\s\S]*?(?:<\/div>|(?=\n\n))/gi, '');
+  
+  // Clean up any residual base64 content that leaked from ReactFlow diagrams
+  processedMarkdown = processedMarkdown
+    .split('\n')
+    .filter(line => !isBase64Residue(line))
+    .join('\n');
   
   const lines = processedMarkdown.split('\n');
   
@@ -1222,6 +1241,11 @@ function parseMarkdownToParagraphs(
           console.warn('Failed to parse ReactFlow diagram for Word:', e);
         }
       }
+      continue;
+    }
+    
+    // Skip base64 residual lines that leaked from ReactFlow diagrams
+    if (isBase64Residue(trimmedLine)) {
       continue;
     }
     
