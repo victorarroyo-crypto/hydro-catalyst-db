@@ -36,8 +36,14 @@ import { safeBase64Decode } from './reactflowToImage';
 function isBase64Residue(line: string): boolean {
   const trimmed = line.trim();
   if (trimmed.length < 30) return false;
-  // Base64 characters only (no spaces, no natural language)
-  return /^[A-Za-z0-9+/=]{30,}$/.test(trimmed);
+  // Pure base64 line
+  if (/^[A-Za-z0-9+/=]{30,}$/.test(trimmed)) return true;
+  // Line containing a reactflow div tag (partial or complete)
+  if (/data-reactflow-diagram/i.test(trimmed)) return true;
+  // Line that is mostly base64 characters (>80%) - likely leaked binary
+  const base64Chars = (trimmed.match(/[A-Za-z0-9+/=]/g) || []).length;
+  if (trimmed.length > 100 && base64Chars / trimmed.length > 0.8) return true;
+  return false;
 }
 
 /**
@@ -1091,8 +1097,10 @@ function parseMarkdownToParagraphs(
     rfIndex++;
   }
   
-  // Clean up any partial/unclosed ReactFlow div tags that weren't captured by the regex
-  processedMarkdown = processedMarkdown.replace(/<div\s+data-reactflow-diagram=[\s\S]*?(?:<\/div>|(?=\n\n))/gi, '');
+  // Aggressively remove entire <div data-reactflow-diagram=...> blocks, even if malformed/unclosed
+  processedMarkdown = processedMarkdown.replace(/<div[^>]*data-reactflow-diagram=[^]*?(<\/div>|$)/gi, '');
+  // Remove truncated div tags that span to end of line
+  processedMarkdown = processedMarkdown.replace(/<div\s+data-reactflow-diagram="[^"]*"?[^\n]*/gi, '');
   
   // Clean up any residual base64 content that leaked from ReactFlow diagrams
   processedMarkdown = processedMarkdown
