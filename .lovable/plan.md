@@ -1,62 +1,81 @@
 
-# Fix: Datos base64 de ReactFlow siguen apareciendo en Word
 
-## Diagnostico
+# Fix: Eliminacion definitiva de base64 en exportacion Word
 
-El fix anterior no funciona porque:
-1. La regex `reactFlowDivRegex` requiere un cierre `>` y/o `</div>` que puede no existir en el contenido
-2. La funcion `isBase64Residue` solo detecta lineas de base64 **puro** - no detecta lineas que empiezan con `<div data-reactflow-diagram="` seguido de base64
-3. La regex de limpieza parcial `/<div\s+data-reactflow-diagram=[\s\S]*?(?:<\/div>|(?=\n\n))/gi` es demasiado conservadora
+## Diagnostico raiz
 
-## Solucion
+Las correcciones previas basadas en regex fallan por una razon fundamental: el contenido del tag `<div data-reactflow-diagram="...BASE64_MUY_LARGO..."></div>` llega como UNA SOLA LINEA de miles de caracteres. Los regex con `[^"]*?` (non-greedy) o `[^]*?` con alternativa `$` no lo capturan de forma fiable, y `isBase64Residue` solo examina linea por linea (la linea entera incluye el HTML del div, no es "pura" base64).
 
-Atacar el problema de forma mas agresiva con tres cambios en `src/lib/generateDeepAdvisorDocument.ts`:
+## Solucion: Limpieza basada en string indexOf (sin regex)
 
-### Cambio 1: Ampliar `isBase64Residue` para detectar tambien lineas con HTML + base64
+Reemplazar la estrategia de regex por una busqueda directa con `indexOf` y `substring`, que es determinista y no depende de backtracking del motor regex.
 
-Ademas de lineas de base64 puro, detectar lineas que contengan `data-reactflow-diagram` o que sean mayoritariamente caracteres base64 (>80% de la longitud sin espacios):
+### Archivo: `src/lib/generateDeepAdvisorDocument.ts`
+
+**Cambio 1 - Nueva funcion de limpieza robusta (reemplazar isBase64Residue y los regex agresivos):**
+
+Antes de cualquier procesamiento regex de Pattern 1/Pattern 2, hacer una limpieza por string search:
 
 ```typescript
-function isBase64Residue(line: string): boolean {
-  const trimmed = line.trim();
-  if (trimmed.length < 30) return false;
-  // Pure base64 line
-  if (/^[A-Za-z0-9+/=]{30,}$/.test(trimmed)) return true;
-  // Line containing a reactflow div tag (partial or complete)
-  if (/data-reactflow-diagram/i.test(trimmed)) return true;
-  // Line that is mostly base64 characters (>80%) - likely leaked binary
-  const base64Chars = (trimmed.match(/[A-Za-z0-9+/=]/g) || []).length;
-  if (trimmed.length > 100 && base64Chars / trimmed.length > 0.8) return true;
-  return false;
+function removeReactFlowDivTags(text: string): string {
+  let result = text;
+  const marker = 'data-reactflow-diagram=';
+  let searchFrom = 0;
+  
+  while (true) {
+    const markerIdx = result.indexOf(marker, searchFrom);
+    if (markerIdx === -1) break;
+    
+    // Find the opening <div that precedes this marker
+    const divStart = result.lastIndexOf('<div', markerIdx);
+    if (divStart === -1) {
+      // No <div found - remove from marker to end of line or </div>
+      const endDiv = result.indexOf('</div>', markerIdx);
+      const endLine = result.indexOf('\n', markerIdx);
+      const cutEnd = endDiv !== -1 ? endDiv + 6 : (endLine !== -1 ? endLine : result.length);
+      result = result.substring(0, markerIdx) + result.substring(cutEnd);
+      continue;
+    }
+    
+    // Find closing </div> or end of tag
+    const closeDivIdx = result.indexOf('</div>', markerIdx);
+    const cutEnd = closeDivIdx !== -1 ? closeDivIdx + 6 : result.length;
+    
+    result = result.substring(0, divStart) + result.substring(cutEnd);
+    searchFrom = divStart; // Continue searching from where we cut
+  }
+  
+  return result;
 }
 ```
 
-### Cambio 2: Agregar limpieza mas agresiva antes del split en lineas
+**Cambio 2 - Aplicar la limpieza al inicio de `parseMarkdownToParagraphs`:**
 
-Antes de hacer `split('\n')`, eliminar cualquier bloque que contenga `data-reactflow-diagram` de principio a fin, incluyendo tags sin cerrar:
-
-```typescript
-// Remove entire <div data-reactflow-diagram=...> blocks, even if malformed/unclosed
-processedMarkdown = processedMarkdown.replace(
-  /<div[^>]*data-reactflow-diagram=[^]*?(<\/div>|$)/gi, 
-  ''
-);
-```
-
-### Cambio 3: Limpiar tambien el tag suelto sin cierre
-
-Si el tag aparece sin `>` de cierre (truncado), eliminarlo hasta el final de la linea:
+Inmediatamente despues de `let processedMarkdown = markdown;` (linea 1062), ANTES de los Pattern 1 y Pattern 2:
 
 ```typescript
-// Remove truncated div tags that span to end of line
-processedMarkdown = processedMarkdown.replace(
-  /<div\s+data-reactflow-diagram="[^"]*"?[^\n]*/gi, 
-  ''
-);
+// Remove raw ReactFlow div tags BEFORE regex processing (deterministic string search)
+processedMarkdown = removeReactFlowDivTags(processedMarkdown);
 ```
 
-## Archivo modificado
+**Cambio 3 - Mantener `isBase64Residue` mejorada y el filtro de lineas:**
+
+Mantener la funcion `isBase64Residue` y el filtro `.filter(line => !isBase64Residue(line))` como red de seguridad para cualquier residuo que quede.
+
+**Cambio 4 - Eliminar los regex agresivos redundantes (lineas 1100-1103):**
+
+Ya no se necesitan las lineas con `/<div[^>]*data-reactflow-diagram=.../` y `/<div\s+data-reactflow-diagram=.../` ya que `removeReactFlowDivTags` hace el mismo trabajo de forma mas fiable.
+
+## Resumen
 
 | Archivo | Accion |
 |---------|--------|
-| `src/lib/generateDeepAdvisorDocument.ts` | Reforzar `isBase64Residue`, agregar limpieza agresiva de tags malformados |
+| `src/lib/generateDeepAdvisorDocument.ts` | Agregar `removeReactFlowDivTags()` con indexOf, aplicarla antes de regex, eliminar regex agresivos redundantes |
+
+## Por que esto funciona
+
+- `indexOf` busca la cadena literal `data-reactflow-diagram=` sin backtracking
+- `lastIndexOf('<div', pos)` encuentra el inicio del tag de forma determinista
+- `indexOf('</div>', pos)` encuentra el cierre sin importar el largo del base64
+- No depende de cuantificadores greedy/non-greedy ni del flag dotAll
+- Si no hay `</div>`, corta hasta el final del string (caso truncado)
