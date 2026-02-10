@@ -47,6 +47,41 @@ function isBase64Residue(line: string): boolean {
 }
 
 /**
+ * Deterministic removal of ReactFlow div tags using indexOf (no regex).
+ * Handles single-line mega-tags, malformed/unclosed tags, and truncated content.
+ */
+function removeReactFlowDivTags(text: string): string {
+  let result = text;
+  const marker = 'data-reactflow-diagram=';
+  let searchFrom = 0;
+  
+  while (true) {
+    const markerIdx = result.indexOf(marker, searchFrom);
+    if (markerIdx === -1) break;
+    
+    // Find the opening <div that precedes this marker
+    const divStart = result.lastIndexOf('<div', markerIdx);
+    if (divStart === -1) {
+      // No <div found - remove from marker to end of line or </div>
+      const endDiv = result.indexOf('</div>', markerIdx);
+      const endLine = result.indexOf('\n', markerIdx);
+      const cutEnd = endDiv !== -1 ? endDiv + 6 : (endLine !== -1 ? endLine : result.length);
+      result = result.substring(0, markerIdx) + result.substring(cutEnd);
+      continue;
+    }
+    
+    // Find closing </div> or end of tag
+    const closeDivIdx = result.indexOf('</div>', markerIdx);
+    const cutEnd = closeDivIdx !== -1 ? closeDivIdx + 6 : result.length;
+    
+    result = result.substring(0, divStart) + result.substring(cutEnd);
+    searchFrom = divStart; // Continue searching from where we cut
+  }
+  
+  return result;
+}
+
+/**
  * Get image dimensions from PNG ArrayBuffer
  * PNG stores width/height in bytes 16-23 of the file (IHDR chunk)
  */
@@ -1060,6 +1095,10 @@ function parseMarkdownToParagraphs(
   
   // First, process ReactFlow divs and replace them with placeholders
   let processedMarkdown = markdown;
+  
+  // Remove raw ReactFlow div tags BEFORE regex processing (deterministic string search)
+  processedMarkdown = removeReactFlowDivTags(processedMarkdown);
+  
   const reactFlowDivRegex = /<div\s+data-reactflow-diagram="([^"]*?)"[^>]*>(?:<\/div>)?/gis;
   const reactFlowMatches: { match: string; jsonContent: string; placeholder: string }[] = [];
   let rfMatch;
@@ -1097,10 +1136,7 @@ function parseMarkdownToParagraphs(
     rfIndex++;
   }
   
-  // Aggressively remove entire <div data-reactflow-diagram=...> blocks, even if malformed/unclosed
-  processedMarkdown = processedMarkdown.replace(/<div[^>]*data-reactflow-diagram=[^]*?(<\/div>|$)/gi, '');
-  // Remove truncated div tags that span to end of line
-  processedMarkdown = processedMarkdown.replace(/<div\s+data-reactflow-diagram="[^"]*"?[^\n]*/gi, '');
+  // Note: aggressive regex removal replaced by deterministic removeReactFlowDivTags() above
   
   // Clean up any residual base64 content that leaked from ReactFlow diagrams
   processedMarkdown = processedMarkdown
