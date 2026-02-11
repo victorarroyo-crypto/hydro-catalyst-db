@@ -298,73 +298,18 @@ export const useMoveToRejected = () => {
   return useMutation({
     mutationFn: async ({ 
       scoutingId, 
-      rejectionReason, 
-      rejectedBy, 
-      rejectionStage 
     }: { 
       scoutingId: string; 
       rejectionReason: string; 
       rejectedBy?: string; 
       rejectionStage: 'analyst' | 'supervisor' | 'admin';
     }) => {
-      // 1. Fetch the record from external DB
-      const { data: scoutingRecord, error: fetchError } = await externalSupabase
-        .from('scouting_queue')
-        .select('*')
-        .eq('id', scoutingId)
-        .single();
-      
-      if (fetchError) throw new Error(`Error al obtener registro: ${fetchError.message}`);
-      if (!scoutingRecord) throw new Error('Registro no encontrado');
-      
-      const record = scoutingRecord as ExternalScoutingQueueItem;
-      const rec = record as unknown as Record<string, unknown>;
-      
-      // 2. Insert into rejected_technologies in external DB
-      // The external table uses column names with spaces/accents (not snake_case)
-      const insertPayload: Record<string, unknown> = {
-        original_scouting_id: record.id,
-        "Nombre de la tecnología": rec["Nombre de la tecnología"] || '',
-        "Tipo de tecnología": rec["Tipo de tecnología"] || 'Sin clasificar',
-        "Proveedor / Empresa": rec["Proveedor / Empresa"],
-        "País de origen": rec["País de origen"],
-        "Web de la empresa": rec["Web de la empresa"],
-        "Email de contacto": rec["Email de contacto"],
-        "Descripción técnica breve": rec["Descripción técnica breve"],
-        "Subcategoría": rec["Subcategoría"],
-        "Sector y subsector": rec["Sector y subsector"],
-        subsector_industrial: rec.subsector_industrial,
-        "Aplicación principal": rec["Aplicación principal"],
-        "Ventaja competitiva clave": rec["Ventaja competitiva clave"],
-        "Porque es innovadora": rec["Porque es innovadora"],
-        "Grado de madurez (TRL)": rec["Grado de madurez (TRL)"],
-        "Casos de referencia": rec["Casos de referencia"],
-        "Paises donde actua": rec["Paises donde actua"],
-        "Comentarios del analista": rec["Comentarios del analista"],
-        "Fecha de scouting": rec["Fecha de scouting"],
-        rejection_reason: rejectionReason,
-        rejection_category: rejectionStage,
-      };
-
-      if (rejectedBy) {
-        insertPayload.rejected_by = rejectedBy;
-      }
-
-      const { error: insertError } = await externalSupabase
-        .from('rejected_technologies')
-        .insert(insertPayload);
-      
-      if (insertError) throw new Error(`Error al mover a rechazadas: ${insertError.message}`);
-      
-      // 3. Delete from external scouting_queue
       const { error: deleteError } = await externalSupabase
         .from('scouting_queue')
         .delete()
         .eq('id', scoutingId);
       
-      if (deleteError) {
-        console.error('Error deleting from external queue:', deleteError);
-      }
+      if (deleteError) throw new Error(`Error al eliminar: ${deleteError.message}`);
       
       return { success: true };
     },
