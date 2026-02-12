@@ -1093,26 +1093,23 @@ function parseMarkdownToParagraphs(
 ): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
   
-  // First, process ReactFlow divs and replace them with placeholders
+  // First, extract ReactFlow divs and replace them with placeholders BEFORE sanitization
   let processedMarkdown = markdown;
-  
-  // Remove raw ReactFlow div tags BEFORE regex processing (deterministic string search)
-  processedMarkdown = removeReactFlowDivTags(processedMarkdown);
   
   const reactFlowDivRegex = /<div\s+data-reactflow-diagram="([^"]*?)"[^>]*>(?:<\/div>)?/gis;
   const reactFlowMatches: { match: string; jsonContent: string; placeholder: string }[] = [];
   let rfMatch;
   let rfIndex = 0;
   
-  // Pattern 1: <div data-reactflow-diagram="BASE64"> format
+  // Pattern 1: <div data-reactflow-diagram="BASE64"> format - extract from ORIGINAL markdown
   while ((rfMatch = reactFlowDivRegex.exec(markdown)) !== null) {
     const placeholder = `__REACTFLOW_DIAGRAM_${rfIndex}__`;
     try {
       const base64 = rfMatch[1];
-      const jsonContent = safeBase64Decode(base64).trim(); // Use safe decode for Unicode support
+      const jsonContent = safeBase64Decode(base64).trim();
       reactFlowMatches.push({
         match: rfMatch[0],
-        jsonContent, // Use JSON content as key (consistent with renderAllReactFlowDiagrams)
+        jsonContent,
         placeholder,
       });
       processedMarkdown = processedMarkdown.replace(rfMatch[0], `\n${placeholder}\n`);
@@ -1121,6 +1118,9 @@ function parseMarkdownToParagraphs(
       console.warn('Failed to decode ReactFlow base64:', e);
     }
   }
+  
+  // NOW remove any remaining ReactFlow div tags that weren't matched (deterministic cleanup)
+  processedMarkdown = removeReactFlowDivTags(processedMarkdown);
   
   // Pattern 2: ```reactflow fenced code blocks
   const reactFlowFenceRegex = /```reactflow\s*\n([\s\S]*?)\n```/gi;
