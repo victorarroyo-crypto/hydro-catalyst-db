@@ -1,5 +1,4 @@
 import React from 'react';
-import { Star, Diamond, Eye, Archive, CircleDashed } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -7,31 +6,31 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-const TIER_CONFIG: Record<string, { label: string; className: string; Icon: React.FC<{ className?: string }> }> = {
+const TIER_CONFIG: Record<string, { label: string; className: string; dotClass: string }> = {
   gold: {
     label: 'Gold',
     className: 'bg-amber-100 text-amber-800 border-amber-300',
-    Icon: Star,
+    dotClass: 'bg-amber-500',
   },
   silver: {
     label: 'Silver',
     className: 'bg-slate-100 text-slate-700 border-slate-300',
-    Icon: Diamond,
+    dotClass: 'bg-slate-400',
   },
   watch: {
     label: 'Watch',
     className: 'bg-orange-50 text-orange-700 border-orange-200',
-    Icon: Eye,
+    dotClass: 'bg-orange-400',
   },
   archive: {
     label: 'Archive',
     className: 'bg-gray-100 text-gray-500 border-gray-200',
-    Icon: Archive,
+    dotClass: 'bg-gray-400',
   },
   unrated: {
-    label: 'Sin clasificar',
+    label: 'Sin tier',
     className: 'bg-gray-50 text-gray-400 border-gray-200',
-    Icon: CircleDashed,
+    dotClass: 'bg-gray-300',
   },
 };
 
@@ -52,11 +51,10 @@ interface TierBadgeProps {
 export const TierBadge: React.FC<TierBadgeProps> = ({ tier, evidenceLevel }) => {
   const config = TIER_CONFIG[tier || 'unrated'] || TIER_CONFIG.unrated;
   const evidenceLabel = EVIDENCE_LABELS[evidenceLevel || 'unknown'] || EVIDENCE_LABELS.unknown;
-  const { Icon } = config;
 
   const badge = (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap ${config.className}`}>
-      <Icon className="w-3 h-3 shrink-0" />
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border leading-none ${config.className}`}>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${config.dotClass}`} />
       {config.label}
     </span>
   );
