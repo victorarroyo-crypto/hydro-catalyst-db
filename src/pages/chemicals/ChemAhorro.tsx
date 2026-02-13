@@ -37,36 +37,38 @@ export default function ChemAhorro() {
     enabled: !!projectId,
   });
 
-  const { data: monthly = [] } = useQuery({
-    queryKey: ['chem-savings-monthly', projectId],
-    queryFn: async () => {
-      const savingIds = savings.map((s: any) => s.id);
-      if (savingIds.length === 0) return [];
-      const { data, error } = await externalSupabase.from('chem_savings_monthly').select('*').in('saving_id', savingIds).order('mes');
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: savings.length > 0,
-  });
-
-  const ahorroTotal = savings.reduce((s: number, sv: any) => s + (sv.ahorro_anual || 0), 0);
-  const potencial = products.reduce((s: number, p: any) => s + (p.potencial_ahorro || 0), 0);
-  const successFeeRate = 0.25; // 25% default
+  // Calculate ahorro from savings rows (each has ahorro_real_mes)
+  const ahorroTotal = savings.reduce((s: number, sv: any) => s + (sv.ahorro_real_mes || 0), 0);
+  
+  // Calculate potencial from products (client-side)
+  const potencial = products.reduce((s: number, p: any) => {
+    const conc = p.concentracion_porcentaje || 100;
+    const precioMA = p.precio_unitario_actual && conc > 0 ? p.precio_unitario_actual / (conc / 100) : 0;
+    const gap = p.precio_benchmark && p.precio_benchmark > 0 ? precioMA - p.precio_benchmark : 0;
+    return s + (gap > 0 ? gap * (conc / 100) * (p.consumo_anual_kg || 0) : 0);
+  }, 0);
+  
+  const successFeeRate = 0.25;
   const successFee = ahorroTotal * successFeeRate;
 
-  // Chart data
-  const chartData = monthly.reduce((acc: any[], m: any) => {
-    const existing = acc.find(a => a.mes === m.mes);
-    if (existing) {
-      existing.ahorro += m.ahorro_real || 0;
-    } else {
-      acc.push({ mes: m.mes?.substring(0, 7), ahorro: m.ahorro_real || 0 });
-    }
-    return acc;
-  }, []).map((item: any, i: number, arr: any[]) => {
-    const acumulado = arr.slice(0, i + 1).reduce((s: number, a: any) => s + a.ahorro, 0);
-    return { ...item, acumulado };
-  });
+  // Chart data - group savings by month
+  const chartData = savings
+    .filter((s: any) => s.mes)
+    .sort((a: any, b: any) => (a.mes || '').localeCompare(b.mes || ''))
+    .reduce((acc: any[], s: any) => {
+      const mesKey = s.mes?.substring(0, 7);
+      const existing = acc.find(a => a.mes === mesKey);
+      if (existing) {
+        existing.ahorro += s.ahorro_real_mes || 0;
+      } else {
+        acc.push({ mes: mesKey, ahorro: s.ahorro_real_mes || 0 });
+      }
+      return acc;
+    }, [])
+    .map((item: any, i: number, arr: any[]) => {
+      const acumulado = arr.slice(0, i + 1).reduce((s: number, a: any) => s + a.ahorro, 0);
+      return { ...item, acumulado };
+    });
 
   return (
     <div className="p-6 space-y-4">
@@ -129,25 +131,27 @@ export default function ChemAhorro() {
               <TableRow>
                 <TableHead>Producto</TableHead>
                 <TableHead>Tipo ahorro</TableHead>
-                <TableHead className="text-right">Baseline €/kg MA</TableHead>
-                <TableHead className="text-right">Nuevo €/kg MA</TableHead>
+                <TableHead className="text-right">Baseline €/kg</TableHead>
+                <TableHead className="text-right">Nuevo €/kg</TableHead>
                 <TableHead className="text-right">Vol. real 12m</TableHead>
-                <TableHead className="text-right font-bold">Ahorro anual €</TableHead>
+                <TableHead className="text-right">Mes</TableHead>
+                <TableHead className="text-right font-bold">Ahorro real mes €</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {savings.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No hay ahorros registrados aún.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No hay ahorros registrados aún.</TableCell></TableRow>
               ) : savings.map((s: any) => {
                 const prod = products.find((p: any) => p.id === s.product_id);
                 return (
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">{prod?.nombre_comercial || '—'}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px]">{s.tipo_ahorro || '—'}</Badge></TableCell>
-                    <TableCell className="text-right font-mono text-sm">{formatCurrency(s.baseline_kg_ma)}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{formatCurrency(s.nuevo_precio_kg_ma)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatCurrency(s.baseline_precio)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatCurrency(s.nuevo_precio)}</TableCell>
                     <TableCell className="text-right text-sm">{s.volumen_real_12m ? new Intl.NumberFormat('es-ES').format(s.volumen_real_12m) : '—'}</TableCell>
-                    <TableCell className="text-right font-bold text-green-600 font-mono">{formatCurrency(s.ahorro_anual)}</TableCell>
+                    <TableCell className="text-right text-sm">{s.mes?.substring(0, 7) || '—'}</TableCell>
+                    <TableCell className="text-right font-bold text-green-600 font-mono">{formatCurrency(s.ahorro_real_mes)}</TableCell>
                   </TableRow>
                 );
               })}

@@ -91,27 +91,27 @@ export default function ChemBenchmarking() {
     upsertMutation.mutate({ productId, data: { [field]: value } });
   };
 
-  // Auto-calculate estado and mejor_benchmark
-  const autoCalc = (productId: string, bm: any) => {
-    const sources = [bm?.cotizacion_1_precio, bm?.cotizacion_2_precio, bm?.cotizacion_3_precio, bm?.taric_precio_cif, bm?.icis_precio, bm?.historico_precio].filter(v => v != null);
+  // Auto-calculate estado_investigacion and best benchmark (client-side)
+  const autoCalc = (bm: any) => {
+    const sources = [bm?.cotizacion_1_precio_dap, bm?.cotizacion_2_precio_dap, bm?.cotizacion_3_precio_dap, bm?.datacomex_precio_cif, bm?.icis_precio_referencia, bm?.benchmark_historico_precio].filter(v => v != null);
     const filledCount = sources.length;
-    let estado = 'sin_investigar';
-    if (filledCount >= 2) estado = 'completado';
-    else if (filledCount >= 1) estado = 'en_curso';
+    let estado_investigacion = 'sin_investigar';
+    if (filledCount >= 2) estado_investigacion = 'completado';
+    else if (filledCount >= 1) estado_investigacion = 'en_curso';
     const mejor = sources.length > 0 ? Math.min(...(sources as number[])) : null;
-    return { estado, mejor_benchmark: mejor };
+    return { estado_investigacion, mejor_benchmark: mejor };
   };
 
   const updateAndRecalc = (productId: string, field: string, value: any) => {
     const bm = benchmarks.find((b: any) => b.product_id === productId) || {};
     const updated = { ...bm, [field]: value };
-    const { estado, mejor_benchmark } = autoCalc(productId, updated);
-    upsertMutation.mutate({ productId, data: { [field]: value, estado, mejor_benchmark } });
+    const { estado_investigacion } = autoCalc(updated);
+    upsertMutation.mutate({ productId, data: { [field]: value, estado_investigacion } });
   };
 
   const completados = products.filter((p: any) => {
     const bm = benchmarks.find((b: any) => b.product_id === p.id);
-    return bm?.estado === 'completado';
+    return bm?.estado_investigacion === 'completado';
   }).length;
   const progressPct = products.length > 0 ? (completados / products.length) * 100 : 0;
 
@@ -119,7 +119,7 @@ export default function ChemBenchmarking() {
   const filtered = products.filter((p: any) => {
     if (filterEstado === 'all') return true;
     const bm = benchmarks.find((b: any) => b.product_id === p.id);
-    return (bm?.estado || 'sin_investigar') === filterEstado;
+    return (bm?.estado_investigacion || 'sin_investigar') === filterEstado;
   });
 
   return (
@@ -147,16 +147,17 @@ export default function ChemBenchmarking() {
       {/* Products */}
       {filtered.map((p: any) => {
         const bm = benchmarks.find((b: any) => b.product_id === p.id);
-        const conc = p.concentracion || 100;
-        const precioMA = p.precio_kg && conc > 0 ? p.precio_kg / (conc / 100) : null;
-        const gap = bm?.mejor_benchmark && precioMA ? ((precioMA - bm.mejor_benchmark) / bm.mejor_benchmark) * 100 : null;
+        const conc = p.concentracion_porcentaje || 100;
+        const precioMA = p.precio_unitario_actual && conc > 0 ? p.precio_unitario_actual / (conc / 100) : null;
+        const { mejor_benchmark } = autoCalc(bm || {});
+        const gap = mejor_benchmark && precioMA ? ((precioMA - mejor_benchmark) / mejor_benchmark) * 100 : null;
         const isExpanded = expandedProduct === p.id;
 
         // Library match
         const libraryMatch = library.find((l: any) =>
-          l.materia_activa?.toLowerCase() === p.materia_activa?.toLowerCase() &&
-          l.concentracion && p.concentracion &&
-          Math.abs(l.concentracion - p.concentracion) / p.concentracion <= 0.05
+          l.nombre_materia_activa?.toLowerCase() === p.nombre_materia_activa?.toLowerCase() &&
+          l.concentracion_porcentaje && p.concentracion_porcentaje &&
+          Math.abs(l.concentracion_porcentaje - p.concentracion_porcentaje) / p.concentracion_porcentaje <= 0.05
         );
 
         return (
@@ -167,13 +168,13 @@ export default function ChemBenchmarking() {
                   <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   <div>
                     <span className="font-medium">{p.nombre_comercial}</span>
-                    <span className="text-xs text-muted-foreground ml-2">{p.materia_activa} {p.concentracion ? `${p.concentracion}%` : ''}</span>
+                    <span className="text-xs text-muted-foreground ml-2">{p.nombre_materia_activa} {p.concentracion_porcentaje ? `${p.concentracion_porcentaje}%` : ''}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-muted-foreground">Cliente: <strong className="text-primary">{precioMA ? formatCurrency(precioMA) : '—'}</strong> €/kg MA</span>
-                  {getEstadoBadge(bm?.estado || 'sin_investigar')}
-                  {bm?.mejor_benchmark && <span className="text-sm">Mejor: <strong>{formatCurrency(bm.mejor_benchmark)}</strong></span>}
+                  {getEstadoBadge(bm?.estado_investigacion || 'sin_investigar')}
+                  {mejor_benchmark && <span className="text-sm">Mejor: <strong>{formatCurrency(mejor_benchmark)}</strong></span>}
                   {gap !== null && <span className={`text-sm font-bold ${getGapColor(gap)}`}>Gap: {gap.toFixed(1)}%</span>}
                 </div>
               </div>
@@ -185,9 +186,9 @@ export default function ChemBenchmarking() {
                 {libraryMatch && (
                   <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 dark:bg-blue-950 dark:border-blue-800 text-sm">
                     <div className="flex items-center gap-2 mb-1"><Lightbulb className="w-4 h-4 text-blue-600" /> <strong>Referencia encontrada</strong></div>
-                    <p className="text-xs">En proyecto {libraryMatch.proyecto_origen || '—'} ({libraryMatch.fecha}) se cotizó {libraryMatch.materia_activa} al {libraryMatch.concentracion}% a <strong>{formatCurrency(libraryMatch.precio_kg_ma)}</strong> €/kg MA DAP {libraryMatch.proveedor ? `(${libraryMatch.proveedor})` : ''}</p>
+                    <p className="text-xs">En proyecto {libraryMatch.proyecto_origen || '—'} ({libraryMatch.fecha_dato}) se cotizó {libraryMatch.nombre_materia_activa} al {libraryMatch.concentracion_porcentaje}% a <strong>{formatCurrency(libraryMatch.precio_dap_kg_materia_activa)}</strong> €/kg MA DAP {libraryMatch.proveedor ? `(${libraryMatch.proveedor})` : ''}</p>
                     <div className="flex gap-2 mt-2">
-                      <Button size="sm" variant="outline" className="text-xs h-6" onClick={() => updateAndRecalc(p.id, 'historico_precio', libraryMatch.precio_kg_ma)}>
+                      <Button size="sm" variant="outline" className="text-xs h-6" onClick={() => updateAndRecalc(p.id, 'benchmark_historico_precio', libraryMatch.precio_dap_kg_materia_activa)}>
                         Usar como referencia
                       </Button>
                     </div>
@@ -203,7 +204,7 @@ export default function ChemBenchmarking() {
                         <div key={i} className="space-y-1">
                           <Label className="text-xs">Proveedor {i}</Label>
                           <Input className="h-7 text-xs" value={(bm as any)?.[`cotizacion_${i}_proveedor`] ?? ''} onChange={e => updateField(p.id, `cotizacion_${i}_proveedor`, e.target.value)} placeholder="Nombre" />
-                          <Input type="number" step="0.01" className="h-7 text-xs" value={(bm as any)?.[`cotizacion_${i}_precio`] ?? ''} onChange={e => updateAndRecalc(p.id, `cotizacion_${i}_precio`, e.target.value ? parseFloat(e.target.value) : null)} placeholder="€/kg DAP" />
+                          <Input type="number" step="0.01" className="h-7 text-xs" value={(bm as any)?.[`cotizacion_${i}_precio_dap`] ?? ''} onChange={e => updateAndRecalc(p.id, `cotizacion_${i}_precio_dap`, e.target.value ? parseFloat(e.target.value) : null)} placeholder="€/kg DAP" />
                           <Input type="date" className="h-7 text-xs" value={(bm as any)?.[`cotizacion_${i}_fecha`] ?? ''} onChange={e => updateField(p.id, `cotizacion_${i}_fecha`, e.target.value || null)} />
                         </div>
                       ))}
@@ -222,18 +223,18 @@ export default function ChemBenchmarking() {
                       </div>
                       <div>
                         <Label className="text-xs">Precio CIF €/kg</Label>
-                        <Input type="number" step="0.01" className="h-7 text-xs" value={bm?.taric_precio_cif ?? ''} onChange={e => {
+                        <Input type="number" step="0.01" className="h-7 text-xs" value={bm?.datacomex_precio_cif ?? ''} onChange={e => {
                           const cif = e.target.value ? parseFloat(e.target.value) : null;
-                          updateAndRecalc(p.id, 'taric_precio_cif', cif);
+                          updateAndRecalc(p.id, 'datacomex_precio_cif', cif);
                         }} />
                       </div>
                       <div>
                         <Label className="text-xs">Periodo</Label>
-                        <Input className="h-7 text-xs" value={bm?.taric_periodo ?? ''} onChange={e => updateField(p.id, 'taric_periodo', e.target.value)} />
+                        <Input className="h-7 text-xs" value={bm?.datacomex_periodo ?? ''} onChange={e => updateField(p.id, 'datacomex_periodo', e.target.value)} />
                       </div>
                     </div>
-                    {bm?.taric_precio_cif && (
-                      <p className="text-xs text-muted-foreground mt-1">Estimación DAP: <strong>{formatCurrency(bm.taric_precio_cif * 1.20)}</strong> (CIF × 1.20)</p>
+                    {bm?.datacomex_precio_cif && (
+                      <p className="text-xs text-muted-foreground mt-1">Estimación DAP: <strong>{formatCurrency(bm.datacomex_precio_cif * 1.20)}</strong> (CIF × 1.20)</p>
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -245,11 +246,11 @@ export default function ChemBenchmarking() {
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <Label className="text-xs">Precio ref. €/kg</Label>
-                        <Input type="number" step="0.01" className="h-7 text-xs" value={bm?.icis_precio ?? ''} onChange={e => updateAndRecalc(p.id, 'icis_precio', e.target.value ? parseFloat(e.target.value) : null)} />
+                        <Input type="number" step="0.01" className="h-7 text-xs" value={bm?.icis_precio_referencia ?? ''} onChange={e => updateAndRecalc(p.id, 'icis_precio_referencia', e.target.value ? parseFloat(e.target.value) : null)} />
                       </div>
                       <div>
                         <Label className="text-xs">Prima mercado €/tm</Label>
-                        <Input type="number" step="0.01" className="h-7 text-xs" value={bm?.icis_prima ?? ''} onChange={e => updateField(p.id, 'icis_prima', e.target.value ? parseFloat(e.target.value) : null)} />
+                        <Input type="number" step="0.01" className="h-7 text-xs" value={bm?.icis_prima_mercado ?? ''} onChange={e => updateField(p.id, 'icis_prima_mercado', e.target.value ? parseFloat(e.target.value) : null)} />
                       </div>
                       <div>
                         <Label className="text-xs">Fecha</Label>
@@ -266,26 +267,26 @@ export default function ChemBenchmarking() {
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <Label className="text-xs">Precio €/kg MA</Label>
-                        <Input type="number" step="0.01" className="h-7 text-xs" value={bm?.historico_precio ?? ''} onChange={e => updateAndRecalc(p.id, 'historico_precio', e.target.value ? parseFloat(e.target.value) : null)} />
+                        <Input type="number" step="0.01" className="h-7 text-xs" value={bm?.benchmark_historico_precio ?? ''} onChange={e => updateAndRecalc(p.id, 'benchmark_historico_precio', e.target.value ? parseFloat(e.target.value) : null)} />
                       </div>
                       <div>
                         <Label className="text-xs">Proyecto origen</Label>
-                        <Input className="h-7 text-xs" value={bm?.historico_proyecto ?? ''} onChange={e => updateField(p.id, 'historico_proyecto', e.target.value)} />
+                        <Input className="h-7 text-xs" value={bm?.benchmark_historico_proyecto ?? ''} onChange={e => updateField(p.id, 'benchmark_historico_proyecto', e.target.value)} />
                       </div>
                       <div>
-                        <Label className="text-xs">Proveedor</Label>
-                        <Input className="h-7 text-xs" value={bm?.historico_proveedor ?? ''} onChange={e => updateField(p.id, 'historico_proveedor', e.target.value)} />
+                        <Label className="text-xs">Fecha</Label>
+                        <Input type="date" className="h-7 text-xs" value={bm?.benchmark_historico_fecha ?? ''} onChange={e => updateField(p.id, 'benchmark_historico_fecha', e.target.value || null)} />
                       </div>
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
 
                 {/* Resultado */}
-                {bm?.mejor_benchmark && (
+                {mejor_benchmark && (
                   <div className="p-3 rounded-lg bg-muted/50">
                     <p className="text-sm font-medium mb-2">Resultado</p>
                     <div className="flex items-center gap-4">
-                      <span className="text-sm">Mejor benchmark: <strong className="text-primary text-lg">{formatCurrency(bm.mejor_benchmark)}</strong> €/kg MA</span>
+                      <span className="text-sm">Mejor benchmark: <strong className="text-primary text-lg">{formatCurrency(mejor_benchmark)}</strong> €/kg MA</span>
                       {gap !== null && <span className={`text-lg font-bold ${getGapColor(gap)}`}>Gap: {gap.toFixed(1)}%</span>}
                       <Button size="sm" variant="outline" className="text-xs ml-auto" disabled><Save className="w-3 h-3 mr-1" /> Guardar en biblioteca</Button>
                     </div>

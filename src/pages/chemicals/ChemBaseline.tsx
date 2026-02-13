@@ -19,9 +19,9 @@ const formatCurrency = (val: number | null | undefined) => {
 };
 
 const FUENTE_OPTIONS = [
-  { value: 'facturas_12m', label: 'Facturas 12 meses' },
-  { value: 'facturas_24m', label: 'Facturas 24 meses' },
-  { value: 'contrato', label: 'Contrato' },
+  { value: 'facturas_12_meses', label: 'Facturas 12 meses' },
+  { value: 'facturas_24_meses', label: 'Facturas 24 meses' },
+  { value: 'contrato_vigente', label: 'Contrato vigente' },
   { value: 'albaranes', label: 'Albaranes' },
   { value: 'otra', label: 'Otra' },
 ];
@@ -33,8 +33,12 @@ export default function ChemBaseline() {
   const { data: products = [] } = useQuery({
     queryKey: ['chem-products', projectId],
     queryFn: async () => {
-      const { data, error } = await externalSupabase.from('chem_products').select('*').eq('project_id', projectId!).order('consumo_anual_kg', { ascending: false });
-      if (error) throw error;
+      const { data, error } = await externalSupabase.from('chem_products').select('*, chem_suppliers!proveedor_actual_id(nombre)').eq('project_id', projectId!).order('consumo_anual_kg', { ascending: false });
+      if (error) {
+        const { data: fb, error: fbErr } = await externalSupabase.from('chem_products').select('*').eq('project_id', projectId!).order('consumo_anual_kg', { ascending: false });
+        if (fbErr) throw fbErr;
+        return fb || [];
+      }
       return data || [];
     },
     enabled: !!projectId,
@@ -79,9 +83,7 @@ export default function ChemBaseline() {
   });
 
   const updateField = (productId: string, field: string, value: any) => {
-    const existing = baselines.find((b: any) => b.product_id === productId);
-    const data = existing ? { [field]: value } : { [field]: value };
-    upsertMutation.mutate({ productId, data });
+    upsertMutation.mutate({ productId, data: { [field]: value } });
   };
 
   const sinFirmar = baselines.filter((b: any) => !b.firmado).length;
@@ -127,22 +129,22 @@ export default function ChemBaseline() {
                   <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">Añade productos en Inventario primero.</TableCell></TableRow>
                 ) : products.map((p: any) => {
                   const bl = baselines.find((b: any) => b.product_id === p.id);
-                  const conc = p.concentracion || 100;
-                  const precioMedio = bl?.precio_medio_ponderado || p.precio_kg;
+                  const conc = p.concentracion_porcentaje || 100;
+                  const precioMedio = bl?.precio_medio_ponderado || p.precio_unitario_actual;
                   const precioMA = precioMedio && conc > 0 ? precioMedio / (conc / 100) : null;
                   const formula = p.tipo_precio === 'fijo' ? '(Baseline − Nuevo) × Vol' : '(Prima ant. − Prima nueva) × Vol';
 
                   return (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium text-sm">{p.nombre_comercial}</TableCell>
-                      <TableCell className="text-xs">{p.materia_activa || '—'} / {conc}%</TableCell>
-                      <TableCell className="text-xs">{p.proveedor_nombre || '—'}</TableCell>
+                      <TableCell className="text-xs">{p.nombre_materia_activa || '—'} / {conc}%</TableCell>
+                      <TableCell className="text-xs">{p.chem_suppliers?.nombre || '—'}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[10px]">{p.tipo_precio}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Input type="number" className="w-24 h-7 text-xs text-right" value={bl?.volumen_referencia_kg ?? p.consumo_anual_kg ?? ''} 
-                          onChange={e => updateField(p.id, 'volumen_referencia_kg', e.target.value ? parseFloat(e.target.value) : null)} />
+                        <Input type="number" className="w-24 h-7 text-xs text-right" value={bl?.volumen_referencia_anual_kg ?? p.consumo_anual_kg ?? ''} 
+                          onChange={e => updateField(p.id, 'volumen_referencia_anual_kg', e.target.value ? parseFloat(e.target.value) : null)} />
                       </TableCell>
                       <TableCell className="text-right font-bold text-primary bg-primary/5">
                         <Input type="number" step="0.0001" className="w-24 h-7 text-xs text-right font-bold" value={bl?.precio_medio_ponderado ?? ''} 

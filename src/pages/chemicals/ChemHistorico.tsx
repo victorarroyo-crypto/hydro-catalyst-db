@@ -59,7 +59,7 @@ export default function ChemHistorico() {
 
   const addMonthMutation = useMutation({
     mutationFn: async (mes: string) => {
-      const { error } = await externalSupabase.from('chem_price_history').insert({ project_id: projectId!, product_id: selectedProduct, mes });
+      const { error } = await externalSupabase.from('chem_price_history').insert({ product_id: selectedProduct, mes });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -68,24 +68,13 @@ export default function ChemHistorico() {
     onError: () => toast.error('Error al añadir mes'),
   });
 
-  const conc = product?.concentracion || 100;
+  const conc = product?.concentracion_porcentaje || 100;
   const isIndexado = product?.tipo_precio === 'indexado';
-
-  // Generate last 24 months if no data
-  const generateMonths = () => {
-    const months: string[] = [];
-    const now = new Date();
-    for (let i = 23; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      months.push(d.toISOString().split('T')[0]);
-    }
-    return months;
-  };
 
   const enriched = history.map((h: any) => {
     const precioUnit = h.cantidad_kg && h.cantidad_kg > 0 ? h.importe_facturado / h.cantidad_kg : null;
     const precioMA = precioUnit && conc > 0 ? precioUnit / (conc / 100) : null;
-    const primaEfectiva = isIndexado && h.indice_icis && precioMA ? (precioMA - h.indice_icis) : null;
+    const primaEfectiva = isIndexado && h.indice_icis_mes && precioMA ? (precioMA - h.indice_icis_mes) : null;
     return { ...h, precioUnit, precioMA, primaEfectiva };
   });
 
@@ -93,7 +82,7 @@ export default function ChemHistorico() {
   const chartData = enriched.map((h: any) => ({
     mes: h.mes?.substring(0, 7),
     precioMA: h.precioMA,
-    ...(isIndexado ? { icis: h.indice_icis, prima: h.primaEfectiva } : {}),
+    ...(isIndexado ? { icis: h.indice_icis_mes, prima: h.primaEfectiva } : {}),
   }));
 
   // Stats
@@ -126,7 +115,7 @@ export default function ChemHistorico() {
         <Select value={selectedProduct} onValueChange={setSelectedProduct}>
           <SelectTrigger className="w-72"><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
           <SelectContent>
-            {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.nombre_comercial} ({p.materia_activa || '—'})</SelectItem>)}
+            {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.nombre_comercial} ({p.nombre_materia_activa || '—'})</SelectItem>)}
           </SelectContent>
         </Select>
         {product && <Badge variant="outline">{product.tipo_precio}</Badge>}
@@ -230,7 +219,7 @@ export default function ChemHistorico() {
                       <TableCell className="text-right font-bold text-primary bg-primary/5 text-sm">{h.precioMA ? formatCurrency(h.precioMA) : '—'}</TableCell>
                       {isIndexado && <>
                         <TableCell className="text-right">
-                          <Input type="number" step="0.01" className="w-20 h-7 text-xs text-right" value={h.indice_icis ?? ''} onChange={e => saveMutation.mutate({ id: h.id, data: { indice_icis: e.target.value ? parseFloat(e.target.value) : null } })} />
+                          <Input type="number" step="0.01" className="w-20 h-7 text-xs text-right" value={h.indice_icis_mes ?? ''} onChange={e => saveMutation.mutate({ id: h.id, data: { indice_icis_mes: e.target.value ? parseFloat(e.target.value) : null } })} />
                         </TableCell>
                         <TableCell className="text-right text-sm">{h.primaEfectiva ? formatCurrency(h.primaEfectiva) : '—'}</TableCell>
                       </>}

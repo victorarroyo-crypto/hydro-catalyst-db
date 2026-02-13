@@ -87,11 +87,6 @@ export default function ChemProjectsList() {
     return true;
   });
 
-  const formatCurrency = (val: number | null) => {
-    if (!val) return '—';
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
-  };
-
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -160,23 +155,21 @@ export default function ChemProjectsList() {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Fecha inicio</TableHead>
-                <TableHead className="text-right">Gasto total</TableHead>
-                <TableHead className="text-right">Ahorro conseguido</TableHead>
+                <TableHead>Contacto</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Cargando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Cargando...</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No hay proyectos. Crea uno nuevo para empezar.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No hay proyectos. Crea uno nuevo para empezar.</TableCell></TableRow>
               ) : (
                 filtered.map((p: any) => (
                   <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/quimicos/${p.id}`)}>
                     <TableCell className="font-medium">{p.nombre_cliente}</TableCell>
                     <TableCell>{getEstadoBadge(p.estado)}</TableCell>
                     <TableCell>{p.fecha_inicio ? format(new Date(p.fecha_inicio), 'dd MMM yyyy', { locale: es }) : '—'}</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(p.gasto_total_anual)}</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(p.ahorro_conseguido)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{p.contacto_principal || '—'}</TableCell>
                   </TableRow>
                 ))
               )}
