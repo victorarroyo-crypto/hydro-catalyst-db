@@ -29,16 +29,17 @@ export default function ChemContratos() {
   const [newProveedorNombre, setNewProveedorNombre] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadTipo, setUploadTipo] = useState('contrato');
+  const [uploadTipo, setUploadTipo] = useState('contrato_formal');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Query audits with JOIN to get supplier name
   const { data: audits = [] } = useQuery({
     queryKey: ['chem-audits', projectId],
     queryFn: async () => {
       const { data, error } = await externalSupabase
         .from('chem_contract_audits')
-        .select('*')
+        .select('*, chem_suppliers(nombre)')
         .eq('project_id', projectId!);
       if (error) throw error;
       return data || [];
@@ -60,11 +61,21 @@ export default function ChemContratos() {
     enabled: !!selectedAudit,
   });
 
+  // Creating an audit: first create supplier, then audit referencing supplier_id
   const createAuditMutation = useMutation({
     mutationFn: async (nombre: string) => {
+      // First create the supplier
+      const { data: supplier, error: supplierError } = await externalSupabase
+        .from('chem_suppliers')
+        .insert({ nombre, project_id: projectId! })
+        .select()
+        .single();
+      if (supplierError) throw supplierError;
+
+      // Then create the audit referencing the supplier
       const { error } = await externalSupabase.from('chem_contract_audits').insert({
         project_id: projectId!,
-        proveedor_nombre: nombre,
+        supplier_id: supplier.id,
       });
       if (error) throw error;
     },
@@ -131,7 +142,7 @@ export default function ChemContratos() {
       toast.success('Documento subido correctamente');
       setShowUploadModal(false);
       setUploadFile(null);
-      setUploadTipo('contrato');
+      setUploadTipo('contrato_formal');
     } catch (err: any) {
       toast.error(`Error: ${err.message}`);
     } finally {
@@ -140,6 +151,9 @@ export default function ChemContratos() {
   };
 
   const currentAudit = audits.find((a: any) => a.id === selectedAudit);
+
+  // Helper to get supplier name from joined data
+  const getSupplierName = (audit: any) => audit?.chem_suppliers?.nombre || '—';
 
   const getScoreBar = (score: number | null, label: string) => {
     const val = score || 0;
@@ -161,13 +175,20 @@ export default function ChemContratos() {
     updateAuditMutation.mutate({ id: selectedAudit, data: { [field]: value } });
   };
 
-  // Calculate completion
+  // Calculate completion using external schema column names
   const getCompletion = (audit: any) => {
     if (!audit) return { completed: 0, total: 0 };
-    const fields = ['plazo_pago_dias', 'duracion_meses', 'fecha_vencimiento', 'volumen_comprometido',
+    const fields = ['plazo_pago_dias', 'duracion_contrato_meses', 'fecha_vencimiento', 'volumen_comprometido_anual',
       'score_precio', 'score_condiciones', 'score_servicio', 'score_logistica'];
     const completed = fields.filter(f => audit[f] != null).length;
     return { completed, total: fields.length };
+  };
+
+  // Calculate score_media client-side (not stored in external DB)
+  const calcScoreMedia = (audit: any) => {
+    if (!audit) return null;
+    const scores = [audit.score_precio, audit.score_condiciones, audit.score_servicio, audit.score_logistica].filter(v => v != null) as number[];
+    return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
   };
 
   const venceSoon = (fecha: string | null) => {
@@ -187,13 +208,14 @@ export default function ChemContratos() {
   if (selectedAudit && currentAudit) {
     const completion = getCompletion(currentAudit);
     const completionPct = completion.total > 0 ? (completion.completed / completion.total) * 100 : 0;
+    const scoreMedia = calcScoreMedia(currentAudit);
 
     return (
       <div className="p-6 space-y-4">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => setSelectedAudit(null)}>← Volver</Button>
-          <h2 className="text-lg font-semibold">{currentAudit.proveedor_nombre}</h2>
-          {currentAudit.score_media != null && currentAudit.score_media < 2.5 && (
+          <h2 className="text-lg font-semibold">{getSupplierName(currentAudit)}</h2>
+          {scoreMedia != null && scoreMedia < 2.5 && (
             <Badge variant="destructive">PRIORIDAD RENEGOCIACIÓN</Badge>
           )}
           {currentAudit.rappel_existe && !currentAudit.rappel_cobrado && (
@@ -244,11 +266,11 @@ export default function ChemContratos() {
                           <TableCell className="font-medium">
                             {d.file_url ? (
                               <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline">
-                                {d.nombre} <ExternalLink className="w-3 h-3" />
+                                {d.nombre_archivo} <ExternalLink className="w-3 h-3" />
                               </a>
-                            ) : d.nombre}
+                            ) : d.nombre_archivo}
                           </TableCell>
-                          <TableCell><Badge variant="outline">{d.tipo}</Badge></TableCell>
+                          <TableCell><Badge variant="outline">{d.tipo_documento}</Badge></TableCell>
                           <TableCell>
                             <Badge variant={d.estado_extraccion === 'completado' ? 'default' : 'secondary'}>
                               {d.estado_extraccion}
@@ -279,10 +301,11 @@ export default function ChemContratos() {
                     <Select value={uploadTipo} onValueChange={setUploadTipo}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="contrato">Contrato</SelectItem>
-                        <SelectItem value="factura">Factura</SelectItem>
-                        <SelectItem value="analisis">Análisis</SelectItem>
-                        <SelectItem value="ficha_tecnica">Ficha técnica</SelectItem>
+                        <SelectItem value="contrato_formal">Contrato formal</SelectItem>
+                        <SelectItem value="condiciones_generales">Condiciones generales</SelectItem>
+                        <SelectItem value="email_tarifa">Email tarifa</SelectItem>
+                        <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
+                        <SelectItem value="adenda">Adenda</SelectItem>
                         <SelectItem value="otro">Otro</SelectItem>
                       </SelectContent>
                     </Select>
@@ -337,16 +360,16 @@ export default function ChemContratos() {
                       </div>
                       <div>
                         <Label className="text-xs">Pronto pago descuento %</Label>
-                        <Input type="number" step="0.1" value={currentAudit.pronto_pago_descuento ?? ''} onChange={e => updateField('pronto_pago_descuento', e.target.value ? parseFloat(e.target.value) : null)} />
+                        <Input type="number" step="0.1" value={currentAudit.pronto_pago_descuento_pct ?? ''} onChange={e => updateField('pronto_pago_descuento_pct', e.target.value ? parseFloat(e.target.value) : null)} />
                       </div>
                       <div>
                         <Label className="text-xs">Pronto pago días</Label>
                         <Input type="number" value={currentAudit.pronto_pago_dias ?? ''} onChange={e => updateField('pronto_pago_dias', e.target.value ? parseInt(e.target.value) : null)} />
                       </div>
                     </div>
-                    {currentAudit.pronto_pago_descuento && currentAudit.pronto_pago_dias && (
+                    {currentAudit.pronto_pago_descuento_pct && currentAudit.pronto_pago_dias && (
                       (() => {
-                        const tae = calcTAE(currentAudit.pronto_pago_descuento, currentAudit.plazo_pago_dias, currentAudit.pronto_pago_dias);
+                        const tae = calcTAE(currentAudit.pronto_pago_descuento_pct, currentAudit.plazo_pago_dias, currentAudit.pronto_pago_dias);
                         if (tae === null) return null;
                         const compensa = tae < 7;
                         return (
@@ -375,7 +398,7 @@ export default function ChemContratos() {
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <Label className="text-xs">Duración meses</Label>
-                        <Input type="number" value={currentAudit.duracion_meses ?? ''} onChange={e => updateField('duracion_meses', e.target.value ? parseInt(e.target.value) : null)} />
+                        <Input type="number" value={currentAudit.duracion_contrato_meses ?? ''} onChange={e => updateField('duracion_contrato_meses', e.target.value ? parseInt(e.target.value) : null)} />
                       </div>
                       <div>
                         <Label className="text-xs">Fecha vencimiento</Label>
@@ -384,7 +407,7 @@ export default function ChemContratos() {
                       </div>
                       <div>
                         <Label className="text-xs">Preaviso días</Label>
-                        <Input type="number" value={currentAudit.preaviso_dias ?? ''} onChange={e => updateField('preaviso_dias', e.target.value ? parseInt(e.target.value) : null)} />
+                        <Input type="number" value={currentAudit.preaviso_no_renovacion_dias ?? ''} onChange={e => updateField('preaviso_no_renovacion_dias', e.target.value ? parseInt(e.target.value) : null)} />
                       </div>
                     </div>
                     <div className="flex gap-6">
@@ -416,15 +439,15 @@ export default function ChemContratos() {
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <Label className="text-xs">Vol. comprometido anual</Label>
-                        <Input type="number" value={currentAudit.volumen_comprometido ?? ''} onChange={e => updateField('volumen_comprometido', e.target.value ? parseFloat(e.target.value) : null)} />
+                        <Input type="number" value={currentAudit.volumen_comprometido_anual ?? ''} onChange={e => updateField('volumen_comprometido_anual', e.target.value ? parseFloat(e.target.value) : null)} />
                       </div>
                       <div>
                         <Label className="text-xs">Banda mín</Label>
-                        <Input type="number" value={currentAudit.banda_min ?? ''} onChange={e => updateField('banda_min', e.target.value ? parseFloat(e.target.value) : null)} />
+                        <Input type="number" value={currentAudit.banda_volumen_min ?? ''} onChange={e => updateField('banda_volumen_min', e.target.value ? parseFloat(e.target.value) : null)} />
                       </div>
                       <div>
                         <Label className="text-xs">Banda máx</Label>
-                        <Input type="number" value={currentAudit.banda_max ?? ''} onChange={e => updateField('banda_max', e.target.value ? parseFloat(e.target.value) : null)} />
+                        <Input type="number" value={currentAudit.banda_volumen_max ?? ''} onChange={e => updateField('banda_volumen_max', e.target.value ? parseFloat(e.target.value) : null)} />
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -434,7 +457,7 @@ export default function ChemContratos() {
                     {currentAudit.take_or_pay && (
                       <div>
                         <Label className="text-xs">Detalle penalización</Label>
-                        <Textarea value={currentAudit.penalizacion_detalle ?? ''} onChange={e => updateField('penalizacion_detalle', e.target.value)} className="h-16" />
+                        <Textarea value={currentAudit.penalizacion_take_or_pay ?? ''} onChange={e => updateField('penalizacion_take_or_pay', e.target.value)} className="h-16" />
                       </div>
                     )}
                   </CardContent>
@@ -454,14 +477,14 @@ export default function ChemContratos() {
                 <CollapsibleContent>
                   <CardContent className="space-y-3 pt-0">
                     <div className="flex items-center gap-2">
-                      <Switch checked={!!currentAudit.existe_formula} onCheckedChange={v => updateField('existe_formula', v)} />
+                      <Switch checked={!!currentAudit.formula_revision_existe} onCheckedChange={v => updateField('formula_revision_existe', v)} />
                       <Label className="text-xs">Existe fórmula de revisión</Label>
                     </div>
-                    {currentAudit.existe_formula && (
+                    {currentAudit.formula_revision_existe && (
                       <>
                         <div>
                           <Label className="text-xs">Detalle fórmula</Label>
-                          <Textarea value={currentAudit.formula_detalle ?? ''} onChange={e => updateField('formula_detalle', e.target.value)} className="h-16" />
+                          <Textarea value={currentAudit.formula_revision_detalle ?? ''} onChange={e => updateField('formula_revision_detalle', e.target.value)} className="h-16" />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
@@ -477,15 +500,16 @@ export default function ChemContratos() {
                                 <SelectItem value="trimestral">Trimestral</SelectItem>
                                 <SelectItem value="semestral">Semestral</SelectItem>
                                 <SelectItem value="anual">Anual</SelectItem>
+                                <SelectItem value="ninguna">Ninguna</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Switch checked={!!currentAudit.simetria} onCheckedChange={v => updateField('simetria', v)} />
+                          <Switch checked={!!currentAudit.simetria_subida_bajada} onCheckedChange={v => updateField('simetria_subida_bajada', v)} />
                           <Label className="text-xs">Simetría subida/bajada</Label>
                         </div>
-                        {!currentAudit.simetria && currentAudit.existe_formula && (
+                        {!currentAudit.simetria_subida_bajada && currentAudit.formula_revision_existe && (
                           <div className="p-2 rounded text-xs bg-yellow-50 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
                             ⚠ Fórmula asimétrica: las subidas se aplican diferente que las bajadas
                           </div>
@@ -493,11 +517,11 @@ export default function ChemContratos() {
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <Label className="text-xs">Cap subida %</Label>
-                            <Input type="number" step="0.1" value={currentAudit.cap_subida ?? ''} onChange={e => updateField('cap_subida', e.target.value ? parseFloat(e.target.value) : null)} />
+                            <Input type="number" step="0.1" value={currentAudit.cap_subida_pct ?? ''} onChange={e => updateField('cap_subida_pct', e.target.value ? parseFloat(e.target.value) : null)} />
                           </div>
                           <div>
                             <Label className="text-xs">Floor bajada %</Label>
-                            <Input type="number" step="0.1" value={currentAudit.floor_bajada ?? ''} onChange={e => updateField('floor_bajada', e.target.value ? parseFloat(e.target.value) : null)} />
+                            <Input type="number" step="0.1" value={currentAudit.floor_bajada_pct ?? ''} onChange={e => updateField('floor_bajada_pct', e.target.value ? parseFloat(e.target.value) : null)} />
                           </div>
                         </div>
                       </>
@@ -569,11 +593,11 @@ export default function ChemContratos() {
                     </div>
                     <div>
                       <Label className="text-xs">Gestión envases vacíos</Label>
-                      <Select value={currentAudit.gestion_envases ?? ''} onValueChange={v => updateField('gestion_envases', v)}>
+                      <Select value={currentAudit.gestion_envases_vacios ?? ''} onValueChange={v => updateField('gestion_envases_vacios', v)}>
                         <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="devolucion_proveedor">Devolución proveedor</SelectItem>
-                          <SelectItem value="gestion_cliente">Gestión cliente como residuo</SelectItem>
+                          <SelectItem value="gestion_cliente_residuo">Gestión cliente como residuo</SelectItem>
                           <SelectItem value="sin_definir">Sin definir</SelectItem>
                         </SelectContent>
                       </Select>
@@ -599,13 +623,13 @@ export default function ChemContratos() {
                 <CollapsibleContent>
                   <CardContent className="space-y-3 pt-0">
                     <div className="flex items-center gap-2">
-                      <Switch checked={!!currentAudit.servicio_tecnico} onCheckedChange={v => updateField('servicio_tecnico', v)} />
+                      <Switch checked={!!currentAudit.servicio_tecnico_incluido} onCheckedChange={v => updateField('servicio_tecnico_incluido', v)} />
                       <Label className="text-xs">Servicio técnico incluido</Label>
                     </div>
-                    {currentAudit.servicio_tecnico && (
+                    {currentAudit.servicio_tecnico_incluido && (
                       <div>
                         <Label className="text-xs">Detalle servicio</Label>
-                        <Input value={currentAudit.servicio_tecnico_detalle ?? ''} onChange={e => updateField('servicio_tecnico_detalle', e.target.value)} />
+                        <Input value={currentAudit.detalle_servicio_tecnico ?? ''} onChange={e => updateField('detalle_servicio_tecnico', e.target.value)} />
                       </div>
                     )}
                     <TooltipProvider>
@@ -622,7 +646,7 @@ export default function ChemContratos() {
                     {currentAudit.equipos_comodato && (
                       <div>
                         <Label className="text-xs">Detalle comodato</Label>
-                        <Input value={currentAudit.equipos_comodato_detalle ?? ''} onChange={e => updateField('equipos_comodato_detalle', e.target.value)} />
+                        <Input value={currentAudit.detalle_comodato ?? ''} onChange={e => updateField('detalle_comodato', e.target.value)} />
                       </div>
                     )}
                     <div className="flex items-center gap-2">
@@ -645,12 +669,7 @@ export default function ChemContratos() {
                     <div key={field}>
                       <Label className="text-xs capitalize">{field.replace('score_', '')}</Label>
                       <Select value={currentAudit[field]?.toString() ?? ''} onValueChange={v => {
-                        const val = parseFloat(v);
-                        updateField(field, val);
-                        // Auto-calc media
-                        const scores = { score_precio: currentAudit.score_precio, score_condiciones: currentAudit.score_condiciones, score_servicio: currentAudit.score_servicio, score_logistica: currentAudit.score_logistica, [field]: val };
-                        const vals = Object.values(scores).filter(v => v != null) as number[];
-                        if (vals.length > 0) updateField('score_media', vals.reduce((a, b) => a + b, 0) / vals.length);
+                        updateField(field, parseFloat(v));
                       }}>
                         <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                         <SelectContent>
@@ -661,9 +680,9 @@ export default function ChemContratos() {
                   ))}
                 </div>
                 <div className="text-center pt-2">
-                  <span className="text-2xl font-bold">{currentAudit.score_media ? currentAudit.score_media.toFixed(1) : '—'}</span>
+                  <span className="text-2xl font-bold">{scoreMedia ? scoreMedia.toFixed(1) : '—'}</span>
                   <span className="text-sm text-muted-foreground ml-2">media</span>
-                  {currentAudit.score_media != null && currentAudit.score_media < 2.5 && (
+                  {scoreMedia != null && scoreMedia < 2.5 && (
                     <p className="text-red-600 text-sm font-semibold mt-1">PRIORIDAD RENEGOCIACIÓN</p>
                   )}
                 </div>
@@ -709,34 +728,37 @@ export default function ChemContratos() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {audits.map((audit: any) => (
-            <Card key={audit.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setSelectedAudit(audit.id)}>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">{audit.proveedor_nombre}</h3>
-                  {audit.score_media != null && (
-                    <span className={`text-lg font-bold ${audit.score_media < 2.5 ? 'text-red-600' : audit.score_media < 3 ? 'text-yellow-600' : 'text-green-600'}`}>
-                      {audit.score_media.toFixed(1)}
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  {getScoreBar(audit.score_precio, 'Precio')}
-                  {getScoreBar(audit.score_condiciones, 'Condiciones')}
-                  {getScoreBar(audit.score_servicio, 'Servicio')}
-                  {getScoreBar(audit.score_logistica, 'Logística')}
-                </div>
-                <div className="flex gap-1 flex-wrap">
-                  {audit.score_media != null && audit.score_media < 2.5 && (
-                    <Badge variant="destructive" className="text-[10px]">PRIORIDAD RENEGOCIACIÓN</Badge>
-                  )}
-                  {audit.rappel_existe && !audit.rappel_cobrado && (
-                    <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 text-[10px]">RAPPEL NO COBRADO</Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {audits.map((audit: any) => {
+            const auditScoreMedia = calcScoreMedia(audit);
+            return (
+              <Card key={audit.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setSelectedAudit(audit.id)}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">{getSupplierName(audit)}</h3>
+                    {auditScoreMedia != null && (
+                      <span className={`text-lg font-bold ${auditScoreMedia < 2.5 ? 'text-red-600' : auditScoreMedia < 3 ? 'text-yellow-600' : 'text-green-600'}`}>
+                        {auditScoreMedia.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    {getScoreBar(audit.score_precio, 'Precio')}
+                    {getScoreBar(audit.score_condiciones, 'Condiciones')}
+                    {getScoreBar(audit.score_servicio, 'Servicio')}
+                    {getScoreBar(audit.score_logistica, 'Logística')}
+                  </div>
+                  <div className="flex gap-1 flex-wrap">
+                    {auditScoreMedia != null && auditScoreMedia < 2.5 && (
+                      <Badge variant="destructive" className="text-[10px]">PRIORIDAD RENEGOCIACIÓN</Badge>
+                    )}
+                    {audit.rappel_existe && !audit.rappel_cobrado && (
+                      <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 text-[10px]">RAPPEL NO COBRADO</Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 

@@ -18,7 +18,7 @@ import { Plus, AlertTriangle } from 'lucide-react';
 const ESTADOS_RFQ = [
   { value: 'borrador', label: 'Borrador' },
   { value: 'enviado', label: 'Enviado' },
-  { value: 'en_evaluacion', label: 'En evaluación' },
+  { value: 'en_evaluación', label: 'En evaluación' },
   { value: 'adjudicado', label: 'Adjudicado' },
   { value: 'cancelado', label: 'Cancelado' },
 ];
@@ -34,7 +34,6 @@ export default function ChemRfqs() {
   const [showModal, setShowModal] = useState(false);
   const [selectedRfq, setSelectedRfq] = useState<string | null>(null);
   const [titulo, setTitulo] = useState('');
-  const [showOfferModal, setShowOfferModal] = useState(false);
 
   const { data: rfqs = [] } = useQuery({
     queryKey: ['chem-rfqs', projectId],
@@ -54,17 +53,6 @@ export default function ChemRfqs() {
       return data || [];
     },
     enabled: !!projectId,
-  });
-
-  const { data: rfqProducts = [] } = useQuery({
-    queryKey: ['chem-rfq-products', selectedRfq],
-    queryFn: async () => {
-      if (!selectedRfq) return [];
-      const { data, error } = await externalSupabase.from('chem_rfq_products').select('*').eq('rfq_id', selectedRfq);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!selectedRfq,
   });
 
   const { data: offers = [] } = useQuery({
@@ -121,8 +109,8 @@ export default function ChemRfqs() {
         <Card>
           <CardContent className="p-4 grid grid-cols-2 gap-4">
             <div>
-              <Label className="text-xs">Incoterm</Label>
-              <Select value={currentRfq.incoterm || 'DAP'} onValueChange={v => updateRfqMutation.mutate({ id: selectedRfq, data: { incoterm: v } })}>
+              <Label className="text-xs">Incoterm solicitado</Label>
+              <Select value={currentRfq.incoterm_solicitado || 'DAP'} onValueChange={v => updateRfqMutation.mutate({ id: selectedRfq, data: { incoterm_solicitado: v } })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {['EXW', 'FCA', 'DAP', 'DDP'].map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
@@ -130,20 +118,20 @@ export default function ChemRfqs() {
               </Select>
             </div>
             <div>
-              <Label className="text-xs">Condiciones pago</Label>
-              <Input value={currentRfq.condiciones_pago ?? ''} onChange={e => updateRfqMutation.mutate({ id: selectedRfq, data: { condiciones_pago: e.target.value } })} />
+              <Label className="text-xs">Condiciones pago ofrecidas</Label>
+              <Input value={currentRfq.condiciones_pago_ofrecidas ?? ''} onChange={e => updateRfqMutation.mutate({ id: selectedRfq, data: { condiciones_pago_ofrecidas: e.target.value } })} />
             </div>
             <div>
               <Label className="text-xs">Fecha envío</Label>
               <Input type="date" value={currentRfq.fecha_envio ?? ''} onChange={e => updateRfqMutation.mutate({ id: selectedRfq, data: { fecha_envio: e.target.value || null } })} />
             </div>
             <div>
-              <Label className="text-xs">Fecha límite</Label>
-              <Input type="date" value={currentRfq.fecha_limite ?? ''} onChange={e => updateRfqMutation.mutate({ id: selectedRfq, data: { fecha_limite: e.target.value || null } })} />
+              <Label className="text-xs">Fecha límite respuesta</Label>
+              <Input type="date" value={currentRfq.fecha_limite_respuesta ?? ''} onChange={e => updateRfqMutation.mutate({ id: selectedRfq, data: { fecha_limite_respuesta: e.target.value || null } })} />
             </div>
             <div className="col-span-2">
               <Label className="text-xs">Especificaciones técnicas</Label>
-              <Textarea value={currentRfq.especificaciones ?? ''} onChange={e => updateRfqMutation.mutate({ id: selectedRfq, data: { especificaciones: e.target.value } })} className="h-16" />
+              <Textarea value={currentRfq.especificaciones_tecnicas ?? ''} onChange={e => updateRfqMutation.mutate({ id: selectedRfq, data: { especificaciones_tecnicas: e.target.value } })} className="h-16" />
             </div>
           </CardContent>
         </Card>
@@ -175,9 +163,9 @@ export default function ChemRfqs() {
                     <TableRow key={o.id}>
                       <TableCell>{(o.chem_suppliers as any)?.nombre || '—'}</TableCell>
                       <TableCell>{products.find((p: any) => p.id === o.product_id)?.nombre_comercial || '—'}</TableCell>
-                      <TableCell className="text-right font-mono">{formatCurrency(o.precio)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(o.precio_ofertado_kg)}</TableCell>
                       <TableCell>{o.incluye_transporte ? '✓' : '✕'}</TableCell>
-                      <TableCell>{o.incluye_servicio ? '✓' : '✕'}</TableCell>
+                      <TableCell>{o.incluye_servicio_tecnico ? '✓' : '✕'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -216,7 +204,7 @@ export default function ChemRfqs() {
                   <TableCell className="font-medium">{r.titulo}</TableCell>
                   <TableCell><Badge variant="outline">{ESTADOS_RFQ.find(e => e.value === r.estado)?.label || r.estado}</Badge></TableCell>
                   <TableCell className="text-sm">{r.fecha_envio || '—'}</TableCell>
-                  <TableCell className="text-sm">{r.fecha_limite || '—'}</TableCell>
+                  <TableCell className="text-sm">{r.fecha_limite_respuesta || '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
