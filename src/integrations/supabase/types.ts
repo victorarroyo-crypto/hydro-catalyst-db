@@ -555,6 +555,1068 @@ export type Database = {
         }
         Relationships: []
       }
+      chem_authorizations: {
+        Row: {
+          alcance: string | null
+          cargo: string | null
+          created_at: string
+          firmante: string | null
+          id: string
+          nif: string | null
+          nombre_empresa: string | null
+          project_id: string
+          updated_at: string
+          vigencia_desde: string | null
+          vigencia_hasta: string | null
+        }
+        Insert: {
+          alcance?: string | null
+          cargo?: string | null
+          created_at?: string
+          firmante?: string | null
+          id?: string
+          nif?: string | null
+          nombre_empresa?: string | null
+          project_id: string
+          updated_at?: string
+          vigencia_desde?: string | null
+          vigencia_hasta?: string | null
+        }
+        Update: {
+          alcance?: string | null
+          cargo?: string | null
+          created_at?: string
+          firmante?: string | null
+          id?: string
+          nif?: string | null
+          nombre_empresa?: string | null
+          project_id?: string
+          updated_at?: string
+          vigencia_desde?: string | null
+          vigencia_hasta?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_authorizations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_baselines: {
+        Row: {
+          created_at: string
+          fecha_firma: string | null
+          firmado: boolean | null
+          firmante_cliente: string | null
+          firmante_era: string | null
+          formula_calculo: string | null
+          fuente_verificacion: string | null
+          id: string
+          periodo_fin: string | null
+          periodo_inicio: string | null
+          precio_kg_ma: number | null
+          precio_medio_ponderado: number | null
+          prima_baseline: number | null
+          product_id: string
+          project_id: string
+          updated_at: string
+          volumen_referencia_kg: number | null
+        }
+        Insert: {
+          created_at?: string
+          fecha_firma?: string | null
+          firmado?: boolean | null
+          firmante_cliente?: string | null
+          firmante_era?: string | null
+          formula_calculo?: string | null
+          fuente_verificacion?: string | null
+          id?: string
+          periodo_fin?: string | null
+          periodo_inicio?: string | null
+          precio_kg_ma?: number | null
+          precio_medio_ponderado?: number | null
+          prima_baseline?: number | null
+          product_id: string
+          project_id: string
+          updated_at?: string
+          volumen_referencia_kg?: number | null
+        }
+        Update: {
+          created_at?: string
+          fecha_firma?: string | null
+          firmado?: boolean | null
+          firmante_cliente?: string | null
+          firmante_era?: string | null
+          formula_calculo?: string | null
+          fuente_verificacion?: string | null
+          id?: string
+          periodo_fin?: string | null
+          periodo_inicio?: string | null
+          precio_kg_ma?: number | null
+          precio_medio_ponderado?: number | null
+          prima_baseline?: number | null
+          product_id?: string
+          project_id?: string
+          updated_at?: string
+          volumen_referencia_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_baselines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "chem_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_baselines_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_benchmark_library: {
+        Row: {
+          concentracion: number | null
+          created_at: string
+          fecha: string
+          id: string
+          materia_activa: string
+          precio_kg_ma: number
+          proveedor: string | null
+          proyecto_id: string | null
+          proyecto_origen: string | null
+          vigente: boolean | null
+          volumen_anual: number | null
+        }
+        Insert: {
+          concentracion?: number | null
+          created_at?: string
+          fecha?: string
+          id?: string
+          materia_activa: string
+          precio_kg_ma: number
+          proveedor?: string | null
+          proyecto_id?: string | null
+          proyecto_origen?: string | null
+          vigente?: boolean | null
+          volumen_anual?: number | null
+        }
+        Update: {
+          concentracion?: number | null
+          created_at?: string
+          fecha?: string
+          id?: string
+          materia_activa?: string
+          precio_kg_ma?: number
+          proveedor?: string | null
+          proyecto_id?: string | null
+          proyecto_origen?: string | null
+          vigente?: boolean | null
+          volumen_anual?: number | null
+        }
+        Relationships: []
+      }
+      chem_benchmarks: {
+        Row: {
+          cotizacion_1_fecha: string | null
+          cotizacion_1_precio: number | null
+          cotizacion_1_proveedor: string | null
+          cotizacion_2_fecha: string | null
+          cotizacion_2_precio: number | null
+          cotizacion_2_proveedor: string | null
+          cotizacion_3_fecha: string | null
+          cotizacion_3_precio: number | null
+          cotizacion_3_proveedor: string | null
+          created_at: string
+          estado: string | null
+          gap_porcentaje: number | null
+          historico_fecha: string | null
+          historico_precio: number | null
+          historico_proveedor: string | null
+          historico_proyecto: string | null
+          historico_volumen: number | null
+          icis_fecha: string | null
+          icis_precio: number | null
+          icis_prima: number | null
+          id: string
+          mejor_benchmark: number | null
+          product_id: string
+          project_id: string
+          taric_periodo: string | null
+          taric_precio_cif: number | null
+          updated_at: string
+        }
+        Insert: {
+          cotizacion_1_fecha?: string | null
+          cotizacion_1_precio?: number | null
+          cotizacion_1_proveedor?: string | null
+          cotizacion_2_fecha?: string | null
+          cotizacion_2_precio?: number | null
+          cotizacion_2_proveedor?: string | null
+          cotizacion_3_fecha?: string | null
+          cotizacion_3_precio?: number | null
+          cotizacion_3_proveedor?: string | null
+          created_at?: string
+          estado?: string | null
+          gap_porcentaje?: number | null
+          historico_fecha?: string | null
+          historico_precio?: number | null
+          historico_proveedor?: string | null
+          historico_proyecto?: string | null
+          historico_volumen?: number | null
+          icis_fecha?: string | null
+          icis_precio?: number | null
+          icis_prima?: number | null
+          id?: string
+          mejor_benchmark?: number | null
+          product_id: string
+          project_id: string
+          taric_periodo?: string | null
+          taric_precio_cif?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cotizacion_1_fecha?: string | null
+          cotizacion_1_precio?: number | null
+          cotizacion_1_proveedor?: string | null
+          cotizacion_2_fecha?: string | null
+          cotizacion_2_precio?: number | null
+          cotizacion_2_proveedor?: string | null
+          cotizacion_3_fecha?: string | null
+          cotizacion_3_precio?: number | null
+          cotizacion_3_proveedor?: string | null
+          created_at?: string
+          estado?: string | null
+          gap_porcentaje?: number | null
+          historico_fecha?: string | null
+          historico_precio?: number | null
+          historico_proveedor?: string | null
+          historico_proyecto?: string | null
+          historico_volumen?: number | null
+          icis_fecha?: string | null
+          icis_precio?: number | null
+          icis_prima?: number | null
+          id?: string
+          mejor_benchmark?: number | null
+          product_id?: string
+          project_id?: string
+          taric_periodo?: string | null
+          taric_precio_cif?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_benchmarks_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "chem_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_benchmarks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_contract_audits: {
+        Row: {
+          banda_max: number | null
+          banda_min: number | null
+          campos_completados: number | null
+          campos_ia_confirmados: Json | null
+          campos_totales: number | null
+          cap_subida: number | null
+          clausula_mfn: boolean | null
+          clausula_salida: boolean | null
+          coste_envases_incluido: boolean | null
+          created_at: string
+          duracion_meses: number | null
+          equipos_comodato: boolean | null
+          equipos_comodato_detalle: string | null
+          existe_formula: boolean | null
+          fecha_vencimiento: string | null
+          floor_bajada: number | null
+          formula_detalle: string | null
+          frecuencia_revision: string | null
+          gestion_envases: string | null
+          id: string
+          indice_vinculado: string | null
+          penalizacion_detalle: string | null
+          plazo_pago_dias: number | null
+          preaviso_dias: number | null
+          project_id: string
+          pronto_pago_descuento: number | null
+          pronto_pago_dias: number | null
+          proveedor_id: string | null
+          proveedor_nombre: string
+          rappel_cobrado: boolean | null
+          rappel_detalle: string | null
+          rappel_existe: boolean | null
+          renovacion_automatica: boolean | null
+          score_condiciones: number | null
+          score_logistica: number | null
+          score_media: number | null
+          score_precio: number | null
+          score_servicio: number | null
+          servicio_tecnico: boolean | null
+          servicio_tecnico_detalle: string | null
+          simetria: boolean | null
+          stock_consigna: boolean | null
+          take_or_pay: boolean | null
+          updated_at: string
+          volumen_comprometido: number | null
+        }
+        Insert: {
+          banda_max?: number | null
+          banda_min?: number | null
+          campos_completados?: number | null
+          campos_ia_confirmados?: Json | null
+          campos_totales?: number | null
+          cap_subida?: number | null
+          clausula_mfn?: boolean | null
+          clausula_salida?: boolean | null
+          coste_envases_incluido?: boolean | null
+          created_at?: string
+          duracion_meses?: number | null
+          equipos_comodato?: boolean | null
+          equipos_comodato_detalle?: string | null
+          existe_formula?: boolean | null
+          fecha_vencimiento?: string | null
+          floor_bajada?: number | null
+          formula_detalle?: string | null
+          frecuencia_revision?: string | null
+          gestion_envases?: string | null
+          id?: string
+          indice_vinculado?: string | null
+          penalizacion_detalle?: string | null
+          plazo_pago_dias?: number | null
+          preaviso_dias?: number | null
+          project_id: string
+          pronto_pago_descuento?: number | null
+          pronto_pago_dias?: number | null
+          proveedor_id?: string | null
+          proveedor_nombre: string
+          rappel_cobrado?: boolean | null
+          rappel_detalle?: string | null
+          rappel_existe?: boolean | null
+          renovacion_automatica?: boolean | null
+          score_condiciones?: number | null
+          score_logistica?: number | null
+          score_media?: number | null
+          score_precio?: number | null
+          score_servicio?: number | null
+          servicio_tecnico?: boolean | null
+          servicio_tecnico_detalle?: string | null
+          simetria?: boolean | null
+          stock_consigna?: boolean | null
+          take_or_pay?: boolean | null
+          updated_at?: string
+          volumen_comprometido?: number | null
+        }
+        Update: {
+          banda_max?: number | null
+          banda_min?: number | null
+          campos_completados?: number | null
+          campos_ia_confirmados?: Json | null
+          campos_totales?: number | null
+          cap_subida?: number | null
+          clausula_mfn?: boolean | null
+          clausula_salida?: boolean | null
+          coste_envases_incluido?: boolean | null
+          created_at?: string
+          duracion_meses?: number | null
+          equipos_comodato?: boolean | null
+          equipos_comodato_detalle?: string | null
+          existe_formula?: boolean | null
+          fecha_vencimiento?: string | null
+          floor_bajada?: number | null
+          formula_detalle?: string | null
+          frecuencia_revision?: string | null
+          gestion_envases?: string | null
+          id?: string
+          indice_vinculado?: string | null
+          penalizacion_detalle?: string | null
+          plazo_pago_dias?: number | null
+          preaviso_dias?: number | null
+          project_id?: string
+          pronto_pago_descuento?: number | null
+          pronto_pago_dias?: number | null
+          proveedor_id?: string | null
+          proveedor_nombre?: string
+          rappel_cobrado?: boolean | null
+          rappel_detalle?: string | null
+          rappel_existe?: boolean | null
+          renovacion_automatica?: boolean | null
+          score_condiciones?: number | null
+          score_logistica?: number | null
+          score_media?: number | null
+          score_precio?: number | null
+          score_servicio?: number | null
+          servicio_tecnico?: boolean | null
+          servicio_tecnico_detalle?: string | null
+          simetria?: boolean | null
+          stock_consigna?: boolean | null
+          take_or_pay?: boolean | null
+          updated_at?: string
+          volumen_comprometido?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_contract_audits_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_contract_audits_proveedor_id_fkey"
+            columns: ["proveedor_id"]
+            isOneToOne: false
+            referencedRelation: "chem_suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_contract_documents: {
+        Row: {
+          audit_id: string
+          created_at: string
+          datos_extraidos: Json | null
+          error_message: string | null
+          estado_extraccion: string | null
+          file_size: number | null
+          file_url: string | null
+          id: string
+          mime_type: string | null
+          nombre: string
+          project_id: string
+          tipo: string | null
+        }
+        Insert: {
+          audit_id: string
+          created_at?: string
+          datos_extraidos?: Json | null
+          error_message?: string | null
+          estado_extraccion?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          mime_type?: string | null
+          nombre: string
+          project_id: string
+          tipo?: string | null
+        }
+        Update: {
+          audit_id?: string
+          created_at?: string
+          datos_extraidos?: Json | null
+          error_message?: string | null
+          estado_extraccion?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          mime_type?: string | null
+          nombre?: string
+          project_id?: string
+          tipo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_contract_documents_audit_id_fkey"
+            columns: ["audit_id"]
+            isOneToOne: false
+            referencedRelation: "chem_contract_audits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_contract_documents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_offers: {
+        Row: {
+          certificaciones: string | null
+          created_at: string
+          id: string
+          incluye_comodato: boolean | null
+          incluye_servicio: boolean | null
+          incluye_transporte: boolean | null
+          incoterm: string | null
+          notas: string | null
+          plazo_pago: number | null
+          precio: number | null
+          product_id: string
+          rfq_id: string
+          supplier_id: string
+        }
+        Insert: {
+          certificaciones?: string | null
+          created_at?: string
+          id?: string
+          incluye_comodato?: boolean | null
+          incluye_servicio?: boolean | null
+          incluye_transporte?: boolean | null
+          incoterm?: string | null
+          notas?: string | null
+          plazo_pago?: number | null
+          precio?: number | null
+          product_id: string
+          rfq_id: string
+          supplier_id: string
+        }
+        Update: {
+          certificaciones?: string | null
+          created_at?: string
+          id?: string
+          incluye_comodato?: boolean | null
+          incluye_servicio?: boolean | null
+          incluye_transporte?: boolean | null
+          incoterm?: string | null
+          notas?: string | null
+          plazo_pago?: number | null
+          precio?: number | null
+          product_id?: string
+          rfq_id?: string
+          supplier_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_offers_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "chem_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_offers_rfq_id_fkey"
+            columns: ["rfq_id"]
+            isOneToOne: false
+            referencedRelation: "chem_rfqs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_offers_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "chem_suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_plant_visits: {
+        Row: {
+          acompanante_cliente: string | null
+          checklist: Json | null
+          created_at: string
+          fecha_visita: string | null
+          id: string
+          impacto_total_estimado: number | null
+          notas: string | null
+          project_id: string
+          updated_at: string
+          visitante: string | null
+        }
+        Insert: {
+          acompanante_cliente?: string | null
+          checklist?: Json | null
+          created_at?: string
+          fecha_visita?: string | null
+          id?: string
+          impacto_total_estimado?: number | null
+          notas?: string | null
+          project_id: string
+          updated_at?: string
+          visitante?: string | null
+        }
+        Update: {
+          acompanante_cliente?: string | null
+          checklist?: Json | null
+          created_at?: string
+          fecha_visita?: string | null
+          id?: string
+          impacto_total_estimado?: number | null
+          notas?: string | null
+          project_id?: string
+          updated_at?: string
+          visitante?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_plant_visits_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_price_history: {
+        Row: {
+          cantidad_kg: number | null
+          created_at: string
+          id: string
+          importe_facturado: number | null
+          indice_icis: number | null
+          mes: string
+          product_id: string
+          project_id: string
+        }
+        Insert: {
+          cantidad_kg?: number | null
+          created_at?: string
+          id?: string
+          importe_facturado?: number | null
+          indice_icis?: number | null
+          mes: string
+          product_id: string
+          project_id: string
+        }
+        Update: {
+          cantidad_kg?: number | null
+          created_at?: string
+          id?: string
+          importe_facturado?: number | null
+          indice_icis?: number | null
+          mes?: string
+          product_id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_price_history_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "chem_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_price_history_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_products: {
+        Row: {
+          aplicacion: string | null
+          benchmark_kg_ma: number | null
+          clasificacion_pareto: string | null
+          codigo_taric: string | null
+          concentracion: number | null
+          consumo_anual_kg: number | null
+          coste_transporte: number | null
+          created_at: string
+          familia: string | null
+          formato_envase: string | null
+          id: string
+          incoterm: string | null
+          indice_referencia: string | null
+          materia_activa: string | null
+          nombre_comercial: string
+          potencial_ahorro: number | null
+          precio_kg: number | null
+          prima_actual: number | null
+          project_id: string
+          proveedor_id: string | null
+          proveedor_nombre: string | null
+          tipo_precio: string | null
+          updated_at: string
+        }
+        Insert: {
+          aplicacion?: string | null
+          benchmark_kg_ma?: number | null
+          clasificacion_pareto?: string | null
+          codigo_taric?: string | null
+          concentracion?: number | null
+          consumo_anual_kg?: number | null
+          coste_transporte?: number | null
+          created_at?: string
+          familia?: string | null
+          formato_envase?: string | null
+          id?: string
+          incoterm?: string | null
+          indice_referencia?: string | null
+          materia_activa?: string | null
+          nombre_comercial: string
+          potencial_ahorro?: number | null
+          precio_kg?: number | null
+          prima_actual?: number | null
+          project_id: string
+          proveedor_id?: string | null
+          proveedor_nombre?: string | null
+          tipo_precio?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aplicacion?: string | null
+          benchmark_kg_ma?: number | null
+          clasificacion_pareto?: string | null
+          codigo_taric?: string | null
+          concentracion?: number | null
+          consumo_anual_kg?: number | null
+          coste_transporte?: number | null
+          created_at?: string
+          familia?: string | null
+          formato_envase?: string | null
+          id?: string
+          incoterm?: string | null
+          indice_referencia?: string | null
+          materia_activa?: string | null
+          nombre_comercial?: string
+          potencial_ahorro?: number | null
+          precio_kg?: number | null
+          prima_actual?: number | null
+          project_id?: string
+          proveedor_id?: string | null
+          proveedor_nombre?: string | null
+          tipo_precio?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_products_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_products_proveedor_id_fkey"
+            columns: ["proveedor_id"]
+            isOneToOne: false
+            referencedRelation: "chem_suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_projects: {
+        Row: {
+          ahorro_conseguido: number | null
+          contacto_principal: string | null
+          created_at: string
+          estado: string
+          fecha_inicio: string | null
+          fecha_mandato: string | null
+          gasto_total_anual: number | null
+          id: string
+          nombre_cliente: string
+          notas: string | null
+          potencial_ahorro: number | null
+          sector: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ahorro_conseguido?: number | null
+          contacto_principal?: string | null
+          created_at?: string
+          estado?: string
+          fecha_inicio?: string | null
+          fecha_mandato?: string | null
+          gasto_total_anual?: number | null
+          id?: string
+          nombre_cliente: string
+          notas?: string | null
+          potencial_ahorro?: number | null
+          sector?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ahorro_conseguido?: number | null
+          contacto_principal?: string | null
+          created_at?: string
+          estado?: string
+          fecha_inicio?: string | null
+          fecha_mandato?: string | null
+          gasto_total_anual?: number | null
+          id?: string
+          nombre_cliente?: string
+          notas?: string | null
+          potencial_ahorro?: number | null
+          sector?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      chem_rfq_products: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          rfq_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          rfq_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          rfq_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_rfq_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "chem_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_rfq_products_rfq_id_fkey"
+            columns: ["rfq_id"]
+            isOneToOne: false
+            referencedRelation: "chem_rfqs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_rfq_suppliers: {
+        Row: {
+          created_at: string
+          id: string
+          rfq_id: string
+          supplier_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          rfq_id: string
+          supplier_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          rfq_id?: string
+          supplier_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_rfq_suppliers_rfq_id_fkey"
+            columns: ["rfq_id"]
+            isOneToOne: false
+            referencedRelation: "chem_rfqs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_rfq_suppliers_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "chem_suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_rfqs: {
+        Row: {
+          condiciones_pago: string | null
+          created_at: string
+          especificaciones: string | null
+          estado: string | null
+          fecha_envio: string | null
+          fecha_limite: string | null
+          id: string
+          incoterm: string | null
+          project_id: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          condiciones_pago?: string | null
+          created_at?: string
+          especificaciones?: string | null
+          estado?: string | null
+          fecha_envio?: string | null
+          fecha_limite?: string | null
+          id?: string
+          incoterm?: string | null
+          project_id: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          condiciones_pago?: string | null
+          created_at?: string
+          especificaciones?: string | null
+          estado?: string | null
+          fecha_envio?: string | null
+          fecha_limite?: string | null
+          id?: string
+          incoterm?: string | null
+          project_id?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_rfqs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_savings: {
+        Row: {
+          ahorro_anual: number | null
+          baseline_kg_ma: number | null
+          created_at: string
+          id: string
+          nuevo_precio_kg_ma: number | null
+          prima_anterior: number | null
+          prima_nueva: number | null
+          product_id: string
+          project_id: string
+          tipo_ahorro: string | null
+          updated_at: string
+          volumen_real_12m: number | null
+        }
+        Insert: {
+          ahorro_anual?: number | null
+          baseline_kg_ma?: number | null
+          created_at?: string
+          id?: string
+          nuevo_precio_kg_ma?: number | null
+          prima_anterior?: number | null
+          prima_nueva?: number | null
+          product_id: string
+          project_id: string
+          tipo_ahorro?: string | null
+          updated_at?: string
+          volumen_real_12m?: number | null
+        }
+        Update: {
+          ahorro_anual?: number | null
+          baseline_kg_ma?: number | null
+          created_at?: string
+          id?: string
+          nuevo_precio_kg_ma?: number | null
+          prima_anterior?: number | null
+          prima_nueva?: number | null
+          product_id?: string
+          project_id?: string
+          tipo_ahorro?: string | null
+          updated_at?: string
+          volumen_real_12m?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_savings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "chem_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chem_savings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "chem_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_savings_monthly: {
+        Row: {
+          ahorro_real: number | null
+          created_at: string
+          id: string
+          indice_icis: number | null
+          mes: string
+          prima_efectiva: number | null
+          saving_id: string
+        }
+        Insert: {
+          ahorro_real?: number | null
+          created_at?: string
+          id?: string
+          indice_icis?: number | null
+          mes: string
+          prima_efectiva?: number | null
+          saving_id: string
+        }
+        Update: {
+          ahorro_real?: number | null
+          created_at?: string
+          id?: string
+          indice_icis?: number | null
+          mes?: string
+          prima_efectiva?: number | null
+          saving_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chem_savings_monthly_saving_id_fkey"
+            columns: ["saving_id"]
+            isOneToOne: false
+            referencedRelation: "chem_savings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chem_suppliers: {
+        Row: {
+          cif: string | null
+          contacto: string | null
+          created_at: string
+          email: string | null
+          id: string
+          nombre: string
+          notas: string | null
+          project_id: string
+          telefono: string | null
+          updated_at: string
+          web: string | null
+        }
+        Insert: {
+          cif?: string | null
+          contacto?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          nombre: string
+          notas?: string | null
+          project_id: string
+          telefono?: string | null
+          updated_at?: string
+          web?: string | null
+        }
+        Update: {
+          cif?: string | null
+          contacto?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          nombre?: string
+          notas?: string | null
+          project_id?: string
+          telefono?: string | null
+          updated_at?: string
+          web?: string | null
+        }
+        Relationships: []
+      }
       cost_consulting_projects: {
         Row: {
           client_name: string | null
