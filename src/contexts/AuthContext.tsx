@@ -23,7 +23,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
  */
 const syncUserToExternal = async (user: User) => {
   try {
+    // Sync to app_users
     await externalSupabase.from('app_users').upsert({
+      id: user.id,
+      email: user.email,
+      name: user.user_metadata?.full_name || user.user_metadata?.name || null,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'id'
+    });
+    // Also sync to users table (referenced by chem_projects FK)
+    await externalSupabase.from('users').upsert({
       id: user.id,
       email: user.email,
       name: user.user_metadata?.full_name || user.user_metadata?.name || null,
