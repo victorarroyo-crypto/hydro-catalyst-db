@@ -74,8 +74,8 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
     >
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-2 mb-3">
-          <div className="flex-1">
-            <h3 className={`font-semibold line-clamp-2 group-hover:text-primary transition-colors ${isInactive ? 'text-muted-foreground' : 'text-foreground'}`}>
+          <div className="flex-1 min-w-0">
+            <h3 className={`font-semibold line-clamp-2 break-words group-hover:text-primary transition-colors ${isInactive ? 'text-muted-foreground' : 'text-foreground'}`}>
               {technology.nombre}
             </h3>
             {isInactive && (
@@ -85,7 +85,7 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
             )}
             {getReviewStatusBadge()}
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-[120px]">
             {showActions && (
               <>
                 <DownloadTechnologyButton technology={technology} />
