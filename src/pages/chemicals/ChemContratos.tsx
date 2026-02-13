@@ -636,16 +636,28 @@ export default function ChemContratos() {
           </TabsContent>
 
           {/* Condiciones */}
-          <TabsContent value="condiciones" className="space-y-3">
-            {/* Auto-fill from extracted data - show ALL documents with data */}
+          <TabsContent value="condiciones" className="space-y-4">
+            {/* Per-document extracted sections */}
             {(() => {
               const docsWithData = documents.filter((d: any) => d.datos_extraidos?.supplier_name);
-              if (docsWithData.length === 0) return null;
-              
+              if (docsWithData.length === 0) return (
+                <Card>
+                  <CardContent className="p-4 text-center text-sm text-muted-foreground">
+                    No hay contratos con datos extraídos. Sube documentos y extrae cláusulas desde la pestaña Documentos.
+                  </CardContent>
+                </Card>
+              );
+
+              const renderValue = (val: any, suffix?: string) => {
+                if (val == null || val === '') return <span className="text-muted-foreground">—</span>;
+                if (typeof val === 'boolean') return val ? '✓ Sí' : '✕ No';
+                return `${val}${suffix || ''}`;
+              };
+
               return docsWithData.map((docWithData: any) => {
                 const ext = docWithData.datos_extraidos;
                 const auditEmpty = !currentAudit.plazo_pago_dias && !currentAudit.duracion_contrato_meses && !currentAudit.fecha_vencimiento;
-                
+
                 const handleAutoFill = async () => {
                   const fieldsToUpdate: Record<string, any> = {};
                   const mapping: Record<string, any> = {
@@ -689,380 +701,510 @@ export default function ChemContratos() {
                   }
                 };
 
+                const filledCount = [
+                  ext.plazo_pago_dias, ext.pronto_pago_descuento_pct, ext.pronto_pago_dias,
+                  ext.duracion_contrato_meses, ext.fecha_vencimiento, ext.renovacion_automatica,
+                  ext.volumen_comprometido_anual, ext.formula_revision_existe,
+                  ext.rappel_existe, ext.stock_consigna, ext.servicio_tecnico_incluido, ext.equipos_comodato,
+                  ext.clausula_mfn, ext.clausula_salida
+                ].filter(v => v != null).length;
+
                 return (
-                  <Card key={docWithData.id} className="border-[#32b4cd]/30 bg-[#32b4cd]/5">
-                    <CardContent className="p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4 text-[#32b4cd]" />
-                        <span className="text-sm">
-                          <strong>{ext.supplier_name}</strong> — {docWithData.nombre_archivo || docWithData.nombre}
-                          {auditEmpty && ' — campos vacíos'}
-                        </span>
-                      </div>
-                      <Button size="sm" onClick={handleAutoFill} className="bg-[#307177] hover:bg-[#307177]/90 text-white">
-                        {auditEmpty ? 'Rellenar campos' : 'Actualizar'}
-                      </Button>
-                    </CardContent>
-                  </Card>
+                  <Collapsible key={docWithData.id} defaultOpen>
+                    <Card className="border-[#32b4cd]/30">
+                      <CollapsibleTrigger className="w-full">
+                        <CardHeader className="py-3 flex flex-row items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-[#32b4cd]" />
+                            <CardTitle className="text-sm">
+                              {ext.supplier_name} — {docWithData.nombre_archivo || docWithData.nombre}
+                            </CardTitle>
+                            <Badge variant="outline" className="text-[10px]">{filledCount} campos</Badge>
+                          </div>
+                          <ChevronDown className="w-4 h-4" />
+                        </CardHeader>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <CardContent className="space-y-4 pt-0">
+                          {/* Pago */}
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-2">💰 Pago</p>
+                            <div className="grid grid-cols-3 gap-3">
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Plazo pago días</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.plazo_pago_dias)}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Pronto pago %</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.pronto_pago_descuento_pct, '%')}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Pronto pago días</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.pronto_pago_dias)}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Duración */}
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-2">📅 Duración</p>
+                            <div className="grid grid-cols-3 gap-3">
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Duración meses</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.duracion_contrato_meses)}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Fecha vencimiento</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.fecha_vencimiento)}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Preaviso días</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.preaviso_no_renovacion_dias)}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-4 mt-2">
+                              <p className="text-xs">Renovación auto: {renderValue(ext.renovacion_automatica)}</p>
+                              <p className="text-xs">Cláusula salida: {renderValue(ext.clausula_salida)}</p>
+                            </div>
+                          </div>
+
+                          {/* Volúmenes */}
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-2">📦 Volúmenes</p>
+                            <div className="grid grid-cols-3 gap-3">
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Vol. comprometido</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.volumen_comprometido_anual)}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Banda mín</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.banda_volumen_min)}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Banda máx</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.banda_volumen_max)}</p>
+                              </div>
+                            </div>
+                            <p className="text-xs mt-2">Take-or-pay: {renderValue(ext.take_or_pay)}</p>
+                          </div>
+
+                          {/* Revisión precios */}
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-2">📊 Revisión de precios</p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Fórmula revisión</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.formula_revision_existe)}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Índice</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.indice_vinculado)}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Frecuencia</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.frecuencia_revision)}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Simetría</Label>
+                                <p className="text-sm font-medium">{renderValue(ext.simetria_subida_bajada)}</p>
+                              </div>
+                            </div>
+                            {ext.formula_revision_detalle && (
+                              <p className="text-xs mt-1 text-muted-foreground italic">{ext.formula_revision_detalle}</p>
+                            )}
+                          </div>
+
+                          {/* Servicio y logística */}
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-2">🔧 Servicio y logística</p>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <p>Rappel: {renderValue(ext.rappel_existe)}</p>
+                              <p>Stock consigna: {renderValue(ext.stock_consigna)}</p>
+                              <p>Envases incl.: {renderValue(ext.coste_envases_incluido)}</p>
+                              <p>Serv. técnico: {renderValue(ext.servicio_tecnico_incluido)}</p>
+                              <p>Comodato: {renderValue(ext.equipos_comodato)}</p>
+                              <p>MFN: {renderValue(ext.clausula_mfn)}</p>
+                            </div>
+                          </div>
+
+                          {/* Apply button */}
+                          <div className="flex justify-end pt-2 border-t">
+                            <Button size="sm" onClick={handleAutoFill} className="bg-[#307177] hover:bg-[#307177]/90 text-white">
+                              <ClipboardList className="w-3 h-3 mr-1" />
+                              {auditEmpty ? 'Rellenar campos del proveedor' : 'Actualizar campos del proveedor'}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </CollapsibleContent>
+                    </Card>
+                  </Collapsible>
                 );
               });
             })()}
 
-            <Card>
-              <CardContent className="p-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">{completion.completed} de {completion.total} campos completados</span>
-                  <Progress value={completionPct} className="flex-1 h-2" />
-                </div>
-              </CardContent>
-            </Card>
+            {/* Datos consolidados del proveedor (editables) */}
+            <div className="border-t pt-4 mt-4">
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <Building2 className="w-4 h-4" />
+                Datos consolidados del proveedor
+              </h3>
 
-            {/* Sección Pago */}
-            <Collapsible defaultOpen>
-              <Card>
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="py-3 flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm">💰 Pago</CardTitle>
-                    <ChevronDown className="w-4 h-4" />
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="space-y-3 pt-0">
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <Label className="text-xs">Plazo pago días</Label>
-                        <Input type="number" value={currentAudit.plazo_pago_dias ?? ''} onChange={e => updateField('plazo_pago_dias', e.target.value ? parseInt(e.target.value) : null)} />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Pronto pago descuento %</Label>
-                        <Input type="number" step="0.1" value={currentAudit.pronto_pago_descuento_pct ?? ''} onChange={e => updateField('pronto_pago_descuento_pct', e.target.value ? parseFloat(e.target.value) : null)} />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Pronto pago días</Label>
-                        <Input type="number" value={currentAudit.pronto_pago_dias ?? ''} onChange={e => updateField('pronto_pago_dias', e.target.value ? parseInt(e.target.value) : null)} />
-                      </div>
-                    </div>
-                    {currentAudit.pronto_pago_descuento_pct && currentAudit.pronto_pago_dias && (
-                      (() => {
-                        const tae = calcTAE(currentAudit.pronto_pago_descuento_pct, currentAudit.plazo_pago_dias, currentAudit.pronto_pago_dias);
-                        if (tae === null) return null;
-                        const compensa = tae < 7;
-                        return (
-                          <div className={`p-2 rounded text-xs ${compensa ? 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200' : 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'}`}>
-                            TAE anualizada: {tae.toFixed(1)}% → {compensa ? '✓ Compensa' : '✕ No compensa'}
-                          </div>
-                        );
-                      })()
-                    )}
-                  </CardContent>
-                </CollapsibleContent>
+              <Card className="mb-3">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">{completion.completed} de {completion.total} campos completados</span>
+                    <Progress value={completionPct} className="flex-1 h-2" />
+                  </div>
+                </CardContent>
               </Card>
-            </Collapsible>
 
-            {/* Sección Duración */}
-            <Collapsible defaultOpen>
-              <Card>
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="py-3 flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm">📅 Duración</CardTitle>
-                    <ChevronDown className="w-4 h-4" />
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="space-y-3 pt-0">
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <Label className="text-xs">Duración meses</Label>
-                        <Input type="number" value={currentAudit.duracion_contrato_meses ?? ''} onChange={e => updateField('duracion_contrato_meses', e.target.value ? parseInt(e.target.value) : null)} />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Fecha vencimiento</Label>
-                        <Input type="date" value={currentAudit.fecha_vencimiento ?? ''} onChange={e => updateField('fecha_vencimiento', e.target.value || null)} />
-                        {venceSoon(currentAudit.fecha_vencimiento) && <Badge variant="destructive" className="mt-1 text-[10px]">VENCE PRONTO</Badge>}
-                      </div>
-                      <div>
-                        <Label className="text-xs">Preaviso días</Label>
-                        <Input type="number" value={currentAudit.preaviso_no_renovacion_dias ?? ''} onChange={e => updateField('preaviso_no_renovacion_dias', e.target.value ? parseInt(e.target.value) : null)} />
-                      </div>
-                    </div>
-                    <div className="flex gap-6">
-                      <div className="flex items-center gap-2">
-                        <Switch checked={!!currentAudit.renovacion_automatica} onCheckedChange={v => updateField('renovacion_automatica', v)} />
-                        <Label className="text-xs">Renovación automática</Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch checked={!!currentAudit.clausula_salida} onCheckedChange={v => updateField('clausula_salida', v)} />
-                        <Label className="text-xs">Cláusula salida</Label>
-                      </div>
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-
-            {/* Sección Volúmenes */}
-            <Collapsible>
-              <Card>
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="py-3 flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm">📦 Volúmenes</CardTitle>
-                    <ChevronDown className="w-4 h-4" />
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="space-y-3 pt-0">
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <Label className="text-xs">Vol. comprometido anual</Label>
-                        <Input type="number" value={currentAudit.volumen_comprometido_anual ?? ''} onChange={e => updateField('volumen_comprometido_anual', e.target.value ? parseFloat(e.target.value) : null)} />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Banda mín</Label>
-                        <Input type="number" value={currentAudit.banda_volumen_min ?? ''} onChange={e => updateField('banda_volumen_min', e.target.value ? parseFloat(e.target.value) : null)} />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Banda máx</Label>
-                        <Input type="number" value={currentAudit.banda_volumen_max ?? ''} onChange={e => updateField('banda_volumen_max', e.target.value ? parseFloat(e.target.value) : null)} />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Switch checked={!!currentAudit.take_or_pay} onCheckedChange={v => updateField('take_or_pay', v)} />
-                      <Label className="text-xs">Take-or-pay</Label>
-                    </div>
-                    {currentAudit.take_or_pay && (
-                      <div>
-                        <Label className="text-xs">Detalle penalización</Label>
-                        <Textarea value={currentAudit.penalizacion_take_or_pay ?? ''} onChange={e => updateField('penalizacion_take_or_pay', e.target.value)} className="h-16" />
-                      </div>
-                    )}
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-
-            {/* Sección Revisión de precios */}
-            <Collapsible>
-              <Card>
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="py-3 flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm">📊 Revisión de precios</CardTitle>
-                    <ChevronDown className="w-4 h-4" />
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="space-y-3 pt-0">
-                    <div className="flex items-center gap-2">
-                      <Switch checked={!!currentAudit.formula_revision_existe} onCheckedChange={v => updateField('formula_revision_existe', v)} />
-                      <Label className="text-xs">Existe fórmula de revisión</Label>
-                    </div>
-                    {currentAudit.formula_revision_existe && (
-                      <>
+              {/* Sección Pago */}
+              <Collapsible defaultOpen>
+                <Card className="mb-3">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="py-3 flex flex-row items-center justify-between">
+                      <CardTitle className="text-sm">💰 Pago</CardTitle>
+                      <ChevronDown className="w-4 h-4" />
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-3 pt-0">
+                      <div className="grid grid-cols-3 gap-3">
                         <div>
-                          <Label className="text-xs">Detalle fórmula</Label>
-                          <Textarea value={currentAudit.formula_revision_detalle ?? ''} onChange={e => updateField('formula_revision_detalle', e.target.value)} className="h-16" />
+                          <Label className="text-xs">Plazo pago días</Label>
+                          <Input type="number" value={currentAudit.plazo_pago_dias ?? ''} onChange={e => updateField('plazo_pago_dias', e.target.value ? parseInt(e.target.value) : null)} />
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label className="text-xs">Índice vinculado</Label>
-                            <Input value={currentAudit.indice_vinculado ?? ''} onChange={e => updateField('indice_vinculado', e.target.value)} />
-                          </div>
-                          <div>
-                            <Label className="text-xs">Frecuencia revisión</Label>
-                            <Select value={currentAudit.frecuencia_revision ?? ''} onValueChange={v => updateField('frecuencia_revision', v)}>
-                              <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="mensual">Mensual</SelectItem>
-                                <SelectItem value="trimestral">Trimestral</SelectItem>
-                                <SelectItem value="semestral">Semestral</SelectItem>
-                                <SelectItem value="anual">Anual</SelectItem>
-                                <SelectItem value="ninguna">Ninguna</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                        <div>
+                          <Label className="text-xs">Pronto pago descuento %</Label>
+                          <Input type="number" step="0.1" value={currentAudit.pronto_pago_descuento_pct ?? ''} onChange={e => updateField('pronto_pago_descuento_pct', e.target.value ? parseFloat(e.target.value) : null)} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Pronto pago días</Label>
+                          <Input type="number" value={currentAudit.pronto_pago_dias ?? ''} onChange={e => updateField('pronto_pago_dias', e.target.value ? parseInt(e.target.value) : null)} />
+                        </div>
+                      </div>
+                      {currentAudit.pronto_pago_descuento_pct && currentAudit.pronto_pago_dias && (
+                        (() => {
+                          const tae = calcTAE(currentAudit.pronto_pago_descuento_pct, currentAudit.plazo_pago_dias, currentAudit.pronto_pago_dias);
+                          if (tae === null) return null;
+                          const compensa = tae < 7;
+                          return (
+                            <div className={`p-2 rounded text-xs ${compensa ? 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200' : 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'}`}>
+                              TAE anualizada: {tae.toFixed(1)}% → {compensa ? '✓ Compensa' : '✕ No compensa'}
+                            </div>
+                          );
+                        })()
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+
+              {/* Sección Duración */}
+              <Collapsible defaultOpen>
+                <Card className="mb-3">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="py-3 flex flex-row items-center justify-between">
+                      <CardTitle className="text-sm">📅 Duración</CardTitle>
+                      <ChevronDown className="w-4 h-4" />
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-3 pt-0">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label className="text-xs">Duración meses</Label>
+                          <Input type="number" value={currentAudit.duracion_contrato_meses ?? ''} onChange={e => updateField('duracion_contrato_meses', e.target.value ? parseInt(e.target.value) : null)} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Fecha vencimiento</Label>
+                          <Input type="date" value={currentAudit.fecha_vencimiento ?? ''} onChange={e => updateField('fecha_vencimiento', e.target.value || null)} />
+                          {venceSoon(currentAudit.fecha_vencimiento) && <Badge variant="destructive" className="mt-1 text-[10px]">VENCE PRONTO</Badge>}
+                        </div>
+                        <div>
+                          <Label className="text-xs">Preaviso días</Label>
+                          <Input type="number" value={currentAudit.preaviso_no_renovacion_dias ?? ''} onChange={e => updateField('preaviso_no_renovacion_dias', e.target.value ? parseInt(e.target.value) : null)} />
+                        </div>
+                      </div>
+                      <div className="flex gap-6">
+                        <div className="flex items-center gap-2">
+                          <Switch checked={!!currentAudit.renovacion_automatica} onCheckedChange={v => updateField('renovacion_automatica', v)} />
+                          <Label className="text-xs">Renovación automática</Label>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Switch checked={!!currentAudit.simetria_subida_bajada} onCheckedChange={v => updateField('simetria_subida_bajada', v)} />
-                          <Label className="text-xs">Simetría subida/bajada</Label>
+                          <Switch checked={!!currentAudit.clausula_salida} onCheckedChange={v => updateField('clausula_salida', v)} />
+                          <Label className="text-xs">Cláusula salida</Label>
                         </div>
-                        {!currentAudit.simetria_subida_bajada && currentAudit.formula_revision_existe && (
-                          <div className="p-2 rounded text-xs bg-yellow-50 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
-                            ⚠ Fórmula asimétrica: las subidas se aplican diferente que las bajadas
-                          </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label className="text-xs">Cap subida %</Label>
-                            <Input type="number" step="0.1" value={currentAudit.cap_subida_pct ?? ''} onChange={e => updateField('cap_subida_pct', e.target.value ? parseFloat(e.target.value) : null)} />
-                          </div>
-                          <div>
-                            <Label className="text-xs">Floor bajada %</Label>
-                            <Input type="number" step="0.1" value={currentAudit.floor_bajada_pct ?? ''} onChange={e => updateField('floor_bajada_pct', e.target.value ? parseFloat(e.target.value) : null)} />
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
 
-            {/* Sección Rappels */}
-            <Collapsible>
-              <Card>
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="py-3 flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm">💸 Rappels</CardTitle>
-                    <ChevronDown className="w-4 h-4" />
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="space-y-3 pt-0">
-                    <div className="flex items-center gap-2">
-                      <Switch checked={!!currentAudit.rappel_existe} onCheckedChange={v => updateField('rappel_existe', v)} />
-                      <Label className="text-xs">Existe rappel</Label>
-                    </div>
-                    {currentAudit.rappel_existe && (
-                      <>
+              {/* Sección Volúmenes */}
+              <Collapsible>
+                <Card className="mb-3">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="py-3 flex flex-row items-center justify-between">
+                      <CardTitle className="text-sm">📦 Volúmenes</CardTitle>
+                      <ChevronDown className="w-4 h-4" />
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-3 pt-0">
+                      <div className="grid grid-cols-3 gap-3">
                         <div>
-                          <Label className="text-xs">Detalle rappel</Label>
-                          <Textarea value={currentAudit.rappel_detalle ?? ''} onChange={e => updateField('rappel_detalle', e.target.value)} className="h-16" />
+                          <Label className="text-xs">Vol. comprometido anual</Label>
+                          <Input type="number" value={currentAudit.volumen_comprometido_anual ?? ''} onChange={e => updateField('volumen_comprometido_anual', e.target.value ? parseFloat(e.target.value) : null)} />
                         </div>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center gap-2">
-                                <Switch checked={!!currentAudit.rappel_cobrado} onCheckedChange={v => updateField('rappel_cobrado', v)} />
-                                <Label className="text-xs">¿Se cobra realmente?</Label>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>Muchos clientes tienen rappels pactados que nunca facturan</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        {currentAudit.rappel_existe && !currentAudit.rappel_cobrado && (
-                          <div className="p-3 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-200 flex items-center gap-2">
-                            <DollarSign className="w-4 h-4" />
-                            <span className="text-sm font-medium">RAPPEL PACTADO NO COBRADO — Ahorro inmediato</span>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-
-            {/* Sección Logística y envases */}
-            <Collapsible>
-              <Card>
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="py-3 flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm">🚛 Logística y envases</CardTitle>
-                    <ChevronDown className="w-4 h-4" />
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="space-y-3 pt-0">
-                    <div className="flex items-center gap-2">
-                      <Switch checked={!!currentAudit.stock_consigna} onCheckedChange={v => updateField('stock_consigna', v)} />
-                      <Label className="text-xs">Stock en consigna</Label>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Gestión envases vacíos</Label>
-                      <Select value={currentAudit.gestion_envases_vacios ?? ''} onValueChange={v => updateField('gestion_envases_vacios', v)}>
-                        <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="devolucion_proveedor">Devolución proveedor</SelectItem>
-                          <SelectItem value="gestion_cliente_residuo">Gestión cliente como residuo</SelectItem>
-                          <SelectItem value="sin_definir">Sin definir</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Switch checked={!!currentAudit.coste_envases_incluido} onCheckedChange={v => updateField('coste_envases_incluido', v)} />
-                      <Label className="text-xs">Coste envases incluido</Label>
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-
-            {/* Sección Servicio */}
-            <Collapsible>
-              <Card>
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="py-3 flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm">🔧 Servicio</CardTitle>
-                    <ChevronDown className="w-4 h-4" />
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="space-y-3 pt-0">
-                    <div className="flex items-center gap-2">
-                      <Switch checked={!!currentAudit.servicio_tecnico_incluido} onCheckedChange={v => updateField('servicio_tecnico_incluido', v)} />
-                      <Label className="text-xs">Servicio técnico incluido</Label>
-                    </div>
-                    {currentAudit.servicio_tecnico_incluido && (
-                      <div>
-                        <Label className="text-xs">Detalle servicio</Label>
-                        <Input value={currentAudit.detalle_servicio_tecnico ?? ''} onChange={e => updateField('detalle_servicio_tecnico', e.target.value)} />
+                        <div>
+                          <Label className="text-xs">Banda mín</Label>
+                          <Input type="number" value={currentAudit.banda_volumen_min ?? ''} onChange={e => updateField('banda_volumen_min', e.target.value ? parseFloat(e.target.value) : null)} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Banda máx</Label>
+                          <Input type="number" value={currentAudit.banda_volumen_max ?? ''} onChange={e => updateField('banda_volumen_max', e.target.value ? parseFloat(e.target.value) : null)} />
+                        </div>
                       </div>
-                    )}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!currentAudit.take_or_pay} onCheckedChange={v => updateField('take_or_pay', v)} />
+                        <Label className="text-xs">Take-or-pay</Label>
+                      </div>
+                      {currentAudit.take_or_pay && (
+                        <div>
+                          <Label className="text-xs">Detalle penalización</Label>
+                          <Textarea value={currentAudit.penalizacion_take_or_pay ?? ''} onChange={e => updateField('penalizacion_take_or_pay', e.target.value)} className="h-16" />
+                        </div>
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+
+              {/* Sección Revisión de precios */}
+              <Collapsible>
+                <Card className="mb-3">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="py-3 flex flex-row items-center justify-between">
+                      <CardTitle className="text-sm">📊 Revisión de precios</CardTitle>
+                      <ChevronDown className="w-4 h-4" />
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-3 pt-0">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!currentAudit.formula_revision_existe} onCheckedChange={v => updateField('formula_revision_existe', v)} />
+                        <Label className="text-xs">Existe fórmula de revisión</Label>
+                      </div>
+                      {currentAudit.formula_revision_existe && (
+                        <>
+                          <div>
+                            <Label className="text-xs">Detalle fórmula</Label>
+                            <Textarea value={currentAudit.formula_revision_detalle ?? ''} onChange={e => updateField('formula_revision_detalle', e.target.value)} className="h-16" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs">Índice vinculado</Label>
+                              <Input value={currentAudit.indice_vinculado ?? ''} onChange={e => updateField('indice_vinculado', e.target.value)} />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Frecuencia revisión</Label>
+                              <Select value={currentAudit.frecuencia_revision ?? ''} onValueChange={v => updateField('frecuencia_revision', v)}>
+                                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="mensual">Mensual</SelectItem>
+                                  <SelectItem value="trimestral">Trimestral</SelectItem>
+                                  <SelectItem value="semestral">Semestral</SelectItem>
+                                  <SelectItem value="anual">Anual</SelectItem>
+                                  <SelectItem value="ninguna">Ninguna</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
                           <div className="flex items-center gap-2">
-                            <Switch checked={!!currentAudit.equipos_comodato} onCheckedChange={v => updateField('equipos_comodato', v)} />
-                            <Label className="text-xs">Equipos en comodato</Label>
+                            <Switch checked={!!currentAudit.simetria_subida_bajada} onCheckedChange={v => updateField('simetria_subida_bajada', v)} />
+                            <Label className="text-xs">Simetría subida/bajada</Label>
                           </div>
-                        </TooltipTrigger>
-                        <TooltipContent>Bombas, dosificadores cedidos. Atan al cliente al proveedor.</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    {currentAudit.equipos_comodato && (
-                      <div>
-                        <Label className="text-xs">Detalle comodato</Label>
-                        <Input value={currentAudit.detalle_comodato ?? ''} onChange={e => updateField('detalle_comodato', e.target.value)} />
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <Switch checked={!!currentAudit.clausula_mfn} onCheckedChange={v => updateField('clausula_mfn', v)} />
-                      <Label className="text-xs">Cláusula MFN</Label>
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
+                          {!currentAudit.simetria_subida_bajada && currentAudit.formula_revision_existe && (
+                            <div className="p-2 rounded text-xs bg-yellow-50 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+                              ⚠ Fórmula asimétrica: las subidas se aplican diferente que las bajadas
+                            </div>
+                          )}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs">Cap subida %</Label>
+                              <Input type="number" step="0.1" value={currentAudit.cap_subida_pct ?? ''} onChange={e => updateField('cap_subida_pct', e.target.value ? parseFloat(e.target.value) : null)} />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Floor bajada %</Label>
+                              <Input type="number" step="0.1" value={currentAudit.floor_bajada_pct ?? ''} onChange={e => updateField('floor_bajada_pct', e.target.value ? parseFloat(e.target.value) : null)} />
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
 
-            {/* Sección Scoring */}
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">⭐ Scoring</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 pt-0">
-                <div className="grid grid-cols-2 gap-3">
-                  {(['score_precio', 'score_condiciones', 'score_servicio', 'score_logistica'] as const).map(field => (
-                    <div key={field}>
-                      <Label className="text-xs capitalize">{field.replace('score_', '')}</Label>
-                      <Select value={currentAudit[field]?.toString() ?? ''} onValueChange={v => {
-                        updateField(field, parseFloat(v));
-                      }}>
-                        <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                        <SelectContent>
-                          {[1, 1.5, 2, 2.5, 3, 3.5, 4].map(v => <SelectItem key={v} value={v.toString()}>{v}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-center pt-2">
-                  <span className="text-2xl font-bold">{scoreMedia ? scoreMedia.toFixed(1) : '—'}</span>
-                  <span className="text-sm text-muted-foreground ml-2">media</span>
-                  {scoreMedia != null && scoreMedia < 2.5 && (
-                    <p className="text-red-600 text-sm font-semibold mt-1">PRIORIDAD RENEGOCIACIÓN</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+              {/* Sección Rappels */}
+              <Collapsible>
+                <Card className="mb-3">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="py-3 flex flex-row items-center justify-between">
+                      <CardTitle className="text-sm">💸 Rappels</CardTitle>
+                      <ChevronDown className="w-4 h-4" />
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-3 pt-0">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!currentAudit.rappel_existe} onCheckedChange={v => updateField('rappel_existe', v)} />
+                        <Label className="text-xs">Existe rappel</Label>
+                      </div>
+                      {currentAudit.rappel_existe && (
+                        <>
+                          <div>
+                            <Label className="text-xs">Detalle rappel</Label>
+                            <Textarea value={currentAudit.rappel_detalle ?? ''} onChange={e => updateField('rappel_detalle', e.target.value)} className="h-16" />
+                          </div>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2">
+                                  <Switch checked={!!currentAudit.rappel_cobrado} onCheckedChange={v => updateField('rappel_cobrado', v)} />
+                                  <Label className="text-xs">¿Se cobra realmente?</Label>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>Muchos clientes tienen rappels pactados que nunca facturan</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          {currentAudit.rappel_existe && !currentAudit.rappel_cobrado && (
+                            <div className="p-3 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-200 flex items-center gap-2">
+                              <DollarSign className="w-4 h-4" />
+                              <span className="text-sm font-medium">RAPPEL PACTADO NO COBRADO — Ahorro inmediato</span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+
+              {/* Sección Logística y envases */}
+              <Collapsible>
+                <Card className="mb-3">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="py-3 flex flex-row items-center justify-between">
+                      <CardTitle className="text-sm">🚛 Logística y envases</CardTitle>
+                      <ChevronDown className="w-4 h-4" />
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-3 pt-0">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!currentAudit.stock_consigna} onCheckedChange={v => updateField('stock_consigna', v)} />
+                        <Label className="text-xs">Stock en consigna</Label>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Gestión envases vacíos</Label>
+                        <Select value={currentAudit.gestion_envases_vacios ?? ''} onValueChange={v => updateField('gestion_envases_vacios', v)}>
+                          <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="devolucion_proveedor">Devolución proveedor</SelectItem>
+                            <SelectItem value="gestion_cliente_residuo">Gestión cliente como residuo</SelectItem>
+                            <SelectItem value="sin_definir">Sin definir</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!currentAudit.coste_envases_incluido} onCheckedChange={v => updateField('coste_envases_incluido', v)} />
+                        <Label className="text-xs">Coste envases incluido</Label>
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+
+              {/* Sección Servicio */}
+              <Collapsible>
+                <Card className="mb-3">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="py-3 flex flex-row items-center justify-between">
+                      <CardTitle className="text-sm">🔧 Servicio</CardTitle>
+                      <ChevronDown className="w-4 h-4" />
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-3 pt-0">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!currentAudit.servicio_tecnico_incluido} onCheckedChange={v => updateField('servicio_tecnico_incluido', v)} />
+                        <Label className="text-xs">Servicio técnico incluido</Label>
+                      </div>
+                      {currentAudit.servicio_tecnico_incluido && (
+                        <div>
+                          <Label className="text-xs">Detalle servicio</Label>
+                          <Input value={currentAudit.detalle_servicio_tecnico ?? ''} onChange={e => updateField('detalle_servicio_tecnico', e.target.value)} />
+                        </div>
+                      )}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-2">
+                              <Switch checked={!!currentAudit.equipos_comodato} onCheckedChange={v => updateField('equipos_comodato', v)} />
+                              <Label className="text-xs">Equipos en comodato</Label>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>Bombas, dosificadores cedidos. Atan al cliente al proveedor.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      {currentAudit.equipos_comodato && (
+                        <div>
+                          <Label className="text-xs">Detalle comodato</Label>
+                          <Input value={currentAudit.detalle_comodato ?? ''} onChange={e => updateField('detalle_comodato', e.target.value)} />
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!currentAudit.clausula_mfn} onCheckedChange={v => updateField('clausula_mfn', v)} />
+                        <Label className="text-xs">Cláusula MFN</Label>
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+
+              {/* Sección Scoring */}
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">⭐ Scoring</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <div className="grid grid-cols-2 gap-3">
+                    {(['score_precio', 'score_condiciones', 'score_servicio', 'score_logistica'] as const).map(field => (
+                      <div key={field}>
+                        <Label className="text-xs capitalize">{field.replace('score_', '')}</Label>
+                        <Select value={currentAudit[field]?.toString() ?? ''} onValueChange={v => {
+                          updateField(field, parseFloat(v));
+                        }}>
+                          <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                          <SelectContent>
+                            {[1, 1.5, 2, 2.5, 3, 3.5, 4].map(v => <SelectItem key={v} value={v.toString()}>{v}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-center pt-2">
+                    <span className="text-2xl font-bold">{scoreMedia ? scoreMedia.toFixed(1) : '—'}</span>
+                    <span className="text-sm text-muted-foreground ml-2">media</span>
+                    {scoreMedia != null && scoreMedia < 2.5 && (
+                      <p className="text-red-600 text-sm font-semibold mt-1">PRIORIDAD RENEGOCIACIÓN</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Facturas */}
