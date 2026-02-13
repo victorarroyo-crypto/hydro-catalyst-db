@@ -92,7 +92,6 @@ export default function ChemProjectLayout() {
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-foreground truncate">{project.nombre_cliente}</h1>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <span>{project.sector}</span>
               {project.fecha_mandato && (
                 <span>Mandato: {format(new Date(project.fecha_mandato), 'dd MMM yyyy', { locale: es })}</span>
               )}

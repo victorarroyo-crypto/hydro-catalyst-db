@@ -16,18 +16,6 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-const SECTORES = [
-  { value: 'farmaceutico', label: 'Farmacéutico' },
-  { value: 'alimentario', label: 'Alimentario' },
-  { value: 'reciclaje', label: 'Reciclaje' },
-  { value: 'quimico', label: 'Químico' },
-  { value: 'automocion', label: 'Automoción' },
-  { value: 'textil', label: 'Textil' },
-  { value: 'papelero', label: 'Papelero' },
-  { value: 'metalurgico', label: 'Metalúrgico' },
-  { value: 'otro', label: 'Otro' },
-];
-
 const ESTADOS = [
   { value: 'prospeccion', label: 'Prospección', color: 'bg-muted text-muted-foreground' },
   { value: 'auditoria', label: 'Auditoría', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
@@ -42,21 +30,15 @@ const getEstadoBadge = (estado: string) => {
   return <Badge variant="outline" className={config.color}>{config.label}</Badge>;
 };
 
-const getSectorLabel = (sector: string) => {
-  return SECTORES.find(s => s.value === sector)?.label || sector;
-};
-
 export default function ChemProjectsList() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [filterEstado, setFilterEstado] = useState<string>('all');
-  const [filterSector, setFilterSector] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [form, setForm] = useState({
     nombre_cliente: '',
-    sector: 'otro',
     contacto_principal: '',
     fecha_inicio: new Date().toISOString().split('T')[0],
   });
@@ -81,7 +63,6 @@ export default function ChemProjectsList() {
         .insert({
           user_id: user.id,
           nombre_cliente: form.nombre_cliente,
-          sector: form.sector,
           contacto_principal: form.contacto_principal,
           fecha_inicio: form.fecha_inicio,
         })
@@ -94,7 +75,7 @@ export default function ChemProjectsList() {
       queryClient.invalidateQueries({ queryKey: ['chem-projects'] });
       toast.success('Proyecto creado correctamente');
       setOpen(false);
-      setForm({ nombre_cliente: '', sector: 'otro', contacto_principal: '', fecha_inicio: new Date().toISOString().split('T')[0] });
+      setForm({ nombre_cliente: '', contacto_principal: '', fecha_inicio: new Date().toISOString().split('T')[0] });
       navigate(`/quimicos/${data.id}`);
     },
     onError: (err: any) => toast.error(err.message),
@@ -102,7 +83,6 @@ export default function ChemProjectsList() {
 
   const filtered = projects.filter((p: any) => {
     if (filterEstado !== 'all' && p.estado !== filterEstado) return false;
-    if (filterSector !== 'all' && p.sector !== filterSector) return false;
     if (searchTerm && !p.nombre_cliente.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     return true;
   });
@@ -136,15 +116,6 @@ export default function ChemProjectsList() {
                 <Input value={form.nombre_cliente} onChange={e => setForm(f => ({ ...f, nombre_cliente: e.target.value }))} placeholder="Empresa S.A." />
               </div>
               <div>
-                <Label>Sector</Label>
-                <Select value={form.sector} onValueChange={v => setForm(f => ({ ...f, sector: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {SECTORES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
                 <Label>Contacto principal</Label>
                 <Input value={form.contacto_principal} onChange={e => setForm(f => ({ ...f, contacto_principal: e.target.value }))} placeholder="Nombre del contacto" />
               </div>
@@ -176,13 +147,6 @@ export default function ChemProjectsList() {
                 {ESTADOS.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={filterSector} onValueChange={setFilterSector}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="Sector" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los sectores</SelectItem>
-                {SECTORES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -194,7 +158,6 @@ export default function ChemProjectsList() {
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Sector</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Fecha inicio</TableHead>
                 <TableHead className="text-right">Gasto total</TableHead>
@@ -203,14 +166,13 @@ export default function ChemProjectsList() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Cargando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Cargando...</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No hay proyectos. Crea uno nuevo para empezar.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No hay proyectos. Crea uno nuevo para empezar.</TableCell></TableRow>
               ) : (
                 filtered.map((p: any) => (
                   <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/quimicos/${p.id}`)}>
                     <TableCell className="font-medium">{p.nombre_cliente}</TableCell>
-                    <TableCell>{getSectorLabel(p.sector)}</TableCell>
                     <TableCell>{getEstadoBadge(p.estado)}</TableCell>
                     <TableCell>{p.fecha_inicio ? format(new Date(p.fecha_inicio), 'dd MMM yyyy', { locale: es }) : '—'}</TableCell>
                     <TableCell className="text-right font-mono">{formatCurrency(p.gasto_total_anual)}</TableCell>
