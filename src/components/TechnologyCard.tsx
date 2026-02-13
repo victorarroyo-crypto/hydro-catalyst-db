@@ -95,7 +95,6 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
                 />
               </>
             )}
-            <TierBadge tier={technology.tier} evidenceLevel={technology.evidence_level} />
             <TRLBadge trl={technology.trl} size="sm" />
           </div>
         </div>
@@ -116,6 +115,9 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
         </div>
 
         <div className="mt-3 pt-3 border-t border-border space-y-2">
+          {/* Tier badge */}
+          <TierBadge tier={technology.tier} evidenceLevel={technology.evidence_level} />
+          
           {/* Taxonomy badges - priorizar arrays de 3 niveles */}
           {hasTaxonomy && (
             <div className="flex flex-wrap gap-1.5">
