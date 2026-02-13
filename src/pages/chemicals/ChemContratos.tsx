@@ -637,6 +637,74 @@ export default function ChemContratos() {
 
           {/* Condiciones */}
           <TabsContent value="condiciones" className="space-y-3">
+            {/* Auto-fill from extracted data */}
+            {(() => {
+              const docWithData = documents.find((d: any) => d.datos_extraidos?.supplier_name);
+              if (!docWithData) return null;
+              const ext = docWithData.datos_extraidos;
+              const auditEmpty = !currentAudit.plazo_pago_dias && !currentAudit.duracion_contrato_meses && !currentAudit.fecha_vencimiento;
+              
+              const handleAutoFill = async () => {
+                const fieldsToUpdate: Record<string, any> = {};
+                const mapping: Record<string, any> = {
+                  plazo_pago_dias: ext.plazo_pago_dias,
+                  pronto_pago_descuento_pct: ext.pronto_pago_descuento_pct,
+                  pronto_pago_dias: ext.pronto_pago_dias,
+                  duracion_contrato_meses: ext.duracion_contrato_meses,
+                  fecha_vencimiento: ext.fecha_vencimiento,
+                  renovacion_automatica: ext.renovacion_automatica,
+                  preaviso_no_renovacion_dias: ext.preaviso_no_renovacion_dias,
+                  volumen_comprometido_anual: ext.volumen_comprometido_anual,
+                  take_or_pay: ext.take_or_pay,
+                  penalizacion_take_or_pay: ext.penalizacion_take_or_pay,
+                  formula_revision_existe: ext.formula_revision_existe ?? !!ext.formula_revision_detalle,
+                  formula_revision_detalle: ext.formula_revision_detalle,
+                  indice_vinculado: ext.indice_vinculado,
+                  frecuencia_revision: ext.frecuencia_revision,
+                  simetria_subida_bajada: ext.simetria_subida_bajada,
+                  cap_subida_pct: ext.cap_subida_pct,
+                  floor_bajada_pct: ext.floor_bajada_pct,
+                  rappel_existe: ext.rappel_existe ?? !!ext.rappel_detalle,
+                  rappel_detalle: ext.rappel_detalle,
+                  stock_consigna: ext.stock_consigna,
+                  gestion_envases_vacios: ext.gestion_envases_vacios,
+                  coste_envases_incluido: ext.coste_envases_incluido,
+                  servicio_tecnico_incluido: ext.servicio_tecnico_incluido,
+                  detalle_servicio_tecnico: ext.detalle_servicio_tecnico,
+                  equipos_comodato: ext.equipos_comodato,
+                  detalle_comodato: ext.detalle_comodato,
+                  clausula_mfn: ext.clausula_mfn,
+                  clausula_salida: ext.clausula_salida ? true : false,
+                  banda_volumen_min: ext.banda_volumen_min,
+                  banda_volumen_max: ext.banda_volumen_max,
+                };
+                for (const [k, v] of Object.entries(mapping)) {
+                  if (v != null) fieldsToUpdate[k] = v;
+                }
+                if (Object.keys(fieldsToUpdate).length > 0) {
+                  updateAuditMutation.mutate({ id: selectedAudit!, data: fieldsToUpdate });
+                  toast.success(`${Object.keys(fieldsToUpdate).length} campos rellenados desde la extracción IA`);
+                }
+              };
+
+              return (
+                <Card className="border-[#32b4cd]/30 bg-[#32b4cd]/5">
+                  <CardContent className="p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="w-4 h-4 text-[#32b4cd]" />
+                      <span className="text-sm">
+                        Datos extraídos de <strong>{ext.supplier_name}</strong> disponibles
+                        {auditEmpty && ' — los campos están vacíos'}
+                      </span>
+                    </div>
+                    <Button size="sm" onClick={handleAutoFill} className="bg-[#307177] hover:bg-[#307177]/90 text-white">
+                      {auditEmpty ? 'Rellenar todos los campos' : 'Actualizar desde extracción'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
             <Card>
               <CardContent className="p-3">
                 <div className="flex items-center gap-2">
