@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -64,7 +64,7 @@ export default function ChemProjectsList() {
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['chem-projects'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_projects')
         .select('*')
         .order('created_at', { ascending: false });
@@ -76,7 +76,7 @@ export default function ChemProjectsList() {
   const createProject = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('No autenticado');
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_projects')
         .insert({
           user_id: user.id,

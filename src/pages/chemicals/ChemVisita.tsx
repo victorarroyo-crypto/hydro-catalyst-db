@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -96,7 +96,7 @@ export default function ChemVisita() {
   const { data: visit } = useQuery({
     queryKey: ['chem-visit', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_plant_visits').select('*').eq('project_id', projectId!).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      const { data, error } = await externalSupabase.from('chem_plant_visits').select('*').eq('project_id', projectId!).order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -106,7 +106,7 @@ export default function ChemVisita() {
   const createMutation = useMutation({
     mutationFn: async () => {
       const checklist = CHECKLIST_TEMPLATE.flatMap(z => z.items.map(item => ({ zona: z.zona, item, estado: '', observacion: '', impacto: 0 })));
-      const { error } = await supabase.from('chem_plant_visits').insert({ project_id: projectId!, checklist });
+      const { error } = await externalSupabase.from('chem_plant_visits').insert({ project_id: projectId!, checklist });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -119,7 +119,7 @@ export default function ChemVisita() {
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
       if (!visit) return;
-      const { error } = await supabase.from('chem_plant_visits').update(data).eq('id', visit.id);
+      const { error } = await externalSupabase.from('chem_plant_visits').update(data).eq('id', visit.id);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chem-visit', projectId] }),

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +37,7 @@ export default function ChemContratos() {
   const { data: audits = [] } = useQuery({
     queryKey: ['chem-audits', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_contract_audits')
         .select('*')
         .eq('project_id', projectId!);
@@ -50,7 +51,7 @@ export default function ChemContratos() {
     queryKey: ['chem-contract-docs', projectId, selectedAudit],
     queryFn: async () => {
       if (!selectedAudit) return [];
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_contract_documents')
         .select('*')
         .eq('audit_id', selectedAudit);
@@ -62,7 +63,7 @@ export default function ChemContratos() {
 
   const createAuditMutation = useMutation({
     mutationFn: async (nombre: string) => {
-      const { error } = await supabase.from('chem_contract_audits').insert({
+      const { error } = await externalSupabase.from('chem_contract_audits').insert({
         project_id: projectId!,
         proveedor_nombre: nombre,
       });
@@ -79,7 +80,7 @@ export default function ChemContratos() {
 
   const updateAuditMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const { error } = await supabase.from('chem_contract_audits').update(data).eq('id', id);
+      const { error } = await externalSupabase.from('chem_contract_audits').update(data).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -96,7 +97,7 @@ export default function ChemContratos() {
         const path = doc.file_url.replace(`${SUPABASE_URL}/storage/v1/object/public/chem-documents/`, '');
         await supabase.storage.from('chem-documents').remove([path]);
       }
-      const { error } = await supabase.from('chem_contract_documents').delete().eq('id', docId);
+      const { error } = await externalSupabase.from('chem_contract_documents').delete().eq('id', docId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -123,7 +124,7 @@ export default function ChemContratos() {
         .from('chem-documents')
         .getPublicUrl(storagePath);
 
-      const { error: dbError } = await supabase.from('chem_contract_documents').insert({
+      const { error: dbError } = await externalSupabase.from('chem_contract_documents').insert({
         audit_id: selectedAudit,
         project_id: projectId,
         nombre: uploadFile.name,

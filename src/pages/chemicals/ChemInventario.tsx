@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -107,7 +107,7 @@ export default function ChemInventario() {
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['chem-products', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_products')
         .select('*')
         .eq('project_id', projectId!)
@@ -121,10 +121,10 @@ export default function ChemInventario() {
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
       if (editingId) {
-        const { error } = await supabase.from('chem_products').update(data).eq('id', editingId);
+        const { error } = await externalSupabase.from('chem_products').update(data).eq('id', editingId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('chem_products').insert({ ...data, project_id: projectId });
+        const { error } = await externalSupabase.from('chem_products').insert({ ...data, project_id: projectId });
         if (error) throw error;
       }
     },
@@ -140,7 +140,7 @@ export default function ChemInventario() {
 
   const inlineSaveMutation = useMutation({
     mutationFn: async ({ id, field, value }: { id: string; field: string; value: number }) => {
-      const { error } = await supabase.from('chem_products').update({ [field]: value }).eq('id', id);
+      const { error } = await externalSupabase.from('chem_products').update({ [field]: value }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

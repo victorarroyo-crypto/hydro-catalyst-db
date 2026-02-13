@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,7 +39,7 @@ export default function ChemRfqs() {
   const { data: rfqs = [] } = useQuery({
     queryKey: ['chem-rfqs', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_rfqs').select('*').eq('project_id', projectId!).order('created_at', { ascending: false });
+      const { data, error } = await externalSupabase.from('chem_rfqs').select('*').eq('project_id', projectId!).order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -49,7 +49,7 @@ export default function ChemRfqs() {
   const { data: products = [] } = useQuery({
     queryKey: ['chem-products', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_products').select('*').eq('project_id', projectId!);
+      const { data, error } = await externalSupabase.from('chem_products').select('*').eq('project_id', projectId!);
       if (error) throw error;
       return data || [];
     },
@@ -60,7 +60,7 @@ export default function ChemRfqs() {
     queryKey: ['chem-rfq-products', selectedRfq],
     queryFn: async () => {
       if (!selectedRfq) return [];
-      const { data, error } = await supabase.from('chem_rfq_products').select('*').eq('rfq_id', selectedRfq);
+      const { data, error } = await externalSupabase.from('chem_rfq_products').select('*').eq('rfq_id', selectedRfq);
       if (error) throw error;
       return data || [];
     },
@@ -71,7 +71,7 @@ export default function ChemRfqs() {
     queryKey: ['chem-offers', selectedRfq],
     queryFn: async () => {
       if (!selectedRfq) return [];
-      const { data, error } = await supabase.from('chem_offers').select('*, chem_suppliers(nombre)').eq('rfq_id', selectedRfq);
+      const { data, error } = await externalSupabase.from('chem_offers').select('*, chem_suppliers(nombre)').eq('rfq_id', selectedRfq);
       if (error) throw error;
       return data || [];
     },
@@ -80,7 +80,7 @@ export default function ChemRfqs() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from('chem_rfqs').insert({ project_id: projectId!, titulo });
+      const { error } = await externalSupabase.from('chem_rfqs').insert({ project_id: projectId!, titulo });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -94,7 +94,7 @@ export default function ChemRfqs() {
 
   const updateRfqMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const { error } = await supabase.from('chem_rfqs').update(data).eq('id', id);
+      const { error } = await externalSupabase.from('chem_rfqs').update(data).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

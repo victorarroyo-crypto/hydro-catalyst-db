@@ -1,7 +1,7 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,7 +20,7 @@ export default function ChemAhorro() {
   const { data: savings = [] } = useQuery({
     queryKey: ['chem-savings', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_savings').select('*').eq('project_id', projectId!);
+      const { data, error } = await externalSupabase.from('chem_savings').select('*').eq('project_id', projectId!);
       if (error) throw error;
       return data || [];
     },
@@ -30,7 +30,7 @@ export default function ChemAhorro() {
   const { data: products = [] } = useQuery({
     queryKey: ['chem-products', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_products').select('*').eq('project_id', projectId!);
+      const { data, error } = await externalSupabase.from('chem_products').select('*').eq('project_id', projectId!);
       if (error) throw error;
       return data || [];
     },
@@ -42,7 +42,7 @@ export default function ChemAhorro() {
     queryFn: async () => {
       const savingIds = savings.map((s: any) => s.id);
       if (savingIds.length === 0) return [];
-      const { data, error } = await supabase.from('chem_savings_monthly').select('*').in('saving_id', savingIds).order('mes');
+      const { data, error } = await externalSupabase.from('chem_savings_monthly').select('*').in('saving_id', savingIds).order('mes');
       if (error) throw error;
       return data || [];
     },

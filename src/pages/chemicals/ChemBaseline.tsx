@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,7 +33,7 @@ export default function ChemBaseline() {
   const { data: products = [] } = useQuery({
     queryKey: ['chem-products', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_products').select('*').eq('project_id', projectId!).order('consumo_anual_kg', { ascending: false });
+      const { data, error } = await externalSupabase.from('chem_products').select('*').eq('project_id', projectId!).order('consumo_anual_kg', { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -43,7 +43,7 @@ export default function ChemBaseline() {
   const { data: baselines = [] } = useQuery({
     queryKey: ['chem-baselines', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_baselines').select('*').eq('project_id', projectId!);
+      const { data, error } = await externalSupabase.from('chem_baselines').select('*').eq('project_id', projectId!);
       if (error) throw error;
       return data || [];
     },
@@ -53,7 +53,7 @@ export default function ChemBaseline() {
   const { data: project } = useQuery({
     queryKey: ['chem-project', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_projects').select('*').eq('id', projectId!).single();
+      const { data, error } = await externalSupabase.from('chem_projects').select('*').eq('id', projectId!).single();
       if (error) throw error;
       return data;
     },
@@ -64,10 +64,10 @@ export default function ChemBaseline() {
     mutationFn: async ({ productId, data }: { productId: string; data: any }) => {
       const existing = baselines.find((b: any) => b.product_id === productId);
       if (existing) {
-        const { error } = await supabase.from('chem_baselines').update(data).eq('id', existing.id);
+        const { error } = await externalSupabase.from('chem_baselines').update(data).eq('id', existing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('chem_baselines').insert({ ...data, project_id: projectId, product_id: productId });
+        const { error } = await externalSupabase.from('chem_baselines').insert({ ...data, project_id: projectId, product_id: productId });
         if (error) throw error;
       }
     },

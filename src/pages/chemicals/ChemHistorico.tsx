@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +26,7 @@ export default function ChemHistorico() {
   const { data: products = [] } = useQuery({
     queryKey: ['chem-products', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_products').select('*').eq('project_id', projectId!).order('nombre_comercial');
+      const { data, error } = await externalSupabase.from('chem_products').select('*').eq('project_id', projectId!).order('nombre_comercial');
       if (error) throw error;
       return data || [];
     },
@@ -39,7 +39,7 @@ export default function ChemHistorico() {
     queryKey: ['chem-price-history', selectedProduct],
     queryFn: async () => {
       if (!selectedProduct) return [];
-      const { data, error } = await supabase.from('chem_price_history').select('*').eq('product_id', selectedProduct).order('mes', { ascending: true });
+      const { data, error } = await externalSupabase.from('chem_price_history').select('*').eq('product_id', selectedProduct).order('mes', { ascending: true });
       if (error) throw error;
       return data || [];
     },
@@ -48,7 +48,7 @@ export default function ChemHistorico() {
 
   const saveMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const { error } = await supabase.from('chem_price_history').update(data).eq('id', id);
+      const { error } = await externalSupabase.from('chem_price_history').update(data).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -59,7 +59,7 @@ export default function ChemHistorico() {
 
   const addMonthMutation = useMutation({
     mutationFn: async (mes: string) => {
-      const { error } = await supabase.from('chem_price_history').insert({ project_id: projectId!, product_id: selectedProduct, mes });
+      const { error } = await externalSupabase.from('chem_price_history').insert({ project_id: projectId!, product_id: selectedProduct, mes });
       if (error) throw error;
     },
     onSuccess: () => {
