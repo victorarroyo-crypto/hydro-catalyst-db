@@ -1,0 +1,644 @@
+import React, { useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { toast } from 'sonner';
+import { ChevronDown, Plus, Upload, AlertTriangle, DollarSign, Building2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+export default function ChemContratos() {
+  const { projectId } = useParams();
+  const queryClient = useQueryClient();
+  const [selectedAudit, setSelectedAudit] = useState<string | null>(null);
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newProveedorNombre, setNewProveedorNombre] = useState('');
+
+  const { data: audits = [] } = useQuery({
+    queryKey: ['chem-audits', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('chem_contract_audits')
+        .select('*')
+        .eq('project_id', projectId!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!projectId,
+  });
+
+  const { data: documents = [] } = useQuery({
+    queryKey: ['chem-contract-docs', projectId, selectedAudit],
+    queryFn: async () => {
+      if (!selectedAudit) return [];
+      const { data, error } = await supabase
+        .from('chem_contract_documents')
+        .select('*')
+        .eq('audit_id', selectedAudit);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedAudit,
+  });
+
+  const createAuditMutation = useMutation({
+    mutationFn: async (nombre: string) => {
+      const { error } = await supabase.from('chem_contract_audits').insert({
+        project_id: projectId!,
+        proveedor_nombre: nombre,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chem-audits', projectId] });
+      toast.success('Proveedor añadido');
+      setShowNewModal(false);
+      setNewProveedorNombre('');
+    },
+    onError: () => toast.error('Error al crear'),
+  });
+
+  const updateAuditMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const { error } = await supabase.from('chem_contract_audits').update(data).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chem-audits', projectId] });
+      toast.success('Actualizado');
+    },
+    onError: () => toast.error('Error al actualizar'),
+  });
+
+  const currentAudit = audits.find((a: any) => a.id === selectedAudit);
+
+  const getScoreBar = (score: number | null, label: string) => {
+    const val = score || 0;
+    const pct = (val / 4) * 100;
+    const color = val < 2.5 ? 'bg-red-500' : val < 3 ? 'bg-yellow-500' : 'bg-green-500';
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-20 text-muted-foreground">{label}</span>
+        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+          <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="w-6 text-right font-mono">{val > 0 ? val.toFixed(1) : '—'}</span>
+      </div>
+    );
+  };
+
+  const updateField = (field: string, value: any) => {
+    if (!selectedAudit) return;
+    updateAuditMutation.mutate({ id: selectedAudit, data: { [field]: value } });
+  };
+
+  // Calculate completion
+  const getCompletion = (audit: any) => {
+    if (!audit) return { completed: 0, total: 0 };
+    const fields = ['plazo_pago_dias', 'duracion_meses', 'fecha_vencimiento', 'volumen_comprometido',
+      'score_precio', 'score_condiciones', 'score_servicio', 'score_logistica'];
+    const completed = fields.filter(f => audit[f] != null).length;
+    return { completed, total: fields.length };
+  };
+
+  const venceSoon = (fecha: string | null) => {
+    if (!fecha) return false;
+    const d = new Date(fecha);
+    const in60 = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+    return d < in60 && d > new Date();
+  };
+
+  const calcTAE = (descuento: number | null, plazoNormal: number | null, plazoProonto: number | null) => {
+    if (!descuento || !plazoNormal || !plazoProonto || plazoNormal <= plazoProonto) return null;
+    const desc = descuento / 100;
+    const tae = (desc / (1 - desc)) * (365 / (plazoNormal - plazoProonto)) * 100;
+    return tae;
+  };
+
+  if (selectedAudit && currentAudit) {
+    const completion = getCompletion(currentAudit);
+    const completionPct = completion.total > 0 ? (completion.completed / completion.total) * 100 : 0;
+
+    return (
+      <div className="p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedAudit(null)}>← Volver</Button>
+          <h2 className="text-lg font-semibold">{currentAudit.proveedor_nombre}</h2>
+          {currentAudit.score_media != null && currentAudit.score_media < 2.5 && (
+            <Badge variant="destructive">PRIORIDAD RENEGOCIACIÓN</Badge>
+          )}
+          {currentAudit.rappel_existe && !currentAudit.rappel_cobrado && (
+            <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">RAPPEL NO COBRADO</Badge>
+          )}
+        </div>
+
+        <Tabs defaultValue="condiciones">
+          <TabsList>
+            <TabsTrigger value="documentos">Documentos</TabsTrigger>
+            <TabsTrigger value="condiciones">Condiciones</TabsTrigger>
+            <TabsTrigger value="facturas">Facturas</TabsTrigger>
+          </TabsList>
+
+          {/* Documentos */}
+          <TabsContent value="documentos">
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Documentos del contrato</CardTitle>
+                  <Button size="sm" variant="outline" disabled><Upload className="w-4 h-4 mr-1" /> Subir documento</Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {documents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">No hay documentos subidos.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Estado extracción</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {documents.map((d: any) => (
+                        <TableRow key={d.id}>
+                          <TableCell>{d.nombre}</TableCell>
+                          <TableCell><Badge variant="outline">{d.tipo}</Badge></TableCell>
+                          <TableCell>
+                            <Badge variant={d.estado_extraccion === 'completado' ? 'default' : 'secondary'}>
+                              {d.estado_extraccion}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Condiciones */}
+          <TabsContent value="condiciones" className="space-y-3">
+            <Card>
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{completion.completed} de {completion.total} campos completados</span>
+                  <Progress value={completionPct} className="flex-1 h-2" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Sección Pago */}
+            <Collapsible defaultOpen>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="py-3 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm">💰 Pago</CardTitle>
+                    <ChevronDown className="w-4 h-4" />
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3 pt-0">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-xs">Plazo pago días</Label>
+                        <Input type="number" value={currentAudit.plazo_pago_dias ?? ''} onChange={e => updateField('plazo_pago_dias', e.target.value ? parseInt(e.target.value) : null)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Pronto pago descuento %</Label>
+                        <Input type="number" step="0.1" value={currentAudit.pronto_pago_descuento ?? ''} onChange={e => updateField('pronto_pago_descuento', e.target.value ? parseFloat(e.target.value) : null)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Pronto pago días</Label>
+                        <Input type="number" value={currentAudit.pronto_pago_dias ?? ''} onChange={e => updateField('pronto_pago_dias', e.target.value ? parseInt(e.target.value) : null)} />
+                      </div>
+                    </div>
+                    {currentAudit.pronto_pago_descuento && currentAudit.pronto_pago_dias && (
+                      (() => {
+                        const tae = calcTAE(currentAudit.pronto_pago_descuento, currentAudit.plazo_pago_dias, currentAudit.pronto_pago_dias);
+                        if (tae === null) return null;
+                        const compensa = tae < 7;
+                        return (
+                          <div className={`p-2 rounded text-xs ${compensa ? 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200' : 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'}`}>
+                            TAE anualizada: {tae.toFixed(1)}% → {compensa ? '✓ Compensa' : '✕ No compensa'}
+                          </div>
+                        );
+                      })()
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* Sección Duración */}
+            <Collapsible defaultOpen>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="py-3 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm">📅 Duración</CardTitle>
+                    <ChevronDown className="w-4 h-4" />
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3 pt-0">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-xs">Duración meses</Label>
+                        <Input type="number" value={currentAudit.duracion_meses ?? ''} onChange={e => updateField('duracion_meses', e.target.value ? parseInt(e.target.value) : null)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Fecha vencimiento</Label>
+                        <Input type="date" value={currentAudit.fecha_vencimiento ?? ''} onChange={e => updateField('fecha_vencimiento', e.target.value || null)} />
+                        {venceSoon(currentAudit.fecha_vencimiento) && <Badge variant="destructive" className="mt-1 text-[10px]">VENCE PRONTO</Badge>}
+                      </div>
+                      <div>
+                        <Label className="text-xs">Preaviso días</Label>
+                        <Input type="number" value={currentAudit.preaviso_dias ?? ''} onChange={e => updateField('preaviso_dias', e.target.value ? parseInt(e.target.value) : null)} />
+                      </div>
+                    </div>
+                    <div className="flex gap-6">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!currentAudit.renovacion_automatica} onCheckedChange={v => updateField('renovacion_automatica', v)} />
+                        <Label className="text-xs">Renovación automática</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!currentAudit.clausula_salida} onCheckedChange={v => updateField('clausula_salida', v)} />
+                        <Label className="text-xs">Cláusula salida</Label>
+                      </div>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* Sección Volúmenes */}
+            <Collapsible>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="py-3 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm">📦 Volúmenes</CardTitle>
+                    <ChevronDown className="w-4 h-4" />
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3 pt-0">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-xs">Vol. comprometido anual</Label>
+                        <Input type="number" value={currentAudit.volumen_comprometido ?? ''} onChange={e => updateField('volumen_comprometido', e.target.value ? parseFloat(e.target.value) : null)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Banda mín</Label>
+                        <Input type="number" value={currentAudit.banda_min ?? ''} onChange={e => updateField('banda_min', e.target.value ? parseFloat(e.target.value) : null)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Banda máx</Label>
+                        <Input type="number" value={currentAudit.banda_max ?? ''} onChange={e => updateField('banda_max', e.target.value ? parseFloat(e.target.value) : null)} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch checked={!!currentAudit.take_or_pay} onCheckedChange={v => updateField('take_or_pay', v)} />
+                      <Label className="text-xs">Take-or-pay</Label>
+                    </div>
+                    {currentAudit.take_or_pay && (
+                      <div>
+                        <Label className="text-xs">Detalle penalización</Label>
+                        <Textarea value={currentAudit.penalizacion_detalle ?? ''} onChange={e => updateField('penalizacion_detalle', e.target.value)} className="h-16" />
+                      </div>
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* Sección Revisión de precios */}
+            <Collapsible>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="py-3 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm">📊 Revisión de precios</CardTitle>
+                    <ChevronDown className="w-4 h-4" />
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3 pt-0">
+                    <div className="flex items-center gap-2">
+                      <Switch checked={!!currentAudit.existe_formula} onCheckedChange={v => updateField('existe_formula', v)} />
+                      <Label className="text-xs">Existe fórmula de revisión</Label>
+                    </div>
+                    {currentAudit.existe_formula && (
+                      <>
+                        <div>
+                          <Label className="text-xs">Detalle fórmula</Label>
+                          <Textarea value={currentAudit.formula_detalle ?? ''} onChange={e => updateField('formula_detalle', e.target.value)} className="h-16" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Índice vinculado</Label>
+                            <Input value={currentAudit.indice_vinculado ?? ''} onChange={e => updateField('indice_vinculado', e.target.value)} />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Frecuencia revisión</Label>
+                            <Select value={currentAudit.frecuencia_revision ?? ''} onValueChange={v => updateField('frecuencia_revision', v)}>
+                              <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="mensual">Mensual</SelectItem>
+                                <SelectItem value="trimestral">Trimestral</SelectItem>
+                                <SelectItem value="semestral">Semestral</SelectItem>
+                                <SelectItem value="anual">Anual</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch checked={!!currentAudit.simetria} onCheckedChange={v => updateField('simetria', v)} />
+                          <Label className="text-xs">Simetría subida/bajada</Label>
+                        </div>
+                        {!currentAudit.simetria && currentAudit.existe_formula && (
+                          <div className="p-2 rounded text-xs bg-yellow-50 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+                            ⚠ Fórmula asimétrica: las subidas se aplican diferente que las bajadas
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Cap subida %</Label>
+                            <Input type="number" step="0.1" value={currentAudit.cap_subida ?? ''} onChange={e => updateField('cap_subida', e.target.value ? parseFloat(e.target.value) : null)} />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Floor bajada %</Label>
+                            <Input type="number" step="0.1" value={currentAudit.floor_bajada ?? ''} onChange={e => updateField('floor_bajada', e.target.value ? parseFloat(e.target.value) : null)} />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* Sección Rappels */}
+            <Collapsible>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="py-3 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm">💸 Rappels</CardTitle>
+                    <ChevronDown className="w-4 h-4" />
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3 pt-0">
+                    <div className="flex items-center gap-2">
+                      <Switch checked={!!currentAudit.rappel_existe} onCheckedChange={v => updateField('rappel_existe', v)} />
+                      <Label className="text-xs">Existe rappel</Label>
+                    </div>
+                    {currentAudit.rappel_existe && (
+                      <>
+                        <div>
+                          <Label className="text-xs">Detalle rappel</Label>
+                          <Textarea value={currentAudit.rappel_detalle ?? ''} onChange={e => updateField('rappel_detalle', e.target.value)} className="h-16" />
+                        </div>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-2">
+                                <Switch checked={!!currentAudit.rappel_cobrado} onCheckedChange={v => updateField('rappel_cobrado', v)} />
+                                <Label className="text-xs">¿Se cobra realmente?</Label>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>Muchos clientes tienen rappels pactados que nunca facturan</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {currentAudit.rappel_existe && !currentAudit.rappel_cobrado && (
+                          <div className="p-3 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-200 flex items-center gap-2">
+                            <DollarSign className="w-4 h-4" />
+                            <span className="text-sm font-medium">RAPPEL PACTADO NO COBRADO — Ahorro inmediato</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* Sección Logística y envases */}
+            <Collapsible>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="py-3 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm">🚛 Logística y envases</CardTitle>
+                    <ChevronDown className="w-4 h-4" />
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3 pt-0">
+                    <div className="flex items-center gap-2">
+                      <Switch checked={!!currentAudit.stock_consigna} onCheckedChange={v => updateField('stock_consigna', v)} />
+                      <Label className="text-xs">Stock en consigna</Label>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Gestión envases vacíos</Label>
+                      <Select value={currentAudit.gestion_envases ?? ''} onValueChange={v => updateField('gestion_envases', v)}>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="devolucion_proveedor">Devolución proveedor</SelectItem>
+                          <SelectItem value="gestion_cliente">Gestión cliente como residuo</SelectItem>
+                          <SelectItem value="sin_definir">Sin definir</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch checked={!!currentAudit.coste_envases_incluido} onCheckedChange={v => updateField('coste_envases_incluido', v)} />
+                      <Label className="text-xs">Coste envases incluido</Label>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* Sección Servicio */}
+            <Collapsible>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="py-3 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm">🔧 Servicio</CardTitle>
+                    <ChevronDown className="w-4 h-4" />
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3 pt-0">
+                    <div className="flex items-center gap-2">
+                      <Switch checked={!!currentAudit.servicio_tecnico} onCheckedChange={v => updateField('servicio_tecnico', v)} />
+                      <Label className="text-xs">Servicio técnico incluido</Label>
+                    </div>
+                    {currentAudit.servicio_tecnico && (
+                      <div>
+                        <Label className="text-xs">Detalle servicio</Label>
+                        <Input value={currentAudit.servicio_tecnico_detalle ?? ''} onChange={e => updateField('servicio_tecnico_detalle', e.target.value)} />
+                      </div>
+                    )}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-2">
+                            <Switch checked={!!currentAudit.equipos_comodato} onCheckedChange={v => updateField('equipos_comodato', v)} />
+                            <Label className="text-xs">Equipos en comodato</Label>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>Bombas, dosificadores cedidos. Atan al cliente al proveedor.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    {currentAudit.equipos_comodato && (
+                      <div>
+                        <Label className="text-xs">Detalle comodato</Label>
+                        <Input value={currentAudit.equipos_comodato_detalle ?? ''} onChange={e => updateField('equipos_comodato_detalle', e.target.value)} />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <Switch checked={!!currentAudit.clausula_mfn} onCheckedChange={v => updateField('clausula_mfn', v)} />
+                      <Label className="text-xs">Cláusula MFN</Label>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* Sección Scoring */}
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">⭐ Scoring</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
+                <div className="grid grid-cols-2 gap-3">
+                  {(['score_precio', 'score_condiciones', 'score_servicio', 'score_logistica'] as const).map(field => (
+                    <div key={field}>
+                      <Label className="text-xs capitalize">{field.replace('score_', '')}</Label>
+                      <Select value={currentAudit[field]?.toString() ?? ''} onValueChange={v => {
+                        const val = parseFloat(v);
+                        updateField(field, val);
+                        // Auto-calc media
+                        const scores = { score_precio: currentAudit.score_precio, score_condiciones: currentAudit.score_condiciones, score_servicio: currentAudit.score_servicio, score_logistica: currentAudit.score_logistica, [field]: val };
+                        const vals = Object.values(scores).filter(v => v != null) as number[];
+                        if (vals.length > 0) updateField('score_media', vals.reduce((a, b) => a + b, 0) / vals.length);
+                      }}>
+                        <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectContent>
+                          {[1, 1.5, 2, 2.5, 3, 3.5, 4].map(v => <SelectItem key={v} value={v.toString()}>{v}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-center pt-2">
+                  <span className="text-2xl font-bold">{currentAudit.score_media ? currentAudit.score_media.toFixed(1) : '—'}</span>
+                  <span className="text-sm text-muted-foreground ml-2">media</span>
+                  {currentAudit.score_media != null && currentAudit.score_media < 2.5 && (
+                    <p className="text-red-600 text-sm font-semibold mt-1">PRIORIDAD RENEGOCIACIÓN</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Facturas */}
+          <TabsContent value="facturas">
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Facturas</CardTitle>
+                  <Button size="sm" variant="outline" disabled><Upload className="w-4 h-4 mr-1" /> Subir facturas</Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground text-center py-8">La extracción de facturas requiere procesamiento IA. Suba PDFs para analizar.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    );
+  }
+
+  // Vista principal: cards de proveedores
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-foreground">Auditoría Contractual</h2>
+        <Button size="sm" onClick={() => setShowNewModal(true)}>
+          <Plus className="w-4 h-4 mr-1" /> Añadir proveedor
+        </Button>
+      </div>
+
+      {audits.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Building2 className="w-10 h-10 text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground">No hay auditorías de proveedores. Añade uno para empezar.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {audits.map((audit: any) => (
+            <Card key={audit.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setSelectedAudit(audit.id)}>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">{audit.proveedor_nombre}</h3>
+                  {audit.score_media != null && (
+                    <span className={`text-lg font-bold ${audit.score_media < 2.5 ? 'text-red-600' : audit.score_media < 3 ? 'text-yellow-600' : 'text-green-600'}`}>
+                      {audit.score_media.toFixed(1)}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {getScoreBar(audit.score_precio, 'Precio')}
+                  {getScoreBar(audit.score_condiciones, 'Condiciones')}
+                  {getScoreBar(audit.score_servicio, 'Servicio')}
+                  {getScoreBar(audit.score_logistica, 'Logística')}
+                </div>
+                <div className="flex gap-1 flex-wrap">
+                  {audit.score_media != null && audit.score_media < 2.5 && (
+                    <Badge variant="destructive" className="text-[10px]">PRIORIDAD RENEGOCIACIÓN</Badge>
+                  )}
+                  {audit.rappel_existe && !audit.rappel_cobrado && (
+                    <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 text-[10px]">RAPPEL NO COBRADO</Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Modal nuevo proveedor */}
+      <Dialog open={showNewModal} onOpenChange={setShowNewModal}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Añadir proveedor</DialogTitle></DialogHeader>
+          <div>
+            <Label>Nombre del proveedor</Label>
+            <Input value={newProveedorNombre} onChange={e => setNewProveedorNombre(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewModal(false)}>Cancelar</Button>
+            <Button onClick={() => { if (newProveedorNombre.trim()) createAuditMutation.mutate(newProveedorNombre); }} disabled={createAuditMutation.isPending}>
+              Añadir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
