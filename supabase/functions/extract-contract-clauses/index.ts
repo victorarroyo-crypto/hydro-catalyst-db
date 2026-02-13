@@ -118,17 +118,17 @@ REGLAS:
 5. Si NO hay cláusula MFN (Most Favored Nation), genera alerta.
 6. Confianza: 1.0 = dato explícito en el texto, 0.7 = inferido/calculado, 0.3 = muy incierto.`;
 
-        // Call Lovable AI (Gemini 2.5 Flash)
-        const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-        const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+        // Call Lovable AI (Gemini 2.5 Flash) via AI Gateway
+        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+        if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
         const aiResponse = await fetch(
-          `${SUPABASE_URL}/functions/v1/ai`,
+          "https://ai.gateway.lovable.dev/v1/chat/completions",
           {
             method: "POST",
             headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
               "Content-Type": "application/json",
-              Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
             },
             body: JSON.stringify({
               model: "google/gemini-2.5-flash",
