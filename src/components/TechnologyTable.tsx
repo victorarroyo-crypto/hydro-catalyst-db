@@ -1,5 +1,6 @@
 import React from 'react';
 import { TRLBadge } from '@/components/TRLBadge';
+import { TierBadge } from '@/components/TierBadge';
 import { Badge } from '@/components/ui/badge';
 import { 
   Table, 
@@ -72,6 +73,7 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
             <TableHead className="font-semibold">Subcategoría</TableHead>
             <TableHead className="font-semibold">Sector</TableHead>
             <TableHead className="font-semibold text-center">TRL</TableHead>
+            <TableHead className="font-semibold text-center">Tier</TableHead>
             <TableHead className="font-semibold">País</TableHead>
             <TableHead className="font-semibold w-12"></TableHead>
           </TableRow>
@@ -109,6 +111,9 @@ export const TechnologyTable: React.FC<TechnologyTableProps> = ({ technologies, 
               </TableCell>
               <TableCell className="text-center">
                 <TRLBadge trl={tech.trl} size="sm" />
+              </TableCell>
+              <TableCell className="text-center">
+                <TierBadge tier={tech.tier} evidenceLevel={tech.evidence_level} />
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {tech.pais || '—'}

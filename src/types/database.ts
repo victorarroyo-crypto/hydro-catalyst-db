@@ -62,6 +62,10 @@ export interface Technology {
   
   // Embedding for semantic search
   embedding: number[] | null;
+  
+  // Curation fields
+  tier: string | null;
+  evidence_level: string | null;
 }
 
 export interface Project {

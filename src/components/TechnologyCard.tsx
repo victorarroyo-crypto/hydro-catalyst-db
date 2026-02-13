@@ -1,5 +1,6 @@
 import React from 'react';
 import { TRLBadge } from '@/components/TRLBadge';
+import { TierBadge } from '@/components/TierBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, MapPin, Tag, Layers, Grid3X3, Eye, Clock, CheckCircle } from 'lucide-react';
@@ -94,6 +95,7 @@ export const TechnologyCard: React.FC<TechnologyCardProps> = ({
                 />
               </>
             )}
+            <TierBadge tier={technology.tier} evidenceLevel={technology.evidence_level} />
             <TRLBadge trl={technology.trl} size="sm" />
           </div>
         </div>
