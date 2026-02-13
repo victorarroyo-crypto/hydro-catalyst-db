@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
@@ -16,8 +16,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { ChevronDown, Plus, Upload, AlertTriangle, DollarSign, Building2, Trash2, FileText, ExternalLink, Loader2 } from 'lucide-react';
+import { ChevronDown, Plus, Upload, AlertTriangle, DollarSign, Building2, Trash2, FileText, ExternalLink, Loader2, ClipboardList, Receipt, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
@@ -32,6 +34,10 @@ export default function ChemContratos() {
   const [uploadTipo, setUploadTipo] = useState('contrato_formal');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [extractingContracts, setExtractingContracts] = useState(false);
+  const [extractingInvoices, setExtractingInvoices] = useState(false);
+  const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // Query audits with JOIN to get supplier name
   const { data: audits = [] } = useQuery({
@@ -53,8 +59,9 @@ export default function ChemContratos() {
       if (!selectedAudit) return [];
       const { data, error } = await externalSupabase
         .from('chem_contract_documents')
-        .select('*')
-        .eq('audit_id', selectedAudit);
+        .select('id, nombre_archivo, tipo_documento, estado_extraccion, confianza_extraccion, datos_extraidos, created_at, file_url')
+        .eq('audit_id', selectedAudit)
+        .order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -118,6 +125,64 @@ export default function ChemContratos() {
     },
     onError: () => toast.error('Error al eliminar'),
   });
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  const startPolling = useCallback(() => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(async () => {
+      const { data } = await externalSupabase
+        .from('chem_contract_documents')
+        .select('id, datos_extraidos, confianza_extraccion, estado_extraccion')
+        .eq('project_id', projectId!);
+      const hasStructured = data?.some((d: any) => d.datos_extraidos?.supplier_name);
+      if (hasStructured) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
+        toast.success('Extracción completada — las cláusulas del contrato han sido extraídas.');
+      }
+    }, 5000);
+    setTimeout(() => { if (pollingRef.current) clearInterval(pollingRef.current); }, 180000);
+  }, [projectId, selectedAudit, queryClient]);
+
+  const handleExtractContracts = async () => {
+    setExtractingContracts(true);
+    try {
+      const response = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts`, { method: 'POST' });
+      const result = await response.json();
+      toast.success(`Extracción iniciada — procesando ${result.documents_to_process || 'los'} documentos.`);
+      startPolling();
+    } catch {
+      toast.error('No se pudo iniciar la extracción de contratos');
+    } finally {
+      setExtractingContracts(false);
+    }
+  };
+
+  const handleExtractInvoices = async () => {
+    setExtractingInvoices(true);
+    try {
+      const response = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices`, { method: 'POST' });
+      const result = await response.json();
+      toast.success(`Extracción de facturas iniciada — procesando ${result.documents_to_process || 'los'} documentos.`);
+      startPolling();
+    } catch {
+      toast.error('No se pudo iniciar la extracción de facturas');
+    } finally {
+      setExtractingInvoices(false);
+    }
+  };
+
+  // Helpers for document status
+  const isPhase1Complete = (doc: any) => doc.estado_extraccion === 'completado' && doc.datos_extraidos?.raw_text;
+  const isPhase2Complete = (doc: any) => doc.datos_extraidos?.supplier_name;
+  const hasDocsReadyForExtraction = documents.some((d: any) => isPhase1Complete(d) && !isPhase2Complete(d));
+
 
   const handleUploadDocument = async () => {
     if (!uploadFile || !selectedAudit || !projectId) return;
@@ -231,7 +296,7 @@ export default function ChemContratos() {
           </TabsList>
 
           {/* Documentos */}
-          <TabsContent value="documentos">
+          <TabsContent value="documentos" className="space-y-4">
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -254,40 +319,211 @@ export default function ChemContratos() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nombre</TableHead>
+                        <TableHead>Archivo</TableHead>
                         <TableHead>Tipo</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead className="w-20">Acciones</TableHead>
+                        <TableHead>Estado extracción</TableHead>
+                        <TableHead>Datos extraídos</TableHead>
+                        <TableHead>Confianza</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead className="w-16">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {documents.map((d: any) => (
-                        <TableRow key={d.id}>
-                          <TableCell className="font-medium">
-                            {d.file_url ? (
-                              <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline">
-                                {d.nombre_archivo} <ExternalLink className="w-3 h-3" />
-                              </a>
-                            ) : d.nombre_archivo}
-                          </TableCell>
-                          <TableCell><Badge variant="outline">{d.tipo_documento}</Badge></TableCell>
-                          <TableCell>
-                            <Badge variant={d.estado_extraccion === 'completado' ? 'default' : 'secondary'}>
-                              {d.estado_extraccion}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteDocMutation.mutate(d.id)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {documents.map((d: any) => {
+                        const phase2Done = isPhase2Complete(d);
+                        const phase1Done = isPhase1Complete(d);
+                        return (
+                          <React.Fragment key={d.id}>
+                            <TableRow
+                              className={`cursor-pointer ${phase2Done ? 'hover:bg-muted/50' : ''}`}
+                              onClick={() => phase2Done && setExpandedDocId(expandedDocId === d.id ? null : d.id)}
+                            >
+                              <TableCell className="font-medium">
+                                {d.file_url ? (
+                                  <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline" onClick={e => e.stopPropagation()}>
+                                    {d.nombre_archivo} <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                ) : d.nombre_archivo}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[10px]">{d.tipo_documento}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                {d.estado_extraccion === 'completado' && (
+                                  <Badge className="bg-[#8cb63c]/15 text-[#8cb63c] border-[#8cb63c]/30 text-[10px]">
+                                    <CheckCircle className="w-3 h-3 mr-1" /> Completado
+                                  </Badge>
+                                )}
+                                {d.estado_extraccion === 'error' && (
+                                  <Badge variant="destructive" className="text-[10px]">
+                                    <XCircle className="w-3 h-3 mr-1" /> Error
+                                  </Badge>
+                                )}
+                                {d.estado_extraccion === 'procesando' && (
+                                  <Badge className="bg-[#32b4cd]/15 text-[#32b4cd] border-[#32b4cd]/30 text-[10px]">
+                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Procesando
+                                  </Badge>
+                                )}
+                                {d.estado_extraccion === 'pendiente' && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    <Clock className="w-3 h-3 mr-1" /> Pendiente
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {phase2Done ? (
+                                  <Badge className="bg-[#8cb63c]/15 text-[#8cb63c] border-[#8cb63c]/30 text-[10px]">
+                                    <ClipboardList className="w-3 h-3 mr-1" /> Cláusulas extraídas
+                                  </Badge>
+                                ) : phase1Done ? (
+                                  <Badge variant="secondary" className="text-[10px]">Solo texto</Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {d.confianza_extraccion != null ? (
+                                  <span className="text-xs font-mono">{(d.confianza_extraccion * 100).toFixed(0)}%</span>
+                                ) : <span className="text-xs text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {d.created_at ? format(new Date(d.created_at), 'dd MMM yyyy', { locale: es }) : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); deleteDocMutation.mutate(d.id); }}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+
+                            {/* Expanded extracted data */}
+                            {expandedDocId === d.id && phase2Done && (
+                              <TableRow>
+                                <TableCell colSpan={7} className="p-0">
+                                  <div className="bg-muted/30 p-4 space-y-4 border-t">
+                                    {/* Contract data */}
+                                    <div>
+                                      <h4 className="text-sm font-semibold mb-2" style={{ color: '#307177' }}>📋 Datos del contrato</h4>
+                                      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-xs">
+                                        {[
+                                          ['Proveedor', d.datos_extraidos?.supplier_name],
+                                          ['Plazo de pago', d.datos_extraidos?.plazo_pago_dias ? `${d.datos_extraidos.plazo_pago_dias} días` : null],
+                                          ['Pronto pago', d.datos_extraidos?.pronto_pago_descuento_pct ? `${d.datos_extraidos.pronto_pago_descuento_pct}% en ${d.datos_extraidos.pronto_pago_dias || '?'} días` : null],
+                                          ['Duración', d.datos_extraidos?.duracion_contrato_meses ? `${d.datos_extraidos.duracion_contrato_meses} meses` : null],
+                                          ['Vencimiento', d.datos_extraidos?.fecha_vencimiento],
+                                          ['Renovación automática', d.datos_extraidos?.renovacion_automatica != null ? (d.datos_extraidos.renovacion_automatica ? 'Sí' : 'No') : null],
+                                          ['Preaviso', d.datos_extraidos?.preaviso_no_renovacion_dias ? `${d.datos_extraidos.preaviso_no_renovacion_dias} días` : null],
+                                          ['Take or Pay', d.datos_extraidos?.take_or_pay != null ? (d.datos_extraidos.take_or_pay ? 'Sí' : 'No') : null],
+                                          ['Vol. comprometido', d.datos_extraidos?.volumen_comprometido_anual ? `${d.datos_extraidos.volumen_comprometido_anual} kg/año` : null],
+                                          ['Fórmula revisión', d.datos_extraidos?.formula_revision_detalle],
+                                          ['Índice vinculado', d.datos_extraidos?.indice_vinculado],
+                                          ['Frecuencia revisión', d.datos_extraidos?.frecuencia_revision],
+                                          ['Rappels', d.datos_extraidos?.rappel_detalle],
+                                          ['Servicio técnico', d.datos_extraidos?.detalle_servicio_tecnico],
+                                          ['Equipos comodato', d.datos_extraidos?.detalle_comodato],
+                                        ].filter(([, v]) => v != null).map(([label, value]) => (
+                                          <div key={label as string}>
+                                            <span className="text-muted-foreground">{label}: </span>
+                                            <span className="font-medium">{value}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Products */}
+                                    {d.datos_extraidos?.productos_mencionados?.length > 0 && (
+                                      <div>
+                                        <h4 className="text-sm font-semibold mb-2" style={{ color: '#307177' }}>📦 Productos</h4>
+                                        <Table>
+                                          <TableHeader>
+                                            <TableRow>
+                                              <TableHead className="text-xs">Producto</TableHead>
+                                              <TableHead className="text-xs">Precio (€/kg)</TableHead>
+                                              <TableHead className="text-xs">Formato</TableHead>
+                                              <TableHead className="text-xs">Incoterm</TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
+                                            {d.datos_extraidos.productos_mencionados.map((p: any, i: number) => (
+                                              <TableRow key={i}>
+                                                <TableCell className="text-xs">{p.nombre || '—'}</TableCell>
+                                                <TableCell className="text-xs font-mono">{p.precio_kg != null ? `${p.precio_kg} €` : '—'}</TableCell>
+                                                <TableCell className="text-xs">{p.formato || '—'}</TableCell>
+                                                <TableCell className="text-xs">{p.incoterm || '—'}</TableCell>
+                                              </TableRow>
+                                            ))}
+                                          </TableBody>
+                                        </Table>
+                                      </div>
+                                    )}
+
+                                    {/* Auditor alerts */}
+                                    {d.datos_extraidos?.alertas_auditor?.length > 0 && (
+                                      <div className="bg-[#ffa720]/10 border border-[#ffa720]/30 rounded-lg p-3">
+                                        <h4 className="text-sm font-semibold mb-2 text-[#ffa720]">⚠️ Alertas del auditor</h4>
+                                        <ul className="space-y-1">
+                                          {d.datos_extraidos.alertas_auditor.map((a: string, i: number) => (
+                                            <li key={i} className="text-xs flex items-start gap-1.5">
+                                              <AlertTriangle className="w-3 h-3 mt-0.5 text-[#ffa720] shrink-0" />
+                                              <span>{a}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+
+                                    {/* Confidence per field */}
+                                    {d.datos_extraidos?.confianza_por_campo && (
+                                      <Collapsible>
+                                        <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                                          <ChevronDown className="w-3 h-3" /> Confianza por campo
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent className="mt-2 space-y-1.5">
+                                          {Object.entries(d.datos_extraidos.confianza_por_campo).map(([campo, valor]: [string, any]) => (
+                                            <div key={campo} className="flex items-center gap-2 text-xs">
+                                              <span className="w-40 text-muted-foreground truncate">{campo}</span>
+                                              <Progress value={(valor as number) * 100} className="flex-1 h-1.5" />
+                                              <span className="w-10 text-right font-mono">{((valor as number) * 100).toFixed(0)}%</span>
+                                            </div>
+                                          ))}
+                                        </CollapsibleContent>
+                                      </Collapsible>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 )}
               </CardContent>
             </Card>
+
+            {/* Extraction buttons */}
+            {documents.length > 0 && (
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleExtractContracts}
+                  disabled={extractingContracts || !hasDocsReadyForExtraction}
+                  className="bg-[#307177] hover:bg-[#307177]/90 text-white"
+                >
+                  {extractingContracts ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ClipboardList className="w-4 h-4 mr-2" />}
+                  Extraer cláusulas de contratos
+                </Button>
+                <Button
+                  onClick={handleExtractInvoices}
+                  disabled={extractingInvoices || !hasDocsReadyForExtraction}
+                  variant="outline"
+                  className="border-[#32b4cd] text-[#32b4cd] hover:bg-[#32b4cd]/10"
+                >
+                  {extractingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Receipt className="w-4 h-4 mr-2" />}
+                  Extraer datos de facturas
+                </Button>
+              </div>
+            )}
 
             {/* Upload Modal */}
             <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
@@ -696,11 +932,26 @@ export default function ChemContratos() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm">Facturas</CardTitle>
-                  <Button size="sm" variant="outline" disabled><Upload className="w-4 h-4 mr-1" /> Subir facturas</Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowUploadModal(true)}>
+                    <Upload className="w-4 h-4 mr-1" /> Subir facturas
+                  </Button>
                 </div>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground text-center py-8">La extracción de facturas requiere procesamiento IA. Suba PDFs para analizar.</p>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Suba PDFs de facturas en la pestaña Documentos y luego lance la extracción con el botón inferior.
+                </p>
+                <div className="flex justify-center">
+                  <Button
+                    onClick={handleExtractInvoices}
+                    disabled={extractingInvoices || !hasDocsReadyForExtraction}
+                    className="border-[#32b4cd] text-[#32b4cd] hover:bg-[#32b4cd]/10"
+                    variant="outline"
+                  >
+                    {extractingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Receipt className="w-4 h-4 mr-2" />}
+                    Extraer datos de facturas
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
