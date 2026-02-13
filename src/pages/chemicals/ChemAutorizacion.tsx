@@ -1,7 +1,7 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,7 @@ export default function ChemAutorizacion() {
   const { data: project } = useQuery({
     queryKey: ['chem-project', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_projects').select('*').eq('id', projectId!).single();
+      const { data, error } = await externalSupabase.from('chem_projects').select('*').eq('id', projectId!).single();
       if (error) throw error;
       return data;
     },
@@ -27,7 +27,7 @@ export default function ChemAutorizacion() {
   const { data: auth } = useQuery({
     queryKey: ['chem-auth', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('chem_authorizations').select('*').eq('project_id', projectId!).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      const { data, error } = await externalSupabase.from('chem_authorizations').select('*').eq('project_id', projectId!).order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -37,10 +37,10 @@ export default function ChemAutorizacion() {
   const upsertMutation = useMutation({
     mutationFn: async (data: any) => {
       if (auth) {
-        const { error } = await supabase.from('chem_authorizations').update(data).eq('id', auth.id);
+        const { error } = await externalSupabase.from('chem_authorizations').update(data).eq('id', auth.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('chem_authorizations').insert({ ...data, project_id: projectId });
+        const { error } = await externalSupabase.from('chem_authorizations').insert({ ...data, project_id: projectId });
         if (error) throw error;
       }
     },

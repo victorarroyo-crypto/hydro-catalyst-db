@@ -1,7 +1,7 @@
 import React from 'react';
 import { useParams, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -41,7 +41,7 @@ export default function ChemProjectLayout() {
   const { data: project, isLoading } = useQuery({
     queryKey: ['chem-project', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_projects')
         .select('*')
         .eq('id', projectId!)
@@ -64,7 +64,7 @@ export default function ChemProjectLayout() {
   };
 
   const handleEstadoChange = async (newEstado: string) => {
-    const { error } = await supabase
+    const { error } = await externalSupabase
       .from('chem_projects')
       .update({ estado: newEstado, updated_at: new Date().toISOString() })
       .eq('id', projectId!);

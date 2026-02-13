@@ -1,7 +1,7 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -37,7 +37,7 @@ export default function ChemDashboard() {
   const { data: products = [] } = useQuery({
     queryKey: ['chem-products', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_products')
         .select('*')
         .eq('project_id', projectId!)
@@ -51,7 +51,7 @@ export default function ChemDashboard() {
   const { data: audits = [] } = useQuery({
     queryKey: ['chem-audits', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_contract_audits')
         .select('*')
         .eq('project_id', projectId!);
@@ -64,7 +64,7 @@ export default function ChemDashboard() {
   const { data: savings = [] } = useQuery({
     queryKey: ['chem-savings', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_savings')
         .select('*')
         .eq('project_id', projectId!);
@@ -77,7 +77,7 @@ export default function ChemDashboard() {
   const { data: baselines = [] } = useQuery({
     queryKey: ['chem-baselines', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await externalSupabase
         .from('chem_baselines')
         .select('*')
         .eq('project_id', projectId!);
