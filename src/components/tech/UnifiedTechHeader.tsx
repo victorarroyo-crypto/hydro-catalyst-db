@@ -8,6 +8,7 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { TRLBadge } from '@/components/TRLBadge';
+import { TierBadge } from '@/components/TierBadge';
 import { 
   CheckCircle2, 
   Database, 
@@ -64,6 +65,7 @@ export const UnifiedTechHeader: React.FC<UnifiedTechHeaderProps> = ({
         </h2>
         <div className="flex items-center gap-2 flex-wrap">
           <TRLBadge trl={data.trl} />
+          <TierBadge tier={(data as any).tier} evidenceLevel={(data as any).evidence_level} />
           
           {/* Source Badge - hidden for database items */}
           {showSourceBadge && (
