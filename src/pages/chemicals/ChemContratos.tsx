@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,8 +16,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { ChevronDown, Plus, Upload, AlertTriangle, DollarSign, Building2 } from 'lucide-react';
+import { ChevronDown, Plus, Upload, AlertTriangle, DollarSign, Building2, Trash2, FileText, ExternalLink, Loader2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bdmpshiqspkxcisnnlyr.supabase.co';
 
 export default function ChemContratos() {
   const { projectId } = useParams();
@@ -25,6 +27,11 @@ export default function ChemContratos() {
   const [selectedAudit, setSelectedAudit] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [newProveedorNombre, setNewProveedorNombre] = useState('');
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTipo, setUploadTipo] = useState('contrato');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: audits = [] } = useQuery({
     queryKey: ['chem-audits', projectId],
@@ -81,6 +88,64 @@ export default function ChemContratos() {
     },
     onError: () => toast.error('Error al actualizar'),
   });
+
+  const deleteDocMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const doc = documents.find((d: any) => d.id === docId);
+      if (doc?.file_url) {
+        const path = doc.file_url.replace(`${SUPABASE_URL}/storage/v1/object/public/chem-documents/`, '');
+        await supabase.storage.from('chem-documents').remove([path]);
+      }
+      const { error } = await supabase.from('chem_contract_documents').delete().eq('id', docId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
+      toast.success('Documento eliminado');
+    },
+    onError: () => toast.error('Error al eliminar'),
+  });
+
+  const handleUploadDocument = async () => {
+    if (!uploadFile || !selectedAudit || !projectId) return;
+    setUploading(true);
+    try {
+      const timestamp = Date.now();
+      const sanitized = uploadFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const storagePath = `${projectId}/${selectedAudit}/${timestamp}-${sanitized}`;
+
+      const { error: storageError } = await supabase.storage
+        .from('chem-documents')
+        .upload(storagePath, uploadFile, { cacheControl: '3600', upsert: false });
+      if (storageError) throw storageError;
+
+      const { data: urlData } = supabase.storage
+        .from('chem-documents')
+        .getPublicUrl(storagePath);
+
+      const { error: dbError } = await supabase.from('chem_contract_documents').insert({
+        audit_id: selectedAudit,
+        project_id: projectId,
+        nombre: uploadFile.name,
+        tipo: uploadTipo,
+        file_url: urlData.publicUrl,
+        mime_type: uploadFile.type,
+        file_size: uploadFile.size,
+        estado_extraccion: 'pendiente',
+      });
+      if (dbError) throw dbError;
+
+      queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
+      toast.success('Documento subido correctamente');
+      setShowUploadModal(false);
+      setUploadFile(null);
+      setUploadTipo('contrato');
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const currentAudit = audits.find((a: any) => a.id === selectedAudit);
 
@@ -157,30 +222,50 @@ export default function ChemContratos() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm">Documentos del contrato</CardTitle>
-                  <Button size="sm" variant="outline" disabled><Upload className="w-4 h-4 mr-1" /> Subir documento</Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowUploadModal(true)}>
+                    <Upload className="w-4 h-4 mr-1" /> Subir documento
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
                 {documents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">No hay documentos subidos.</p>
+                  <div className="text-center py-8 space-y-2">
+                    <FileText className="w-10 h-10 mx-auto text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">No hay documentos subidos.</p>
+                    <Button size="sm" variant="ghost" onClick={() => setShowUploadModal(true)}>
+                      <Upload className="w-4 h-4 mr-1" /> Subir primer documento
+                    </Button>
+                  </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nombre</TableHead>
                         <TableHead>Tipo</TableHead>
-                        <TableHead>Estado extracción</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead className="w-20">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {documents.map((d: any) => (
                         <TableRow key={d.id}>
-                          <TableCell>{d.nombre}</TableCell>
+                          <TableCell className="font-medium">
+                            {d.file_url ? (
+                              <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline">
+                                {d.nombre} <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ) : d.nombre}
+                          </TableCell>
                           <TableCell><Badge variant="outline">{d.tipo}</Badge></TableCell>
                           <TableCell>
                             <Badge variant={d.estado_extraccion === 'completado' ? 'default' : 'secondary'}>
                               {d.estado_extraccion}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteDocMutation.mutate(d.id)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -189,6 +274,46 @@ export default function ChemContratos() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Upload Modal */}
+            <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Subir documento</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Tipo de documento</Label>
+                    <Select value={uploadTipo} onValueChange={setUploadTipo}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="contrato">Contrato</SelectItem>
+                        <SelectItem value="factura">Factura</SelectItem>
+                        <SelectItem value="analisis">Análisis</SelectItem>
+                        <SelectItem value="ficha_tecnica">Ficha técnica</SelectItem>
+                        <SelectItem value="otro">Otro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Archivo</Label>
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.docx,.xlsx,.xls,.jpg,.jpeg,.png"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">PDF, Word, Excel o imágenes</p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setShowUploadModal(false); setUploadFile(null); }}>Cancelar</Button>
+                  <Button onClick={handleUploadDocument} disabled={!uploadFile || uploading}>
+                    {uploading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Subiendo...</> : <><Upload className="w-4 h-4 mr-1" /> Subir</>}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* Condiciones */}
