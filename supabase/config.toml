@@ -128,3 +128,6 @@ verify_jwt = false
 
 [functions.deep-advisor]
 verify_jwt = false
+
+[functions.extract-contract-clauses]
+verify_jwt = false

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
@@ -36,6 +37,7 @@ export default function ChemContratos() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [extractingContracts, setExtractingContracts] = useState(false);
   const [extractingInvoices, setExtractingInvoices] = useState(false);
+  const [extractingDocId, setExtractingDocId] = useState<string | null>(null);
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -153,14 +155,33 @@ export default function ChemContratos() {
   const handleExtractContracts = async () => {
     setExtractingContracts(true);
     try {
-      const response = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts`, { method: 'POST' });
-      const result = await response.json();
-      toast.success(`Extracción iniciada — procesando ${result.documents_to_process || 'los'} documentos.`);
+      const response = await supabase.functions.invoke('extract-contract-clauses', {
+        body: { project_id: projectId },
+      });
+      if (response.error) throw response.error;
+      const result = response.data;
+      toast.success(`Extracción iniciada — procesando ${result.processed || 'los'} documentos.`);
       startPolling();
     } catch {
       toast.error('No se pudo iniciar la extracción de contratos');
     } finally {
       setExtractingContracts(false);
+    }
+  };
+
+  const handleExtractSingleDoc = async (docId: string) => {
+    setExtractingDocId(docId);
+    try {
+      const response = await supabase.functions.invoke('extract-contract-clauses', {
+        body: { project_id: projectId, document_id: docId },
+      });
+      if (response.error) throw response.error;
+      toast.success('Extracción iniciada para este documento.');
+      startPolling();
+    } catch {
+      toast.error('No se pudo iniciar la extracción');
+    } finally {
+      setExtractingDocId(null);
     }
   };
 
@@ -335,8 +356,8 @@ export default function ChemContratos() {
                         return (
                           <React.Fragment key={d.id}>
                             <TableRow
-                              className={`cursor-pointer ${phase2Done ? 'hover:bg-muted/50' : ''}`}
-                              onClick={() => phase2Done && setExpandedDocId(expandedDocId === d.id ? null : d.id)}
+                              className={`cursor-pointer hover:bg-muted/50`}
+                              onClick={() => (phase2Done || phase1Done) && setExpandedDocId(expandedDocId === d.id ? null : d.id)}
                             >
                               <TableCell className="font-medium">
                                 {d.file_url ? (
@@ -376,7 +397,9 @@ export default function ChemContratos() {
                                     <ClipboardList className="w-3 h-3 mr-1" /> Cláusulas extraídas
                                   </Badge>
                                 ) : phase1Done ? (
-                                  <Badge variant="secondary" className="text-[10px]">Solo texto</Badge>
+                                  <Badge className="bg-[#32b4cd]/15 text-[#32b4cd] border-[#32b4cd]/30 text-[10px]">
+                                    <FileText className="w-3 h-3 mr-1" /> Texto extraído
+                                  </Badge>
                                 ) : (
                                   <span className="text-xs text-muted-foreground">—</span>
                                 )}
@@ -396,7 +419,40 @@ export default function ChemContratos() {
                               </TableCell>
                             </TableRow>
 
-                            {/* Expanded extracted data */}
+                            {/* Expanded: Phase 1 only - show raw text */}
+                            {expandedDocId === d.id && phase1Done && !phase2Done && (
+                              <TableRow>
+                                <TableCell colSpan={7} className="p-0">
+                                  <div className="bg-muted/30 p-4 space-y-3 border-t">
+                                    <div className="flex items-center justify-between">
+                                      <h4 className="text-sm font-semibold" style={{ color: '#307177' }}>📄 Texto extraído del documento</h4>
+                                      <Button
+                                        size="sm"
+                                        onClick={(e) => { e.stopPropagation(); handleExtractSingleDoc(d.id); }}
+                                        disabled={extractingDocId === d.id}
+                                        className="bg-[#307177] hover:bg-[#307177]/90 text-white"
+                                      >
+                                        {extractingDocId === d.id ? (
+                                          <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Extrayendo cláusulas…</>
+                                        ) : (
+                                          <><ClipboardList className="w-3.5 h-3.5 mr-1.5" /> Extraer cláusulas con IA</>
+                                        )}
+                                      </Button>
+                                    </div>
+                                    <pre className="text-xs whitespace-pre-wrap font-mono bg-background border rounded-lg p-3 max-h-[400px] overflow-y-auto">
+                                      {d.datos_extraidos?.raw_text || 'Sin texto disponible'}
+                                    </pre>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {d.datos_extraidos?.chars ? `${d.datos_extraidos.chars} caracteres` : ''} 
+                                      {d.datos_extraidos?.pages ? ` · ${d.datos_extraidos.pages} páginas` : ''}
+                                      {' · Phase 2 (extracción estructurada) pendiente'}
+                                    </p>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+
+                            {/* Expanded: Phase 2 complete - structured data */}
                             {expandedDocId === d.id && phase2Done && (
                               <TableRow>
                                 <TableCell colSpan={7} className="p-0">
@@ -489,6 +545,18 @@ export default function ChemContratos() {
                                         </CollapsibleContent>
                                       </Collapsible>
                                     )}
+
+                                    {/* Raw text collapsible */}
+                                    <Collapsible>
+                                      <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                                        <ChevronDown className="w-3 h-3" /> Ver texto original
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent className="mt-2">
+                                        <pre className="text-xs whitespace-pre-wrap font-mono bg-background border rounded-lg p-3 max-h-[300px] overflow-y-auto">
+                                          {d.datos_extraidos?.raw_text || 'Sin texto'}
+                                        </pre>
+                                      </CollapsibleContent>
+                                    </Collapsible>
                                   </div>
                                 </TableCell>
                               </TableRow>
