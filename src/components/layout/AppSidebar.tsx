@@ -37,6 +37,7 @@ import {
   PieChart,
   ClipboardCheck,
   Clock,
+  FlaskConical,
 } from 'lucide-react';
 import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
 import {
@@ -88,6 +89,7 @@ const costConsultingSubItems = [
   { title: 'Nuevo Análisis', url: '/cost-consulting/new', icon: Rocket },
   { title: 'Proveedores', url: '/cost-consulting/suppliers', icon: Building2 },
   { title: 'Benchmarks', url: '/cost-consulting/benchmarks', icon: BarChart3 },
+  { title: 'Químicos', url: '/quimicos', icon: FlaskConical },
 ];
 
 const costConsultingAdminSubItems = [
@@ -171,7 +173,7 @@ export function AppSidebar() {
     consultoriaSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/consultoria'))
   );
   const [costConsultingOpen, setCostConsultingOpen] = useState(
-    costConsultingSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/cost-consulting'))
+    costConsultingSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/cost-consulting') || location.pathname.startsWith('/quimicos'))
   );
   const [taxonomyOpen, setTaxonomyOpen] = useState(
     location.pathname === '/taxonomy-admin'
@@ -198,7 +200,7 @@ export function AppSidebar() {
   const isAdvisorActive = advisorSubItems.some((item) => location.pathname === item.url);
   const isProjectsActive = projectsSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/studies/'));
   const isConsultoriaActive = consultoriaSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/consultoria'));
-  const isCostConsultingActive = costConsultingSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/cost-consulting'));
+  const isCostConsultingActive = costConsultingSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/cost-consulting') || location.pathname.startsWith('/quimicos'));
   const isTaxonomyActive = location.pathname === '/taxonomy-admin';
   const isBdTechActive = location.pathname === '/technologies';
   const isSettingsActive = settingsItems.some((item) => location.pathname === item.url);

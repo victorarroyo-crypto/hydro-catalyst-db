@@ -62,6 +62,13 @@ import {
   CostBenchmarksAdmin,
 } from "./pages/cost-consulting";
 
+import {
+  ChemProjectsList,
+  ChemProjectLayout,
+  ChemDashboard,
+  ChemPlaceholder,
+} from "./pages/chemicals";
+
 import ProjectBriefingPage from "./pages/consultoria/ProjectBriefingPage";
 import ProjectResearchPage from "./pages/consultoria/ProjectResearchPage";
 import EntitiesListPage from "./pages/consultoria/EntitiesListPage";
@@ -130,6 +137,21 @@ const App = () => (
               <Route path="/cost-consulting/:id/simulator" element={<CostConsultingSimulator />} />
               <Route path="/cost-consulting/:id/duplicates" element={<CostConsultingDuplicates />} />
               <Route path="/cost-consulting/:id/dashboard" element={<CostConsultingDashboard />} />
+              
+              {/* Químicos Routes */}
+              <Route path="/quimicos" element={<ChemProjectsList />} />
+              <Route path="/quimicos/:projectId" element={<ChemProjectLayout />}>
+                <Route index element={<ChemDashboard />} />
+                <Route path="inventario" element={<ChemPlaceholder title="Inventario de Químicos" description="Gestión del inventario de productos químicos del proyecto." />} />
+                <Route path="contratos" element={<ChemPlaceholder title="Auditoría Contractual" description="Auditoría de condiciones contractuales por proveedor." />} />
+                <Route path="baseline" element={<ChemPlaceholder title="Baseline / Acta de Precios" description="Definición de precios base para el cálculo de ahorros." />} />
+                <Route path="benchmarking" element={<ChemPlaceholder title="Benchmarking" description="Investigación de precios de mercado por producto." />} />
+                <Route path="historico" element={<ChemPlaceholder title="Histórico de Precios" description="Evolución de precios y análisis de tendencias." />} />
+                <Route path="visita" element={<ChemPlaceholder title="Visita a Planta" description="Checklist de oportunidades detectadas en visita." />} />
+                <Route path="rfqs" element={<ChemPlaceholder title="Gestión de RFQs" description="Solicitudes de cotización y comparativas de ofertas." />} />
+                <Route path="ahorro" element={<ChemPlaceholder title="Tracking de Ahorro" description="Seguimiento del ahorro conseguido vs estimado." />} />
+                <Route path="autorizacion" element={<ChemPlaceholder title="Carta de Autorización" description="Generación de carta de autorización para el cliente." />} />
+              </Route>
               
               <Route path="/quality-control" element={<QualityControl />} />
               <Route path="/data-quality" element={<DataQualityControl />} />
