@@ -74,7 +74,10 @@ export default function ChemContratos() {
       setShowNewModal(false);
       setNewProveedorNombre('');
     },
-    onError: () => toast.error('Error al crear'),
+    onError: (err: any) => {
+      console.error('Error creating audit:', err);
+      toast.error(`Error al crear proveedor: ${err?.message || 'Error desconocido'}`);
+    },
   });
 
   const updateAuditMutation = useMutation({
