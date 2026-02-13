@@ -19,7 +19,7 @@ import { toast } from 'sonner';
 import { ChevronDown, Plus, Upload, AlertTriangle, DollarSign, Building2, Trash2, FileText, ExternalLink, Loader2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-const EXTERNAL_SUPABASE_URL = 'https://ktzhrlcvluaptixngrsh.supabase.co';
+const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
 export default function ChemContratos() {
   const { projectId } = useParams();
@@ -91,13 +91,12 @@ export default function ChemContratos() {
 
   const deleteDocMutation = useMutation({
     mutationFn: async (docId: string) => {
-      const doc = documents.find((d: any) => d.id === docId);
-      if (doc?.file_url) {
-        const path = doc.file_url.replace(`${EXTERNAL_SUPABASE_URL}/storage/v1/object/public/chem-documents/`, '');
-        await externalSupabase.storage.from('chem-documents').remove([path]);
-      }
-      const { error } = await externalSupabase.from('chem_contract_documents').delete().eq('id', docId);
-      if (error) throw error;
+      const response = await fetch(
+        `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/documents/${docId}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) throw new Error('Error eliminando documento');
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
@@ -110,30 +109,20 @@ export default function ChemContratos() {
     if (!uploadFile || !selectedAudit || !projectId) return;
     setUploading(true);
     try {
-      const timestamp = Date.now();
-      const sanitized = uploadFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const storagePath = `${projectId}/${selectedAudit}/${timestamp}-${sanitized}`;
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      formData.append('tipo_documento', uploadTipo);
+      formData.append('audit_id', selectedAudit);
 
-      const { error: storageError } = await externalSupabase.storage
-        .from('chem-documents')
-        .upload(storagePath, uploadFile, { cacheControl: '3600', upsert: false });
-      if (storageError) throw storageError;
+      const response = await fetch(
+        `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/documents`,
+        { method: 'POST', body: formData }
+      );
 
-      const { data: urlData } = externalSupabase.storage
-        .from('chem-documents')
-        .getPublicUrl(storagePath);
-
-      const { error: dbError } = await externalSupabase.from('chem_contract_documents').insert({
-        audit_id: selectedAudit,
-        project_id: projectId,
-        nombre: uploadFile.name,
-        tipo: uploadTipo,
-        file_url: urlData.publicUrl,
-        mime_type: uploadFile.type,
-        file_size: uploadFile.size,
-        estado_extraccion: 'pendiente',
-      });
-      if (dbError) throw dbError;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error subiendo documento');
+      }
 
       queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
       toast.success('Documento subido correctamente');
