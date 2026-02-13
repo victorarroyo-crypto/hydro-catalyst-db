@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +19,7 @@ import { toast } from 'sonner';
 import { ChevronDown, Plus, Upload, AlertTriangle, DollarSign, Building2, Trash2, FileText, ExternalLink, Loader2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bdmpshiqspkxcisnnlyr.supabase.co';
+const EXTERNAL_SUPABASE_URL = 'https://ktzhrlcvluaptixngrsh.supabase.co';
 
 export default function ChemContratos() {
   const { projectId } = useParams();
@@ -94,8 +93,8 @@ export default function ChemContratos() {
     mutationFn: async (docId: string) => {
       const doc = documents.find((d: any) => d.id === docId);
       if (doc?.file_url) {
-        const path = doc.file_url.replace(`${SUPABASE_URL}/storage/v1/object/public/chem-documents/`, '');
-        await supabase.storage.from('chem-documents').remove([path]);
+        const path = doc.file_url.replace(`${EXTERNAL_SUPABASE_URL}/storage/v1/object/public/chem-documents/`, '');
+        await externalSupabase.storage.from('chem-documents').remove([path]);
       }
       const { error } = await externalSupabase.from('chem_contract_documents').delete().eq('id', docId);
       if (error) throw error;
@@ -115,12 +114,12 @@ export default function ChemContratos() {
       const sanitized = uploadFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const storagePath = `${projectId}/${selectedAudit}/${timestamp}-${sanitized}`;
 
-      const { error: storageError } = await supabase.storage
+      const { error: storageError } = await externalSupabase.storage
         .from('chem-documents')
         .upload(storagePath, uploadFile, { cacheControl: '3600', upsert: false });
       if (storageError) throw storageError;
 
-      const { data: urlData } = supabase.storage
+      const { data: urlData } = externalSupabase.storage
         .from('chem-documents')
         .getPublicUrl(storagePath);
 
