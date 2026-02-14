@@ -1,30 +1,114 @@
 
 
-# Corregir pestaña Facturas: 3 bugs pendientes
+# Plan completo: Corregir flujo de Facturas en ChemContratos
 
-## Problema 1: Boton "Extraer datos de facturas" en pestaña Documentos sigue deshabilitado
-En la linea 594 del archivo, el boton de extraccion de facturas que aparece en la pestana Documentos todavia usa `hasDocsReadyForExtraction` (que requiere Phase 1 completa Y Phase 2 incompleta). Solo se corrigio el boton de la pestana Facturas pero no el de la pestana Documentos.
+## Resumen de todos los problemas
 
-**Solucion**: Cambiar `hasDocsReadyForExtraction` a `hasDocsForInvoiceExtraction` en la linea 594.
+### 1. Subida de facturas envia tipo "factura" que NO existe en el esquema de la BD
+`openUploadForInvoices` establece `uploadTipo = 'factura'`. Sin embargo, la tabla `chem_contract_documents` solo acepta: `contrato_formal`, `condiciones_generales`, `email_tarifa`, `oferta_aceptada`, `adenda`, `otro`. El backend Railway probablemente rechaza el valor "factura", causando el error "Failed to fetch".
 
-## Problema 2: Subida de documentos falla ("Failed to fetch")
-El modal de subida usa `handleUploadDocument` que requiere `selectedAudit` en la linea 217. Si no hay un audit seleccionado (por ejemplo si se accede desde la pestana Facturas sin haber seleccionado proveedor), la funcion retorna sin hacer nada. Ademas, tras subir, resetea el tipo a `contrato_formal` (linea 239), lo que pierde la seleccion de "factura".
+**Solucion**: Cambiar `openUploadForInvoices` para usar `'otro'` en lugar de `'factura'`. Eliminar la opcion "Factura" del selector del modal de subida (ya que no es un tipo valido en la BD).
+
+### 2. La subida requiere `selectedAudit` pero desde la pestana Facturas podria no haber uno
+La linea 217 hace `if (!uploadFile || !selectedAudit || !projectId) return;`. Si el usuario navego a la pestana Facturas sin que haya un audit seleccionado, la subida falla silenciosamente.
+
+**Solucion**: Mostrar un toast de error explicativo si `selectedAudit` no existe cuando se intenta subir: "Selecciona un proveedor primero". Esto ya esta resuelto implicitamente porque para llegar a la pestana Facturas hay que estar dentro de un proveedor (el `selectedAudit` ya existe), pero anadiremos una validacion explicita por seguridad.
+
+### 3. La pestana Facturas solo muestra documentos del proveedor actual, pero la extraccion es a nivel proyecto
+`documents` se filtra por `audit_id = selectedAudit` (linea 62-68). Pero `handleExtractInvoices` llama a Railway con `project_id` (linea 193), procesando TODOS los documentos del proyecto.
+
+**Solucion**: Crear una nueva query `allProjectDocs` que traiga todos los documentos del proyecto (sin filtrar por audit). Usar esta query en la pestana Facturas para:
+- Contar documentos disponibles para extraccion
+- Habilitar/deshabilitar el boton de extraccion
+- Mostrar una tabla con todos los documentos del proyecto (archivo, proveedor, tipo, estado)
+
+### 4. La pestana Facturas no muestra datos extraidos
+La tabla destino de facturas es `chem_price_history` (producto, mes, importe_facturado, cantidad_kg). Actualmente la pestana Facturas no muestra nada de esto.
+
+**Solucion**: Anadir una query a `chem_price_history` por `project_id` con JOIN a `chem_products` para nombre del producto. Mostrar una tabla con las columnas: Producto, Mes, Importe facturado, Cantidad (kg), Precio medio.
+
+### 5. Textos de botones confusos
+Los botones de extraccion no aclaran bien que hacen ni a que alcance (proveedor vs proyecto).
 
 **Solucion**: 
-- Cambiar el reset del tipo tras subida: en vez de forzar `contrato_formal`, mantener el tipo actual o usar un valor por defecto mas neutro como `otro`.
-- Verificar que `selectedAudit` existe antes de permitir subir y mostrar mensaje claro si no hay proveedor seleccionado.
+- Pestana Documentos: "Extraer clausulas de contratos" (sin cambio) + "Procesar todos los documentos del proyecto"
+- Pestana Facturas: "Procesar facturas de todos los proveedores"
 
-## Problema 3: Texto del boton de extraccion no refleja lo que hace
-El boton dice "Extraer datos de facturas" pero realmente procesa todos los documentos (contratos y facturas). 
+### 6. Mejor manejo de errores de conexion
+Cuando Railway no responde, el error generico "Failed to fetch" no es util.
 
-**Solucion**: Renombrar a "Extraer datos de documentos" o "Extraer facturas y contratos" para que sea claro.
+**Solucion**: En `handleUploadDocument`, capturar `TypeError` y mostrar: "No se pudo conectar con el servidor. Verifica tu conexion."
 
-## Cambios tecnicos
+## Cambios tecnicos detallados
 
 Archivo: `src/pages/chemicals/ChemContratos.tsx`
 
-1. **Linea 594**: Cambiar `disabled={extractingInvoices || !hasDocsReadyForExtraction}` a `disabled={extractingInvoices || !hasDocsForInvoiceExtraction}`
-2. **Linea 239**: Cambiar `setUploadTipo('contrato_formal')` a `setUploadTipo('otro')` para no sobreescribir la seleccion
-3. **Linea 599**: Cambiar texto de "Extraer datos de facturas" a "Extraer datos de facturas y contratos" (pestana Documentos)
-4. **Linea 1288**: Cambiar texto del boton en pestana Facturas a "Extraer datos de todos los documentos" para claridad
+### A. Nueva query: todos los documentos del proyecto
+
+```typescript
+const { data: allProjectDocs = [] } = useQuery({
+  queryKey: ['chem-all-project-docs', projectId],
+  queryFn: async () => {
+    const { data, error } = await externalSupabase
+      .from('chem_contract_documents')
+      .select('id, nombre_archivo, tipo_documento, estado_extraccion, datos_extraidos, created_at, audit_id, chem_contract_audits(supplier_id, chem_suppliers(nombre))')
+      .eq('project_id', projectId!)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+  enabled: !!projectId,
+});
+```
+
+### B. Nueva query: historico de precios (facturas extraidas)
+
+```typescript
+const { data: priceHistory = [] } = useQuery({
+  queryKey: ['chem-price-history', projectId],
+  queryFn: async () => {
+    const { data, error } = await externalSupabase
+      .from('chem_price_history')
+      .select('*, chem_products(nombre_comercial)')
+      .eq('project_id', projectId!)
+      .order('mes', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+  enabled: !!projectId,
+});
+```
+
+### C. Corregir `openUploadForInvoices`
+Cambiar de `setUploadTipo('factura')` a `setUploadTipo('otro')`.
+
+### D. Eliminar opcion "Factura" del selector
+Quitar `<SelectItem value="factura">Factura</SelectItem>` del modal de subida (linea 621).
+
+### E. Nueva variable para habilitacion del boton de extraccion en Facturas
+```typescript
+const hasProjectDocsForExtraction = allProjectDocs.some((d: any) => 
+  d.estado_extraccion === 'completado' && d.datos_extraidos?.raw_text
+);
+```
+
+### F. Reescribir pestana Facturas
+Reemplazar el contenido actual de la pestana Facturas con:
+1. Tabla de documentos del proyecto (usando `allProjectDocs`): Archivo, Proveedor (via JOIN), Tipo, Estado
+2. Boton de extraccion usando `hasProjectDocsForExtraction`
+3. Tabla de datos extraidos (usando `priceHistory`): Producto, Mes, Importe, Cantidad, Precio medio
+
+### G. Mejorar manejo de errores en `handleUploadDocument`
+```typescript
+} catch (err: any) {
+  if (err instanceof TypeError && err.message === 'Failed to fetch') {
+    toast.error('No se pudo conectar con el servidor. Verifica tu conexion.');
+  } else {
+    toast.error(`Error: ${err.message}`);
+  }
+}
+```
+
+### H. Invalidar queries tras extraccion
+En `handleExtractInvoices`, anadir invalidacion de `chem-all-project-docs` y `chem-price-history` para que la pestana Facturas se actualice automaticamente.
 
