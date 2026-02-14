@@ -75,7 +75,8 @@ export default function ChemVisita() {
     queryFn: async () => {
       const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/plant-visits`);
       if (!res.ok) throw new Error('Error cargando visitas');
-      return res.json();
+      const data = await res.json();
+      return data.visits || [];
     },
     enabled: !!projectId,
   });
