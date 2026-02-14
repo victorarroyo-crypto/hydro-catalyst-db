@@ -70,9 +70,7 @@ const mainNavItems = [
 ];
 
 const bdTechnologiesSubItems = [
-  { title: 'Tecnologías Revisadas', url: '/technologies', icon: Search },
-  { title: 'En Revisión', url: '/technologies?review=in_review', icon: ClipboardCheck },
-  { title: 'En Aprobación', url: '/technologies?review=pending_approval', icon: Clock },
+  { title: 'Catálogo', url: '/technologies', icon: Search },
 ];
 
 const projectsSubItems = [
@@ -183,7 +181,10 @@ export function AppSidebar() {
     location.pathname === '/taxonomy-admin'
   );
   const [bdTechOpen, setBdTechOpen] = useState(
-    location.pathname === '/technologies' || location.search.includes('review=')
+    location.pathname === '/technologies' || location.pathname.startsWith('/scouting')
+  );
+  const [scoutingNestedOpen, setScoutingNestedOpen] = useState(
+    location.pathname.startsWith('/scouting')
   );
   const [settingsOpen, setSettingsOpen] = useState(
     settingsItems.some((item) => location.pathname === item.url)
@@ -206,7 +207,7 @@ export function AppSidebar() {
   const isConsultoriaActive = consultoriaSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/consultoria'));
   const isCostConsultingActive = location.pathname.startsWith('/cost-consulting') || location.pathname.startsWith('/quimicos');
   const isTaxonomyActive = location.pathname === '/taxonomy-admin';
-  const isBdTechActive = location.pathname === '/technologies';
+  const isBdTechActive = location.pathname === '/technologies' || location.pathname.startsWith('/scouting');
   const isSettingsActive = settingsItems.some((item) => location.pathname === item.url);
 
   return (
@@ -303,6 +304,53 @@ export function AppSidebar() {
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
+                      {/* Nuevas Tecnologías - nested collapsible */}
+                      <SidebarMenuSubItem>
+                        <Collapsible open={scoutingNestedOpen} onOpenChange={setScoutingNestedOpen}>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuSubButton
+                              className={cn(
+                                'transition-all duration-200 cursor-pointer',
+                                isScoutingActive
+                                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                  : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                              )}
+                            >
+                              <div className="flex items-center gap-2 w-full">
+                                <Radar className="w-4 h-4" />
+                                <span className="flex-1 text-left">Nuevas Tecnologías</span>
+                                <ChevronDown className={cn(
+                                  "w-3 h-3 transition-transform duration-200",
+                                  scoutingNestedOpen && "rotate-180"
+                                )} />
+                              </div>
+                            </SidebarMenuSubButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              {scoutingSubItems.map((item) => (
+                                <SidebarMenuSubItem key={item.title}>
+                                  <SidebarMenuSubButton
+                                    asChild
+                                    isActive={isActive(item.url)}
+                                    className={cn(
+                                      'transition-all duration-200',
+                                      isActive(item.url)
+                                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                        : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                                    )}
+                                  >
+                                    <Link to={item.url} className="flex items-center gap-2">
+                                      <item.icon className="w-4 h-4" />
+                                      <span>{item.title}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </SidebarMenuSubItem>
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>
@@ -518,59 +566,6 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               </Collapsible>
 
-              {/* Scouting Submenu */}
-              <Collapsible
-                open={scoutingOpen}
-                onOpenChange={setScoutingOpen}
-                className="group/collapsible"
-              >
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton
-                      className={cn(
-                        'transition-all duration-200 w-full',
-                        isScoutingActive
-                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                      )}
-                    >
-                      <Radar className="w-5 h-5" />
-                      {!collapsed && (
-                        <>
-                          <span className="flex-1 text-left">Busca Nuevas Tecnologías</span>
-                          <ChevronDown className={cn(
-                            "w-4 h-4 transition-transform duration-200",
-                            scoutingOpen && "rotate-180"
-                          )} />
-                        </>
-                      )}
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {scoutingSubItems.map((item) => (
-                        <SidebarMenuSubItem key={item.title}>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={isActive(item.url)}
-                            className={cn(
-                              'transition-all duration-200',
-                              isActive(item.url)
-                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                            )}
-                          >
-                            <Link to={item.url} className="flex items-center gap-2">
-                              <item.icon className="w-4 h-4" />
-                              <span>{item.title}</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
 
               {/* AI Advisor Submenu */}
               <Collapsible
