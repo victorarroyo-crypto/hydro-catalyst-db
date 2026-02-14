@@ -85,17 +85,16 @@ const consultoriaSubItems = [
 ];
 
 const costConsultingSubItems = [
-  { title: 'Mis Análisis', url: '/cost-consulting', icon: FileText },
+  { title: 'Agua Industrial', url: '/cost-consulting', icon: FileText },
   { title: 'Nuevo Análisis', url: '/cost-consulting/new', icon: Rocket },
   { title: 'Proveedores', url: '/cost-consulting/suppliers', icon: Building2 },
   { title: 'Benchmarks', url: '/cost-consulting/benchmarks', icon: BarChart3 },
+  { title: 'Gestión Proveedores', url: '/cost-consulting/admin/suppliers', icon: ShieldCheck },
+  { title: 'Gestión Benchmarks', url: '/cost-consulting/admin/benchmarks', icon: ShieldCheck },
   { title: 'Químicos', url: '/quimicos', icon: FlaskConical },
 ];
 
-const costConsultingAdminSubItems = [
-  { title: 'Gestión Proveedores', url: '/cost-consulting/admin/suppliers', icon: ShieldCheck },
-  { title: 'Gestión Benchmarks', url: '/cost-consulting/admin/benchmarks', icon: ShieldCheck },
-];
+const costConsultingAdminSubItems: typeof costConsultingSubItems = [];
 
 const scoutingSubItems = [
   { title: 'Cola de Revisión', url: '/scouting', icon: Radar },
