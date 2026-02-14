@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
@@ -242,11 +242,9 @@ export default function ChemContratos() {
   const handleExtractContracts = async () => {
     setExtractingContracts(true);
     try {
-      const response = await supabase.functions.invoke('extract-contract-clauses', {
-        body: { project_id: projectId },
-      });
-      if (response.error) throw response.error;
-      const result = response.data;
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts`, { method: 'POST' });
+      if (!res.ok) throw new Error('Error al iniciar extracción');
+      const result = await res.json();
       toast.success(`Extracción iniciada — procesando ${result.processed || 'los'} documentos.`);
       startPolling();
     } catch {
@@ -259,10 +257,8 @@ export default function ChemContratos() {
   const handleExtractSingleDoc = async (docId: string) => {
     setExtractingDocId(docId);
     try {
-      const response = await supabase.functions.invoke('extract-contract-clauses', {
-        body: { project_id: projectId, document_id: docId },
-      });
-      if (response.error) throw response.error;
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts?document_id=${docId}`, { method: 'POST' });
+      if (!res.ok) throw new Error('Error al iniciar extracción');
       toast.success('Extracción iniciada para este documento.');
       startPolling();
     } catch {

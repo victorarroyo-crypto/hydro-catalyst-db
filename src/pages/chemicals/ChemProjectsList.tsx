@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { API_URL } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,10 +18,10 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 const ESTADOS = [
-  { value: 'prospeccion', label: 'Prospección', color: 'bg-muted text-muted-foreground' },
-  { value: 'auditoria', label: 'Auditoría', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
-  { value: 'negociacion', label: 'Negociación', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
-  { value: 'implementacion', label: 'Implementación', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' },
+  { value: 'prospección', label: 'Prospección', color: 'bg-muted text-muted-foreground' },
+  { value: 'auditoría', label: 'Auditoría', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
+  { value: 'negociación', label: 'Negociación', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
+  { value: 'implementación', label: 'Implementación', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' },
   { value: 'seguimiento', label: 'Seguimiento', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
   { value: 'cerrado', label: 'Cerrado', color: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200' },
 ];
@@ -46,12 +47,13 @@ export default function ChemProjectsList() {
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['chem-projects'],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('chem_projects')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data || [];
+      const url = user?.id
+        ? `${API_URL}/api/chem-consulting/projects?user_id=${user.id}`
+        : `${API_URL}/api/chem-consulting/projects`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Error cargando proyectos');
+      const json = await res.json();
+      return json.projects || [];
     },
   });
 
