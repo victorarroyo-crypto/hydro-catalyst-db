@@ -11,3 +11,4 @@ export { default as ChemVisita } from './ChemVisita';
 export { default as ChemRfqs } from './ChemRfqs';
 export { default as ChemAhorro } from './ChemAhorro';
 export { default as ChemAutorizacion } from './ChemAutorizacion';
+export { default as ChemAlertas } from './ChemAlertas';
