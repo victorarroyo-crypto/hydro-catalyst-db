@@ -192,10 +192,11 @@ export default function ChemContratos() {
 
   // Auto-resume polling for active processes on mount
   useEffect(() => {
-    if (!projectId) return;
-    const activeInvoice = processTracker.getActive('chem-invoice-extraction', projectId);
+    if (!projectId || !selectedAudit) return;
+    const trackingId = `${projectId}:${selectedAudit}`;
+    const activeInvoice = processTracker.getActive('chem-invoice-extraction', trackingId);
     if (activeInvoice && !invoicePollingActive) {
-      console.log('[ProcessTracker] Resuming invoice extraction polling for', projectId);
+      console.log('[ProcessTracker] Resuming invoice extraction polling for', trackingId);
       setInvoicePollingActive(true);
       startInvoicePolling();
     }
@@ -205,31 +206,41 @@ export default function ChemContratos() {
       startPolling(activeContract.metadata?.docIds);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, selectedAudit]);
 
   // Dedicated invoice polling: invalidates chem-invoices queries until data appears
   const startInvoicePolling = useCallback(() => {
     if (invoicePollingRef.current) clearInterval(invoicePollingRef.current);
     setInvoicePollingActive(true);
+    const trackingId = projectId && selectedAudit ? `${projectId}:${selectedAudit}` : projectId || '';
+    const currentAuditId = selectedAudit;
     // Track process for resilience across navigation
-    if (projectId) processTracker.start('chem-invoice-extraction', projectId, 180000);
-    const initialInvoiceCount = queryClient.getQueryData<any[]>(['chem-invoices', projectId])?.length || 0;
+    if (trackingId) processTracker.start('chem-invoice-extraction', trackingId, 180000, { auditId: currentAuditId });
+
     invoicePollingRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices`);
-        if (res.ok) {
-          const data = await res.json();
-          const invoices = data.invoices || data || [];
+        if (currentAuditId) {
+          // Scoped polling: check document extraction status for this audit only
+          const { data: auditDocs } = await externalSupabase
+            .from('chem_contract_documents')
+            .select('id, estado_extraccion')
+            .eq('audit_id', currentAuditId);
+
           // Invalidate to refresh UI
           queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId] });
           queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId] });
           queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
           queryClient.invalidateQueries({ queryKey: ['chem-all-project-docs', projectId] });
-          if (invoices.length > initialInvoiceCount) {
+          queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, currentAuditId] });
+
+          const invoiceDocsInAudit = auditDocs?.filter((d: any) => d.estado_extraccion !== 'pendiente') || [];
+          const allDone = auditDocs && auditDocs.length > 0 && auditDocs.every((d: any) => d.estado_extraccion === 'completado');
+          
+          if (allDone) {
             if (invoicePollingRef.current) clearInterval(invoicePollingRef.current);
             setInvoicePollingActive(false);
-            if (projectId) processTracker.complete('chem-invoice-extraction', projectId);
-            toast.success(`${invoices.length} factura${invoices.length > 1 ? 's' : ''} procesada${invoices.length > 1 ? 's' : ''} correctamente`);
+            processTracker.complete('chem-invoice-extraction', trackingId);
+            toast.success(`Facturas del contrato procesadas correctamente`);
           }
         }
       } catch { /* ignore fetch errors during polling */ }
@@ -239,11 +250,11 @@ export default function ChemContratos() {
       if (invoicePollingRef.current) {
         clearInterval(invoicePollingRef.current);
         setInvoicePollingActive(false);
-        if (projectId) processTracker.complete('chem-invoice-extraction', projectId);
+        if (trackingId) processTracker.complete('chem-invoice-extraction', trackingId);
         toast.info('Tiempo de espera agotado. Recarga la página para ver si hay facturas procesadas.');
       }
     }, 180000);
-  }, [projectId, queryClient]);
+  }, [projectId, selectedAudit, queryClient]);
 
   const startPolling = useCallback((docIds?: string[]) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
@@ -307,7 +318,7 @@ export default function ChemContratos() {
     }
   };
 
-  const handleExtractInvoices = async () => {
+  const handleExtractInvoices = async (force = false) => {
     if (!selectedAudit) {
       toast.error('Selecciona un contrato primero');
       return;
@@ -323,10 +334,21 @@ export default function ChemContratos() {
         return;
       }
 
-      const url = `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices?audit_id=${selectedAudit}`;
+      const params = new URLSearchParams();
+      params.append('audit_id', selectedAudit);
+      if (force) params.append('force', 'true');
+
+      const url = `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices?${params.toString()}`;
       const response = await fetch(url, { method: 'POST' });
       const result = await response.json();
-      toast.success(`Extracción de facturas iniciada — procesando ${docIds.length} documento(s) de este contrato.`);
+
+      // Handle "already extracted" response
+      if (result.documents_to_process === 0 && result.already_extracted > 0) {
+        toast.info('Las facturas ya fueron extraídas. Usa "Re-extraer" si quieres volver a procesar.');
+        return;
+      }
+
+      toast.success(`Extracción de facturas iniciada — procesando ${result.documents_to_process || docIds.length} documento(s) de este contrato.`);
       queryClient.invalidateQueries({ queryKey: ['chem-all-project-docs', projectId] });
       queryClient.invalidateQueries({ queryKey: ['chem-price-history', projectId] });
       startInvoicePolling();
@@ -1409,7 +1431,7 @@ export default function ChemContratos() {
                           {hasExtractable && (
                             <Button
                               size="sm"
-                              onClick={handleExtractInvoices}
+                              onClick={() => handleExtractInvoices(false)}
                               disabled={extractingInvoices}
                               className="bg-[#32b4cd] hover:bg-[#32b4cd]/90 text-white"
                             >
@@ -1417,6 +1439,15 @@ export default function ChemContratos() {
                               Extraer datos
                             </Button>
                           )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleExtractInvoices(true)}
+                            disabled={extractingInvoices || invoiceDocs.length === 0}
+                          >
+                            {extractingInvoices ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Receipt className="w-4 h-4 mr-1" />}
+                            Re-extraer
+                          </Button>
                           <Button size="sm" variant="outline" onClick={openUploadForInvoices}>
                             <Upload className="w-4 h-4 mr-1" /> Subir factura
                           </Button>
