@@ -131,7 +131,8 @@ export default function ChemInventario() {
     queryFn: async () => {
       const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/suppliers`);
       if (!res.ok) return [];
-      return res.json();
+      const json = await res.json();
+      return Array.isArray(json) ? json : (json.suppliers ?? json.data ?? []);
     },
     enabled: !!projectId,
   });
