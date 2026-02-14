@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Upload, Filter } from 'lucide-react';
+import { Plus, Upload, Filter, Edit2, TrendingUp, Clock, Loader2, Trash2 } from 'lucide-react';
+
+const RAILWAY_URL = API_URL;
 
 const FAMILIAS = [
   'ácidos', 'bases_álcalis', 'oxidantes_desinfectantes', 'floculantes_coagulantes',
@@ -20,24 +21,19 @@ const FAMILIAS = [
 ];
 
 const FAMILIAS_LABELS: Record<string, string> = {
-  'ácidos': 'Ácidos',
-  'bases_álcalis': 'Bases/Álcalis',
-  'oxidantes_desinfectantes': 'Oxidantes/Desinfectantes',
-  'floculantes_coagulantes': 'Floculantes/Coagulantes',
-  'detergentes_desengrasantes': 'Detergentes/Desengrasantes',
-  'disolventes': 'Disolventes',
-  'nutrientes': 'Nutrientes',
-  'antiespumantes': 'Antiespumantes',
-  'inhibidores_corrosión': 'Inhibidores corrosión',
-  'resinas_intercambio': 'Resinas intercambio',
-  'especialidades': 'Especialidades',
-  'otros': 'Otros',
+  'ácidos': 'Ácidos', 'bases_álcalis': 'Bases/Álcalis',
+  'oxidantes_desinfectantes': 'Oxidantes/Desinfectantes', 'floculantes_coagulantes': 'Floculantes/Coagulantes',
+  'detergentes_desengrasantes': 'Detergentes/Desengrasantes', 'disolventes': 'Disolventes',
+  'nutrientes': 'Nutrientes', 'antiespumantes': 'Antiespumantes',
+  'inhibidores_corrosión': 'Inhibidores corrosión', 'resinas_intercambio': 'Resinas intercambio',
+  'especialidades': 'Especialidades', 'otros': 'Otros',
 };
 
 const PARETO_OPTIONS = [
-  { value: 'commodity', label: 'Commodity' },
-  { value: 'semi-especialidad', label: 'Semi-especialidad' },
-  { value: 'especialidad', label: 'Especialidad' },
+  { value: 'commodity', label: 'Commodity', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
+  { value: 'semi-especialidad', label: 'Semi-especialidad', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' },
+  { value: 'especialidad', label: 'Especialidad', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' },
+  { value: 'sin_clasificar', label: 'Sin clasificar', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' },
 ];
 
 const TIPO_PRECIO_OPTIONS = [
@@ -63,26 +59,20 @@ const formatCurrency = (val: number | null | undefined) => {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(val);
 };
 
+const formatCurrencyRound = (val: number | null | undefined) => {
+  if (!val && val !== 0) return '—';
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+};
+
 const formatNumber = (val: number | null | undefined) => {
   if (!val && val !== 0) return '—';
   return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(val);
 };
 
-const getGapBadge = (gap: number | null) => {
-  if (gap === null) return null;
-  if (gap < 5) return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">{gap.toFixed(1)}%</Badge>;
-  if (gap < 15) return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">{gap.toFixed(1)}%</Badge>;
-  if (gap < 30) return <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">{gap.toFixed(1)}%</Badge>;
-  return <Badge variant="destructive">{gap.toFixed(1)}%</Badge>;
-};
-
-const getTipoPrecioBadge = (tipo: string | null) => {
-  switch (tipo) {
-    case 'fijo': return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Fijo</Badge>;
-    case 'indexado': return <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">Indexado</Badge>;
-    case 'spot': return <Badge variant="secondary">Spot</Badge>;
-    default: return <Badge variant="outline">{tipo || '—'}</Badge>;
-  }
+const getParetoBadge = (pareto: string | null) => {
+  const opt = PARETO_OPTIONS.find(o => o.value === pareto);
+  if (!opt) return <Badge variant="outline" className="text-[10px]">Sin clasificar</Badge>;
+  return <Badge className={`${opt.color} text-[10px]`}>{opt.label}</Badge>;
 };
 
 interface ProductForm {
@@ -93,7 +83,7 @@ interface ProductForm {
   clasificacion_pareto: string;
   codigo_taric: string;
   aplicacion: string;
-  proveedor_nombre_temp: string; // UI-only, not sent to DB directly
+  proveedor_actual_id: string;
   precio_unitario_actual: number | null;
   tipo_precio: string;
   indice_referencia: string;
@@ -102,61 +92,61 @@ interface ProductForm {
   coste_transporte_separado: number | null;
   formato_envase: string;
   consumo_anual_kg: number | null;
+  precio_benchmark: number | null;
 }
 
 const emptyForm: ProductForm = {
   nombre_comercial: '', nombre_materia_activa: '', concentracion_porcentaje: null, familia_quimica: '',
   clasificacion_pareto: 'commodity', codigo_taric: '', aplicacion: '',
-  proveedor_nombre_temp: '', precio_unitario_actual: null, tipo_precio: 'fijo',
+  proveedor_actual_id: '', precio_unitario_actual: null, tipo_precio: 'fijo',
   indice_referencia: '', prima_actual: null, incoterm_actual: 'DAP',
-  coste_transporte_separado: null, formato_envase: '', consumo_anual_kg: null,
+  coste_transporte_separado: null, formato_envase: '', consumo_anual_kg: null, precio_benchmark: null,
 };
 
 export default function ChemInventario() {
   const { projectId } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterFamilia, setFilterFamilia] = useState<string>('all');
   const [filterPareto, setFilterPareto] = useState<string>('all');
-  const [filterTipoPrecio, setFilterTipoPrecio] = useState<string>('all');
-  const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
-  const [cellValue, setCellValue] = useState('');
 
-  // Use the calculated view for products
+  // Fetch products with calculated view
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['chem-products', projectId],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('chem_products')
-        .select('*, chem_suppliers!proveedor_actual_id(nombre)')
-        .eq('project_id', projectId!)
-        .order('consumo_anual_kg', { ascending: false });
-      if (error) {
-        // Fallback without join if FK doesn't work
-        const { data: fallbackData, error: fallbackError } = await externalSupabase
-          .from('chem_products')
-          .select('*')
-          .eq('project_id', projectId!)
-          .order('consumo_anual_kg', { ascending: false });
-        if (fallbackError) throw fallbackError;
-        return fallbackData || [];
-      }
-      return data || [];
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/products?view=calculated`);
+      if (!res.ok) throw new Error('Error cargando productos');
+      return res.json();
+    },
+    enabled: !!projectId,
+  });
+
+  // Fetch suppliers for the select
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['chem-suppliers', projectId],
+    queryFn: async () => {
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/suppliers`);
+      if (!res.ok) return [];
+      return res.json();
     },
     enabled: !!projectId,
   });
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
-      if (editingId) {
-        const { error } = await externalSupabase.from('chem_products').update(data).eq('id', editingId);
-        if (error) throw error;
-      } else {
-        const { error } = await externalSupabase.from('chem_products').insert({ ...data, project_id: projectId });
-        if (error) throw error;
-      }
+      const url = editingId
+        ? `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/products/${editingId}`
+        : `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/products`;
+      const res = await fetch(url, {
+        method: editingId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Error al guardar');
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chem-products', projectId] });
@@ -168,21 +158,21 @@ export default function ChemInventario() {
     onError: (err: any) => toast.error(`Error al guardar: ${err?.message || 'Error desconocido'}`),
   });
 
-  const inlineSaveMutation = useMutation({
-    mutationFn: async ({ id, field, value }: { id: string; field: string; value: number }) => {
-      const { error } = await externalSupabase.from('chem_products').update({ [field]: value }).eq('id', id);
-      if (error) throw error;
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/products/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Error al eliminar');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chem-products', projectId] });
-      setEditingCell(null);
+      toast.success('Producto eliminado');
     },
-    onError: () => toast.error('Error al actualizar'),
+    onError: () => toast.error('Error al eliminar'),
   });
 
   const handleSubmit = () => {
     if (!form.nombre_comercial.trim()) { toast.error('Nombre comercial requerido'); return; }
-    saveMutation.mutate({
+    const payload: any = {
       nombre_comercial: form.nombre_comercial,
       nombre_materia_activa: form.nombre_materia_activa || null,
       concentracion_porcentaje: form.concentracion_porcentaje,
@@ -190,6 +180,7 @@ export default function ChemInventario() {
       clasificacion_pareto: form.clasificacion_pareto,
       codigo_taric: form.codigo_taric || null,
       aplicacion: form.aplicacion || null,
+      proveedor_actual_id: form.proveedor_actual_id || null,
       precio_unitario_actual: form.precio_unitario_actual,
       tipo_precio: form.tipo_precio,
       indice_referencia: form.tipo_precio === 'indexado' ? form.indice_referencia : null,
@@ -198,7 +189,9 @@ export default function ChemInventario() {
       coste_transporte_separado: form.incoterm_actual !== 'DAP' ? form.coste_transporte_separado : null,
       formato_envase: form.formato_envase || null,
       consumo_anual_kg: form.consumo_anual_kg,
-    });
+      precio_benchmark: form.precio_benchmark,
+    };
+    saveMutation.mutate(payload);
   };
 
   const openEdit = (p: any) => {
@@ -211,7 +204,7 @@ export default function ChemInventario() {
       clasificacion_pareto: p.clasificacion_pareto || 'commodity',
       codigo_taric: p.codigo_taric || '',
       aplicacion: p.aplicacion || '',
-      proveedor_nombre_temp: p.chem_suppliers?.nombre || '',
+      proveedor_actual_id: p.proveedor_actual_id || '',
       precio_unitario_actual: p.precio_unitario_actual,
       tipo_precio: p.tipo_precio || 'fijo',
       indice_referencia: p.indice_referencia || '',
@@ -220,60 +213,29 @@ export default function ChemInventario() {
       coste_transporte_separado: p.coste_transporte_separado,
       formato_envase: p.formato_envase || '',
       consumo_anual_kg: p.consumo_anual_kg,
+      precio_benchmark: p.precio_benchmark,
     });
     setShowModal(true);
   };
 
-  const startInlineEdit = (id: string, field: string, currentValue: number | null) => {
-    setEditingCell({ id, field });
-    setCellValue(currentValue?.toString() || '');
-  };
+  const getProveedorNombre = (p: any) => p.proveedor_nombre || p.chem_suppliers?.nombre || '—';
 
-  const commitInlineEdit = () => {
-    if (!editingCell) return;
-    const num = parseFloat(cellValue);
-    if (isNaN(num)) { setEditingCell(null); return; }
-    inlineSaveMutation.mutate({ id: editingCell.id, field: editingCell.field, value: num });
-  };
-
-  // Helper to get supplier name
-  const getProveedorNombre = (p: any) => p.chem_suppliers?.nombre || '—';
-
-  // Filtrar productos
   const filtered = products.filter((p: any) => {
     if (filterFamilia !== 'all' && p.familia_quimica !== filterFamilia) return false;
     if (filterPareto !== 'all' && p.clasificacion_pareto !== filterPareto) return false;
-    if (filterTipoPrecio !== 'all' && p.tipo_precio !== filterTipoPrecio) return false;
     return true;
   });
 
-  // Totales + Pareto
-  const gastoTotal = filtered.reduce((s: number, p: any) => s + ((p.precio_unitario_actual || 0) * (p.consumo_anual_kg || 0)), 0);
+  const gastoTotal = filtered.reduce((s: number, p: any) => s + (p.gasto_anual || 0), 0);
+  const ahorroTotal = filtered.reduce((s: number, p: any) => s + (p.potencial_ahorro || 0), 0);
 
-  // Calcular gasto acumulado para badge PRIORIDAD (80%)
-  const sortedByGasto = [...products].sort((a: any, b: any) =>
-    ((b.precio_unitario_actual || 0) * (b.consumo_anual_kg || 0)) - ((a.precio_unitario_actual || 0) * (a.consumo_anual_kg || 0))
-  );
-  const gastoTotalAll = sortedByGasto.reduce((s: number, p: any) => s + ((p.precio_unitario_actual || 0) * (p.consumo_anual_kg || 0)), 0);
-  let acum = 0;
-  const paretoIds = new Set<string>();
-  for (const p of sortedByGasto) {
-    acum += (p.precio_unitario_actual || 0) * (p.consumo_anual_kg || 0);
-    paretoIds.add(p.id);
-    if (gastoTotalAll > 0 && acum / gastoTotalAll >= 0.8) break;
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
-
-  const enriched = filtered.map((p: any) => {
-    const gasto = (p.precio_unitario_actual || 0) * (p.consumo_anual_kg || 0);
-    const conc = p.concentracion_porcentaje || 100;
-    const precioMA = conc > 0 ? (p.precio_unitario_actual || 0) / (conc / 100) : 0;
-    const gap = p.precio_benchmark && p.precio_benchmark > 0 ? ((precioMA - p.precio_benchmark) / p.precio_benchmark) * 100 : null;
-    const potencialAhorro = gap !== null && gap > 0 && p.precio_benchmark ? (precioMA - p.precio_benchmark) * (conc / 100) * (p.consumo_anual_kg || 0) : 0;
-    const isPrioridad = paretoIds.has(p.id);
-    return { ...p, gasto, precioMA, gap, potencialAhorroCalc: potencialAhorro, isPrioridad };
-  });
-
-  const ahorroTotal = enriched.reduce((s: number, p: any) => s + (p.potencialAhorroCalc || 0), 0);
 
   return (
     <div className="p-6 space-y-4">
@@ -290,7 +252,31 @@ export default function ChemInventario() {
         </div>
       </div>
 
-      {/* Filtros */}
+      {/* Summary KPIs */}
+      {products.length > 0 && (
+        <div className="grid grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground">Productos</p>
+              <p className="text-2xl font-bold">{filtered.length}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground">Gasto total anual</p>
+              <p className="text-2xl font-bold">{formatCurrencyRound(gastoTotal)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground">Potencial ahorro</p>
+              <p className="text-2xl font-bold text-green-600">{formatCurrencyRound(ahorroTotal)}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Filters */}
       <Card>
         <CardContent className="p-3 flex flex-wrap gap-3 items-center">
           <Filter className="w-4 h-4 text-muted-foreground" />
@@ -308,96 +294,144 @@ export default function ChemInventario() {
               {PARETO_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={filterTipoPrecio} onValueChange={setFilterTipoPrecio}>
-            <SelectTrigger className="w-36 h-8 text-xs"><SelectValue placeholder="Tipo precio" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los tipos</SelectItem>
-              {TIPO_PRECIO_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
         </CardContent>
       </Card>
 
-      {/* Tabla */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[150px]">Producto</TableHead>
-                  <TableHead>Materia activa</TableHead>
-                  <TableHead className="text-right">Conc. %</TableHead>
-                  <TableHead>Familia</TableHead>
-                  <TableHead>Proveedor</TableHead>
-                  <TableHead className="text-right">€/kg prod.</TableHead>
-                  <TableHead className="text-right font-bold bg-primary/5">€/kg MA</TableHead>
-                  <TableHead>Tipo precio</TableHead>
-                  <TableHead>Envase</TableHead>
-                  <TableHead className="text-right">Consumo kg/año</TableHead>
-                  <TableHead className="text-right">Gasto anual</TableHead>
-                  <TableHead className="text-right">Benchmark</TableHead>
-                  <TableHead className="text-right">Gap %</TableHead>
-                  <TableHead className="text-right">Pot. ahorro</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {enriched.length === 0 ? (
-                  <TableRow><TableCell colSpan={15} className="text-center py-8 text-muted-foreground">No hay productos. Haz clic en "Añadir producto" para empezar.</TableCell></TableRow>
-                ) : enriched.map((p: any) => (
-                  <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openEdit(p)}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-1">
-                        {p.nombre_comercial}
-                        {p.isPrioridad && <Badge variant="default" className="text-[10px] px-1 py-0 ml-1">PRIORIDAD</Badge>}
+      {/* Product Cards */}
+      {filtered.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <p className="text-sm text-muted-foreground">No hay productos. Haz clic en "Añadir producto" para empezar.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((p: any) => {
+            const precioMA = p.precio_kg_materia_activa;
+            const puestoPlanta = p.precio_puesto_planta;
+            const gasto = p.gasto_anual;
+            const gap = p.gap_vs_benchmark_pct;
+            const potencial = p.potencial_ahorro;
+            const transporte = p.coste_transporte_separado;
+
+            return (
+              <Card key={p.id} className="hover:border-primary/50 transition-colors">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm">{p.nombre_comercial}</CardTitle>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(p)}>
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm('¿Eliminar producto?')) deleteMutation.mutate(p.id); }}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {p.nombre_materia_activa && <span className="text-xs text-muted-foreground">{p.nombre_materia_activa}</span>}
+                    {p.nombre_materia_activa && <span className="text-muted-foreground">|</span>}
+                    {getParetoBadge(p.clasificacion_pareto)}
+                    {p.familia_quimica && <span className="text-muted-foreground">|</span>}
+                    {p.familia_quimica && <span className="text-xs text-muted-foreground">{FAMILIAS_LABELS[p.familia_quimica] || p.familia_quimica}</span>}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  {/* Prices */}
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Precio:</span>
+                      <span>{formatCurrency(p.precio_unitario_actual)} /kg</span>
+                    </div>
+                    <div className="flex justify-between font-semibold">
+                      <span className="text-muted-foreground">€/kg MA:</span>
+                      <span className="text-primary">{precioMA ? `${formatCurrency(precioMA)} /kg MA` : '—'}</span>
+                    </div>
+                    {puestoPlanta != null && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Puesto plta:</span>
+                        <span>
+                          {formatCurrency(puestoPlanta)} /kg
+                          {p.incoterm_actual && ` (${p.incoterm_actual}`}
+                          {transporte ? ` + ${formatCurrency(transporte)} transp.)` : p.incoterm_actual ? ')' : ''}
+                        </span>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{p.nombre_materia_activa || '—'}</TableCell>
-                    <TableCell className="text-right text-sm">{p.concentracion_porcentaje ? `${p.concentracion_porcentaje}%` : '—'}</TableCell>
-                    <TableCell className="text-sm">{FAMILIAS_LABELS[p.familia_quimica] || p.familia_quimica || '—'}</TableCell>
-                    <TableCell className="text-sm">{getProveedorNombre(p)}</TableCell>
-                    <TableCell className="text-right" onClick={e => { e.stopPropagation(); startInlineEdit(p.id, 'precio_unitario_actual', p.precio_unitario_actual); }}>
-                      {editingCell?.id === p.id && editingCell.field === 'precio_unitario_actual' ? (
-                        <Input className="w-20 h-7 text-xs text-right" autoFocus value={cellValue} onChange={e => setCellValue(e.target.value)}
-                          onBlur={commitInlineEdit} onKeyDown={e => e.key === 'Enter' && commitInlineEdit()} />
-                      ) : <span className="text-sm">{formatCurrency(p.precio_unitario_actual)}</span>}
-                    </TableCell>
-                    <TableCell className="text-right font-bold text-primary bg-primary/5">
-                      {p.precioMA > 0 ? formatCurrency(p.precioMA) : '—'}
-                    </TableCell>
-                    <TableCell>{getTipoPrecioBadge(p.tipo_precio)}</TableCell>
-                    <TableCell className="text-xs">{p.formato_envase || '—'}</TableCell>
-                    <TableCell className="text-right" onClick={e => { e.stopPropagation(); startInlineEdit(p.id, 'consumo_anual_kg', p.consumo_anual_kg); }}>
-                      {editingCell?.id === p.id && editingCell.field === 'consumo_anual_kg' ? (
-                        <Input className="w-24 h-7 text-xs text-right" autoFocus value={cellValue} onChange={e => setCellValue(e.target.value)}
-                          onBlur={commitInlineEdit} onKeyDown={e => e.key === 'Enter' && commitInlineEdit()} />
-                      ) : <span className="text-sm">{formatNumber(p.consumo_anual_kg)}</span>}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">{formatCurrency(p.gasto)}</TableCell>
-                    <TableCell className="text-right text-sm">{p.precio_benchmark ? formatCurrency(p.precio_benchmark) : '—'}</TableCell>
-                    <TableCell className="text-right">{getGapBadge(p.gap)}</TableCell>
-                    <TableCell className="text-right text-sm">{p.potencialAhorroCalc > 0 ? formatCurrency(p.potencialAhorroCalc) : '—'}</TableCell>
-                    <TableCell />
-                  </TableRow>
-                ))}
-                {enriched.length > 0 && (
-                  <TableRow className="bg-muted/30 font-semibold">
-                    <TableCell colSpan={10} className="text-right">Totales</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(gastoTotal)}</TableCell>
-                    <TableCell />
-                    <TableCell />
-                    <TableCell className="text-right font-mono">{formatCurrency(ahorroTotal)}</TableCell>
-                    <TableCell />
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                    )}
+                  </div>
 
-      {/* Modal crear/editar */}
+                  {/* Consumption */}
+                  <div className="space-y-1 text-sm border-t pt-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Consumo:</span>
+                      <span>{formatNumber(p.consumo_anual_kg)} kg/año</span>
+                    </div>
+                    <div className="flex justify-between font-medium">
+                      <span className="text-muted-foreground">Gasto:</span>
+                      <span>{gasto ? `${formatCurrencyRound(gasto)}/año` : '—'}</span>
+                    </div>
+                  </div>
+
+                  {/* Benchmark */}
+                  {(p.precio_benchmark || gap != null) && (
+                    <div className="space-y-1 text-sm border-t pt-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Benchmark:</span>
+                        <span>{p.precio_benchmark ? `${formatCurrency(p.precio_benchmark)} /kg MA` : '—'}</span>
+                      </div>
+                      {gap != null && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Gap:</span>
+                          <div className="flex items-center gap-2">
+                            <Badge className={gap > 15 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : gap > 5 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}>
+                              {gap > 0 ? '+' : ''}{gap.toFixed(1)}%
+                            </Badge>
+                            {potencial > 0 && (
+                              <span className="text-green-600 font-semibold text-xs">Potencial: {formatCurrencyRound(potencial)}</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Details */}
+                  <div className="space-y-1 text-xs border-t pt-2 text-muted-foreground">
+                    <div className="flex justify-between">
+                      <span>Proveedor:</span>
+                      <span className="text-foreground">{getProveedorNombre(p)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Tipo precio:</span>
+                      <span className="text-foreground">
+                        {p.tipo_precio === 'indexado' ? `Indexado${p.indice_referencia ? ` (${p.indice_referencia})` : ''}` : p.tipo_precio || '—'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Formato:</span>
+                      <span className="text-foreground">{ENVASE_OPTIONS.find(e => e.value === p.formato_envase)?.label || p.formato_envase || '—'}</span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 pt-2 border-t">
+                    <Button variant="outline" size="sm" className="flex-1 text-xs h-7" onClick={() => openEdit(p)}>
+                      <Edit2 className="w-3 h-3 mr-1" /> Editar
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1 text-xs h-7" onClick={() => navigate(`/quimicos/${projectId}/benchmarking`)}>
+                      <TrendingUp className="w-3 h-3 mr-1" /> Benchmarks
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1 text-xs h-7" onClick={() => navigate(`/quimicos/${projectId}/historico`)}>
+                      <Clock className="w-3 h-3 mr-1" /> Historial
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Create/Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -439,6 +473,23 @@ export default function ChemInventario() {
               <Input value={form.aplicacion} onChange={e => setForm(f => ({ ...f, aplicacion: e.target.value }))} placeholder="Uso en planta" />
             </div>
             <div>
+              <Label>Formato envase</Label>
+              <Select value={form.formato_envase} onValueChange={v => setForm(f => ({ ...f, formato_envase: v }))}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                <SelectContent>{ENVASE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Proveedor actual</Label>
+              <Select value={form.proveedor_actual_id} onValueChange={v => setForm(f => ({ ...f, proveedor_actual_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Sin proveedor</SelectItem>
+                  {suppliers.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label>Precio €/kg producto</Label>
               <Input type="number" step="0.01" value={form.precio_unitario_actual ?? ''} onChange={e => setForm(f => ({ ...f, precio_unitario_actual: e.target.value ? parseFloat(e.target.value) : null }))} />
             </div>
@@ -449,18 +500,6 @@ export default function ChemInventario() {
                 <SelectContent>{TIPO_PRECIO_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            {form.tipo_precio === 'indexado' && (
-              <>
-                <div>
-                  <Label>Índice referencia</Label>
-                  <Input value={form.indice_referencia} onChange={e => setForm(f => ({ ...f, indice_referencia: e.target.value }))} />
-                </div>
-                <div>
-                  <Label>Prima actual €/tm</Label>
-                  <Input type="number" step="0.01" value={form.prima_actual ?? ''} onChange={e => setForm(f => ({ ...f, prima_actual: e.target.value ? parseFloat(e.target.value) : null }))} />
-                </div>
-              </>
-            )}
             <div>
               <Label>Incoterm</Label>
               <Select value={form.incoterm_actual} onValueChange={v => setForm(f => ({ ...f, incoterm_actual: v }))}>
@@ -470,21 +509,30 @@ export default function ChemInventario() {
             </div>
             {form.incoterm_actual !== 'DAP' && (
               <div>
-                <Label>Coste transporte €</Label>
+                <Label>Coste transporte €/kg</Label>
                 <Input type="number" step="0.01" value={form.coste_transporte_separado ?? ''} onChange={e => setForm(f => ({ ...f, coste_transporte_separado: e.target.value ? parseFloat(e.target.value) : null }))} />
               </div>
             )}
             <div>
-              <Label>Formato envase</Label>
-              <Select value={form.formato_envase} onValueChange={v => setForm(f => ({ ...f, formato_envase: v }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>{ENVASE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
               <Label>Consumo anual kg</Label>
               <Input type="number" value={form.consumo_anual_kg ?? ''} onChange={e => setForm(f => ({ ...f, consumo_anual_kg: e.target.value ? parseFloat(e.target.value) : null }))} />
             </div>
+            <div>
+              <Label>Benchmark €/kg MA</Label>
+              <Input type="number" step="0.01" value={form.precio_benchmark ?? ''} onChange={e => setForm(f => ({ ...f, precio_benchmark: e.target.value ? parseFloat(e.target.value) : null }))} />
+            </div>
+            {form.tipo_precio === 'indexado' && (
+              <>
+                <div>
+                  <Label>Índice referencia</Label>
+                  <Input value={form.indice_referencia} onChange={e => setForm(f => ({ ...f, indice_referencia: e.target.value }))} placeholder="Ej: ICIS NWE" />
+                </div>
+                <div>
+                  <Label>Prima actual €/tm</Label>
+                  <Input type="number" step="0.01" value={form.prima_actual ?? ''} onChange={e => setForm(f => ({ ...f, prima_actual: e.target.value ? parseFloat(e.target.value) : null }))} />
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
