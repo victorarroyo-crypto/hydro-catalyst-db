@@ -26,6 +26,7 @@ const TABS = [
   { value: 'contratos', label: 'Contratos', path: '/contratos' },
   { value: 'baseline', label: 'Baseline', path: '/baseline' },
   { value: 'alertas', label: 'Alertas', path: '/alertas' },
+  { value: 'matriz', label: 'Matriz Estratégica', path: '/matriz' },
   { value: 'benchmarking', label: 'Benchmarking', path: '/benchmarking' },
   { value: 'historico', label: 'Histórico precios', path: '/historico' },
   { value: 'visita', label: 'Visita planta', path: '/visita' },
