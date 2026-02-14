@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Upload, Filter, Edit2, TrendingUp, Clock, Loader2, Trash2 } from 'lucide-react';
+import { Plus, Upload, Filter, Edit2, TrendingUp, Clock, Loader2, Trash2, Wand2, X, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 const RAILWAY_URL = API_URL;
 
@@ -112,6 +113,39 @@ export default function ChemInventario() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterFamilia, setFilterFamilia] = useState<string>('all');
   const [filterPareto, setFilterPareto] = useState<string>('all');
+  const [discoverBanner, setDiscoverBanner] = useState<{ count: number } | null>(null);
+
+  // Check if project has invoices
+  const { data: invoiceCount = 0 } = useQuery({
+    queryKey: ['chem-invoices-count', projectId],
+    queryFn: async () => {
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices`);
+      if (!res.ok) return 0;
+      const json = await res.json();
+      const list = Array.isArray(json) ? json : (json.invoices ?? json.data ?? []);
+      return list.length;
+    },
+    enabled: !!projectId,
+  });
+
+  // Auto-discover mutation
+  const autoDiscoverMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/products/auto-discover`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error('Error en auto-descubrimiento');
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['chem-products', projectId] });
+      toast.success(`${data.created || 0} productos descubiertos, ${data.skipped || 0} ya existían, ${data.linked || 0} líneas vinculadas`);
+      if (data.created > 0) {
+        setDiscoverBanner({ count: data.created });
+      }
+    },
+    onError: () => toast.error('Error al auto-descubrir productos desde facturas'),
+  });
 
   // Fetch products with calculated view
   const { data: products = [], isLoading } = useQuery({
@@ -245,6 +279,29 @@ export default function ChemInventario() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-foreground">Inventario de Químicos</h2>
         <div className="flex gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={invoiceCount === 0 || autoDiscoverMutation.isPending}
+                    onClick={() => autoDiscoverMutation.mutate()}
+                  >
+                    {autoDiscoverMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Descubriendo productos…</>
+                    ) : (
+                      <><Wand2 className="w-4 h-4 mr-1" /> Auto-descubrir desde facturas</>
+                    )}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {invoiceCount === 0 && (
+                <TooltipContent>Primero sube facturas en la pestaña Facturas</TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
           <Button variant="outline" size="sm" disabled>
             <Upload className="w-4 h-4 mr-1" /> Importar CSV
           </Button>
@@ -253,6 +310,19 @@ export default function ChemInventario() {
           </Button>
         </div>
       </div>
+
+      {/* Auto-discover banner */}
+      {discoverBanner && (
+        <div className="flex items-center gap-3 p-3 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950 text-sm">
+          <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+          <span className="flex-1 text-blue-800 dark:text-blue-200">
+            Se han creado {discoverBanner.count} productos desde las facturas. Revisa precios, concentraciones y familias químicas para completar la información.
+          </span>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDiscoverBanner(null)}>
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
 
       {/* Summary KPIs */}
       {products.length > 0 && (
