@@ -222,14 +222,17 @@ export default function ChemContratos() {
     }, 180000);
   }, [projectId, queryClient]);
 
-  const startPolling = useCallback(() => {
+  const startPolling = useCallback((docIds?: string[]) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
       const { data } = await externalSupabase
         .from('chem_contract_documents')
         .select('id, datos_extraidos, confianza_extraccion, estado_extraccion')
-        .eq('project_id', projectId!);
-      const hasStructured = data?.some((d: any) => d.datos_extraidos?.supplier_name);
+        .eq('audit_id', selectedAudit!);
+      const targetDocs = docIds 
+        ? data?.filter((d: any) => docIds.includes(d.id))
+        : data;
+      const hasStructured = targetDocs?.some((d: any) => d.datos_extraidos?.supplier_name);
       if (hasStructured) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
@@ -242,11 +245,14 @@ export default function ChemContratos() {
   const handleExtractContracts = async () => {
     setExtractingContracts(true);
     try {
+      const pendingDocIds = documents
+        ?.filter((d: any) => !d.datos_extraidos?.supplier_name)
+        .map((d: any) => d.id) || [];
       const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts`, { method: 'POST' });
       if (!res.ok) throw new Error('Error al iniciar extracción');
       const result = await res.json();
       toast.success(`Extracción iniciada — procesando ${result.processed || 'los'} documentos.`);
-      startPolling();
+      startPolling(pendingDocIds);
     } catch {
       toast.error('No se pudo iniciar la extracción de contratos');
     } finally {
@@ -260,7 +266,7 @@ export default function ChemContratos() {
       const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts?document_id=${docId}`, { method: 'POST' });
       if (!res.ok) throw new Error('Error al iniciar extracción');
       toast.success('Extracción iniciada para este documento.');
-      startPolling();
+      startPolling([docId]);
     } catch {
       toast.error('No se pudo iniciar la extracción');
     } finally {
