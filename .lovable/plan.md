@@ -1,65 +1,62 @@
 
 
-# Plan: Asegurar que TODOS los procesos de extraccion y analisis esten correctamente scoped al contrato activo
+# Fix: Resumen de facturas muestra datos de TODOS los contratos
 
-## Problema identificado
+## Problema
 
-Aunque los endpoints de extraccion y analisis ya envian `audit_id` correctamente, el **polling posterior** sigue siendo global:
+En `useChemInvoices.ts`, el endpoint de resumen (`/invoice-summary`) se llama sin `audit_id`, por lo que devuelve KPIs globales del proyecto (gasto total, alertas, baselines) en vez de solo los del contrato seleccionado.
 
-1. **`startInvoicePolling` en ChemContratos.tsx (linea 219)**: Hace fetch de TODAS las facturas del proyecto (`/projects/${projectId}/invoices`), no solo las del contrato. El conteo inicial y la comparacion para detectar "completado" usan datos globales, lo que provoca:
-   - Senales falsas de "completado" si otro contrato tiene facturas procesandose
-   - Conteos incorrectos en el toast de finalizacion
+Las facturas y alertas SI se filtran client-side via `auditDocIds`, pero el resumen se muestra tal cual del backend.
 
-2. **`startPolling` (contratos)**: Este SI esta scoped correctamente al `auditId` via metadata del processTracker. No requiere cambios.
+## Solucion
 
-3. **`processTracker` para facturas**: Almacena solo `projectId` como `entityId`, sin `auditId`. Si hay dos contratos procesando facturas simultaneamente, colisionan.
+### Archivo: `src/components/chemicals/invoices/useChemInvoices.ts`
 
-## Cambios propuestos
+**1. Summary query - pasar `audit_id`** (lineas 37-46):
+- Incluir `audit_id` en la query key para que React Query cache por contrato
+- Pasar `?audit_id=` como query param al endpoint
+- Asi el backend calculara el resumen solo con las facturas de ese contrato
 
-### 1. Archivo: `src/pages/chemicals/ChemContratos.tsx`
-
-**`startInvoicePolling`** - Scope el polling al contrato activo:
-
-- Cambiar el entity ID del processTracker de `projectId` a `${projectId}:${selectedAudit}` para evitar colisiones entre contratos
-- Almacenar `auditId` en metadata del processTracker
-- En el polling, filtrar las facturas consultadas contra los `document_id` del contrato actual (ya disponibles en la query `documents`), en lugar de consultar todas las facturas del proyecto
-- Alternativa mas simple: en vez de contar todas las facturas, invalidar queries y verificar si los documentos de factura del contrato actual cambiaron su `estado_extraccion`
-
-Implementacion concreta:
-```text
-startInvoicePolling():
-  1. processTracker.start('chem-invoice-extraction', `${projectId}:${selectedAudit}`, ...)
-  2. En el setInterval, en vez de fetch global de invoices:
-     - Consultar chem_contract_documents del audit actual
-     - Verificar si los docs tipo factura pasaron a estado 'completado'
-     - Si todos completaron -> parar polling y notificar
+```
+Antes:  GET /projects/{id}/invoice-summary
+Despues: GET /projects/{id}/invoice-summary?audit_id={auditId}
 ```
 
-### 2. Archivo: `src/pages/chemicals/ChemContratos.tsx`
+**2. Invoices query - pasar `audit_id`** (lineas 13-22):
+- Pasar `?audit_id=` para que el backend solo devuelva facturas del contrato
+- Incluir `auditId` en la query key
+- Esto elimina la necesidad de filtrar client-side (mas eficiente)
 
-**Auto-resume polling en mount** (lineas 194-208):
-- Ajustar la busqueda del processTracker para usar la clave compuesta `${projectId}:${auditId}` en lugar de solo `projectId`
-- Solo reanudar el polling si el `selectedAudit` coincide con el que inicio el proceso
+**3. Alerts query - pasar `audit_id`** (lineas 25-34):
+- Pasar `?audit_id=` para filtrar alertas en backend
+- Incluir `auditId` en la query key
 
-### 3. Archivo: `src/components/chemicals/invoices/useChemInvoices.ts`
+**4. Simplificar filtrado client-side** (lineas 249-258):
+- Si el backend ya filtra, el filtrado por `auditDocIds` sigue como safety net pero ya no seria necesario como unica capa
 
-**Revisar consistencia del hook**:
-- Ya esta correcto: `analyzeInvoicesMutation` y `autoLinkMutation` pasan `auditId` cuando esta disponible
-- No requiere cambios adicionales
+## Seccion tecnica
 
-## Resumen de impacto
+Cambios concretos en `useChemInvoices.ts`:
 
-| Componente | Estado actual | Accion |
-|---|---|---|
-| `handleExtractContracts` | Scoped con `audit_id` | Sin cambios |
-| `handleExtractInvoices` | Scoped con `audit_id` | Sin cambios |
-| `handleExtractSingleDoc` | Scoped por `document_id` | Sin cambios |
-| `analyzeInvoicesMutation` | Scoped con `audit_id` | Sin cambios |
-| `autoLinkMutation` | Scoped con `audit_id` | Sin cambios |
-| **`startInvoicePolling`** | **GLOBAL - BUG** | **Scopear al audit** |
-| **processTracker invoice** | **Colisiona entre audits** | **Clave compuesta** |
-| **Auto-resume mount** | **No verifica audit** | **Verificar audit** |
+```text
+// Summary (linea 37-46)
+queryKey: ['chem-invoice-summary', projectId, auditId]   // <-- add auditId
+const params = auditId ? `?audit_id=${auditId}` : '';
+fetch(`.../${projectId}/invoice-summary${params}`)
+
+// Invoices (linea 13-22)  
+queryKey: ['chem-invoices', projectId, auditId]           // <-- add auditId
+const params = auditId ? `?audit_id=${auditId}` : '';
+fetch(`.../${projectId}/invoices${params}`)
+
+// Alerts (linea 25-34)
+queryKey: ['chem-invoice-alerts', projectId, auditId]     // <-- add auditId
+const params = auditId ? `?audit_id=${auditId}` : '';
+fetch(`.../${projectId}/invoice-alerts${params}`)
+```
+
+Tambien actualizar las `invalidateQueries` calls (lineas 60-61, 97-98, 125-126, 184-185, 242-243, 279-281) para incluir `auditId` en las query keys.
 
 ## Archivos a modificar
 
-- `src/pages/chemicals/ChemContratos.tsx` — refactorizar `startInvoicePolling` y auto-resume
+- `src/components/chemicals/invoices/useChemInvoices.ts` -- pasar `audit_id` a los 3 endpoints GET y actualizar query keys
