@@ -12,6 +12,7 @@ import { ChemInvoicesList } from './ChemInvoicesList';
 import { ChemInvoiceAlerts } from './ChemInvoiceAlerts';
 import { ChemInvoiceSummary } from './ChemInvoiceSummary';
 import { toast } from 'sonner';
+import type { InvoiceSummary } from './types';
 
 interface Props {
   projectId: string;
@@ -110,6 +111,77 @@ export function ChemInvoicesTab({ projectId, auditId }: Props) {
       return { ...inv, chem_suppliers: { nombre } };
     });
   }, [invoices, docSupplierMap]);
+
+  // Compute client-side summary from filtered invoices & alerts when inside a contract
+  const computedSummary: InvoiceSummary | null = useMemo(() => {
+    if (!auditId) return null; // Use backend summary when no contract filter
+    if (invoicesLoading || alertsLoading) return null;
+
+    const totalGasto = enrichedInvoices.reduce((s, inv) => s + (inv.importe_total ?? 0), 0);
+    const totalProductos = enrichedInvoices.reduce((s, inv) => s + (inv.total_productos ?? 0), 0);
+    const totalPortes = enrichedInvoices.reduce((s, inv) => s + (inv.total_portes ?? 0), 0);
+    const totalRecargos = enrichedInvoices.reduce((s, inv) => s + (inv.total_recargos ?? 0), 0);
+    const totalServicios = enrichedInvoices.reduce((s, inv) => s + (inv.total_servicios ?? 0), 0);
+    const totalDescuentos = enrichedInvoices.reduce((s, inv) => s + (inv.total_descuentos ?? 0), 0);
+    const noProd = totalGasto > 0
+      ? ((totalPortes + totalRecargos + totalServicios - totalDescuentos) / totalGasto) * 100
+      : 0;
+
+    const pendientes = alerts.filter(a => a.estado === 'pendiente').length;
+    const ahorroPotencial = alerts.reduce((s, a) => s + (a.impacto_estimado_eur ?? 0), 0);
+    const porTipo: Record<string, number> = {};
+    alerts.forEach(a => { porTipo[a.tipo_alerta] = (porTipo[a.tipo_alerta] || 0) + 1; });
+
+    // Build baselines from invoice lines
+    const lineMap = new Map<string, { total: number; vol: number; count: Set<string>; maTotal: number; maVol: number }>();
+    enrichedInvoices.forEach(inv => {
+      (inv.lines || []).filter(l => l.tipo_linea === 'producto').forEach(line => {
+        const name = line.producto_nombre || 'Desconocido';
+        if (!lineMap.has(name)) lineMap.set(name, { total: 0, vol: 0, count: new Set(), maTotal: 0, maVol: 0 });
+        const entry = lineMap.get(name)!;
+        entry.total += line.importe_linea ?? 0;
+        entry.vol += line.cantidad ?? 0;
+        entry.count.add(inv.id);
+        if (line.precio_kg_materia_activa != null && line.cantidad > 0) {
+          entry.maTotal += line.precio_kg_materia_activa * line.cantidad;
+          entry.maVol += line.cantidad;
+        }
+      });
+    });
+
+    const baselines = Array.from(lineMap.entries()).map(([producto, d]) => ({
+      producto,
+      precio_medio: d.vol > 0 ? d.total / d.vol : 0,
+      volumen_total_kg: d.vol,
+      num_facturas: d.count.size,
+      precio_kg_ma: d.maVol > 0 ? d.maTotal / d.maVol : null,
+    }));
+
+    return {
+      project_id: projectId,
+      total_invoices: enrichedInvoices.length,
+      total_gasto: totalGasto,
+      desglose_costes: {
+        productos: totalProductos,
+        portes: totalPortes,
+        recargos: totalRecargos,
+        servicios: totalServicios,
+        descuentos: totalDescuentos,
+        pct_no_producto: noProd,
+      },
+      alertas: {
+        total: alerts.length,
+        pendientes,
+        por_tipo: porTipo,
+        ahorro_potencial_eur: ahorroPotencial,
+      },
+      baselines,
+    };
+  }, [auditId, enrichedInvoices, alerts, invoicesLoading, alertsLoading, projectId]);
+
+  // Use client-side summary when in contract view, otherwise backend summary
+  const effectiveSummary = auditId ? computedSummary : summary;
+  const effectiveSummaryLoading = auditId ? (invoicesLoading || alertsLoading) : summaryLoading;
 
   const openChemPdf = useCallback(async (fileUrl: string) => {
     // For http(s) URLs, open directly
@@ -229,8 +301,8 @@ export function ChemInvoicesTab({ projectId, auditId }: Props) {
 
         <TabsContent value="resumen">
           <ChemInvoiceSummary
-            summary={summary}
-            loading={summaryLoading}
+            summary={effectiveSummary}
+            loading={effectiveSummaryLoading}
           />
         </TabsContent>
       </Tabs>
