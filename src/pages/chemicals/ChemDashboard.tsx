@@ -5,10 +5,16 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Receipt, AlertTriangle, TrendingDown, TrendingUp, Minus, DollarSign, Loader2, RefreshCw, BarChart3 } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useChemInvoices } from '@/components/chemicals/invoices/useChemInvoices';
 import type { InvoiceSummary, ProductBaseline, ChemInvoiceAlert } from '@/components/chemicals/invoices/types';
 import { formatEUR, formatEURCurrency, SEVERITY_CONFIG } from '@/components/chemicals/invoices/types';
+
+function getDominantFormat(formatos?: Record<string, number>): string | null {
+  if (!formatos || Object.keys(formatos).length === 0) return null;
+  return Object.entries(formatos).sort(([, a], [, b]) => b - a)[0][0];
+}
 
 // Corporate colors
 const COLORS = {
@@ -39,12 +45,6 @@ function normalizeSummary(raw: InvoiceSummary) {
   return { totalInvoices, totalGasto, desglose, pctNoProducto, baselines, alertas, ahorroPotencial, suppliers: raw.suppliers ?? [] };
 }
 
-const TENDENCIA_ICON: Record<string, React.ReactNode> = {
-  subiendo: <TrendingUp className="w-3.5 h-3.5 text-red-500" />,
-  bajando: <TrendingDown className="w-3.5 h-3.5 text-green-500" />,
-  estable: <Minus className="w-3.5 h-3.5 text-muted-foreground" />,
-  'sin datos': <Minus className="w-3.5 h-3.5 text-muted-foreground" />,
-};
 
 export default function ChemDashboard() {
   const { projectId } = useParams();
@@ -134,7 +134,7 @@ export default function ChemDashboard() {
                     <Pie data={donutData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2}>
                       {donutData.map((_, i) => <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(v: number) => formatEURCurrency(v)} />
+                    <RechartsTooltip formatter={(v: number) => formatEURCurrency(v)} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex-1 space-y-2">
@@ -219,43 +219,123 @@ export default function ChemDashboard() {
             <CardTitle className="text-sm">Baseline por Producto (Top 10)</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs">Producto</TableHead>
-                  <TableHead className="text-xs text-right">€/kg</TableHead>
-                  <TableHead className="text-xs text-right">€/kg MA</TableHead>
-                  <TableHead className="text-xs text-right">Conc. %</TableHead>
-                  <TableHead className="text-xs text-right">Vol. (kg)</TableHead>
-                  <TableHead className="text-xs text-right">Gasto</TableHead>
-                  <TableHead className="text-xs text-center">Tend.</TableHead>
-                  <TableHead className="text-xs text-center">Facturas</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {top10.map((bl, i) => {
-                  const precioKg = bl.precio_medio_ponderado ?? bl.precio_medio;
-                  const precioMA = bl.precio_medio_ponderado_ma ?? bl.precio_kg_ma;
-                  const conc = bl.concentracion_media ?? bl.concentracion;
-                  const vol = bl.volumen_anual_kg ?? bl.volumen_total_kg;
-                  const gasto = bl.gasto_anual ?? precioKg * vol;
-                  const tend = bl.tendencia ?? 'sin datos';
+            <TooltipProvider>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Producto</TableHead>
+                    <TableHead className="text-xs text-right">
+                      <Tooltip><TooltipTrigger asChild><span className="cursor-help">Precio Nominal</span></TooltipTrigger>
+                        <TooltipContent>Media ponderada de facturas</TooltipContent></Tooltip>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <Tooltip><TooltipTrigger asChild><span className="cursor-help">Precio MA</span></TooltipTrigger>
+                        <TooltipContent>Normalizado por concentración</TooltipContent></Tooltip>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <Tooltip><TooltipTrigger asChild><span className="cursor-help">Conc.</span></TooltipTrigger>
+                        <TooltipContent>Concentración media detectada</TooltipContent></Tooltip>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <Tooltip><TooltipTrigger asChild><span className="cursor-help">TCO</span></TooltipTrigger>
+                        <TooltipContent>Precio + portes + recargos atribuidos. Rojo si TCO {'>'} precio × 1.15</TooltipContent></Tooltip>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">Volumen</TableHead>
+                    <TableHead className="text-xs text-right">Gasto</TableHead>
+                    <TableHead className="text-xs text-center">Tend.</TableHead>
+                    <TableHead className="text-xs text-center">Formato</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {top10.map((bl, i) => {
+                    const precioKg = bl.precio_medio_ponderado ?? bl.precio_medio;
+                    const precioMA = bl.precio_medio_ponderado_ma ?? bl.precio_kg_ma;
+                    const conc = bl.concentracion_media ?? bl.concentracion;
+                    const vol = bl.volumen_anual_kg ?? bl.volumen_total_kg;
+                    const gasto = bl.gasto_anual ?? precioKg * vol;
+                    const tend = bl.tendencia ?? 'sin datos';
+                    const variacion = bl.variacion_pct ?? 0;
+                    const tco = bl.tco_kg;
+                    const tcoHighlight = tco != null && precioKg > 0 && tco > precioKg * 1.15;
+                    const dominantFormat = getDominantFormat(bl.formatos);
 
-                  return (
-                    <TableRow key={i}>
-                      <TableCell className="text-xs font-medium max-w-[200px] truncate">{bl.producto}</TableCell>
-                      <TableCell className="text-xs text-right font-mono">{formatEUR(precioKg, 4)}</TableCell>
-                      <TableCell className="text-xs text-right font-mono font-semibold">{precioMA != null ? formatEUR(precioMA, 3) : '—'}</TableCell>
-                      <TableCell className="text-xs text-right font-mono">{conc != null ? `${conc.toFixed(0)}%` : '—'}</TableCell>
-                      <TableCell className="text-xs text-right font-mono">{vol.toLocaleString('es-ES')}</TableCell>
-                      <TableCell className="text-xs text-right font-mono">{formatEURCurrency(gasto)}</TableCell>
-                      <TableCell className="text-xs text-center">{TENDENCIA_ICON[tend]}</TableCell>
-                      <TableCell className="text-xs text-center">{bl.num_facturas}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                    return (
+                      <TableRow key={i}>
+                        <TableCell className="text-xs font-medium max-w-[200px] truncate">{bl.producto}</TableCell>
+                        <TableCell className="text-xs text-right font-mono">{formatEUR(precioKg, 4)}</TableCell>
+                        <TableCell className="text-xs text-right font-mono">
+                          {precioMA != null ? (
+                            <span className="font-bold">{formatEUR(precioMA, 4)}</span>
+                          ) : (
+                            <Tooltip><TooltipTrigger asChild><span className="text-muted-foreground cursor-help">—</span></TooltipTrigger>
+                              <TooltipContent>Sin datos de concentración</TooltipContent></Tooltip>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-right font-mono">{conc != null ? `${conc.toFixed(0)}%` : '—'}</TableCell>
+                        <TableCell className={`text-xs text-right font-mono ${tcoHighlight ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 font-semibold' : ''}`}>
+                          {tco != null ? formatEUR(tco, 4) : '—'}
+                        </TableCell>
+                        <TableCell className="text-xs text-right font-mono">{vol.toLocaleString('es-ES')} kg</TableCell>
+                        <TableCell className="text-xs text-right font-mono">{formatEURCurrency(gasto)}</TableCell>
+                        <TableCell className="text-xs text-center">
+                          <span className="inline-flex items-center gap-1">
+                            {tend === 'subiendo' && variacion > 5 ? (
+                              <span className="text-red-600 font-bold inline-flex items-center gap-0.5">
+                                <TrendingUp className="w-3.5 h-3.5" />+{variacion.toFixed(1)}%
+                              </span>
+                            ) : tend === 'subiendo' ? (
+                              <span className="text-red-500 inline-flex items-center gap-0.5">
+                                <TrendingUp className="w-3.5 h-3.5" />+{variacion.toFixed(1)}%
+                              </span>
+                            ) : tend === 'bajando' ? (
+                              <span className="text-green-600 inline-flex items-center gap-0.5">
+                                <TrendingDown className="w-3.5 h-3.5" />{variacion.toFixed(1)}%
+                              </span>
+                            ) : tend === 'estable' ? (
+                              <span className="text-muted-foreground inline-flex items-center gap-0.5">
+                                <Minus className="w-3.5 h-3.5" />
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-center">
+                          {dominantFormat ? (
+                            <Badge variant="outline" className="text-[10px]">{dominantFormat}</Badge>
+                          ) : '—'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TooltipProvider>
+
+            {/* TCO cost breakdown bar */}
+            {s.desglose && donutTotal > 0 && (
+              <div className="px-4 py-3 border-t">
+                <div className="flex h-5 w-full rounded-md overflow-hidden text-[10px] font-medium">
+                  {donutData.map((d, i) => (
+                    <div
+                      key={d.name}
+                      className="flex items-center justify-center text-white whitespace-nowrap overflow-hidden"
+                      style={{ width: `${d.pct}%`, backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length], minWidth: d.pct > 3 ? undefined : 0 }}
+                    >
+                      {d.pct >= 5 && `${d.pct.toFixed(1)}% ${d.name}`}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3 mt-1.5 flex-wrap">
+                  {donutData.map((d, i) => (
+                    <span key={d.name} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                      {d.pct.toFixed(1)}% {d.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
