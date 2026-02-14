@@ -46,6 +46,8 @@ export default function ChemContratos() {
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [activeDocName, setActiveDocName] = useState<string | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const invoicePollingRef = useRef<NodeJS.Timeout | null>(null);
+  const [invoicePollingActive, setInvoicePollingActive] = useState(false);
 
   // Query audits with JOIN to get supplier name
   const { data: audits = [] } = useQuery({
@@ -185,8 +187,42 @@ export default function ChemContratos() {
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
+      if (invoicePollingRef.current) clearInterval(invoicePollingRef.current);
     };
   }, []);
+
+  // Dedicated invoice polling: invalidates chem-invoices queries until data appears
+  const startInvoicePolling = useCallback(() => {
+    if (invoicePollingRef.current) clearInterval(invoicePollingRef.current);
+    setInvoicePollingActive(true);
+    invoicePollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices`);
+        if (res.ok) {
+          const data = await res.json();
+          const invoices = data.invoices || data || [];
+          // Invalidate to refresh UI
+          queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId] });
+          queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId] });
+          queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
+          queryClient.invalidateQueries({ queryKey: ['chem-all-project-docs', projectId] });
+          if (invoices.length > 0) {
+            if (invoicePollingRef.current) clearInterval(invoicePollingRef.current);
+            setInvoicePollingActive(false);
+            toast.success(`${invoices.length} factura${invoices.length > 1 ? 's' : ''} procesada${invoices.length > 1 ? 's' : ''} correctamente`);
+          }
+        }
+      } catch { /* ignore fetch errors during polling */ }
+    }, 5000);
+    // Max 3 minutes
+    setTimeout(() => {
+      if (invoicePollingRef.current) {
+        clearInterval(invoicePollingRef.current);
+        setInvoicePollingActive(false);
+        toast.info('Tiempo de espera agotado. Recarga la página para ver si hay facturas procesadas.');
+      }
+    }, 180000);
+  }, [projectId, queryClient]);
 
   const startPolling = useCallback(() => {
     if (pollingRef.current) clearInterval(pollingRef.current);
@@ -246,7 +282,7 @@ export default function ChemContratos() {
       toast.success(`Extracción de facturas iniciada — procesando ${result.documents_to_process || 'los'} documentos.`);
       queryClient.invalidateQueries({ queryKey: ['chem-all-project-docs', projectId] });
       queryClient.invalidateQueries({ queryKey: ['chem-price-history', projectId] });
-      startPolling();
+      startInvoicePolling();
     } catch {
       toast.error('No se pudo iniciar la extracción de facturas');
     } finally {
@@ -1310,6 +1346,19 @@ export default function ChemContratos() {
                 </>
               );
             })()}
+
+            {/* Banner de procesamiento de facturas */}
+            {(invoicePollingActive || extractingInvoices) && (
+              <Card className="border-[#32b4cd]/30 bg-[#32b4cd]/5">
+                <CardContent className="py-4 flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 animate-spin text-[#32b4cd]" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Extrayendo datos de facturas…</p>
+                    <p className="text-xs text-muted-foreground">Railway está procesando los PDFs. Los resultados aparecerán automáticamente.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Resultados procesados por Railway */}
             <ChemInvoicesTab projectId={projectId!} />
