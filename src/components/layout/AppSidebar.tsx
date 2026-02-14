@@ -38,6 +38,7 @@ import {
   ClipboardCheck,
   Clock,
   FlaskConical,
+  Droplets,
 } from 'lucide-react';
 import vandarumSymbolBlue from '@/assets/vandarum-symbol-blue.png';
 import {
@@ -84,13 +85,15 @@ const consultoriaSubItems = [
   { title: 'Nuevo Proyecto', url: '/consultoria/nuevo', icon: Rocket },
 ];
 
-const costConsultingSubItems = [
-  { title: 'Agua Industrial', url: '/cost-consulting', icon: FileText },
+const aguaIndustrialSubItems = [
   { title: 'Nuevo Análisis', url: '/cost-consulting/new', icon: Rocket },
   { title: 'Proveedores', url: '/cost-consulting/suppliers', icon: Building2 },
   { title: 'Benchmarks', url: '/cost-consulting/benchmarks', icon: BarChart3 },
   { title: 'Gestión Proveedores', url: '/cost-consulting/admin/suppliers', icon: ShieldCheck },
   { title: 'Gestión Benchmarks', url: '/cost-consulting/admin/benchmarks', icon: ShieldCheck },
+];
+
+const costConsultingSubItems = [
   { title: 'Químicos', url: '/quimicos', icon: FlaskConical },
 ];
 
@@ -171,9 +174,11 @@ export function AppSidebar() {
   const [consultoriaOpen, setConsultoriaOpen] = useState(
     consultoriaSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/consultoria'))
   );
+  const isAguaIndustrialRoute = location.pathname.startsWith('/cost-consulting');
   const [costConsultingOpen, setCostConsultingOpen] = useState(
-    costConsultingSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/cost-consulting') || location.pathname.startsWith('/quimicos'))
+    isAguaIndustrialRoute || location.pathname.startsWith('/quimicos')
   );
+  const [aguaIndustrialOpen, setAguaIndustrialOpen] = useState(isAguaIndustrialRoute);
   const [taxonomyOpen, setTaxonomyOpen] = useState(
     location.pathname === '/taxonomy-admin'
   );
@@ -199,7 +204,7 @@ export function AppSidebar() {
   const isAdvisorActive = advisorSubItems.some((item) => location.pathname === item.url);
   const isProjectsActive = projectsSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/studies/'));
   const isConsultoriaActive = consultoriaSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/consultoria'));
-  const isCostConsultingActive = costConsultingSubItems.some((item) => location.pathname === item.url || location.pathname.startsWith('/cost-consulting') || location.pathname.startsWith('/quimicos'));
+  const isCostConsultingActive = location.pathname.startsWith('/cost-consulting') || location.pathname.startsWith('/quimicos');
   const isTaxonomyActive = location.pathname === '/taxonomy-admin';
   const isBdTechActive = location.pathname === '/technologies';
   const isSettingsActive = settingsItems.some((item) => location.pathname === item.url);
@@ -441,6 +446,54 @@ export function AppSidebar() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
+                      {/* Agua Industrial - nested collapsible */}
+                      <SidebarMenuSubItem>
+                        <Collapsible open={aguaIndustrialOpen} onOpenChange={setAguaIndustrialOpen}>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuSubButton
+                              className={cn(
+                                'transition-all duration-200 cursor-pointer',
+                                isAguaIndustrialRoute
+                                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                  : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                              )}
+                            >
+                              <div className="flex items-center gap-2 w-full">
+                                <Droplets className="w-4 h-4" />
+                                <span className="flex-1 text-left">Agua Industrial</span>
+                                <ChevronDown className={cn(
+                                  "w-3 h-3 transition-transform duration-200",
+                                  aguaIndustrialOpen && "rotate-180"
+                                )} />
+                              </div>
+                            </SidebarMenuSubButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              {aguaIndustrialSubItems.map((item) => (
+                                <SidebarMenuSubItem key={item.title}>
+                                  <SidebarMenuSubButton
+                                    asChild
+                                    isActive={isActive(item.url) || location.pathname.startsWith(item.url + '/')}
+                                    className={cn(
+                                      'transition-all duration-200',
+                                      (isActive(item.url) || location.pathname.startsWith(item.url + '/'))
+                                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                        : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                                    )}
+                                  >
+                                    <Link to={item.url} className="flex items-center gap-2">
+                                      <item.icon className="w-4 h-4" />
+                                      <span>{item.title}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </SidebarMenuSubItem>
+                      {/* Other items like Químicos */}
                       {costConsultingSubItems.map((item) => (
                         <SidebarMenuSubItem key={item.title}>
                           <SidebarMenuSubButton
@@ -460,31 +513,6 @@ export function AppSidebar() {
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
-                      {/* Admin Items - Solo Admin */}
-                      {profile?.role === 'admin' && (
-                        <>
-                          <div className="my-1 mx-2 border-t border-sidebar-border/50" />
-                          {costConsultingAdminSubItems.map((item) => (
-                            <SidebarMenuSubItem key={item.title}>
-                              <SidebarMenuSubButton
-                                asChild
-                                isActive={isActive(item.url)}
-                                className={cn(
-                                  'transition-all duration-200',
-                                  isActive(item.url)
-                                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                                    : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                                )}
-                              >
-                                <Link to={item.url} className="flex items-center gap-2">
-                                  <item.icon className="w-4 h-4" />
-                                  <span>{item.title}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                        </>
-                      )}
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>
