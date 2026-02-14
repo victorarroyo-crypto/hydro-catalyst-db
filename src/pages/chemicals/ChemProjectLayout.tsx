@@ -25,6 +25,7 @@ const TABS = [
   { value: 'inventario', label: 'Inventario', path: '/inventario' },
   { value: 'contratos', label: 'Contratos', path: '/contratos' },
   { value: 'baseline', label: 'Baseline', path: '/baseline' },
+  { value: 'alertas', label: 'Alertas', path: '/alertas' },
   { value: 'benchmarking', label: 'Benchmarking', path: '/benchmarking' },
   { value: 'historico', label: 'Histórico precios', path: '/historico' },
   { value: 'visita', label: 'Visita planta', path: '/visita' },
