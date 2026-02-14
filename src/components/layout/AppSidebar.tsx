@@ -123,7 +123,7 @@ const knowledgeBaseItems = [
   { title: 'Documentos Técnicos', url: '/knowledge-base?section=documents', icon: FileText },
   { title: 'Fuentes de Scouting', url: '/knowledge-base?section=sources', icon: Globe },
   { title: 'Casos de Estudio', url: '/knowledge-base?section=cases', icon: BookOpen },
-  { title: 'Tendencias', url: '/knowledge-base?section=trends', icon: Lightbulb },
+  
 ];
 
 const aiToolsItems = [
