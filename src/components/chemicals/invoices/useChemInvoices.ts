@@ -37,7 +37,8 @@ export function useChemInvoices(projectId: string | undefined) {
     queryFn: async (): Promise<InvoiceSummary | null> => {
       const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoice-summary`);
       if (!res.ok) return null;
-      return res.json();
+      const data = await res.json();
+      return data.summary || null;
     },
     enabled: !!projectId,
   });
