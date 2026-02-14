@@ -33,9 +33,12 @@ export default function ChemContratos() {
   const [newProveedorNombre, setNewProveedorNombre] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadTipo, setUploadTipo] = useState('contrato_formal');
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const MAX_BATCH_FILES = 10;
   const [extractingContracts, setExtractingContracts] = useState(false);
   const [extractingInvoices, setExtractingInvoices] = useState(false);
   const [extractingDocId, setExtractingDocId] = useState<string | null>(null);
@@ -283,43 +286,60 @@ export default function ChemContratos() {
   };
 
 
-  const handleUploadDocument = async () => {
-    if (!uploadFile || !projectId) return;
-    // For invoices (tipo 'otro'), audit_id is optional
-    if (uploadTipo !== 'otro' && !selectedAudit) return;
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', uploadFile);
-      formData.append('tipo_documento', uploadTipo);
-      if (selectedAudit) {
-        formData.append('audit_id', selectedAudit);
-      }
-
-      const response = await fetch(
-        `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/documents`,
-        { method: 'POST', body: formData }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Error subiendo documento');
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
-      toast.success('Documento subido correctamente');
-      setShowUploadModal(false);
-      setUploadFile(null);
-      setUploadTipo('otro');
-    } catch (err: any) {
-      if (err instanceof TypeError && err.message === 'Failed to fetch') {
-        toast.error('No se pudo conectar con el servidor. Verifica tu conexión o inténtalo más tarde.');
-      } else {
-        toast.error(`Error: ${err.message}`);
-      }
-    } finally {
-      setUploading(false);
+  const uploadSingleFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('tipo_documento', uploadTipo);
+    if (selectedAudit) {
+      formData.append('audit_id', selectedAudit);
     }
+    const response = await fetch(
+      `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/documents`,
+      { method: 'POST', body: formData }
+    );
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Error subiendo ${file.name}`);
+    }
+  };
+
+  const handleUploadDocument = async () => {
+    if (!projectId) return;
+    const isInvoiceBatch = uploadTipo === 'otro' && uploadFiles.length > 0;
+    const filesToUpload = isInvoiceBatch ? uploadFiles : (uploadFile ? [uploadFile] : []);
+    if (filesToUpload.length === 0) return;
+    if (uploadTipo !== 'otro' && !selectedAudit) return;
+
+    setUploading(true);
+    setUploadProgress({ current: 0, total: filesToUpload.length });
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < filesToUpload.length; i++) {
+      setUploadProgress({ current: i + 1, total: filesToUpload.length });
+      try {
+        await uploadSingleFile(filesToUpload[i]);
+        successCount++;
+      } catch (err: any) {
+        errorCount++;
+        if (err instanceof TypeError && err.message === 'Failed to fetch') {
+          toast.error(`${filesToUpload[i].name}: No se pudo conectar con el servidor.`);
+        } else {
+          toast.error(`${filesToUpload[i].name}: ${err.message}`);
+        }
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
+    if (successCount > 0) {
+      toast.success(`${successCount} factura${successCount > 1 ? 's' : ''} subida${successCount > 1 ? 's' : ''} correctamente${errorCount > 0 ? ` (${errorCount} con error)` : ''}`);
+    }
+    setShowUploadModal(false);
+    setUploadFile(null);
+    setUploadFiles([]);
+    setUploadTipo('otro');
+    setUploadProgress({ current: 0, total: 0 });
+    setUploading(false);
   };
 
   const currentAudit = audits.find((a: any) => a.id === selectedAudit);
@@ -1296,45 +1316,99 @@ export default function ChemContratos() {
           </TabsContent>
         </Tabs>
 
-        {/* Upload Modal - fuera de cualquier TabsContent para que sea accesible desde todas las pestañas */}
-        <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
+        {/* Upload Modal */}
+        <Dialog open={showUploadModal} onOpenChange={(open) => { if (!uploading) { setShowUploadModal(open); if (!open) { setUploadFile(null); setUploadFiles([]); } } }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{uploadTipo === 'otro' ? 'Subir factura' : 'Subir documento'}</DialogTitle>
+              <DialogTitle>{uploadTipo === 'otro' ? 'Subir facturas' : 'Subir documento'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               {uploadTipo === 'otro' ? (
-                <p className="text-sm text-muted-foreground">El archivo se clasificará automáticamente como factura.</p>
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Selecciona hasta <strong>{MAX_BATCH_FILES} facturas</strong> a la vez. Se clasificarán automáticamente.
+                  </p>
+                  <div>
+                    <Label>Archivos</Label>
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,.docx,.xlsx,.xls,.jpg,.jpeg,.png"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length > MAX_BATCH_FILES) {
+                          toast.error(`Máximo ${MAX_BATCH_FILES} archivos por lote`);
+                          setUploadFiles(files.slice(0, MAX_BATCH_FILES));
+                        } else {
+                          setUploadFiles(files);
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">PDF, Word, Excel o imágenes · Máx. {MAX_BATCH_FILES} archivos</p>
+                  </div>
+                  {uploadFiles.length > 0 && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">{uploadFiles.length} archivo{uploadFiles.length > 1 ? 's' : ''} seleccionado{uploadFiles.length > 1 ? 's' : ''}</Label>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {uploadFiles.map((f, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs bg-muted/50 rounded px-2 py-1">
+                            <FileText className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <span className="truncate">{f.name}</span>
+                            <span className="text-muted-foreground ml-auto flex-shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {uploading && uploadProgress.total > 1 && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Subiendo {uploadProgress.current} de {uploadProgress.total}</span>
+                        <span>{Math.round((uploadProgress.current / uploadProgress.total) * 100)}%</span>
+                      </div>
+                      <Progress value={(uploadProgress.current / uploadProgress.total) * 100} className="h-2" />
+                    </div>
+                  )}
+                </>
               ) : (
-                <div>
-                  <Label>Tipo de documento</Label>
-                  <Select value={uploadTipo} onValueChange={setUploadTipo}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="contrato_formal">Contrato formal</SelectItem>
-                      <SelectItem value="condiciones_generales">Condiciones generales</SelectItem>
-                      <SelectItem value="email_tarifa">Email tarifa</SelectItem>
-                      <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
-                      <SelectItem value="adenda">Adenda</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <>
+                  <div>
+                    <Label>Tipo de documento</Label>
+                    <Select value={uploadTipo} onValueChange={setUploadTipo}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="contrato_formal">Contrato formal</SelectItem>
+                        <SelectItem value="condiciones_generales">Condiciones generales</SelectItem>
+                        <SelectItem value="email_tarifa">Email tarifa</SelectItem>
+                        <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
+                        <SelectItem value="adenda">Adenda</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Archivo</Label>
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.docx,.xlsx,.xls,.jpg,.jpeg,.png"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">PDF, Word, Excel o imágenes</p>
+                  </div>
+                </>
               )}
-              <div>
-                <Label>Archivo</Label>
-                <Input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.docx,.xlsx,.xls,.jpg,.jpeg,.png"
-                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">PDF, Word, Excel o imágenes</p>
-              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setShowUploadModal(false); setUploadFile(null); }}>Cancelar</Button>
-              <Button onClick={handleUploadDocument} disabled={!uploadFile || uploading}>
-                {uploading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Subiendo...</> : <><Upload className="w-4 h-4 mr-1" /> Subir</>}
+              <Button variant="outline" onClick={() => { setShowUploadModal(false); setUploadFile(null); setUploadFiles([]); }} disabled={uploading}>Cancelar</Button>
+              <Button 
+                onClick={handleUploadDocument} 
+                disabled={uploading || (uploadTipo === 'otro' ? uploadFiles.length === 0 : !uploadFile)}
+              >
+                {uploading 
+                  ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Subiendo{uploadProgress.total > 1 ? ` ${uploadProgress.current}/${uploadProgress.total}` : ''}...</>
+                  : <><Upload className="w-4 h-4 mr-1" /> Subir{uploadTipo === 'otro' && uploadFiles.length > 1 ? ` ${uploadFiles.length} facturas` : ''}</>
+                }
               </Button>
             </DialogFooter>
           </DialogContent>
