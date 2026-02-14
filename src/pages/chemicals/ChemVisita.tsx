@@ -85,10 +85,11 @@ export default function ChemVisita() {
   const createMutation = useMutation({
     mutationFn: async () => {
       const checklist = CHECKLIST_TEMPLATE.map(t => ({ ...t, observado: false, nota: '' }));
+      const today = new Date().toISOString().split('T')[0];
       const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/plant-visits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checklist }),
+        body: JSON.stringify({ checklist, fecha_visita: today }),
       });
       if (!res.ok) throw new Error('Error al crear visita');
       return res.json();
