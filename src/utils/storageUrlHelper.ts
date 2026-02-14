@@ -9,6 +9,7 @@
  */
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bdmpshiqspkxcisnnlyr.supabase.co';
+const EXTERNAL_SUPABASE_URL = 'https://ktzhrlcvluaptixngrsh.supabase.co';
 
 export const convertStorageUrl = (url: string | undefined | null): string | null => {
   if (!url) return null;
@@ -20,29 +21,25 @@ export const convertStorageUrl = (url: string | undefined | null): string | null
   
   // Handle storage:// protocol from Railway backend
   if (url.startsWith('storage://')) {
-    // Extract path after storage://
-    // Format: storage://documents/cost-consulting/{projectId}/{filename}
     const path = url.replace('storage://', '');
     
-    // The path might be:
-    // - documents/cost-consulting/{projectId}/{filename}
-    // - cost-documents/{projectId}/{filename}
-    // - {projectId}/{filename}
+    // Chemical documents: stored in external Supabase bucket "chem-documents"
+    if (path.startsWith('chem-documents/')) {
+      const filePath = path.replace('chem-documents/', '');
+      return `${EXTERNAL_SUPABASE_URL}/storage/v1/object/public/chem-documents/${filePath}`;
+    }
     
+    // Cost consulting documents
     let bucketPath: string;
     
     if (path.startsWith('documents/cost-consulting/')) {
-      // Convert "documents/cost-consulting/..." to "cost-documents/..."
       bucketPath = path.replace('documents/cost-consulting/', '');
     } else if (path.startsWith('cost-documents/')) {
-      // Already has correct bucket name
       bucketPath = path.replace('cost-documents/', '');
     } else {
-      // Assume it's just projectId/filename
       bucketPath = path;
     }
     
-    // Build the public Supabase Storage URL
     return `${SUPABASE_URL}/storage/v1/object/public/cost-documents/${bucketPath}`;
   }
   
