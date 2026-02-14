@@ -205,50 +205,10 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
 
   const auditDocIds = useMemo(() => new Set(auditDocsQuery.data || []), [auditDocsQuery.data]);
 
-  // Deduplicate invoices
-  const deduplicatedInvoices = useMemo(() => {
-    const raw = invoicesQuery.data || [];
-    const seen = new Map<string, ChemInvoice>();
-    const duplicateIds: string[] = [];
-    for (const inv of raw) {
-      const key = `${(inv.numero_factura || '').trim().toLowerCase()}|${inv.fecha_factura || ''}|${inv.importe_total ?? ''}`;
-      if (key === '||') {
-        seen.set(inv.id, inv);
-      } else if (!seen.has(key)) {
-        seen.set(key, inv);
-      } else {
-        duplicateIds.push(inv.id);
-      }
-    }
-    return { unique: Array.from(seen.values()), duplicateIds };
-  }, [invoicesQuery.data]);
-
-  // Auto-delete duplicate invoices from DB
-  const deletedDuplicatesRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const ids = deduplicatedInvoices.duplicateIds.filter(id => !deletedDuplicatesRef.current.has(id));
-    if (ids.length === 0) return;
-    ids.forEach(id => deletedDuplicatesRef.current.add(id));
-    const deleteAll = async () => {
-      let deleted = 0;
-      for (const id of ids) {
-        try {
-          const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices/${id}`, { method: 'DELETE' });
-          if (res.ok) deleted++;
-        } catch {}
-      }
-      if (deleted > 0) {
-        toast.success(`${deleted} factura${deleted > 1 ? 's' : ''} duplicada${deleted > 1 ? 's' : ''} eliminada${deleted > 1 ? 's' : ''} de la base de datos`);
-        invalidateAll();
-      }
-    };
-    deleteAll();
-  }, [deduplicatedInvoices.duplicateIds, projectId, auditId, queryClient]);
-
   // Client-side safety net filter (backend should already filter by audit_id)
   const filteredInvoices = auditId
-    ? deduplicatedInvoices.unique.filter(i => i.document_id && auditDocIds.has(i.document_id))
-    : deduplicatedInvoices.unique;
+    ? (invoicesQuery.data || []).filter(i => i.document_id && auditDocIds.has(i.document_id))
+    : (invoicesQuery.data || []);
 
   const filteredInvoiceIds = useMemo(() => new Set(filteredInvoices.map(i => i.id)), [filteredInvoices]);
 
@@ -256,11 +216,8 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
     ? (alertsQuery.data || []).filter(a => a.invoice_id && filteredInvoiceIds.has(a.invoice_id))
     : (alertsQuery.data || []);
 
-  const duplicatesRemoved = deduplicatedInvoices.duplicateIds.length;
-
   return {
     invoices: filteredInvoices,
-    duplicatesRemoved,
     invoicesLoading: invoicesQuery.isLoading || (!!auditId && auditDocsQuery.isLoading),
     alerts: filteredAlerts,
     alertsLoading: alertsQuery.isLoading,
