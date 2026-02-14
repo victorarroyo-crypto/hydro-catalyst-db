@@ -119,7 +119,8 @@ export default function ChemInventario() {
     queryFn: async () => {
       const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/products?view=calculated`);
       if (!res.ok) throw new Error('Error cargando productos');
-      return res.json();
+      const json = await res.json();
+      return Array.isArray(json) ? json : (json.data ?? json.products ?? []);
     },
     enabled: !!projectId,
   });
