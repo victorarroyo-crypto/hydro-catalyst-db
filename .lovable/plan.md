@@ -1,79 +1,65 @@
 
 
-## Fix: Document extraction polling scoped to current audit
+# Plan: Asegurar que TODOS los procesos de extraccion y analisis esten correctamente scoped al contrato activo
 
-### Problem
-When you upload a document to the Proquimia contract and request extraction, the polling logic checks ALL project documents. Since Brenntag already has extracted data (`supplier_name` exists), the polling immediately detects "structured data found" and stops -- before Proquimia's document has actually been processed. The document appears to never get extracted.
+## Problema identificado
 
-### Root Cause
-The `startPolling` function (line 225) queries `chem_contract_documents` filtered only by `project_id`. It considers polling complete when ANY document in the project has `datos_extraidos.supplier_name`. Since Brenntag's documents already have this, polling stops instantly for any other contract.
+Aunque los endpoints de extraccion y analisis ya envian `audit_id` correctamente, el **polling posterior** sigue siendo global:
 
-### Solution
-Scope the polling to the current audit's documents only, using `audit_id` instead of `project_id`.
+1. **`startInvoicePolling` en ChemContratos.tsx (linea 219)**: Hace fetch de TODAS las facturas del proyecto (`/projects/${projectId}/invoices`), no solo las del contrato. El conteo inicial y la comparacion para detectar "completado" usan datos globales, lo que provoca:
+   - Senales falsas de "completado" si otro contrato tiene facturas procesandose
+   - Conteos incorrectos en el toast de finalizacion
 
-### Changes in `src/pages/chemicals/ChemContratos.tsx`
+2. **`startPolling` (contratos)**: Este SI esta scoped correctamente al `auditId` via metadata del processTracker. No requiere cambios.
 
-**1. Fix `startPolling` (lines 225-240)**
+3. **`processTracker` para facturas**: Almacena solo `projectId` como `entityId`, sin `auditId`. Si hay dos contratos procesando facturas simultaneamente, colisionan.
 
-Change the polling query from:
-```js
-.eq('project_id', projectId!)
-```
-To:
-```js
-.eq('audit_id', selectedAudit!)
-```
+## Cambios propuestos
 
-And track which specific document IDs lacked structured data BEFORE extraction started, then check if those specific documents now have it:
+### 1. Archivo: `src/pages/chemicals/ChemContratos.tsx`
 
-```js
-const startPolling = useCallback((docIds?: string[]) => {
-  if (pollingRef.current) clearInterval(pollingRef.current);
-  pollingRef.current = setInterval(async () => {
-    const query = externalSupabase
-      .from('chem_contract_documents')
-      .select('id, datos_extraidos, confianza_extraccion, estado_extraccion')
-      .eq('audit_id', selectedAudit!);
-    
-    const { data } = await query;
-    
-    // Check if targeted docs (or any audit doc) now have structured data
-    const targetDocs = docIds 
-      ? data?.filter((d: any) => docIds.includes(d.id))
-      : data;
-    const hasStructured = targetDocs?.some((d: any) => d.datos_extraidos?.supplier_name);
-    
-    if (hasStructured) {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
-      toast.success('Extraccion completada');
-    }
-  }, 5000);
-  setTimeout(() => { if (pollingRef.current) clearInterval(pollingRef.current); }, 180000);
-}, [projectId, selectedAudit, queryClient]);
+**`startInvoicePolling`** - Scope el polling al contrato activo:
+
+- Cambiar el entity ID del processTracker de `projectId` a `${projectId}:${selectedAudit}` para evitar colisiones entre contratos
+- Almacenar `auditId` en metadata del processTracker
+- En el polling, filtrar las facturas consultadas contra los `document_id` del contrato actual (ya disponibles en la query `documents`), en lugar de consultar todas las facturas del proyecto
+- Alternativa mas simple: en vez de contar todas las facturas, invalidar queries y verificar si los documentos de factura del contrato actual cambiaron su `estado_extraccion`
+
+Implementacion concreta:
+```text
+startInvoicePolling():
+  1. processTracker.start('chem-invoice-extraction', `${projectId}:${selectedAudit}`, ...)
+  2. En el setInterval, en vez de fetch global de invoices:
+     - Consultar chem_contract_documents del audit actual
+     - Verificar si los docs tipo factura pasaron a estado 'completado'
+     - Si todos completaron -> parar polling y notificar
 ```
 
-**2. Fix `handleExtractSingleDoc` (line 257)**
+### 2. Archivo: `src/pages/chemicals/ChemContratos.tsx`
 
-Pass the specific `docId` to `startPolling` so it only watches that document:
-```js
-startPolling([docId]);
-```
+**Auto-resume polling en mount** (lineas 194-208):
+- Ajustar la busqueda del processTracker para usar la clave compuesta `${projectId}:${auditId}` en lugar de solo `projectId`
+- Solo reanudar el polling si el `selectedAudit` coincide con el que inicio el proceso
 
-**3. Fix `handleExtractContracts` (line 242)**
+### 3. Archivo: `src/components/chemicals/invoices/useChemInvoices.ts`
 
-Collect the IDs of documents that don't yet have structured data, pass them to `startPolling`:
-```js
-const pendingDocIds = documents
-  .filter((d: any) => !d.datos_extraidos?.supplier_name)
-  .map((d: any) => d.id);
-startPolling(pendingDocIds);
-```
+**Revisar consistencia del hook**:
+- Ya esta correcto: `analyzeInvoicesMutation` y `autoLinkMutation` pasan `auditId` cuando esta disponible
+- No requiere cambios adicionales
 
-### Why this fixes it
-- Polling now only checks the current audit's documents, not the whole project
-- It specifically tracks which documents were pending extraction and waits for THOSE to complete
-- Brenntag's already-extracted data no longer triggers a false "completed" signal
+## Resumen de impacto
 
-### Files to modify
-- `src/pages/chemicals/ChemContratos.tsx` -- 3 small changes to `startPolling`, `handleExtractContracts`, and `handleExtractSingleDoc`
+| Componente | Estado actual | Accion |
+|---|---|---|
+| `handleExtractContracts` | Scoped con `audit_id` | Sin cambios |
+| `handleExtractInvoices` | Scoped con `audit_id` | Sin cambios |
+| `handleExtractSingleDoc` | Scoped por `document_id` | Sin cambios |
+| `analyzeInvoicesMutation` | Scoped con `audit_id` | Sin cambios |
+| `autoLinkMutation` | Scoped con `audit_id` | Sin cambios |
+| **`startInvoicePolling`** | **GLOBAL - BUG** | **Scopear al audit** |
+| **processTracker invoice** | **Colisiona entre audits** | **Clave compuesta** |
+| **Auto-resume mount** | **No verifica audit** | **Verificar audit** |
+
+## Archivos a modificar
+
+- `src/pages/chemicals/ChemContratos.tsx` — refactorizar `startInvoicePolling` y auto-resume
