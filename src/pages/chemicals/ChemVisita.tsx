@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
-import { ChevronDown, Camera, Loader2 } from 'lucide-react';
+import { ChevronDown, Camera, Loader2, Sparkles } from 'lucide-react';
 
 const RAILWAY_URL = API_URL;
 
@@ -50,6 +50,9 @@ interface ChecklistItem {
   item: string;
   observado: boolean;
   nota: string;
+  source?: 'template' | 'ai';
+  contexto?: string;
+  prioridad?: 'alta' | 'media' | 'baja';
 }
 
 interface PlantVisit {
@@ -69,6 +72,7 @@ export default function ChemVisita() {
   const { projectId } = useParams();
   const queryClient = useQueryClient();
   const [expandedNotes, setExpandedNotes] = useState<Record<number, boolean>>({});
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const { data: visits, isLoading } = useQuery<PlantVisit[]>({
     queryKey: ['chem-plant-visits', projectId],
@@ -85,21 +89,49 @@ export default function ChemVisita() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const checklist = CHECKLIST_TEMPLATE.map(t => ({ ...t, observado: false, nota: '' }));
-      const today = new Date().toISOString().split('T')[0];
+      setIsGenerating(true);
+
+      let checklist: ChecklistItem[] | undefined;
+      try {
+        const genRes = await fetch(
+          `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/plant-visits/generate-checklist`,
+          { method: 'POST' }
+        );
+        if (genRes.ok) {
+          const genData = await genRes.json();
+          checklist = genData.checklist;
+        }
+      } catch (e) {
+        // Fallback to static template
+      }
+
+      if (!checklist || !Array.isArray(checklist) || checklist.length === 0) {
+        checklist = CHECKLIST_TEMPLATE.map(t => ({
+          ...t, observado: false, nota: '', source: 'template' as const, prioridad: 'media' as const,
+        }));
+      }
+
+      setIsGenerating(false);
+
       const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/plant-visits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checklist, fecha_visita: today }),
+        body: JSON.stringify({
+          fecha_visita: new Date().toISOString().split('T')[0],
+          checklist,
+        }),
       });
       if (!res.ok) throw new Error('Error al crear visita');
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chem-plant-visits', projectId] });
-      toast.success('Visita creada');
+      toast.success('Visita creada con checklist personalizado');
     },
-    onError: () => toast.error('Error al crear visita'),
+    onError: () => {
+      setIsGenerating(false);
+      toast.error('Error al crear visita');
+    },
   });
 
   const updateMutation = useMutation({
@@ -142,11 +174,28 @@ export default function ChemVisita() {
       <div className="p-6">
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Camera className="w-10 h-10 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground mb-4">No hay visitas registradas para este proyecto.</p>
-            <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
-              Crear visita a planta
-            </Button>
+            {isGenerating ? (
+              <>
+                <Sparkles className="w-10 h-10 text-amber-500 mb-3 animate-pulse" />
+                <p className="text-sm font-medium text-foreground mb-1">
+                  Generando checklist personalizado...
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Analizando productos, contratos y alertas del proyecto
+                </p>
+              </>
+            ) : (
+              <>
+                <Camera className="w-10 h-10 text-muted-foreground mb-3" />
+                <p className="text-sm text-muted-foreground mb-4">
+                  No hay visitas registradas para este proyecto.
+                </p>
+                <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Crear visita con checklist inteligente
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -155,15 +204,36 @@ export default function ChemVisita() {
 
   const zonaKeys = Object.keys(ZONAS);
   const observados = checklist.filter(i => i.observado).length;
+  const aiItems = checklist.filter(i => i.source === 'ai');
 
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-foreground">Visita a Planta</h2>
-        <span className="text-xs text-muted-foreground">
-          {observados}/{checklist.length} observados
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {observados}/{checklist.length} observados
+          </span>
+          {aiItems.length > 0 && (
+            <span className="text-xs text-amber-600">
+              ({aiItems.length} IA)
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* AI context banner */}
+      {aiItems.length > 0 && (
+        <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+          <Sparkles className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+          <div className="text-xs text-amber-800 dark:text-amber-300">
+            <span className="font-medium">Checklist personalizado:</span>{' '}
+            {aiItems.length} items específicos generados a partir de los datos del proyecto
+            (productos, contratos, alertas). Los items con etiqueta{' '}
+            <span className="font-medium">IA</span> son específicos para esta planta.
+          </div>
+        </div>
+      )}
 
       {/* Header fields */}
       <Card>
@@ -207,8 +277,14 @@ export default function ChemVisita() {
                 <CardContent className="space-y-1 pt-0">
                   {items.map(item => {
                     const isExpanded = expandedNotes[item.idx] || !!item.nota;
+                    const isAI = item.source === 'ai';
                     return (
-                      <div key={item.idx} className="border rounded-lg p-3 space-y-2">
+                      <div
+                        key={item.idx}
+                        className={`border rounded-lg p-3 space-y-2 ${
+                          isAI ? 'border-amber-200 bg-amber-50/30 dark:bg-amber-950/10' : ''
+                        }`}
+                      >
                         <div className="flex items-start gap-3">
                           <Checkbox
                             checked={item.observado}
@@ -220,9 +296,27 @@ export default function ChemVisita() {
                             className="flex-1 text-left text-sm cursor-pointer hover:text-primary transition-colors"
                             onClick={() => toggleNote(item.idx)}
                           >
-                            <span className={item.observado ? 'font-medium' : 'text-muted-foreground'}>{item.item}</span>
+                            <span className={item.observado ? 'font-medium' : 'text-muted-foreground'}>
+                              {item.item}
+                            </span>
+                            {isAI && (
+                              <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-100 rounded px-1.5 py-0.5 align-middle">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                IA
+                              </span>
+                            )}
+                            {isAI && item.prioridad === 'alta' && (
+                              <span className="ml-1 inline-flex items-center text-[10px] font-medium text-red-600 bg-red-100 rounded px-1.5 py-0.5 align-middle">
+                                ALTA
+                              </span>
+                            )}
                           </button>
                         </div>
+                        {isAI && item.contexto && (
+                          <p className="ml-7 text-xs text-amber-700 dark:text-amber-400 italic">
+                            {item.contexto}
+                          </p>
+                        )}
                         {isExpanded && (
                           <Textarea
                             className="ml-7 h-16 min-h-[40px] text-xs"
