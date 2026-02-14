@@ -1389,7 +1389,7 @@ export default function ChemContratos() {
             )}
 
             {/* Resultados procesados por Railway */}
-            <ChemInvoicesTab projectId={projectId!} supplierId={currentAudit?.proveedor_id ?? undefined} />
+            <ChemInvoicesTab projectId={projectId!} auditId={currentAudit?.id} />
           </TabsContent>
         </Tabs>
 
