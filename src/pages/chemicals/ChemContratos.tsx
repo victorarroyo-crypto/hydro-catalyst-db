@@ -205,6 +205,12 @@ export default function ChemContratos() {
   const isPhase1Complete = (doc: any) => doc.estado_extraccion === 'completado' && doc.datos_extraidos?.raw_text;
   const isPhase2Complete = (doc: any) => doc.datos_extraidos?.supplier_name;
   const hasDocsReadyForExtraction = documents.some((d: any) => isPhase1Complete(d) && !isPhase2Complete(d));
+  const hasDocsForInvoiceExtraction = documents.some((d: any) => isPhase1Complete(d));
+
+  const openUploadForInvoices = () => {
+    setUploadTipo('factura');
+    setShowUploadModal(true);
+  };
 
 
   const handleUploadDocument = async () => {
@@ -612,6 +618,7 @@ export default function ChemContratos() {
                         <SelectItem value="email_tarifa">Email tarifa</SelectItem>
                         <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
                         <SelectItem value="adenda">Adenda</SelectItem>
+                        <SelectItem value="factura">Factura</SelectItem>
                         <SelectItem value="otro">Otro</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1250,19 +1257,30 @@ export default function ChemContratos() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm">Facturas</CardTitle>
-                  <Button size="sm" variant="outline" onClick={() => setShowUploadModal(true)}>
+                  <Button size="sm" variant="outline" onClick={openUploadForInvoices}>
                     <Upload className="w-4 h-4 mr-1" /> Subir facturas
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Suba PDFs de facturas en la pestaña Documentos y luego lance la extracción con el botón inferior.
-                </p>
+                {(() => {
+                  const docsWithText = documents.filter((d: any) => isPhase1Complete(d));
+                  return (
+                    <div className="text-center py-4 space-y-2">
+                      <Receipt className="w-8 h-8 mx-auto text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        {docsWithText.length === 0
+                          ? 'No hay documentos disponibles. Sube facturas (PDF, Excel) con el botón de arriba.'
+                          : `${docsWithText.length} documento${docsWithText.length > 1 ? 's' : ''} disponible${docsWithText.length > 1 ? 's' : ''} para extracción de facturas.`
+                        }
+                      </p>
+                    </div>
+                  );
+                })()}
                 <div className="flex justify-center">
                   <Button
                     onClick={handleExtractInvoices}
-                    disabled={extractingInvoices || !hasDocsReadyForExtraction}
+                    disabled={extractingInvoices || !hasDocsForInvoiceExtraction}
                     className="border-[#32b4cd] text-[#32b4cd] hover:bg-[#32b4cd]/10"
                     variant="outline"
                   >
