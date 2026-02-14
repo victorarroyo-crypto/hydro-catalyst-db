@@ -4,29 +4,31 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { comparisonProjectsService } from '@/services/comparisonProjectsService';
+import { API_URL } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { StatsCard } from '@/components/StatsCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { 
   Cpu, 
   FolderOpen, 
-  Search, 
-  Star, 
   ArrowRight,
   Droplets,
   TrendingUp,
-  BarChart3,
   ClipboardList,
   BookOpen,
-  Lightbulb,
   CheckCircle,
   Clock,
   XCircle,
   Tag,
+  FlaskConical,
+  Radar,
+  MessageSquare,
+  Beaker,
+  Database,
+  DollarSign,
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
@@ -34,7 +36,6 @@ const Dashboard: React.FC = () => {
   const canReviewEdits = profile?.role && ['admin', 'supervisor'].includes(profile.role);
   const isInternalUser = profile?.role && ['admin', 'supervisor'].includes(profile.role);
 
-  // Subscribe to real-time updates for all dashboard data
   useRealtimeSubscription({
     tables: [
       'technologies', 
@@ -51,20 +52,16 @@ const Dashboard: React.FC = () => {
     ],
   });
 
+  // Main stats query (technologies, case studies, scouting projects)
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats', isInternalUser ? 'internal' : 'public'],
     queryFn: async () => {
-      // For regular users, only count active/published technologies
-      // For admin/supervisor, count all technologies with breakdown by status
       let techQuery = externalSupabase.from('technologies').select('id', { count: 'exact', head: true });
-      let highTrlQuery = externalSupabase.from('technologies').select('id', { count: 'exact', head: true }).gte('trl', 7);
       
       if (!isInternalUser) {
         techQuery = techQuery.eq('status', 'active');
-        highTrlQuery = highTrlQuery.eq('status', 'active');
       }
       
-      // Fetch projects count from external API
       const projectsResponse = await comparisonProjectsService.list();
       const projectsList = projectsResponse.projects || projectsResponse.data || [];
       const activeProjectsCount = projectsList.filter((p: any) => 
@@ -73,15 +70,12 @@ const Dashboard: React.FC = () => {
 
       const baseQueries = [
         techQuery,
-        highTrlQuery,
-        Promise.resolve({ count: activeProjectsCount }), // projects count from API
+        Promise.resolve({ count: activeProjectsCount }),
         externalSupabase.from('casos_de_estudio').select('id', { count: 'exact', head: true }),
-        externalSupabase.from('technological_trends').select('id', { count: 'exact', head: true }),
       ];
 
-      // For internal users, also get status breakdown and pending classification
       if (isInternalUser) {
-        const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount, 
+        const [techCount, projectsCount, caseStudiesCount,
                activeCount, inReviewCount, inactiveCount, pendingClassificationCount] = await Promise.all([
           ...baseQueries,
           externalSupabase.from('technologies').select('id', { count: 'exact', head: true }).eq('status', 'active'),
@@ -92,10 +86,8 @@ const Dashboard: React.FC = () => {
         
         return {
           totalTechnologies: techCount.count || 0,
-          highTrlTechnologies: highTrlCount.count || 0,
           activeProjects: projectsCount.count || 0,
           caseStudies: caseStudiesCount.count || 0,
-          trends: trendsCount.count || 0,
           statusBreakdown: {
             active: activeCount.count || 0,
             en_revision: inReviewCount.count || 0,
@@ -105,22 +97,69 @@ const Dashboard: React.FC = () => {
         };
       }
       
-      const [techCount, highTrlCount, projectsCount, caseStudiesCount, trendsCount] = await Promise.all(baseQueries);
+      const [techCount, projectsCount, caseStudiesCount] = await Promise.all(baseQueries);
       
       return {
         totalTechnologies: techCount.count || 0,
-        highTrlTechnologies: highTrlCount.count || 0,
         activeProjects: projectsCount.count || 0,
         caseStudies: caseStudiesCount.count || 0,
-        trends: trendsCount.count || 0,
       };
     },
   });
 
+  // Consultoria count (Railway API)
+  const { data: consultoriaCount } = useQuery({
+    queryKey: ['dashboard-consultoria-count'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/api/projects`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : data.projects || data.data || [];
+      return list.length;
+    },
+    retry: false,
+  });
+
+  // Agua Industrial / Cost Consulting count
+  const { data: costCount } = useQuery({
+    queryKey: ['dashboard-cost-count'],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('cost_consulting_projects')
+        .select('id', { count: 'exact', head: true });
+      return count || 0;
+    },
+    retry: false,
+  });
+
+  // Quimicos count (external Supabase)
+  const { data: chemCount } = useQuery({
+    queryKey: ['dashboard-chem-count'],
+    queryFn: async () => {
+      const { count } = await externalSupabase
+        .from('chem_projects')
+        .select('id', { count: 'exact', head: true });
+      return count || 0;
+    },
+    retry: false,
+  });
+
+  // Scouting sessions count
+  const { data: scoutingCount } = useQuery({
+    queryKey: ['dashboard-scouting-count'],
+    queryFn: async () => {
+      const { count } = await externalSupabase
+        .from('scouting_sessions')
+        .select('id', { count: 'exact', head: true });
+      return count || 0;
+    },
+    retry: false,
+  });
+
+  // Pending edits (admin only)
   const { data: pendingEdits } = useQuery({
     queryKey: ['pending-edits-dashboard'],
     queryFn: async () => {
-      // Fetch pending technology edits from main Cloud database
       const { data: editsData, error: editsError } = await supabase
         .from('technology_edits')
         .select('edit_type')
@@ -128,7 +167,6 @@ const Dashboard: React.FC = () => {
       
       if (editsError) throw editsError;
       
-      // Fetch technologies pending review from external database
       const { count: reviewCount, error: reviewError } = await externalSupabase
         .from('technologies')
         .select('id', { count: 'exact', head: true })
@@ -151,26 +189,60 @@ const Dashboard: React.FC = () => {
     enabled: !!canReviewEdits,
   });
 
-  const quickActions = [
+  // Module cards config
+  const modules = [
     {
       title: 'BD Tecnologías',
-      description: 'Explora más de 2600 tecnologías de tratamiento de agua',
-      icon: Search,
+      description: 'Catálogo completo de tecnologías de agua',
+      icon: Database,
       href: '/technologies',
+      count: stats?.totalTechnologies,
+      countLabel: 'tecnologías',
       variant: 'primary' as const,
     },
     {
-      title: 'Mis Proyectos',
-      description: 'Gestiona tus proyectos activos y asigna tecnologías',
+      title: 'Consultoría de Procesos',
+      description: 'Proyectos de ingeniería y consultoría',
       icon: FolderOpen,
       href: '/projects',
+      count: consultoriaCount,
+      countLabel: 'proyectos',
       variant: 'secondary' as const,
     },
     {
-      title: 'Favoritos',
-      description: 'Accede a las tecnologías que has marcado',
-      icon: Star,
-      href: '/favorites',
+      title: 'Agua Industrial',
+      description: 'Análisis de costes y optimización',
+      icon: DollarSign,
+      href: '/cost-consulting',
+      count: costCount,
+      countLabel: 'análisis',
+      variant: 'accent' as const,
+    },
+    {
+      title: 'Químicos',
+      description: 'Gestión de productos químicos',
+      icon: FlaskConical,
+      href: '/chemicals',
+      count: chemCount,
+      countLabel: 'proyectos',
+      variant: 'primary' as const,
+    },
+    {
+      title: 'Scouting IA',
+      description: 'Búsqueda inteligente de tecnologías',
+      icon: Radar,
+      href: '/scouting',
+      count: scoutingCount,
+      countLabel: 'sesiones',
+      variant: 'secondary' as const,
+    },
+    {
+      title: 'Advisor IA',
+      description: 'Asistente experto en agua industrial',
+      icon: MessageSquare,
+      href: '/advisor',
+      count: undefined,
+      countLabel: '',
       variant: 'accent' as const,
     },
   ];
@@ -194,8 +266,7 @@ const Dashboard: React.FC = () => {
               ¡Bienvenido, {profile?.full_name || 'Usuario'}!
             </h1>
             <p className="text-primary-foreground/80 max-w-xl">
-              Accede a la base de datos completa de tecnologías del agua. 
-              Encuentra soluciones innovadoras para tus proyectos.
+              Tu plataforma integral de tecnología, consultoría y optimización del agua industrial.
             </p>
           </div>
           <div className="hidden md:block">
@@ -206,8 +277,8 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* KPI Row - 6 cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatsCard
           title="Tecnologías"
           value={stats?.totalTechnologies?.toLocaleString() || '—'}
@@ -216,38 +287,78 @@ const Dashboard: React.FC = () => {
           variant="primary"
         />
         <StatsCard
-          title="Casos de Estudio"
-          value={stats?.caseStudies?.toLocaleString() || '—'}
-          subtitle="Implementaciones reales"
-          icon={BookOpen}
+          title="Consultoría"
+          value={consultoriaCount != null ? consultoriaCount.toLocaleString() : '—'}
+          subtitle="Proyectos activos"
+          icon={FolderOpen}
           variant="secondary"
         />
         <StatsCard
-          title="Tendencias"
-          value={stats?.trends?.toLocaleString() || '—'}
-          subtitle="Análisis de tendencias"
-          icon={Lightbulb}
+          title="Agua Industrial"
+          value={costCount != null ? costCount.toLocaleString() : '—'}
+          subtitle="Análisis activos"
+          icon={DollarSign}
           variant="accent"
         />
         <StatsCard
-          title="Mis Proyectos"
-          value={stats?.activeProjects?.toLocaleString() || '—'}
-          subtitle="Total de proyectos"
-          icon={FolderOpen}
+          title="Químicos"
+          value={chemCount != null ? chemCount.toLocaleString() : '—'}
+          subtitle="Proyectos activos"
+          icon={FlaskConical}
           variant="primary"
         />
-        <Link to="/statistics" className="block">
-          <StatsCard
-            title="Estadísticas"
-            value="Ver análisis"
-            subtitle="Distribución completa"
-            icon={BarChart3}
-            variant="secondary"
-          />
-        </Link>
+        <StatsCard
+          title="Scouting"
+          value={scoutingCount != null ? scoutingCount.toLocaleString() : '—'}
+          subtitle="Sesiones IA"
+          icon={Radar}
+          variant="secondary"
+        />
+        <StatsCard
+          title="Casos de Estudio"
+          value={stats?.caseStudies?.toLocaleString() || '—'}
+          subtitle="Implementaciones"
+          icon={BookOpen}
+          variant="accent"
+        />
       </div>
 
-      {/* Technology Status Breakdown - Only for Admin/Supervisor */}
+      {/* Module Grid - 2x3 */}
+      <div>
+        <h2 className="text-xl font-display font-semibold mb-4">Módulos de la Plataforma</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {modules.map((mod) => (
+            <Link key={mod.href} to={mod.href} className="block group">
+              <Card className="h-full transition-all duration-200 hover:shadow-lg hover:border-primary/30">
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-105 ${
+                      mod.variant === 'primary' ? 'bg-primary text-primary-foreground' :
+                      mod.variant === 'secondary' ? 'bg-secondary text-secondary-foreground' :
+                      'bg-accent text-accent-foreground'
+                    }`}>
+                      <mod.icon className="w-6 h-6" />
+                    </div>
+                    {mod.count != null && (
+                      <Badge variant="secondary" className="text-xs">
+                        {mod.count} {mod.countLabel}
+                      </Badge>
+                    )}
+                  </div>
+                  <h3 className="text-base font-semibold text-foreground mb-1">{mod.title}</h3>
+                  <p className="text-sm text-muted-foreground mb-3">{mod.description}</p>
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                    Acceder
+                    <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Admin Panel - Technology Status Breakdown */}
       {isInternalUser && stats?.statusBreakdown && (
         <Card className="border-primary/20">
           <CardHeader className="pb-3">
@@ -304,8 +415,7 @@ const Dashboard: React.FC = () => {
         </Card>
       )}
 
-
-      {/* Pending Suggestions Widget - Only for Admin/Supervisor */}
+      {/* Pending Suggestions Widget - Admin/Supervisor only */}
       {canReviewEdits && pendingEdits && pendingEdits.total > 0 && (
         <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
           <CardHeader className="pb-3">
@@ -358,34 +468,6 @@ const Dashboard: React.FC = () => {
           </CardContent>
         </Card>
       )}
-
-      {/* Quick Actions */}
-      <div>
-        <h2 className="text-xl font-display font-semibold mb-4">Accesos Rápidos</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {quickActions.map((action) => (
-            <Link key={action.href} to={action.href} className="block group">
-              <Card className="h-full transition-all duration-200 hover:shadow-lg hover:border-primary/30">
-                <CardContent className="p-6">
-                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-105 ${
-                    action.variant === 'primary' ? 'bg-primary text-primary-foreground' :
-                    action.variant === 'secondary' ? 'bg-secondary text-secondary-foreground' :
-                    'bg-accent text-accent-foreground'
-                  }`}>
-                    <action.icon className="w-7 h-7" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">{action.title}</h3>
-                  <p className="text-sm text-muted-foreground mb-4">{action.description}</p>
-                  <span className="inline-flex items-center gap-1 text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                    Acceder
-                    <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                  </span>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };
