@@ -15,9 +15,10 @@ import { toast } from 'sonner';
 
 interface Props {
   projectId: string;
+  supplierId?: string;
 }
 
-export function ChemInvoicesTab({ projectId }: Props) {
+export function ChemInvoicesTab({ projectId, supplierId }: Props) {
   const {
     invoices,
     invoicesLoading,
@@ -32,7 +33,7 @@ export function ChemInvoicesTab({ projectId }: Props) {
     autoLinkProducts,
     autoLinking,
     deleteInvoice,
-  } = useChemInvoices(projectId);
+  } = useChemInvoices(projectId, supplierId);
 
   const pendingAlerts = alerts.filter(a => a.estado === 'pendiente').length;
 
