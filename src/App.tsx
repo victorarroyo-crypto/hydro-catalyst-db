@@ -78,6 +78,7 @@ import {
   ChemAutorizacion,
   ChemAlertas,
   ChemMatrizEstrategica,
+  ChemFacturas,
 } from "./pages/chemicals";
 
 import ProjectBriefingPage from "./pages/consultoria/ProjectBriefingPage";
@@ -154,6 +155,7 @@ const App = () => (
               <Route path="/quimicos/:projectId" element={<ChemProjectLayout />}>
                 <Route index element={<ChemDashboard />} />
                 <Route path="inventario" element={<ChemInventario />} />
+                <Route path="facturas" element={<ChemFacturas />} />
                 <Route path="contratos" element={<ChemContratos />} />
                 <Route path="baseline" element={<ChemBaseline />} />
                 <Route path="alertas" element={<ChemAlertas />} />

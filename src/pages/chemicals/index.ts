@@ -13,3 +13,4 @@ export { default as ChemAhorro } from './ChemAhorro';
 export { default as ChemAutorizacion } from './ChemAutorizacion';
 export { default as ChemAlertas } from './ChemAlertas';
 export { default as ChemMatrizEstrategica } from './ChemMatrizEstrategica';
+export { default as ChemFacturas } from './ChemFacturas';
