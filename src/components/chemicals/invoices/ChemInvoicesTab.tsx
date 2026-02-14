@@ -69,7 +69,7 @@ export function ChemInvoicesTab({ projectId, auditId }: Props) {
       if (auditIds.length === 0) return [];
       const { data, error } = await externalSupabase
         .from('chem_contract_audits')
-        .select('id, proveedor_nombre')
+        .select('id, chem_suppliers(nombre)')
         .in('id', auditIds);
       if (error) throw error;
       return data || [];
@@ -88,7 +88,10 @@ export function ChemInvoicesTab({ projectId, auditId }: Props) {
   // Build document_id -> proveedor_nombre map
   const docSupplierMap = useMemo(() => {
     const auditMap = new Map<string, string>();
-    auditSuppliers.forEach((a: any) => { if (a.proveedor_nombre) auditMap.set(a.id, a.proveedor_nombre); });
+    auditSuppliers.forEach((a: any) => {
+      const nombre = a.chem_suppliers?.nombre;
+      if (nombre) auditMap.set(a.id, nombre);
+    });
     const map: Record<string, string> = {};
     docData.forEach((d: any) => {
       if (d.audit_id && auditMap.has(d.audit_id)) {
