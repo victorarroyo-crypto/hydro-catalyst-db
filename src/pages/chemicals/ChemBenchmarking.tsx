@@ -307,6 +307,7 @@ export default function ChemBenchmarking() {
             { label: 'Euro Chlor', url: 'https://www.eurochlor.org' },
             { label: 'ChemAnalyst', url: 'https://www.chemanalyst.com' },
             { label: 'ICIS', url: 'https://www.icis.com' },
+            { label: 'BusinessAnalytiq', url: 'https://businessanalytiq.com/procurementanalytics/index/caustic-soda-price-index/' },
           ].map(l => (
             <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
               {l.label} <ExternalLink className="w-3 h-3" />
