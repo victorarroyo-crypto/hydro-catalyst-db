@@ -1,62 +1,69 @@
 
-
-# Fix: Resumen de facturas muestra datos de TODOS los contratos
+# Rediseno radical del Dashboard General de Cost Consulting
 
 ## Problema
+El dashboard actual (`CostDashboard.tsx`) solo consume un unico endpoint (`/dashboard`) y muestra 4 KPIs basicos + 3 graficos en tabs. El proyecto ahora tiene endpoints ricos para: contratos, facturas, proveedores, documentos, oportunidades, duplicados, benchmarks, timeline analytics y matriz de oportunidades. Nada de esto se refleja en el dashboard.
 
-En `useChemInvoices.ts`, el endpoint de resumen (`/invoice-summary`) se llama sin `audit_id`, por lo que devuelve KPIs globales del proyecto (gasto total, alertas, baselines) en vez de solo los del contrato seleccionado.
+## Nuevo diseno
 
-Las facturas y alertas SI se filtran client-side via `auditDocIds`, pero el resumen se muestra tal cual del backend.
+### Layout (de arriba a abajo)
 
-## Solucion
+**Fila 1 -- 6 KPI Cards**
+| Gasto Total | Ahorro Potencial | % Ahorro | Facturas | Proveedores | Duplicados |
+Cada card con icono, valor principal y subtitulo contextual. La card de duplicados muestra pending count y ahorro potencial por duplicados.
 
-### Archivo: `src/components/chemicals/invoices/useChemInvoices.ts`
+**Fila 2 -- 2 columnas**
+- **Izquierda (60%)**: Grafico de categorias con benchmark (SpendByCategoryChart, ya existente y bien hecho)
+- **Derecha (40%)**: Matriz de Oportunidades compacta -- resumen visual de los 4 cuadrantes (Quick Wins, Major Projects, Fill-ins, Low Priority) con count + ahorro total por cuadrante
 
-**1. Summary query - pasar `audit_id`** (lineas 37-46):
-- Incluir `audit_id` en la query key para que React Query cache por contrato
-- Pasar `?audit_id=` como query param al endpoint
-- Asi el backend calculara el resumen solo con las facturas de ese contrato
+**Fila 3 -- 2 columnas**
+- **Izquierda (50%)**: Gasto por proveedor (barras horizontales top 8, con risk flags en color)
+- **Derecha (50%)**: Evolucion temporal (area chart mensual, ya existente)
 
-```
-Antes:  GET /projects/{id}/invoice-summary
-Despues: GET /projects/{id}/invoice-summary?audit_id={auditId}
-```
+**Fila 4 -- Benchmark Comparison** (nueva)
+- Tabla compacta con categorias, tu precio vs benchmark mediana, posicion (dot de color), y ahorro potencial por categoria
 
-**2. Invoices query - pasar `audit_id`** (lineas 13-22):
-- Pasar `?audit_id=` para que el backend solo devuelva facturas del contrato
-- Incluir `auditId` en la query key
-- Esto elimina la necesidad de filtrar client-side (mas eficiente)
+### Fuentes de datos
 
-**3. Alerts query - pasar `audit_id`** (lineas 25-34):
-- Pasar `?audit_id=` para filtrar alertas en backend
-- Incluir `auditId` en la query key
+Se mantiene la query principal al endpoint `/dashboard` que ya devuelve summary, spend_by_category, spend_by_supplier y timeline.
 
-**4. Simplificar filtrado client-side** (lineas 249-258):
-- Si el backend ya filtra, el filtrado por `auditDocIds` sigue como safety net pero ya no seria necesario como unica capa
+Se agregan 2 queries adicionales (ligeras):
+1. `getOpportunityMatrix(projectId)` -- para la mini-matriz
+2. `getBenchmarkComparison(projectId)` -- para la tabla de benchmarks
+3. `getDuplicateStats(projectId)` -- para el KPI de duplicados
+
+Todas estas funciones ya existen en `costConsultingApi.ts`, solo hay que importarlas y llamarlas.
 
 ## Seccion tecnica
 
-Cambios concretos en `useChemInvoices.ts`:
+### Archivo a modificar: `src/components/cost-consulting/CostDashboard.tsx`
 
+**Cambios principales:**
+
+1. **Imports adicionales**: Agregar `getOpportunityMatrix`, `getBenchmarkComparison`, `getDuplicateStats` y sus tipos desde `costConsultingApi.ts`
+
+2. **Queries adicionales** en el componente principal:
 ```text
-// Summary (linea 37-46)
-queryKey: ['chem-invoice-summary', projectId, auditId]   // <-- add auditId
-const params = auditId ? `?audit_id=${auditId}` : '';
-fetch(`.../${projectId}/invoice-summary${params}`)
-
-// Invoices (linea 13-22)  
-queryKey: ['chem-invoices', projectId, auditId]           // <-- add auditId
-const params = auditId ? `?audit_id=${auditId}` : '';
-fetch(`.../${projectId}/invoices${params}`)
-
-// Alerts (linea 25-34)
-queryKey: ['chem-invoice-alerts', projectId, auditId]     // <-- add auditId
-const params = auditId ? `?audit_id=${auditId}` : '';
-fetch(`.../${projectId}/invoice-alerts${params}`)
+useQuery(['cost-opportunity-matrix', projectId], () => getOpportunityMatrix(projectId))
+useQuery(['cost-benchmarks', projectId], () => getBenchmarkComparison(projectId))
+useQuery(['cost-duplicate-stats', projectId], () => getDuplicateStats(projectId))
 ```
+Estas queries son independientes y opcionales (si fallan, esas secciones simplemente no se muestran).
 
-Tambien actualizar las `invalidateQueries` calls (lineas 60-61, 97-98, 125-126, 184-185, 242-243, 279-281) para incluir `auditId` en las query keys.
+3. **KPI Cards ampliadas**: De 4 a 6, agregando "Facturas" (invoice_count) y "Duplicados" (del duplicateStats).
 
-## Archivos a modificar
+4. **Nuevo subcomponente `OpportunityMatrixMini`**: Cuadricula 2x2 con los 4 cuadrantes. Cada celda muestra el nombre, count de oportunidades y ahorro total. Quick Wins resaltado en verde, Major Projects en azul, etc.
 
-- `src/components/chemicals/invoices/useChemInvoices.ts` -- pasar `audit_id` a los 3 endpoints GET y actualizar query keys
+5. **Nuevo subcomponente `BenchmarkTable`**: Tabla compacta con columnas: Categoria, Tu Precio, Mediana Mercado, Posicion (dot color), Ahorro Potencial. Usa datos de `getBenchmarkComparison`.
+
+6. **Layout refactorizado**: Eliminar el sistema de Tabs y mostrar todo en un grid fluido con las 4 filas descritas arriba. Cada seccion en su propia Card.
+
+7. **Mantener sin cambios**: `SpendByCategoryChart` (importado), `formatCurrency`, `formatPercent`, `KPICard`, `KPICardSkeleton`, tooltips de proveedores.
+
+### Archivos que NO se tocan
+- `src/pages/cost-consulting/CostConsultingDashboard.tsx` (wrapper, sin cambios)
+- `src/components/cost-consulting/SpendByCategoryChart.tsx` (ya funciona bien)
+- `src/services/costConsultingApi.ts` (las funciones ya existen)
+
+### Manejo de errores
+Las queries adicionales (matrix, benchmarks, duplicates) se tratan como opcionales: si fallan o no devuelven datos, esa seccion simplemente se oculta con un fallback elegante. Solo la query principal de dashboard es bloqueante.
