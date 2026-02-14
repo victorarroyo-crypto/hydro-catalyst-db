@@ -246,9 +246,13 @@ export default function ChemContratos() {
     setExtractingContracts(true);
     try {
       const pendingDocIds = documents
-        ?.filter((d: any) => !d.datos_extraidos?.supplier_name)
+        ?.filter((d: any) => !isInvoiceDoc(d) && !d.datos_extraidos?.supplier_name)
         .map((d: any) => d.id) || [];
-      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts`, { method: 'POST' });
+      // Extract only documents from the current audit
+      const url = selectedAudit
+        ? `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts?audit_id=${selectedAudit}`
+        : `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts`;
+      const res = await fetch(url, { method: 'POST' });
       if (!res.ok) throw new Error('Error al iniciar extracción');
       const result = await res.json();
       toast.success(`Extracción iniciada — procesando ${result.processed || 'los'} documentos.`);
@@ -277,9 +281,23 @@ export default function ChemContratos() {
   const handleExtractInvoices = async () => {
     setExtractingInvoices(true);
     try {
-      const response = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices`, { method: 'POST' });
+      // Only extract invoice documents from the current audit
+      const invoiceDocs = documents.filter((d: any) => isInvoiceDoc(d));
+      const docIds = invoiceDocs.map((d: any) => d.id);
+      
+      if (docIds.length === 0) {
+        toast.error('No hay facturas para extraer en este contrato');
+        setExtractingInvoices(false);
+        return;
+      }
+
+      // Send document IDs to extract only these specific invoices
+      const url = selectedAudit
+        ? `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices?audit_id=${selectedAudit}`
+        : `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices`;
+      const response = await fetch(url, { method: 'POST' });
       const result = await response.json();
-      toast.success(`Extracción de facturas iniciada — procesando ${result.documents_to_process || 'los'} documentos.`);
+      toast.success(`Extracción de facturas iniciada — procesando ${docIds.length} documento(s) de este contrato.`);
       queryClient.invalidateQueries({ queryKey: ['chem-all-project-docs', projectId] });
       queryClient.invalidateQueries({ queryKey: ['chem-price-history', projectId] });
       startInvoicePolling();
