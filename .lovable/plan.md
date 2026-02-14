@@ -1,44 +1,33 @@
 
 
-## Fix: Tabs overflow and page scroll in Chemical Project Layout
+## Fix: Filter invoices by supplier when viewing a contract
 
 ### Problem
-The project layout has 12 tabs that overflow horizontally, and the entire page requires vertical scrolling because the layout doesn't properly fill the available viewport height. The `h-full` on the outer div doesn't work because the parent `main` in `AppLayout` doesn't establish a fixed height context.
+When you open a specific contract (e.g., Proquimia), the "Facturas" sub-tab shows ALL project invoices (including Brentag's) instead of only the invoices belonging to that supplier.
+
+### Root Cause
+`ChemInvoicesTab` in `ChemContratos.tsx` (line 1392) only receives `projectId` -- it has no knowledge of which supplier/audit is selected. The `useChemInvoices` hook fetches all invoices for the entire project without any supplier filter.
 
 ### Solution
+Pass an optional `supplierId` prop through the component chain and filter invoices, alerts, and summary client-side.
 
-Two changes across two files:
+### Changes
 
-### 1. `src/components/layout/AppLayout.tsx`
-- Change the `main` element to use `overflow-hidden` and a fixed height calculation so child components can properly fill the space with their own scroll.
-- Replace `flex-1 p-6 overflow-auto` with `flex-1 overflow-hidden` (remove padding -- padding will be handled by each page individually, or we keep a wrapper).
-- Actually, the simplest fix: make main use `h-[calc(100vh-3.5rem)]` and `overflow-hidden` so the ChemProjectLayout can fill it with `h-full`.
+**1. `src/components/chemicals/invoices/ChemInvoicesTab.tsx`**
+- Add optional `supplierId?: string` prop
+- Pass it to `useChemInvoices`
 
-### 2. `src/pages/chemicals/ChemProjectLayout.tsx`
-- Make the TabsList scrollable horizontally with proper overflow styling (hide scrollbar, allow scroll).
-- Reduce tab size and spacing to fit better.
-- Consider showing only icons on smaller screens or using a compact layout.
-- Ensure the content area (`flex-1 overflow-auto`) takes remaining height without causing page scroll.
+**2. `src/components/chemicals/invoices/useChemInvoices.ts`**
+- Accept optional `supplierId` parameter
+- After fetching all invoices, filter them client-side: `invoices.filter(i => i.supplier_id === supplierId)` when `supplierId` is provided
+- Similarly filter alerts by `supplier_id`
+- Return filtered data so all sub-tabs (invoices list, alerts, summary) show only the relevant supplier's data
 
-### Technical Details
+**3. `src/pages/chemicals/ChemContratos.tsx`**
+- Pass `supplierId={currentAudit.supplier_id}` to `ChemInvoicesTab` at line 1392
 
-**AppLayout.tsx** -- line 71:
-```tsx
-<main className="flex-1 overflow-hidden">
-  <Outlet />
-</main>
-```
-Remove `p-6` from main (pages that need padding already have their own). Add `overflow-hidden` to prevent double scrollbars.
+**4. `src/pages/chemicals/ChemFacturas.tsx`** (no change needed)
+- The standalone Facturas page continues showing all invoices (no `supplierId` passed), which is correct behavior for the project-wide view.
 
-**ChemProjectLayout.tsx** -- changes:
-- Root div: change `h-full` to `h-full` (keep) but ensure it works with the new parent.
-- Header: reduce `py-4` to `py-2` and `mb-3` to `mb-2` to save vertical space.
-- TabsList: add proper horizontal scroll with hidden scrollbar CSS, and reduce trigger padding:
-  ```tsx
-  <TabsList className="w-full justify-start overflow-x-auto flex-nowrap scrollbar-hide">
-  ```
-- Add a small CSS utility `.scrollbar-hide` (via Tailwind plugin or inline style) to hide the scrollbar while keeping scroll functional.
-- Reduce icon size in tabs from `w-3.5 h-3.5` to `w-3 h-3` and use even smaller text.
-
-These changes will make the header compact, the tabs horizontally scrollable without a visible scrollbar, and the content area will fill the remaining viewport height with its own internal scroll.
-
+### Technical Detail
+Client-side filtering is used because the Railway API endpoint does not currently support a `supplier_id` query parameter. The data volume per project is small enough that this is efficient. The filter applies to `invoicesQuery.data`, `alertsQuery.data` before they are returned from the hook.
