@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronDown, ChevronRight, Trash2, Package, Truck, AlertTriangle, ArrowDown, Clock, Wrench, HelpCircle, Loader2, Link, ExternalLink } from 'lucide-react';
-import { openDocumentUrl } from '@/utils/storageUrlHelper';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { ChemInvoice, ChemInvoiceLine, LineType } from './types';
@@ -19,6 +18,7 @@ interface Props {
   onAutoLink: () => void;
   autoLinking: boolean;
   documentUrlMap: Record<string, string>;
+  onOpenPdf: (fileUrl: string) => void;
 }
 
 const LINE_ICONS: Partial<Record<LineType, React.ReactNode>> = {
@@ -31,7 +31,7 @@ const LINE_ICONS: Partial<Record<LineType, React.ReactNode>> = {
   otro: <HelpCircle className="w-3.5 h-3.5" />,
 };
 
-export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteInvoice, onAutoLink, autoLinking, documentUrlMap }: Props) {
+export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteInvoice, onAutoLink, autoLinking, documentUrlMap, onOpenPdf }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterSupplier, setFilterSupplier] = useState<string>('all');
   const [filterEstado, setFilterEstado] = useState<string>('all');
@@ -172,7 +172,7 @@ export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteI
                               variant="ghost"
                               className="h-7 w-7 text-[#32b4cd]"
                               title="Ver PDF"
-                              onClick={e => { e.stopPropagation(); openDocumentUrl(documentUrlMap[inv.document_id!]); }}
+                              onClick={e => { e.stopPropagation(); onOpenPdf(documentUrlMap[inv.document_id!]); }}
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </Button>
@@ -191,6 +191,7 @@ export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteI
                           <InvoiceDetail
                             invoice={inv}
                             pdfUrl={inv.document_id ? documentUrlMap[inv.document_id] : undefined}
+                            onOpenPdf={onOpenPdf}
                             onUpdateEstado={(estado) => onUpdateInvoice({ invoiceId: inv.id, data: { estado } })}
                           />
                         </TableCell>
@@ -207,7 +208,7 @@ export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteI
   );
 }
 
-function InvoiceDetail({ invoice, pdfUrl, onUpdateEstado }: { invoice: ChemInvoice; pdfUrl?: string; onUpdateEstado: (estado: string) => void }) {
+function InvoiceDetail({ invoice, pdfUrl, onOpenPdf, onUpdateEstado }: { invoice: ChemInvoice; pdfUrl?: string; onOpenPdf: (url: string) => void; onUpdateEstado: (estado: string) => void }) {
   const lines = invoice.lines || [];
 
   const desglose = useMemo(() => {
@@ -247,7 +248,7 @@ function InvoiceDetail({ invoice, pdfUrl, onUpdateEstado }: { invoice: ChemInvoi
             </SelectContent>
           </Select>
           {pdfUrl && (
-            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openDocumentUrl(pdfUrl)}>
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => onOpenPdf(pdfUrl)}>
               <ExternalLink className="w-3.5 h-3.5 mr-1" /> Ver PDF
             </Button>
           )}

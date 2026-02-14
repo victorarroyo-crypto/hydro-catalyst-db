@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,10 +6,12 @@ import { Loader2, BarChart3, AlertTriangle, Receipt, FileText, Info } from 'luci
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useQuery } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { extractChemDocumentPath } from '@/utils/storageUrlHelper';
 import { useChemInvoices } from './useChemInvoices';
 import { ChemInvoicesList } from './ChemInvoicesList';
 import { ChemInvoiceAlerts } from './ChemInvoiceAlerts';
 import { ChemInvoiceSummary } from './ChemInvoiceSummary';
+import { toast } from 'sonner';
 
 interface Props {
   projectId: string;
@@ -58,6 +60,34 @@ export function ChemInvoicesTab({ projectId }: Props) {
     });
     return map;
   }, [docUrls]);
+
+  const openChemPdf = useCallback(async (fileUrl: string) => {
+    // For http(s) URLs, open directly
+    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+      window.open(fileUrl, '_blank');
+      return;
+    }
+
+    // Extract path within chem-documents bucket
+    const filePath = extractChemDocumentPath(fileUrl);
+    if (!filePath) {
+      toast.error('URL de documento no válida');
+      return;
+    }
+
+    const { data, error } = await externalSupabase.storage
+      .from('chem-documents')
+      .createSignedUrl(filePath, 3600);
+
+    if (error || !data?.signedUrl) {
+      console.error('Error creating signed URL:', error);
+      toast.error('No se pudo abrir el PDF');
+      return;
+    }
+
+    window.open(data.signedUrl, '_blank');
+  }, []);
+
   return (
     <div className="space-y-4">
       {/* Top action bar */}
@@ -126,6 +156,7 @@ export function ChemInvoicesTab({ projectId }: Props) {
             onAutoLink={() => autoLinkProducts()}
             autoLinking={autoLinking}
             documentUrlMap={documentUrlMap}
+            onOpenPdf={openChemPdf}
           />
         </TabsContent>
 
