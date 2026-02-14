@@ -1,75 +1,78 @@
 
 
-## Plan: Corregir el flujo de facturas - Separacion limpia entre contratos y facturas
+## Plan: Conectar el flujo completo de extraccion y analisis de facturas
 
-### Problemas identificados
+### Problema raiz
 
-1. **Facturas aparecen en "Condiciones"**: La pestana Condiciones muestra todos los documentos que tienen `datos_extraidos.supplier_name`. Las facturas extraidas por Railway tambien incluyen ese campo, asi que aparecen como si fueran contratos.
+Hay dos desconexiones criticas:
 
-2. **Facturas aparecen dos veces en "Facturas"**: La pestana Facturas muestra (a) los PDFs subidos filtrados de `documents` y (b) el componente `ChemInvoicesTab` que trae datos procesados desde la API de Railway. Si Railway ya proceso esas facturas, el usuario ve la misma informacion duplicada.
+1. **"Extraer datos"** llama a `startPolling()`, pero ese polling solo busca contratos (`supplier_name` en `chem_contract_documents`). Nunca invalida las queries de facturas (`chem-invoices`, `chem-invoice-alerts`, `chem-invoice-summary`), asi que `ChemInvoicesTab` nunca se actualiza.
 
-3. **Filtro fragil en "Documentos"**: El filtro actual (`tipo_documento === 'otro' && nombre_archivo.includes('factura')`) es fragil y puede fallar si el archivo no tiene "factura" en el nombre.
+2. **"Analizar Facturas"** hace un unico `setTimeout` de 10 segundos para refrescar alertas. Si Railway tarda mas, el usuario no ve nada. No hay feedback visual de progreso.
 
-4. **Documentos acotados al audit seleccionado**: La query `documents` esta filtrada por `audit_id`, lo que limita las facturas visibles a un solo proveedor en vez de mostrar todas las del proyecto.
+### Solucion
 
-### Solucion propuesta
+#### 1. Crear un polling dedicado para facturas en `ChemContratos.tsx`
 
-#### 1. Crear un filtro robusto para distinguir facturas de contratos
+Nueva funcion `startInvoicePolling()` que:
+- Cada 5 segundos consulta el endpoint `/invoices` de Railway
+- Invalida `chem-invoices`, `chem-invoice-alerts` y `chem-invoice-summary`
+- Para cuando detecta que hay facturas procesadas (o tras 3 minutos maximo)
+- Muestra estado visual de "Procesando facturas..." con spinner
 
-En lugar de depender del nombre del archivo, usar una funcion helper que identifique facturas por multiples criterios:
-- `tipo_documento === 'otro'` con nombre que incluya "factura"
-- O bien, el `raw_text` extraido contiene indicadores de factura (numero factura, IVA, base imponible)
-- O bien, `datos_extraidos` tiene campos tipicos de factura (como `productos_mencionados` con precios pero sin clausulas contractuales como `duracion_contrato_meses`)
+`handleExtractInvoices` llamara a `startInvoicePolling()` en vez del `startPolling()` actual.
 
-La funcion seria algo como:
+#### 2. Indicador visual de procesamiento en la seccion de PDFs
 
-```text
-isInvoiceDoc(doc):
-  - Si tipo_documento === 'otro' Y nombre contiene 'factura' -> true
-  - Si datos_extraidos.raw_text contiene 'FACTURA' e 'IVA' -> true
-  - Si tipo_documento es un tipo contractual conocido -> false
-  - Default: false
-```
+Agregar un banner/estado entre la card de PDFs y el `ChemInvoicesTab`:
+- Mientras el polling esta activo: "Extrayendo datos de facturas..." con spinner y barra de progreso
+- Cuando termina: desaparece automaticamente
 
-#### 2. Pestana "Condiciones" — Excluir facturas
+Se usara un nuevo estado `invoicePollingActive` para controlar la visibilidad.
 
-Modificar el filtro en la linea 662 para excluir documentos identificados como facturas:
+#### 3. Polling para "Analizar Facturas" en `useChemInvoices.ts`
 
-```text
-const docsWithData = documents.filter(d => 
-  d.datos_extraidos?.supplier_name && !isInvoiceDoc(d)
-);
-```
+Reemplazar el `setTimeout` unico de 10s por un polling real:
+- Cada 5 segundos invalida `chem-invoice-alerts` y `chem-invoice-summary`
+- Para cuando detecta alertas nuevas o tras 2 minutos
+- Muestra "Analizando..." en el boton mientras esta activo (ya lo hace parcialmente con `isPending`, pero necesita extenderse al polling)
 
-#### 3. Pestana "Documentos" — Excluir facturas
+#### 4. Mensaje contextual cuando no hay facturas procesadas
 
-Actualizar el filtro en linea 395-398 para usar la misma funcion `isInvoiceDoc`:
+En `ChemInvoicesTab`, cuando `invoices.length === 0` y no esta cargando:
+- Mostrar mensaje: "No hay facturas procesadas. Sube PDFs de facturas y pulsa 'Extraer datos' para comenzar."
+- El boton "Analizar Facturas" mostrara tooltip explicativo: "Primero extrae los datos de las facturas subidas"
 
-```text
-const contractDocs = documents.filter(d => !isInvoiceDoc(d));
-```
-
-#### 4. Pestana "Facturas" — Eliminar la lista duplicada de PDFs
-
-La seccion de "Facturas subidas" (lineas 1268-1329) que muestra los PDFs crudos es redundante con el `ChemInvoicesTab`. La solucion es simplificar esta pestana:
-
-- Mantener solo el boton "Subir factura" y el boton "Extraer datos de facturas"
-- Mostrar la lista de PDFs subidos de forma compacta (solo como referencia, sin tabla detallada)
-- El componente `ChemInvoicesTab` ya muestra los datos procesados correctamente
-
-#### 5. Boton "Extraer facturas" en el lugar correcto
-
-Mover la logica de extraccion de facturas exclusivamente a la pestana Facturas y eliminar el boton duplicado de la pestana Documentos (lineas 603-612).
-
-### Cambios de archivos
+### Cambios por archivo
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/pages/chemicals/ChemContratos.tsx` | Agregar funcion `isInvoiceDoc()`, actualizar filtros en las 3 pestanas, simplificar seccion de PDFs en Facturas, mover boton de extraccion |
+| `src/pages/chemicals/ChemContratos.tsx` | Crear `startInvoicePolling()` con invalidacion de queries de facturas. Agregar estado `invoicePollingActive`. Mostrar banner de procesamiento. Cambiar `handleExtractInvoices` para usar el nuevo polling. |
+| `src/components/chemicals/invoices/useChemInvoices.ts` | Reemplazar `setTimeout(10s)` en `analyzeInvoicesMutation` por polling real con intervalo de 5s y maximo 2 min. Exponer estado `analyzingPolling` para UI. |
+| `src/components/chemicals/invoices/ChemInvoicesTab.tsx` | Agregar mensaje vacio contextual cuando no hay facturas. Extender el estado de "Analizando" para cubrir el polling post-analisis. |
 
-### Resultado esperado
+### Flujo resultante
 
-- **Documentos**: Solo contratos y documentos NO-factura
-- **Condiciones**: Solo datos extraidos de contratos (nunca facturas)
-- **Facturas**: Seccion compacta de PDFs subidos + boton subir + boton extraer + `ChemInvoicesTab` con datos procesados (sin duplicacion)
+```text
+Usuario sube PDFs ──> Railway extrae texto (fase 1, automatico)
+                          |
+Usuario pulsa "Extraer datos"
+                          |
+    ┌─────────────────────┴──────────────────────┐
+    │  Banner: "Extrayendo datos de facturas..."  │
+    │  Polling cada 5s invalida chem-invoices     │
+    │  Barra de progreso visible                  │
+    └─────────────────────┬──────────────────────┘
+                          |
+    Railway termina ──> Polling detecta facturas ──> Tabla se llena
+                          |
+Usuario pulsa "Analizar Facturas"
+                          |
+    ┌─────────────────────┴──────────────────────┐
+    │  Boton: "Analizando..."                     │
+    │  Polling cada 5s invalida alerts/summary    │
+    └─────────────────────┬──────────────────────┘
+                          |
+    Railway termina ──> Alertas y resumen aparecen
+```
 
