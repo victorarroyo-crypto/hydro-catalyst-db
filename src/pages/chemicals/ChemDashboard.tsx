@@ -50,7 +50,7 @@ function normalizeSummary(raw: InvoiceSummary) {
 
 export default function ChemDashboard() {
   const { projectId } = useParams();
-  const { summary, summaryLoading, alerts, alertsLoading, analyzeInvoices, analyzingInvoices, refetchAll } = useChemInvoices(projectId);
+  const { summary, summaryLoading, alerts, alertsLoading, analyzeInvoices, analyzingInvoices, refetchAll, invoices } = useChemInvoices(projectId);
 
   // Fetch real product data (source of truth for gasto_anual)
   const { data: productData = [] } = useQuery({
@@ -74,6 +74,18 @@ export default function ChemDashboard() {
     });
     return map;
   }, [productData]);
+
+  // Calculate real gasto total from products (source of truth, no duplicates)
+  const realGastoTotal = useMemo(() => {
+    if (productData.length > 0) {
+      const sum = productData.reduce((acc: number, p: any) => acc + (p.gasto_anual ?? 0), 0);
+      if (sum > 0) return sum;
+    }
+    return summary ? (normalizeSummary(summary).totalGasto) : 0;
+  }, [productData, summary]);
+
+  // Use deduplicated invoice count
+  const realInvoiceCount = invoices.length > 0 ? invoices.length : (summary ? (normalizeSummary(summary).totalInvoices) : 0);
 
   if (summaryLoading) {
     return (
@@ -102,8 +114,8 @@ export default function ChemDashboard() {
 
   // KPI data
   const kpis = [
-    { label: 'Gasto Total', value: compactCurrency(s.totalGasto), color: COLORS.teal, icon: <DollarSign className="w-5 h-5" /> },
-    { label: 'Facturas Analizadas', value: s.totalInvoices.toString(), color: COLORS.blue, icon: <Receipt className="w-5 h-5" /> },
+    { label: 'Gasto Total', value: compactCurrency(realGastoTotal), color: COLORS.teal, icon: <DollarSign className="w-5 h-5" /> },
+    { label: 'Facturas Analizadas', value: realInvoiceCount.toString(), color: COLORS.blue, icon: <Receipt className="w-5 h-5" /> },
     { label: 'Alertas Pendientes', value: (s.alertas.pendientes ?? pendingAlerts.length).toString(), color: (s.alertas.pendientes ?? pendingAlerts.length) > 0 ? COLORS.orange : COLORS.green, icon: <AlertTriangle className="w-5 h-5" /> },
     { label: 'Ahorro Potencial', value: compactCurrency(s.ahorroPotencial), color: COLORS.green, icon: <TrendingDown className="w-5 h-5" /> },
   ];
