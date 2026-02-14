@@ -57,8 +57,8 @@ export default function ChemContratos() {
     queryFn: async () => {
       const res = await fetch(`${API_URL}/api/chem-consulting/projects/${projectId}/audits`);
       if (!res.ok) throw new Error('Error cargando auditorías');
-      const data = await res.json();
-      return data || [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : (json.audits ?? json.data ?? []);
     },
     enabled: !!projectId,
   });
