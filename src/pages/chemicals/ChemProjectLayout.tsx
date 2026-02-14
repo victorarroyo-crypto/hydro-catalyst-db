@@ -85,22 +85,22 @@ export default function ChemProjectLayout() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center gap-4 mb-3">
+      <div className="border-b border-border bg-card px-6 py-2">
+        <div className="flex items-center gap-4 mb-2">
           <Button variant="ghost" size="icon" onClick={() => navigate('/quimicos')}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <FlaskConical className="w-6 h-6 text-primary" />
+          <FlaskConical className="w-5 h-5 text-primary" />
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-foreground truncate">{project.nombre_cliente}</h1>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <h1 className="text-lg font-bold text-foreground truncate">{project.nombre_cliente}</h1>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
               {project.fecha_mandato && (
                 <span>Mandato: {format(new Date(project.fecha_mandato), 'dd MMM yyyy', { locale: es })}</span>
               )}
             </div>
           </div>
           <Select value={project.estado} onValueChange={handleEstadoChange}>
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="w-40 h-8 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -111,10 +111,10 @@ export default function ChemProjectLayout() {
 
         {/* Tabs */}
         <Tabs value={currentTab} onValueChange={handleTabChange}>
-          <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
+          <TabsList className="w-full justify-start overflow-x-auto flex-nowrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {TABS.map(tab => (
-              <TabsTrigger key={tab.value} value={tab.value} className="text-xs whitespace-nowrap gap-1.5">
-                <tab.icon className="w-3.5 h-3.5" />
+              <TabsTrigger key={tab.value} value={tab.value} className="text-xs whitespace-nowrap gap-1 px-2 py-1">
+                <tab.icon className="w-3 h-3" />
                 {tab.label}
               </TabsTrigger>
             ))}
