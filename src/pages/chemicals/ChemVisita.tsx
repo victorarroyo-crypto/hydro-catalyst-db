@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
-import { ChevronDown, Camera, Loader2, Sparkles } from 'lucide-react';
+import { ChevronDown, Camera, Loader2, Sparkles, FileDown } from 'lucide-react';
 
 const RAILWAY_URL = API_URL;
 
@@ -73,6 +73,7 @@ export default function ChemVisita() {
   const queryClient = useQueryClient();
   const [expandedNotes, setExpandedNotes] = useState<Record<number, boolean>>({});
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const { data: visits, isLoading } = useQuery<PlantVisit[]>({
     queryKey: ['chem-plant-visits', projectId],
@@ -161,6 +162,31 @@ export default function ChemVisita() {
     setExpandedNotes(prev => ({ ...prev, [index]: !prev[index] }));
   };
 
+  const downloadDocx = async () => {
+    if (!visit || !projectId) return;
+    setIsDownloading(true);
+    try {
+      const res = await fetch(
+        `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/plant-visits/${visit.id}/report/docx`
+      );
+      if (!res.ok) throw new Error('Error descargando');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Visita_${visit.fecha_visita || 'planta'}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('Documento descargado');
+    } catch {
+      toast.error('Error al descargar el documento');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center">
@@ -219,6 +245,19 @@ export default function ChemVisita() {
               ({aiItems.length} IA)
             </span>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={downloadDocx}
+            disabled={isDownloading}
+          >
+            {isDownloading ? (
+              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            ) : (
+              <FileDown className="w-4 h-4 mr-1" />
+            )}
+            Descargar Word
+          </Button>
         </div>
       </div>
 
