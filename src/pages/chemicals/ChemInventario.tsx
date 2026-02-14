@@ -486,7 +486,7 @@ export default function ChemInventario() {
               <Select value={form.proveedor_actual_id} onValueChange={v => setForm(f => ({ ...f, proveedor_actual_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sin proveedor</SelectItem>
+                  <SelectItem value="none">Sin proveedor</SelectItem>
                   {suppliers.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>)}
                 </SelectContent>
               </Select>
