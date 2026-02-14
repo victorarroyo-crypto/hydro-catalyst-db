@@ -361,22 +361,45 @@ export default function ChemContratos() {
     if (filesToUpload.length === 0) return;
     if (uploadTipo !== 'otro' && !selectedAudit) return;
 
+    // Prevent duplicate document uploads by checking existing file names
+    const existingNames = new Set([
+      ...documents.map((d: any) => d.nombre?.toLowerCase().trim()),
+      ...allProjectDocs.map((d: any) => d.nombre?.toLowerCase().trim()),
+    ].filter(Boolean));
+
+    const newFiles: File[] = [];
+    const skippedNames: string[] = [];
+    for (const f of filesToUpload) {
+      if (existingNames.has(f.name.toLowerCase().trim())) {
+        skippedNames.push(f.name);
+      } else {
+        newFiles.push(f);
+      }
+    }
+    if (skippedNames.length > 0) {
+      toast.warning(`${skippedNames.length} documento${skippedNames.length > 1 ? 's' : ''} ya existe${skippedNames.length > 1 ? 'n' : ''} y no se subirá${skippedNames.length > 1 ? 'n' : ''}: ${skippedNames.slice(0, 3).join(', ')}${skippedNames.length > 3 ? '…' : ''}`);
+    }
+    if (newFiles.length === 0) {
+      toast.info('Todos los documentos ya están subidos.');
+      return;
+    }
+
     setUploading(true);
-    setUploadProgress({ current: 0, total: filesToUpload.length });
+    setUploadProgress({ current: 0, total: newFiles.length });
     let successCount = 0;
     let errorCount = 0;
 
-    for (let i = 0; i < filesToUpload.length; i++) {
-      setUploadProgress({ current: i + 1, total: filesToUpload.length });
+    for (let i = 0; i < newFiles.length; i++) {
+      setUploadProgress({ current: i + 1, total: newFiles.length });
       try {
-        await uploadSingleFile(filesToUpload[i]);
+        await uploadSingleFile(newFiles[i]);
         successCount++;
       } catch (err: any) {
         errorCount++;
         if (err instanceof TypeError && err.message === 'Failed to fetch') {
-          toast.error(`${filesToUpload[i].name}: No se pudo conectar con el servidor.`);
+          toast.error(`${newFiles[i].name}: No se pudo conectar con el servidor.`);
         } else {
-          toast.error(`${filesToUpload[i].name}: ${err.message}`);
+          toast.error(`${newFiles[i].name}: ${err.message}`);
         }
       }
     }
