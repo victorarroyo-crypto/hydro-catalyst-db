@@ -271,15 +271,16 @@ export default function ChemContratos() {
   }, [projectId, selectedAudit, queryClient]);
 
   const handleExtractContracts = async () => {
+    if (!selectedAudit) {
+      toast.error('Selecciona un contrato primero');
+      return;
+    }
     setExtractingContracts(true);
     try {
       const pendingDocIds = documents
         ?.filter((d: any) => !isInvoiceDoc(d) && !d.datos_extraidos?.supplier_name)
         .map((d: any) => d.id) || [];
-      // Extract only documents from the current audit
-      const url = selectedAudit
-        ? `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts?audit_id=${selectedAudit}`
-        : `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts`;
+      const url = `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-contracts?audit_id=${selectedAudit}`;
       const res = await fetch(url, { method: 'POST' });
       if (!res.ok) throw new Error('Error al iniciar extracción');
       const result = await res.json();
@@ -307,9 +308,12 @@ export default function ChemContratos() {
   };
 
   const handleExtractInvoices = async () => {
+    if (!selectedAudit) {
+      toast.error('Selecciona un contrato primero');
+      return;
+    }
     setExtractingInvoices(true);
     try {
-      // Only extract invoice documents from the current audit
       const invoiceDocs = documents.filter((d: any) => isInvoiceDoc(d));
       const docIds = invoiceDocs.map((d: any) => d.id);
       
@@ -319,10 +323,7 @@ export default function ChemContratos() {
         return;
       }
 
-      // Send document IDs to extract only these specific invoices
-      const url = selectedAudit
-        ? `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices?audit_id=${selectedAudit}`
-        : `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices`;
+      const url = `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices?audit_id=${selectedAudit}`;
       const response = await fetch(url, { method: 'POST' });
       const result = await response.json();
       toast.success(`Extracción de facturas iniciada — procesando ${docIds.length} documento(s) de este contrato.`);
