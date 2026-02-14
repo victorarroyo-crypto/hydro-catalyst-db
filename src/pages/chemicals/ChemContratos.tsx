@@ -78,7 +78,7 @@ export default function ChemContratos() {
     queryFn: async () => {
       const { data, error } = await externalSupabase
         .from('chem_contract_documents')
-        .select('id, nombre, tipo, estado_extraccion, datos_extraidos, created_at, audit_id, chem_contract_audits(supplier_id, chem_suppliers(nombre))')
+        .select('id, nombre_archivo, tipo_documento, estado_extraccion, datos_extraidos, created_at, audit_id, chem_contract_audits(supplier_id, chem_suppliers(nombre))')
         .eq('project_id', projectId!)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -87,19 +87,36 @@ export default function ChemContratos() {
     enabled: !!projectId,
   });
 
-  // Price history (extracted invoice data)
-  const { data: priceHistory = [] } = useQuery({
-    queryKey: ['chem-price-history', projectId],
+  // Products for this project (needed to filter price history)
+  const { data: projectProducts = [] } = useQuery({
+    queryKey: ['chem-products-for-history', projectId],
     queryFn: async () => {
       const { data, error } = await externalSupabase
-        .from('chem_price_history')
-        .select('*, chem_products(nombre_comercial)')
-        .eq('project_id', projectId!)
-        .order('mes', { ascending: false });
+        .from('chem_products')
+        .select('id, nombre_comercial')
+        .eq('project_id', projectId!);
       if (error) throw error;
       return data || [];
     },
     enabled: !!projectId,
+  });
+
+  const productIds = projectProducts.map((p: any) => p.id);
+
+  // Price history (extracted invoice data) - filtered by product IDs
+  const { data: priceHistory = [] } = useQuery({
+    queryKey: ['chem-price-history', projectId, productIds],
+    queryFn: async () => {
+      if (productIds.length === 0) return [];
+      const { data, error } = await externalSupabase
+        .from('chem_price_history')
+        .select('*, chem_products(nombre_comercial)')
+        .in('product_id', productIds)
+        .order('mes', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: productIds.length > 0,
   });
 
   // Creating an audit: first create supplier, then audit referencing supplier_id
@@ -238,7 +255,7 @@ export default function ChemContratos() {
   const isPhase2Complete = (doc: any) => doc.datos_extraidos?.supplier_name;
   const hasDocsReadyForExtraction = documents.some((d: any) => isPhase1Complete(d) && !isPhase2Complete(d));
   const hasDocsForInvoiceExtraction = documents.some((d: any) => isPhase1Complete(d));
-  const hasProjectDocsForExtraction = allProjectDocs.some((d: any) => d.estado_extraccion === 'completado' && d.datos_extraidos?.raw_text);
+  const hasProjectDocsForExtraction = allProjectDocs.some((d: any) => d.estado_extraccion === 'completado' && d.datos_extraidos);
 
   const openUploadForInvoices = () => {
     setUploadTipo('otro');
@@ -656,7 +673,7 @@ export default function ChemContratos() {
                         <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
                         <SelectItem value="adenda">Adenda</SelectItem>
                         
-                        <SelectItem value="otro">Otro</SelectItem>
+                        <SelectItem value="otro">Otro / Factura</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1320,10 +1337,10 @@ export default function ChemContratos() {
                     <TableBody>
                       {allProjectDocs.map((d: any) => (
                         <TableRow key={d.id}>
-                          <TableCell className="text-sm font-medium">{d.nombre || '—'}</TableCell>
+                          <TableCell className="text-sm font-medium">{d.nombre_archivo || '—'}</TableCell>
                           <TableCell className="text-sm">{d.chem_contract_audits?.chem_suppliers?.nombre || '—'}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="text-[10px]">{d.tipo || 'otro'}</Badge>
+                            <Badge variant="outline" className="text-[10px]">{d.tipo_documento || 'otro'}</Badge>
                           </TableCell>
                           <TableCell>
                             {d.estado_extraccion === 'completado' && (
