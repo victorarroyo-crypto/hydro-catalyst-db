@@ -108,9 +108,8 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
 
   const analyzeInvoicesMutation = useMutation({
     mutationFn: async () => {
-      const url = auditId
-        ? `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/analyze-invoices?audit_id=${auditId}`
-        : `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/analyze-invoices`;
+      if (!auditId) throw new Error('Se requiere un contrato seleccionado para analizar facturas');
+      const url = `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/analyze-invoices?audit_id=${auditId}`;
       const res = await fetch(url, {
         method: 'POST',
       });
@@ -157,9 +156,8 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
   // Auto-link products
   const autoLinkMutation = useMutation({
     mutationFn: async () => {
-      const url = auditId
-        ? `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices/auto-link-products?audit_id=${auditId}`
-        : `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices/auto-link-products`;
+      if (!auditId) throw new Error('Se requiere un contrato seleccionado para vincular productos');
+      const url = `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices/auto-link-products?audit_id=${auditId}`;
       const res = await fetch(url, {
         method: 'POST',
       });
