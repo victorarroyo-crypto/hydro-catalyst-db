@@ -623,47 +623,6 @@ export default function ChemContratos() {
               </div>
             )}
 
-            {/* Upload Modal */}
-            <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Subir documento</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Tipo de documento</Label>
-                    <Select value={uploadTipo} onValueChange={setUploadTipo}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="contrato_formal">Contrato formal</SelectItem>
-                        <SelectItem value="condiciones_generales">Condiciones generales</SelectItem>
-                        <SelectItem value="email_tarifa">Email tarifa</SelectItem>
-                        <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
-                        <SelectItem value="adenda">Adenda</SelectItem>
-                        
-                        <SelectItem value="otro">Otro / Factura</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Archivo</Label>
-                    <Input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf,.docx,.xlsx,.xls,.jpg,.jpeg,.png"
-                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">PDF, Word, Excel o imágenes</p>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => { setShowUploadModal(false); setUploadFile(null); }}>Cancelar</Button>
-                  <Button onClick={handleUploadDocument} disabled={!uploadFile || uploading}>
-                    {uploading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Subiendo...</> : <><Upload className="w-4 h-4 mr-1" /> Subir</>}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           </TabsContent>
 
           {/* Condiciones */}
@@ -1336,6 +1295,47 @@ export default function ChemContratos() {
             <ChemInvoicesTab projectId={projectId!} />
           </TabsContent>
         </Tabs>
+
+        {/* Upload Modal - fuera de cualquier TabsContent para que sea accesible desde todas las pestañas */}
+        <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Subir documento</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Tipo de documento</Label>
+                <Select value={uploadTipo} onValueChange={setUploadTipo}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contrato_formal">Contrato formal</SelectItem>
+                    <SelectItem value="condiciones_generales">Condiciones generales</SelectItem>
+                    <SelectItem value="email_tarifa">Email tarifa</SelectItem>
+                    <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
+                    <SelectItem value="adenda">Adenda</SelectItem>
+                    <SelectItem value="otro">Otro / Factura</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Archivo</Label>
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.xlsx,.xls,.jpg,.jpeg,.png"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">PDF, Word, Excel o imágenes</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setShowUploadModal(false); setUploadFile(null); }}>Cancelar</Button>
+              <Button onClick={handleUploadDocument} disabled={!uploadFile || uploading}>
+                {uploading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Subiendo...</> : <><Upload className="w-4 h-4 mr-1" /> Subir</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
