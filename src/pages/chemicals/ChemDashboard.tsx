@@ -85,11 +85,15 @@ export default function ChemDashboard() {
 
   // Donut data — breakdown by product
   const donutData = s.baselines
-    .map(b => ({
-      name: b.producto,
-      value: b.gasto_anual ?? (b.precio_medio * b.volumen_total_kg),
-      pct: 0,
-    }))
+    .map(b => {
+      const precio = b.precio_medio_ponderado ?? b.precio_medio;
+      const vol = b.volumen_anual_kg ?? b.volumen_total_kg;
+      return {
+        name: b.producto,
+        value: b.gasto_anual ?? (precio * vol),
+        pct: 0,
+      };
+    })
     .filter(d => d.value > 0)
     .sort((a, b) => b.value - a.value);
 
@@ -107,7 +111,11 @@ export default function ChemDashboard() {
 
   // Top 10 baselines
   const top10 = [...s.baselines]
-    .sort((a, b) => ((b.gasto_anual ?? b.precio_medio * b.volumen_total_kg) - (a.gasto_anual ?? a.precio_medio * a.volumen_total_kg)))
+    .sort((a, b) => {
+      const gastoA = a.gasto_anual ?? (a.precio_medio_ponderado ?? a.precio_medio) * (a.volumen_anual_kg ?? a.volumen_total_kg);
+      const gastoB = b.gasto_anual ?? (b.precio_medio_ponderado ?? b.precio_medio) * (b.volumen_anual_kg ?? b.volumen_total_kg);
+      return gastoB - gastoA;
+    })
     .slice(0, 10);
 
   return (
