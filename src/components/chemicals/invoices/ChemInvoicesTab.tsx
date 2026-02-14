@@ -34,7 +34,6 @@ export function ChemInvoicesTab({ projectId, auditId }: Props) {
     autoLinkProducts,
     autoLinking,
     deleteInvoice,
-    duplicatesRemoved,
   } = useChemInvoices(projectId, auditId);
 
   const pendingAlerts = alerts.filter(a => a.estado === 'pendiente').length;
@@ -269,14 +268,6 @@ export function ChemInvoicesTab({ projectId, auditId }: Props) {
           </TabsTrigger>
         </TabsList>
 
-        {duplicatesRemoved > 0 && (
-          <div className="mb-3 p-2.5 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 text-xs flex items-center gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-            <span className="text-amber-800 dark:text-amber-200">
-              Se han filtrado <strong>{duplicatesRemoved}</strong> factura{duplicatesRemoved > 1 ? 's' : ''} duplicada{duplicatesRemoved > 1 ? 's' : ''} (mismo nº factura, fecha e importe).
-            </span>
-          </div>
-        )}
 
         <TabsContent value="facturas">
           <ChemInvoicesList
