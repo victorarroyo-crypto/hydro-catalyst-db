@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useChemInvoices } from '@/components/chemicals/invoices/useChemInvoices';
 import type { InvoiceSummary, ProductBaseline, ChemInvoiceAlert } from '@/components/chemicals/invoices/types';
 import { formatEUR, formatEURCurrency, SEVERITY_CONFIG } from '@/components/chemicals/invoices/types';
+import { API_URL } from '@/lib/api';
 
 function getDominantFormat(formatos?: Record<string, number>): string | null {
   if (!formatos || Object.keys(formatos).length === 0) return null;
@@ -50,6 +52,29 @@ export default function ChemDashboard() {
   const { projectId } = useParams();
   const { summary, summaryLoading, alerts, alertsLoading, analyzeInvoices, analyzingInvoices, refetchAll } = useChemInvoices(projectId);
 
+  // Fetch real product data (source of truth for gasto_anual)
+  const { data: productData = [] } = useQuery({
+    queryKey: ['chem-products-dashboard', projectId],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/api/chem-consulting/projects/${projectId}/products?view=calculated`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : (json.data ?? json.products ?? []);
+    },
+    enabled: !!projectId,
+  });
+
+  // Build nombre -> gasto_anual map from products (source of truth)
+  const productGastoMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    productData.forEach((p: any) => {
+      if (p.nombre_comercial && p.gasto_anual != null) {
+        map[p.nombre_comercial.toLowerCase().trim()] = p.gasto_anual;
+      }
+    });
+    return map;
+  }, [productData]);
+
   if (summaryLoading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -83,14 +108,16 @@ export default function ChemDashboard() {
     { label: 'Ahorro Potencial', value: compactCurrency(s.ahorroPotencial), color: COLORS.green, icon: <TrendingDown className="w-5 h-5" /> },
   ];
 
-  // Donut data — breakdown by product
+  // Donut data — breakdown by product, using product endpoint gasto_anual as source of truth
   const donutData = s.baselines
     .map(b => {
-      const precio = b.precio_medio_ponderado ?? b.precio_medio;
-      const vol = b.volumen_anual_kg ?? b.volumen_total_kg;
+      const key = b.producto.toLowerCase().trim();
+      const realGasto = productGastoMap[key];
+      const fallbackPrecio = b.precio_medio_ponderado ?? b.precio_medio;
+      const fallbackVol = b.volumen_anual_kg ?? b.volumen_total_kg;
       return {
         name: b.producto,
-        value: b.gasto_anual ?? (precio * vol),
+        value: realGasto ?? b.gasto_anual ?? (fallbackPrecio * fallbackVol),
         pct: 0,
       };
     })
@@ -109,13 +136,13 @@ export default function ChemDashboard() {
   const donutTotal = donutData.reduce((acc, d) => acc + d.value, 0);
   donutData.forEach(d => { d.pct = donutTotal > 0 ? (d.value / donutTotal) * 100 : 0; });
 
-  // Top 10 baselines
+  // Top 10 baselines — use product gasto as source of truth
+  const getBaselineGasto = (b: ProductBaseline) => {
+    const key = b.producto.toLowerCase().trim();
+    return productGastoMap[key] ?? b.gasto_anual ?? (b.precio_medio_ponderado ?? b.precio_medio) * (b.volumen_anual_kg ?? b.volumen_total_kg);
+  };
   const top10 = [...s.baselines]
-    .sort((a, b) => {
-      const gastoA = a.gasto_anual ?? (a.precio_medio_ponderado ?? a.precio_medio) * (a.volumen_anual_kg ?? a.volumen_total_kg);
-      const gastoB = b.gasto_anual ?? (b.precio_medio_ponderado ?? b.precio_medio) * (b.volumen_anual_kg ?? b.volumen_total_kg);
-      return gastoB - gastoA;
-    })
+    .sort((a, b) => getBaselineGasto(b) - getBaselineGasto(a))
     .slice(0, 10);
 
   return (
@@ -271,7 +298,7 @@ export default function ChemDashboard() {
                     const precioMA = bl.precio_medio_ponderado_ma ?? bl.precio_kg_ma;
                     const conc = bl.concentracion_media ?? bl.concentracion;
                     const vol = bl.volumen_anual_kg ?? bl.volumen_total_kg;
-                    const gasto = bl.gasto_anual ?? precioKg * vol;
+                    const gasto = getBaselineGasto(bl);
                     const tend = bl.tendencia ?? 'sin datos';
                     const variacion = bl.variacion_pct ?? 0;
                     const tco = bl.tco_kg;
