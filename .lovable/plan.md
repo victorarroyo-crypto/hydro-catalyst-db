@@ -1,69 +1,75 @@
 
-# Rediseno radical del Dashboard General de Cost Consulting
+
+# Rediseno del Dashboard General (/dashboard)
 
 ## Problema
-El dashboard actual (`CostDashboard.tsx`) solo consume un unico endpoint (`/dashboard`) y muestra 4 KPIs basicos + 3 graficos en tabs. El proyecto ahora tiene endpoints ricos para: contratos, facturas, proveedores, documentos, oportunidades, duplicados, benchmarks, timeline analytics y matriz de oportunidades. Nada de esto se refleja en el dashboard.
+
+El dashboard general actual muestra solo stats de tecnologias (BD, casos de estudio, tendencias, proyectos) y 3 accesos rapidos fijos. El proyecto ahora tiene 6+ modulos completos que no se reflejan: Consultoria de Procesos, Agua Industrial (Cost Consulting), Quimicos, Scouting, Advisor IA, y Herramientas IA. El usuario llega al dashboard y no tiene visibilidad de la actividad reciente ni accesos a los modulos nuevos.
 
 ## Nuevo diseno
 
 ### Layout (de arriba a abajo)
 
-**Fila 1 -- 6 KPI Cards**
-| Gasto Total | Ahorro Potencial | % Ahorro | Facturas | Proveedores | Duplicados |
-Cada card con icono, valor principal y subtitulo contextual. La card de duplicados muestra pending count y ahorro potencial por duplicados.
+**1. Hero/Welcome** (mantener, simplificar texto)
+Se mantiene el banner de bienvenida actual pero con texto mas generico que refleje la plataforma completa, no solo "tecnologias del agua".
 
-**Fila 2 -- 2 columnas**
-- **Izquierda (60%)**: Grafico de categorias con benchmark (SpendByCategoryChart, ya existente y bien hecho)
-- **Derecha (40%)**: Matriz de Oportunidades compacta -- resumen visual de los 4 cuadrantes (Quick Wins, Major Projects, Fill-ins, Low Priority) con count + ahorro total por cuadrante
+**2. KPI Row -- 6 cards**
+| Tecnologias | Proyectos Consultoria | Analisis Agua Industrial | Proyectos Quimicos | Scouting Sessions | Casos de Estudio |
 
-**Fila 3 -- 2 columnas**
-- **Izquierda (50%)**: Gasto por proveedor (barras horizontales top 8, con risk flags en color)
-- **Derecha (50%)**: Evolucion temporal (area chart mensual, ya existente)
+Cada card con dato real consultado. Se reemplazan las 5 stats actuales por 6 mas relevantes que cubren todos los modulos.
 
-**Fila 4 -- Benchmark Comparison** (nueva)
-- Tabla compacta con categorias, tu precio vs benchmark mediana, posicion (dot de color), y ahorro potencial por categoria
+**3. Modulos de la Plataforma (grid 2x3)**
+Cards de acceso rapido para cada modulo principal, con icono, descripcion corta y count de items activos:
+- BD Tecnologias (catalogo + count)
+- Consultoria de Procesos (proyectos activos)
+- Agua Industrial (analisis activos)
+- Quimicos (proyectos activos)
+- Scouting IA (sesiones)
+- Advisor IA (acceso directo)
+
+**4. Panel Admin** (solo admin/supervisor, mantener)
+- Estado de tecnologias (mantener desglose actual)
+- Sugerencias pendientes (mantener widget actual)
 
 ### Fuentes de datos
 
-Se mantiene la query principal al endpoint `/dashboard` que ya devuelve summary, spend_by_category, spend_by_supplier y timeline.
+Datos actuales que se mantienen:
+- `externalSupabase.from('technologies')` -- count total
+- `externalSupabase.from('casos_de_estudio')` -- count
+- `comparisonProjectsService.list()` -- proyectos scouting
+- `supabase.from('technology_edits')` -- edits pendientes (admin)
 
-Se agregan 2 queries adicionales (ligeras):
-1. `getOpportunityMatrix(projectId)` -- para la mini-matriz
-2. `getBenchmarkComparison(projectId)` -- para la tabla de benchmarks
-3. `getDuplicateStats(projectId)` -- para el KPI de duplicados
-
-Todas estas funciones ya existen en `costConsultingApi.ts`, solo hay que importarlas y llamarlas.
+Datos nuevos a agregar:
+- `fetch(API_URL + '/api/projects')` -- count proyectos consultoria
+- `fetch(API_URL + '/api/cost-consulting/projects')` -- count analisis agua industrial
+- `externalSupabase.from('chem_projects')` -- count proyectos quimicos
+- `externalSupabase.from('scouting_sessions')` -- count sesiones scouting
 
 ## Seccion tecnica
 
-### Archivo a modificar: `src/components/cost-consulting/CostDashboard.tsx`
+### Archivo a modificar: `src/pages/Dashboard.tsx`
 
 **Cambios principales:**
 
-1. **Imports adicionales**: Agregar `getOpportunityMatrix`, `getBenchmarkComparison`, `getDuplicateStats` y sus tipos desde `costConsultingApi.ts`
+1. **Queries adicionales**: Agregar 3 queries ligeras para counts de Consultoria, Agua Industrial y Quimicos. Cada una independiente y opcional (si falla, muestra "--").
 
-2. **Queries adicionales** en el componente principal:
-```text
-useQuery(['cost-opportunity-matrix', projectId], () => getOpportunityMatrix(projectId))
-useQuery(['cost-benchmarks', projectId], () => getBenchmarkComparison(projectId))
-useQuery(['cost-duplicate-stats', projectId], () => getDuplicateStats(projectId))
-```
-Estas queries son independientes y opcionales (si fallan, esas secciones simplemente no se muestran).
+2. **KPI Cards refactorizadas**: De 5 stats cards a 6, cubriendo todos los modulos. Se usa el mismo componente `StatsCard` existente.
 
-3. **KPI Cards ampliadas**: De 4 a 6, agregando "Facturas" (invoice_count) y "Duplicados" (del duplicateStats).
+3. **Grid de Modulos**: Reemplazar los 3 "Accesos Rapidos" fijos por un grid de 6 cards de modulos con count de actividad, icono tematico y link directo. Cada card incluye:
+   - Icono del modulo
+   - Nombre
+   - Descripcion corta (1 linea)
+   - Badge con count de items activos (si disponible)
+   - Link a la pagina raiz del modulo
 
-4. **Nuevo subcomponente `OpportunityMatrixMini`**: Cuadricula 2x2 con los 4 cuadrantes. Cada celda muestra el nombre, count de oportunidades y ahorro total. Quick Wins resaltado en verde, Major Projects en azul, etc.
+4. **Panel Admin**: Mantener sin cambios el bloque de "Estado de Tecnologias" y "Sugerencias Pendientes". Solo moverlos debajo del grid de modulos.
 
-5. **Nuevo subcomponente `BenchmarkTable`**: Tabla compacta con columnas: Categoria, Tu Precio, Mediana Mercado, Posicion (dot color), Ahorro Potencial. Usa datos de `getBenchmarkComparison`.
-
-6. **Layout refactorizado**: Eliminar el sistema de Tabs y mostrar todo en un grid fluido con las 4 filas descritas arriba. Cada seccion en su propia Card.
-
-7. **Mantener sin cambios**: `SpendByCategoryChart` (importado), `formatCurrency`, `formatPercent`, `KPICard`, `KPICardSkeleton`, tooltips de proveedores.
+5. **Iconos**: Agregar imports de `FlaskConical`, `Radar`, `MessageSquare`, `Beaker` (o similares) desde lucide-react para los nuevos modulos.
 
 ### Archivos que NO se tocan
-- `src/pages/cost-consulting/CostConsultingDashboard.tsx` (wrapper, sin cambios)
-- `src/components/cost-consulting/SpendByCategoryChart.tsx` (ya funciona bien)
-- `src/services/costConsultingApi.ts` (las funciones ya existen)
+- `src/components/StatsCard.tsx` (se reutiliza tal cual)
+- `src/components/layout/AppSidebar.tsx` (sin cambios)
+- Ninguna pagina de modulos individuales
 
 ### Manejo de errores
-Las queries adicionales (matrix, benchmarks, duplicates) se tratan como opcionales: si fallan o no devuelven datos, esa seccion simplemente se oculta con un fallback elegante. Solo la query principal de dashboard es bloqueante.
+Las queries nuevas son opcionales. Si alguna falla (ej: API de Railway no responde), ese KPI muestra "--" y la card del modulo sigue siendo clickeable pero sin badge de count.
