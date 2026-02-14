@@ -9,7 +9,6 @@
  */
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bdmpshiqspkxcisnnlyr.supabase.co';
-const EXTERNAL_SUPABASE_URL = 'https://ktzhrlcvluaptixngrsh.supabase.co';
 
 export const convertStorageUrl = (url: string | undefined | null): string | null => {
   if (!url) return null;
@@ -23,13 +22,7 @@ export const convertStorageUrl = (url: string | undefined | null): string | null
   if (url.startsWith('storage://')) {
     const path = url.replace('storage://', '');
     
-    // Chemical documents: stored in external Supabase bucket "chem-documents"
-    if (path.startsWith('chem-documents/')) {
-      const filePath = path.replace('chem-documents/', '');
-      return `${EXTERNAL_SUPABASE_URL}/storage/v1/object/public/chem-documents/${filePath}`;
-    }
-    
-    // Cost consulting documents
+    // Cost consulting documents (public bucket)
     let bucketPath: string;
     
     if (path.startsWith('documents/cost-consulting/')) {
@@ -46,6 +39,23 @@ export const convertStorageUrl = (url: string | undefined | null): string | null
   // Unknown format, return as-is (might work, might not)
   console.warn('Unknown storage URL format:', url);
   return url;
+};
+
+/**
+ * Extracts the file path within the chem-documents bucket from a storage:// URL.
+ * Returns null if the URL is not a chem-documents storage URL.
+ */
+export const extractChemDocumentPath = (url: string | undefined | null): string | null => {
+  if (!url) return null;
+  
+  if (url.startsWith('storage://')) {
+    const path = url.replace('storage://', '');
+    if (path.startsWith('chem-documents/')) {
+      return path.replace('chem-documents/', '');
+    }
+  }
+  
+  return null;
 };
 
 /**
