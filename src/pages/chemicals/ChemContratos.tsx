@@ -714,7 +714,19 @@ export default function ChemContratos() {
                 ].filter(v => v != null).length;
 
                 return (
-                  <Collapsible key={docWithData.id} defaultOpen>
+                  <Collapsible
+                    key={docWithData.id}
+                    open={activeDocId === docWithData.id}
+                    onOpenChange={(isOpen) => {
+                      if (isOpen) {
+                        setActiveDocId(docWithData.id);
+                        setActiveDocName(docWithData.nombre_archivo || docWithData.nombre || ext.supplier_name);
+                      } else {
+                        setActiveDocId(null);
+                        setActiveDocName(null);
+                      }
+                    }}
+                  >
                     <Card className={`transition-colors ${activeDocId === docWithData.id ? 'border-green-500 border-2 ring-1 ring-green-500/20' : 'border-[#32b4cd]/30'}`}>
                       <CollapsibleTrigger className="w-full">
                         <CardHeader className="py-3 flex flex-row items-center justify-between">
@@ -855,7 +867,9 @@ export default function ChemContratos() {
             <div className="border-t pt-4 mt-4">
               <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
-                Ficha de condiciones del proveedor
+                {activeDocName
+                  ? `Ficha de condiciones de ${documents.find((d: any) => d.id === activeDocId)?.datos_extraidos?.supplier_name || activeDocName}`
+                  : 'Ficha de condiciones del proveedor'}
               </h3>
               <p className="text-xs text-muted-foreground mb-3">
                 Estos son los datos oficiales del proveedor que se usarán en el análisis. Puedes rellenarlos automáticamente desde cualquier contrato o editarlos manualmente.
@@ -863,21 +877,12 @@ export default function ChemContratos() {
 
               {/* Context bar: which contract data comes from */}
               {activeDocId && activeDocName && (
-                <div className="mb-3 p-2.5 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm">
-                    <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    <span className="text-green-800 dark:text-green-200">
-                      Datos cargados desde: <strong>{activeDocName}</strong>
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-xs text-green-700 dark:text-green-300 h-7"
-                    onClick={() => { setActiveDocId(null); setActiveDocName(null); }}
-                  >
-                    Desmarcar
-                  </Button>
+                <div className="mb-3 p-2.5 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                  <span className="text-sm text-green-800 dark:text-green-200">
+                    Proveedor: <strong>{documents.find((d: any) => d.id === activeDocId)?.datos_extraidos?.supplier_name || '—'}</strong>
+                    {' | '}Documento: <strong>{activeDocName}</strong>
+                  </span>
                 </div>
               )}
 
