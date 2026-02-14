@@ -200,9 +200,26 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
 
   const auditDocIds = useMemo(() => new Set(auditDocsQuery.data || []), [auditDocsQuery.data]);
 
+  // Deduplicate invoices by numero_factura + fecha_factura + importe_total
+  const deduplicatedInvoices = useMemo(() => {
+    const raw = invoicesQuery.data || [];
+    const seen = new Map<string, ChemInvoice>();
+    for (const inv of raw) {
+      const key = `${(inv.numero_factura || '').trim().toLowerCase()}|${inv.fecha_factura || ''}|${inv.importe_total ?? ''}`;
+      // If key is fully empty (no identifying data), keep all
+      if (key === '||') {
+        seen.set(inv.id, inv);
+      } else if (!seen.has(key)) {
+        seen.set(key, inv);
+      }
+      // else: duplicate — skip
+    }
+    return Array.from(seen.values());
+  }, [invoicesQuery.data]);
+
   const filteredInvoices = auditId
-    ? (invoicesQuery.data || []).filter(i => i.document_id && auditDocIds.has(i.document_id))
-    : (invoicesQuery.data || []);
+    ? deduplicatedInvoices.filter(i => i.document_id && auditDocIds.has(i.document_id))
+    : deduplicatedInvoices;
 
   // Filter alerts by matching invoice_ids from filtered invoices
   const filteredInvoiceIds = useMemo(() => new Set(filteredInvoices.map(i => i.id)), [filteredInvoices]);
@@ -211,8 +228,11 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
     ? (alertsQuery.data || []).filter(a => a.invoice_id && filteredInvoiceIds.has(a.invoice_id))
     : (alertsQuery.data || []);
 
+  const duplicatesRemoved = (invoicesQuery.data?.length || 0) - deduplicatedInvoices.length;
+
   return {
     invoices: filteredInvoices,
+    duplicatesRemoved,
     invoicesLoading: invoicesQuery.isLoading || (!!auditId && auditDocsQuery.isLoading),
     alerts: filteredAlerts,
     alertsLoading: alertsQuery.isLoading,
