@@ -379,7 +379,7 @@ export default function ChemContratos() {
             <TabsTrigger value="facturas">Facturas</TabsTrigger>
           </TabsList>
 
-          {/* Documentos */}
+          {/* Documentos (solo contratos, sin facturas) */}
           <TabsContent value="documentos" className="space-y-4">
             <Card>
               <CardHeader className="pb-2">
@@ -391,245 +391,201 @@ export default function ChemContratos() {
                 </div>
               </CardHeader>
               <CardContent>
-                {documents.length === 0 ? (
-                  <div className="text-center py-8 space-y-2">
-                    <FileText className="w-10 h-10 mx-auto text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">No hay documentos subidos.</p>
-                    <Button size="sm" variant="ghost" onClick={() => setShowUploadModal(true)}>
-                      <Upload className="w-4 h-4 mr-1" /> Subir primer documento
-                    </Button>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Archivo</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Estado extracción</TableHead>
-                        <TableHead>Datos extraídos</TableHead>
-                        <TableHead>Confianza</TableHead>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead className="w-16">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {documents.map((d: any) => {
-                        const phase2Done = isPhase2Complete(d);
-                        const phase1Done = isPhase1Complete(d);
-                        return (
-                          <React.Fragment key={d.id}>
-                            <TableRow
-                              className={`cursor-pointer hover:bg-muted/50`}
-                              onClick={() => (phase2Done || phase1Done) && setExpandedDocId(expandedDocId === d.id ? null : d.id)}
-                            >
-                              <TableCell className="font-medium">
-                                {d.file_url ? (
-                                  <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline" onClick={e => e.stopPropagation()}>
-                                    {d.nombre_archivo} <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                ) : d.nombre_archivo}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="text-[10px]">{d.tipo_documento}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                {d.estado_extraccion === 'completado' && (
-                                  <Badge className="bg-[#8cb63c]/15 text-[#8cb63c] border-[#8cb63c]/30 text-[10px]">
-                                    <CheckCircle className="w-3 h-3 mr-1" /> Completado
+                {(() => {
+                  const contractDocs = documents.filter((d: any) => {
+                    const isInvoice = d.tipo_documento === 'otro' && d.nombre_archivo?.toLowerCase().includes('factura');
+                    return !isInvoice;
+                  });
+                  if (contractDocs.length === 0) return (
+                    <div className="text-center py-8 space-y-2">
+                      <FileText className="w-10 h-10 mx-auto text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">No hay documentos de contrato subidos.</p>
+                      <Button size="sm" variant="ghost" onClick={() => setShowUploadModal(true)}>
+                        <Upload className="w-4 h-4 mr-1" /> Subir primer documento
+                      </Button>
+                    </div>
+                  );
+                  return (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Archivo</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Estado extracción</TableHead>
+                          <TableHead>Datos extraídos</TableHead>
+                          <TableHead>Confianza</TableHead>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead className="w-16">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {contractDocs.map((d: any) => {
+                          const hasPhase2 = d.datos_extraidos?.supplier_name;
+                          return (
+                            <React.Fragment key={d.id}>
+                              <TableRow
+                                className="cursor-pointer hover:bg-muted/50"
+                                onClick={() => setExpandedDocId(expandedDocId === d.id ? null : d.id)}
+                              >
+                                <TableCell className="text-xs font-medium">{d.nombre_archivo || d.nombre}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {d.tipo_documento === 'contrato_formal' ? 'Contrato' :
+                                     d.tipo_documento === 'condiciones_generales' ? 'Condiciones' :
+                                     d.tipo_documento === 'email_tarifa' ? 'Email' :
+                                     d.tipo_documento === 'oferta_aceptada' ? 'Oferta' :
+                                     d.tipo_documento === 'adenda' ? 'Adenda' : 'Otro'}
                                   </Badge>
-                                )}
-                                {d.estado_extraccion === 'error' && (
-                                  <Badge variant="destructive" className="text-[10px]">
-                                    <XCircle className="w-3 h-3 mr-1" /> Error
-                                  </Badge>
-                                )}
-                                {d.estado_extraccion === 'procesando' && (
-                                  <Badge className="bg-[#32b4cd]/15 text-[#32b4cd] border-[#32b4cd]/30 text-[10px]">
-                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Procesando
-                                  </Badge>
-                                )}
-                                {d.estado_extraccion === 'pendiente' && (
-                                  <Badge variant="secondary" className="text-[10px]">
-                                    <Clock className="w-3 h-3 mr-1" /> Pendiente
-                                  </Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {phase2Done ? (
-                                  <Badge className="bg-[#8cb63c]/15 text-[#8cb63c] border-[#8cb63c]/30 text-[10px]">
-                                    <ClipboardList className="w-3 h-3 mr-1" /> Cláusulas extraídas
-                                  </Badge>
-                                ) : phase1Done ? (
-                                  <Badge className="bg-[#32b4cd]/15 text-[#32b4cd] border-[#32b4cd]/30 text-[10px]">
-                                    <FileText className="w-3 h-3 mr-1" /> Texto extraído
-                                  </Badge>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">—</span>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {d.confianza_extraccion != null ? (
-                                  <span className="text-xs font-mono">{(d.confianza_extraccion * 100).toFixed(0)}%</span>
-                                ) : <span className="text-xs text-muted-foreground">—</span>}
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {d.created_at ? format(new Date(d.created_at), 'dd MMM yyyy', { locale: es }) : '—'}
-                              </TableCell>
-                              <TableCell>
-                                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); deleteDocMutation.mutate(d.id); }}>
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-
-                            {/* Expanded: Phase 1 only - show raw text */}
-                            {expandedDocId === d.id && phase1Done && !phase2Done && (
-                              <TableRow>
-                                <TableCell colSpan={7} className="p-0">
-                                  <div className="bg-muted/30 p-4 space-y-3 border-t">
-                                    <div className="flex items-center justify-between">
-                                      <h4 className="text-sm font-semibold" style={{ color: '#307177' }}>📄 Texto extraído del documento</h4>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1.5">
+                                    {d.estado_extraccion === 'completado' ? (
+                                      <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                                    ) : d.estado_extraccion === 'error' ? (
+                                      <XCircle className="w-3.5 h-3.5 text-destructive" />
+                                    ) : (
+                                      <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                                    )}
+                                    <span className="text-xs">{d.estado_extraccion || 'pendiente'}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {hasPhase2 ? (
+                                    <Badge className="bg-[#307177]/10 text-[#307177] border-[#307177]/30 text-[10px]">
+                                      Cláusulas extraídas
+                                    </Badge>
+                                  ) : d.datos_extraidos?.raw_text ? (
+                                    <Badge variant="secondary" className="text-[10px]">Solo texto</Badge>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {d.confianza_extraccion != null ? (
+                                    <span className="text-xs font-mono">{(d.confianza_extraccion * 100).toFixed(0)}%</span>
+                                  ) : '—'}
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {d.created_at ? format(new Date(d.created_at), 'dd/MM/yyyy', { locale: es }) : '—'}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex gap-1">
+                                    {d.file_url && (
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                                        <a href={d.file_url.replace('storage://', `${RAILWAY_URL}/api/chem-consulting/storage/`)} target="_blank" rel="noopener noreferrer">
+                                          <ExternalLink className="w-3.5 h-3.5" />
+                                        </a>
+                                      </Button>
+                                    )}
+                                    {d.datos_extraidos?.raw_text && !hasPhase2 && (
                                       <Button
-                                        size="sm"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-[#307177]"
                                         onClick={(e) => { e.stopPropagation(); handleExtractSingleDoc(d.id); }}
                                         disabled={extractingDocId === d.id}
-                                        className="bg-[#307177] hover:bg-[#307177]/90 text-white"
                                       >
-                                        {extractingDocId === d.id ? (
-                                          <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Extrayendo cláusulas…</>
-                                        ) : (
-                                          <><ClipboardList className="w-3.5 h-3.5 mr-1.5" /> Extraer cláusulas con IA</>
-                                        )}
+                                        {extractingDocId === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />}
                                       </Button>
-                                    </div>
-                                    <pre className="text-xs whitespace-pre-wrap font-mono bg-background border rounded-lg p-3 max-h-[400px] overflow-y-auto">
-                                      {d.datos_extraidos?.raw_text || 'Sin texto disponible'}
-                                    </pre>
-                                    <p className="text-[10px] text-muted-foreground">
-                                      {d.datos_extraidos?.chars ? `${d.datos_extraidos.chars} caracteres` : ''} 
-                                      {d.datos_extraidos?.pages ? ` · ${d.datos_extraidos.pages} páginas` : ''}
-                                      {' · Phase 2 (extracción estructurada) pendiente'}
-                                    </p>
+                                    )}
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); deleteDocMutation.mutate(d.id); }}>
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
                                   </div>
                                 </TableCell>
                               </TableRow>
-                            )}
 
-                            {/* Expanded: Phase 2 complete - structured data */}
-                            {expandedDocId === d.id && phase2Done && (
-                              <TableRow>
-                                <TableCell colSpan={7} className="p-0">
-                                  <div className="bg-muted/30 p-4 space-y-4 border-t">
-                                    {/* Contract data */}
-                                    <div>
-                                      <h4 className="text-sm font-semibold mb-2" style={{ color: '#307177' }}>📋 Datos del contrato</h4>
-                                      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-xs">
-                                        {[
-                                          ['Proveedor', d.datos_extraidos?.supplier_name],
-                                          ['Plazo de pago', d.datos_extraidos?.plazo_pago_dias ? `${d.datos_extraidos.plazo_pago_dias} días` : null],
-                                          ['Pronto pago', d.datos_extraidos?.pronto_pago_descuento_pct ? `${d.datos_extraidos.pronto_pago_descuento_pct}% en ${d.datos_extraidos.pronto_pago_dias || '?'} días` : null],
-                                          ['Duración', d.datos_extraidos?.duracion_contrato_meses ? `${d.datos_extraidos.duracion_contrato_meses} meses` : null],
-                                          ['Vencimiento', d.datos_extraidos?.fecha_vencimiento],
-                                          ['Renovación automática', d.datos_extraidos?.renovacion_automatica != null ? (d.datos_extraidos.renovacion_automatica ? 'Sí' : 'No') : null],
-                                          ['Preaviso', d.datos_extraidos?.preaviso_no_renovacion_dias ? `${d.datos_extraidos.preaviso_no_renovacion_dias} días` : null],
-                                          ['Take or Pay', d.datos_extraidos?.take_or_pay != null ? (d.datos_extraidos.take_or_pay ? 'Sí' : 'No') : null],
-                                          ['Vol. comprometido', d.datos_extraidos?.volumen_comprometido_anual ? `${d.datos_extraidos.volumen_comprometido_anual} kg/año` : null],
-                                          ['Fórmula revisión', d.datos_extraidos?.formula_revision_detalle],
-                                          ['Índice vinculado', d.datos_extraidos?.indice_vinculado],
-                                          ['Frecuencia revisión', d.datos_extraidos?.frecuencia_revision],
-                                          ['Rappels', d.datos_extraidos?.rappel_detalle],
-                                          ['Servicio técnico', d.datos_extraidos?.detalle_servicio_tecnico],
-                                          ['Equipos comodato', d.datos_extraidos?.detalle_comodato],
-                                        ].filter(([, v]) => v != null).map(([label, value]) => (
-                                          <div key={label as string}>
-                                            <span className="text-muted-foreground">{label}: </span>
-                                            <span className="font-medium">{value}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
+                              {expandedDocId === d.id && d.datos_extraidos && (
+                                <TableRow>
+                                  <TableCell colSpan={7} className="bg-muted/30 p-4">
+                                    <div className="space-y-3">
+                                      {hasPhase2 && (
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                          <div><span className="text-muted-foreground">Proveedor:</span> <span className="font-medium">{d.datos_extraidos.supplier_name}</span></div>
+                                          <div><span className="text-muted-foreground">Plazo pago:</span> <span className="font-medium">{d.datos_extraidos.plazo_pago_dias ?? '—'} días</span></div>
+                                          <div><span className="text-muted-foreground">Duración:</span> <span className="font-medium">{d.datos_extraidos.duracion_contrato_meses ?? '—'} meses</span></div>
+                                          <div><span className="text-muted-foreground">Vencimiento:</span> <span className="font-medium">{d.datos_extraidos.fecha_vencimiento ?? '—'}</span></div>
+                                        </div>
+                                      )}
 
-                                    {/* Products */}
-                                    {d.datos_extraidos?.productos_mencionados?.length > 0 && (
-                                      <div>
-                                        <h4 className="text-sm font-semibold mb-2" style={{ color: '#307177' }}>📦 Productos</h4>
-                                        <Table>
-                                          <TableHeader>
-                                            <TableRow>
-                                              <TableHead className="text-xs">Producto</TableHead>
-                                              <TableHead className="text-xs">Precio (€/kg)</TableHead>
-                                              <TableHead className="text-xs">Formato</TableHead>
-                                              <TableHead className="text-xs">Incoterm</TableHead>
-                                            </TableRow>
-                                          </TableHeader>
-                                          <TableBody>
-                                            {d.datos_extraidos.productos_mencionados.map((p: any, i: number) => (
-                                              <TableRow key={i}>
-                                                <TableCell className="text-xs">{p.nombre || '—'}</TableCell>
-                                                <TableCell className="text-xs font-mono">{p.precio_kg != null ? `${p.precio_kg} €` : '—'}</TableCell>
-                                                <TableCell className="text-xs">{p.formato || '—'}</TableCell>
-                                                <TableCell className="text-xs">{p.incoterm || '—'}</TableCell>
+                                      {d.datos_extraidos?.productos_mencionados?.length > 0 && (
+                                        <div>
+                                          <h4 className="text-xs font-semibold mb-1">Productos mencionados</h4>
+                                          <Table>
+                                            <TableHeader>
+                                              <TableRow>
+                                                <TableHead className="text-xs">Producto</TableHead>
+                                                <TableHead className="text-xs">Precio (€/kg)</TableHead>
+                                                <TableHead className="text-xs">Formato</TableHead>
+                                                <TableHead className="text-xs">Incoterm</TableHead>
                                               </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                              {d.datos_extraidos.productos_mencionados.map((p: any, i: number) => (
+                                                <TableRow key={i}>
+                                                  <TableCell className="text-xs">{p.nombre || '—'}</TableCell>
+                                                  <TableCell className="text-xs font-mono">{p.precio_kg != null ? `${p.precio_kg} €` : '—'}</TableCell>
+                                                  <TableCell className="text-xs">{p.formato || '—'}</TableCell>
+                                                  <TableCell className="text-xs">{p.incoterm || '—'}</TableCell>
+                                                </TableRow>
+                                              ))}
+                                            </TableBody>
+                                          </Table>
+                                        </div>
+                                      )}
+
+                                      {d.datos_extraidos?.alertas_auditor?.length > 0 && (
+                                        <div className="bg-[#ffa720]/10 border border-[#ffa720]/30 rounded-lg p-3">
+                                          <h4 className="text-sm font-semibold mb-2 text-[#ffa720]">⚠️ Alertas del auditor</h4>
+                                          <ul className="space-y-1">
+                                            {d.datos_extraidos.alertas_auditor.map((a: string, i: number) => (
+                                              <li key={i} className="text-xs flex items-start gap-1.5">
+                                                <AlertTriangle className="w-3 h-3 mt-0.5 text-[#ffa720] shrink-0" />
+                                                <span>{a}</span>
+                                              </li>
                                             ))}
-                                          </TableBody>
-                                        </Table>
-                                      </div>
-                                    )}
+                                          </ul>
+                                        </div>
+                                      )}
 
-                                    {/* Auditor alerts */}
-                                    {d.datos_extraidos?.alertas_auditor?.length > 0 && (
-                                      <div className="bg-[#ffa720]/10 border border-[#ffa720]/30 rounded-lg p-3">
-                                        <h4 className="text-sm font-semibold mb-2 text-[#ffa720]">⚠️ Alertas del auditor</h4>
-                                        <ul className="space-y-1">
-                                          {d.datos_extraidos.alertas_auditor.map((a: string, i: number) => (
-                                            <li key={i} className="text-xs flex items-start gap-1.5">
-                                              <AlertTriangle className="w-3 h-3 mt-0.5 text-[#ffa720] shrink-0" />
-                                              <span>{a}</span>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
+                                      {d.datos_extraidos?.confianza_por_campo && (
+                                        <Collapsible>
+                                          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                                            <ChevronDown className="w-3 h-3" /> Confianza por campo
+                                          </CollapsibleTrigger>
+                                          <CollapsibleContent className="mt-2 space-y-1.5">
+                                            {Object.entries(d.datos_extraidos.confianza_por_campo).map(([campo, valor]: [string, any]) => (
+                                              <div key={campo} className="flex items-center gap-2 text-xs">
+                                                <span className="w-40 text-muted-foreground truncate">{campo}</span>
+                                                <Progress value={(valor as number) * 100} className="flex-1 h-1.5" />
+                                                <span className="w-10 text-right font-mono">{((valor as number) * 100).toFixed(0)}%</span>
+                                              </div>
+                                            ))}
+                                          </CollapsibleContent>
+                                        </Collapsible>
+                                      )}
 
-                                    {/* Confidence per field */}
-                                    {d.datos_extraidos?.confianza_por_campo && (
                                       <Collapsible>
                                         <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                                          <ChevronDown className="w-3 h-3" /> Confianza por campo
+                                          <ChevronDown className="w-3 h-3" /> Ver texto original
                                         </CollapsibleTrigger>
-                                        <CollapsibleContent className="mt-2 space-y-1.5">
-                                          {Object.entries(d.datos_extraidos.confianza_por_campo).map(([campo, valor]: [string, any]) => (
-                                            <div key={campo} className="flex items-center gap-2 text-xs">
-                                              <span className="w-40 text-muted-foreground truncate">{campo}</span>
-                                              <Progress value={(valor as number) * 100} className="flex-1 h-1.5" />
-                                              <span className="w-10 text-right font-mono">{((valor as number) * 100).toFixed(0)}%</span>
-                                            </div>
-                                          ))}
+                                        <CollapsibleContent className="mt-2">
+                                          <pre className="text-xs whitespace-pre-wrap font-mono bg-background border rounded-lg p-3 max-h-[300px] overflow-y-auto">
+                                            {d.datos_extraidos?.raw_text || 'Sin texto'}
+                                          </pre>
                                         </CollapsibleContent>
                                       </Collapsible>
-                                    )}
-
-                                    {/* Raw text collapsible */}
-                                    <Collapsible>
-                                      <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                                        <ChevronDown className="w-3 h-3" /> Ver texto original
-                                      </CollapsibleTrigger>
-                                      <CollapsibleContent className="mt-2">
-                                        <pre className="text-xs whitespace-pre-wrap font-mono bg-background border rounded-lg p-3 max-h-[300px] overflow-y-auto">
-                                          {d.datos_extraidos?.raw_text || 'Sin texto'}
-                                        </pre>
-                                      </CollapsibleContent>
-                                    </Collapsible>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  );
+                })()}
               </CardContent>
             </Card>
 
@@ -1308,6 +1264,84 @@ export default function ChemContratos() {
 
           {/* Facturas — nuevo sistema v2 */}
           <TabsContent value="facturas" className="space-y-4">
+            {/* Documentos de factura subidos */}
+            {(() => {
+              const invoiceDocs = documents.filter((d: any) => {
+                return d.tipo_documento === 'otro' && d.nombre_archivo?.toLowerCase().includes('factura');
+              });
+              return (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        Facturas subidas ({invoiceDocs.length})
+                      </CardTitle>
+                      <Button size="sm" variant="outline" onClick={openUploadForInvoices}>
+                        <Upload className="w-4 h-4 mr-1" /> Subir factura
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {invoiceDocs.length === 0 ? (
+                      <div className="text-center py-6 space-y-2">
+                        <Receipt className="w-8 h-8 mx-auto text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">No hay facturas subidas para este proveedor.</p>
+                        <Button size="sm" variant="ghost" onClick={openUploadForInvoices}>
+                          <Upload className="w-4 h-4 mr-1" /> Subir primera factura
+                        </Button>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Archivo</TableHead>
+                            <TableHead>Estado</TableHead>
+                            <TableHead>Fecha subida</TableHead>
+                            <TableHead className="w-16">Acciones</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {invoiceDocs.map((d: any) => (
+                            <TableRow key={d.id}>
+                              <TableCell className="text-xs font-medium">{d.nombre_archivo || d.nombre}</TableCell>
+                              <TableCell>
+                                <Badge variant={d.estado_extraccion === 'completado' ? 'default' : 'secondary'} className="text-[10px]">
+                                  {d.estado_extraccion === 'completado' ? '✓ Texto extraído' : d.estado_extraccion || 'Pendiente'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {d.created_at ? format(new Date(d.created_at), 'dd/MM/yyyy HH:mm', { locale: es }) : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocMutation.mutate(d.id)}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* Extracción y análisis de facturas */}
+            {documents.some((d: any) => d.tipo_documento === 'otro' && d.nombre_archivo?.toLowerCase().includes('factura') && d.estado_extraccion === 'completado') && (
+              <Button
+                onClick={handleExtractInvoices}
+                disabled={extractingInvoices}
+                className="bg-[#32b4cd] hover:bg-[#32b4cd]/90 text-white"
+                size="sm"
+              >
+                {extractingInvoices ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Receipt className="w-4 h-4 mr-1" />}
+                Extraer datos de facturas
+              </Button>
+            )}
+
+            {/* Resultados procesados */}
             <ChemInvoicesTab projectId={projectId!} />
           </TabsContent>
         </Tabs>
