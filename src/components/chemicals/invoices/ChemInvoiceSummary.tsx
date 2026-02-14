@@ -90,7 +90,7 @@ export function ChemInvoiceSummary({ summary, loading }: Props) {
       </Card>
 
       {/* Baselines */}
-      {summary.baselines.length > 0 && (
+      {(summary.baselines ?? []).length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Baseline de precios por producto</CardTitle>
@@ -108,7 +108,7 @@ export function ChemInvoiceSummary({ summary, loading }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {summary.baselines.map((bl, i) => (
+                {(summary.baselines ?? []).map((bl, i) => (
                   <TableRow key={i}>
                     <TableCell className="text-xs font-medium">{bl.producto}</TableCell>
                     <TableCell className="text-xs text-right font-mono">{formatEUR(bl.precio_medio, 4)}</TableCell>
@@ -127,7 +127,7 @@ export function ChemInvoiceSummary({ summary, loading }: Props) {
       )}
 
       {/* Suppliers */}
-      {summary.suppliers.length > 0 && (
+      {(summary.suppliers ?? []).length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Gasto por proveedor</CardTitle>
@@ -143,7 +143,7 @@ export function ChemInvoiceSummary({ summary, loading }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {summary.suppliers.map(sup => (
+                {(summary.suppliers ?? []).map(sup => (
                   <TableRow key={sup.supplier_id}>
                     <TableCell className="text-xs font-medium">{sup.nombre}</TableCell>
                     <TableCell className="text-xs text-center">{sup.num_facturas}</TableCell>
