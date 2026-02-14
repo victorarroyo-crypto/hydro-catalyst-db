@@ -310,20 +310,17 @@ export default function ChemContratos() {
 
   // Robust helper to distinguish invoices from contracts
   const isInvoiceDoc = (doc: any): boolean => {
-    const nombre = (doc.nombre_archivo || doc.nombre || '').toLowerCase();
-    // 1. tipo_documento === 'otro' with invoice-like name
-    if (doc.tipo_documento === 'otro' && nombre.includes('factura')) return true;
-    // 2. raw_text contains invoice indicators
+    // 1. Known contract types are never invoices
+    const contractTypes = ['contrato_formal', 'condiciones_generales', 'email_tarifa', 'oferta_aceptada', 'adenda'];
+    if (contractTypes.includes(doc.tipo_documento)) return false;
+    // 2. tipo_documento === 'otro' → treat as invoice (this is how invoices are uploaded)
+    if (doc.tipo_documento === 'otro') return true;
+    // 3. raw_text contains invoice indicators (fallback for docs without tipo)
     const rawText = (doc.datos_extraidos?.raw_text || '').toUpperCase();
     if (rawText.includes('FACTURA') && (rawText.includes('IVA') || rawText.includes('BASE IMPONIBLE'))) {
-      // But exclude if it also has contract-specific fields
       const hasContractFields = doc.datos_extraidos?.duracion_contrato_meses || doc.datos_extraidos?.clausula_salida;
       if (!hasContractFields) return true;
     }
-    // 3. Known contract types are never invoices
-    const contractTypes = ['contrato_formal', 'condiciones_generales', 'email_tarifa', 'oferta_aceptada', 'adenda'];
-    if (contractTypes.includes(doc.tipo_documento)) return false;
-    // 4. tipo_documento === 'otro' without invoice indicators → not invoice
     return false;
   };
 
