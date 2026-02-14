@@ -284,13 +284,17 @@ export default function ChemContratos() {
 
 
   const handleUploadDocument = async () => {
-    if (!uploadFile || !selectedAudit || !projectId) return;
+    if (!uploadFile || !projectId) return;
+    // For invoices (tipo 'otro'), audit_id is optional
+    if (uploadTipo !== 'otro' && !selectedAudit) return;
     setUploading(true);
     try {
       const formData = new FormData();
       formData.append('file', uploadFile);
       formData.append('tipo_documento', uploadTipo);
-      formData.append('audit_id', selectedAudit);
+      if (selectedAudit) {
+        formData.append('audit_id', selectedAudit);
+      }
 
       const response = await fetch(
         `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/documents`,
