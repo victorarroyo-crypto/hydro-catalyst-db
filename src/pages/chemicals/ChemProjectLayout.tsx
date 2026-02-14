@@ -5,7 +5,7 @@ import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, FlaskConical } from 'lucide-react';
+import { ArrowLeft, FlaskConical, LayoutDashboard, Package, FileText, Bell, FileCheck, Factory, Target, BarChart3, PiggyBank, BookOpen, TrendingUp, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -21,18 +21,18 @@ const ESTADOS = [
 ];
 
 const TABS = [
-  { value: 'dashboard', label: 'Dashboard', path: '' },
-  { value: 'inventario', label: 'Inventario', path: '/inventario' },
-  { value: 'contratos', label: 'Contratos', path: '/contratos' },
-  { value: 'baseline', label: 'Baseline', path: '/baseline' },
-  { value: 'alertas', label: 'Alertas', path: '/alertas' },
-  { value: 'matriz', label: 'Matriz Estratégica', path: '/matriz' },
-  { value: 'benchmarking', label: 'Benchmarking', path: '/benchmarking' },
-  { value: 'historico', label: 'Histórico precios', path: '/historico' },
-  { value: 'visita', label: 'Visita planta', path: '/visita' },
-  { value: 'rfqs', label: 'RFQs', path: '/rfqs' },
-  { value: 'ahorro', label: 'Ahorro', path: '/ahorro' },
-  { value: 'autorizacion', label: 'Autorización', path: '/autorizacion' },
+  { value: 'dashboard', label: 'Dashboard', path: '', icon: LayoutDashboard },
+  { value: 'inventario', label: 'Productos', path: '/inventario', icon: Package },
+  { value: 'facturas', label: 'Facturas', path: '/facturas', icon: FileText },
+  { value: 'alertas', label: 'Alertas', path: '/alertas', icon: Bell },
+  { value: 'contratos', label: 'Contratos', path: '/contratos', icon: FileCheck },
+  { value: 'visita', label: 'Visitas Planta', path: '/visita', icon: Factory },
+  { value: 'matriz', label: 'Matriz Estratégica', path: '/matriz', icon: Target },
+  { value: 'rfqs', label: 'RFQs y Ofertas', path: '/rfqs', icon: BarChart3 },
+  { value: 'ahorro', label: 'Ahorros', path: '/ahorro', icon: PiggyBank },
+  { value: 'benchmarking', label: 'Benchmarks', path: '/benchmarking', icon: BookOpen },
+  { value: 'historico', label: 'Historial Precios', path: '/historico', icon: TrendingUp },
+  { value: 'documentos', label: 'Documentos', path: '/documentos', icon: FolderOpen },
 ];
 
 export default function ChemProjectLayout() {
@@ -113,7 +113,8 @@ export default function ChemProjectLayout() {
         <Tabs value={currentTab} onValueChange={handleTabChange}>
           <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
             {TABS.map(tab => (
-              <TabsTrigger key={tab.value} value={tab.value} className="text-xs whitespace-nowrap">
+              <TabsTrigger key={tab.value} value={tab.value} className="text-xs whitespace-nowrap gap-1.5">
+                <tab.icon className="w-3.5 h-3.5" />
                 {tab.label}
               </TabsTrigger>
             ))}
