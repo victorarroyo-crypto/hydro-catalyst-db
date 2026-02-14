@@ -103,6 +103,7 @@ export function useChemInvoices(projectId: string | undefined) {
   // Analyze invoices (batch) with polling
   const [analyzingPolling, setAnalyzingPolling] = useState(false);
   const analyzePollingRef = useRef<NodeJS.Timeout | null>(null);
+  const initialAlertCountRef = useRef<number>(0);
 
   const analyzeInvoicesMutation = useMutation({
     mutationFn: async () => {
@@ -114,9 +115,9 @@ export function useChemInvoices(projectId: string | undefined) {
     },
     onSuccess: () => {
       toast.success('Análisis de facturas iniciado — esperando resultados…');
+      initialAlertCountRef.current = alertsQuery.data?.length || 0;
       setAnalyzingPolling(true);
       if (analyzePollingRef.current) clearInterval(analyzePollingRef.current);
-      const initialAlertCount = alertsQuery.data?.length || 0;
       analyzePollingRef.current = setInterval(() => {
         queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId] });
         queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
@@ -132,12 +133,13 @@ export function useChemInvoices(projectId: string | undefined) {
     onError: () => toast.error('Error al iniciar análisis'),
   });
 
-  // Stop analyze polling when alerts change (new alerts detected)
+  // Stop analyze polling when NEW alerts are detected (count exceeds initial)
   useEffect(() => {
-    if (analyzingPolling && alertsQuery.data && alertsQuery.data.length > 0) {
+    if (analyzingPolling && alertsQuery.data && alertsQuery.data.length > initialAlertCountRef.current) {
       if (analyzePollingRef.current) clearInterval(analyzePollingRef.current);
       setAnalyzingPolling(false);
-      toast.success(`Análisis completado — ${alertsQuery.data.length} alerta${alertsQuery.data.length > 1 ? 's' : ''} detectada${alertsQuery.data.length > 1 ? 's' : ''}`);
+      const newCount = alertsQuery.data.length - initialAlertCountRef.current;
+      toast.success(`Análisis completado — ${newCount} nueva${newCount > 1 ? 's' : ''} alerta${newCount > 1 ? 's' : ''} detectada${newCount > 1 ? 's' : ''}`);
     }
   }, [alertsQuery.data, analyzingPolling]);
 
