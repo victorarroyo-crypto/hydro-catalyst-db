@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ChemInvoice, ChemInvoiceAlert, InvoiceSummary } from './types';
@@ -99,7 +100,10 @@ export function useChemInvoices(projectId: string | undefined) {
     onError: () => toast.error('Error al actualizar alerta'),
   });
 
-  // Analyze invoices (batch)
+  // Analyze invoices (batch) with polling
+  const [analyzingPolling, setAnalyzingPolling] = useState(false);
+  const analyzePollingRef = useRef<NodeJS.Timeout | null>(null);
+
   const analyzeInvoicesMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/analyze-invoices`, {
@@ -109,15 +113,40 @@ export function useChemInvoices(projectId: string | undefined) {
       return res.json();
     },
     onSuccess: () => {
-      toast.success('Análisis de facturas iniciado en background');
-      // Poll alerts after 10s
-      setTimeout(() => {
+      toast.success('Análisis de facturas iniciado — esperando resultados…');
+      setAnalyzingPolling(true);
+      if (analyzePollingRef.current) clearInterval(analyzePollingRef.current);
+      const initialAlertCount = alertsQuery.data?.length || 0;
+      analyzePollingRef.current = setInterval(() => {
         queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId] });
         queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
-      }, 10000);
+      }, 5000);
+      // Stop after 2 minutes max
+      setTimeout(() => {
+        if (analyzePollingRef.current) {
+          clearInterval(analyzePollingRef.current);
+          setAnalyzingPolling(false);
+        }
+      }, 120000);
     },
     onError: () => toast.error('Error al iniciar análisis'),
   });
+
+  // Stop analyze polling when alerts change (new alerts detected)
+  useEffect(() => {
+    if (analyzingPolling && alertsQuery.data && alertsQuery.data.length > 0) {
+      if (analyzePollingRef.current) clearInterval(analyzePollingRef.current);
+      setAnalyzingPolling(false);
+      toast.success(`Análisis completado — ${alertsQuery.data.length} alerta${alertsQuery.data.length > 1 ? 's' : ''} detectada${alertsQuery.data.length > 1 ? 's' : ''}`);
+    }
+  }, [alertsQuery.data, analyzingPolling]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (analyzePollingRef.current) clearInterval(analyzePollingRef.current);
+    };
+  }, []);
 
   // Auto-link products
   const autoLinkMutation = useMutation({
@@ -163,7 +192,7 @@ export function useChemInvoices(projectId: string | undefined) {
     updateLine: updateLineMutation.mutate,
     updateAlert: updateAlertMutation.mutate,
     analyzeInvoices: analyzeInvoicesMutation.mutate,
-    analyzingInvoices: analyzeInvoicesMutation.isPending,
+    analyzingInvoices: analyzeInvoicesMutation.isPending || analyzingPolling,
     autoLinkProducts: autoLinkMutation.mutate,
     autoLinking: autoLinkMutation.isPending,
     deleteInvoice: deleteInvoiceMutation.mutate,

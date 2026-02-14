@@ -2,7 +2,8 @@ import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, BarChart3, AlertTriangle, Receipt, FileText } from 'lucide-react';
+import { Loader2, BarChart3, AlertTriangle, Receipt, FileText, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useChemInvoices } from './useChemInvoices';
 import { ChemInvoicesList } from './ChemInvoicesList';
 import { ChemInvoiceAlerts } from './ChemInvoiceAlerts';
@@ -39,19 +40,40 @@ export function ChemInvoicesTab({ projectId }: Props) {
           <Receipt className="w-4 h-4" />
           Análisis de Facturas
         </h3>
-        <Button
-          onClick={() => analyzeInvoices()}
-          disabled={analyzingInvoices || invoices.length === 0}
-          className="bg-[#307177] hover:bg-[#307177]/90 text-white"
-          size="sm"
-        >
-          {analyzingInvoices ? (
-            <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Analizando…</>
-          ) : (
-            <><BarChart3 className="w-4 h-4 mr-1" /> Analizar Facturas</>
-          )}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  onClick={() => analyzeInvoices()}
+                  disabled={analyzingInvoices || invoices.length === 0}
+                  className="bg-[#307177] hover:bg-[#307177]/90 text-white"
+                  size="sm"
+                >
+                  {analyzingInvoices ? (
+                    <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Analizando…</>
+                  ) : (
+                    <><BarChart3 className="w-4 h-4 mr-1" /> Analizar Facturas</>
+                  )}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {invoices.length === 0 && !analyzingInvoices && (
+              <TooltipContent>
+                <p>Primero extrae los datos de las facturas subidas</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </div>
+
+      {/* Empty state message */}
+      {!invoicesLoading && invoices.length === 0 && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border text-sm text-muted-foreground">
+          <Info className="w-4 h-4 flex-shrink-0" />
+          <span>No hay facturas procesadas. Sube PDFs de facturas y pulsa <strong>"Extraer datos"</strong> para comenzar.</span>
+        </div>
+      )}
 
       {/* Sub-tabs */}
       <Tabs defaultValue="facturas">
