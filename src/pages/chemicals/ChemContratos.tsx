@@ -39,6 +39,8 @@ export default function ChemContratos() {
   const [extractingInvoices, setExtractingInvoices] = useState(false);
   const [extractingDocId, setExtractingDocId] = useState<string | null>(null);
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
+  const [activeDocId, setActiveDocId] = useState<string | null>(null);
+  const [activeDocName, setActiveDocName] = useState<string | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // Query audits with JOIN to get supplier name
@@ -697,6 +699,8 @@ export default function ChemContratos() {
                   }
                   if (Object.keys(fieldsToUpdate).length > 0) {
                     updateAuditMutation.mutate({ id: selectedAudit!, data: fieldsToUpdate });
+                    setActiveDocId(docWithData.id);
+                    setActiveDocName(docWithData.nombre_archivo || docWithData.nombre || ext.supplier_name);
                     toast.success(`${Object.keys(fieldsToUpdate).length} campos rellenados desde ${ext.supplier_name}`);
                   }
                 };
@@ -711,7 +715,7 @@ export default function ChemContratos() {
 
                 return (
                   <Collapsible key={docWithData.id} defaultOpen>
-                    <Card className="border-[#32b4cd]/30">
+                    <Card className={`transition-colors ${activeDocId === docWithData.id ? 'border-green-500 border-2 ring-1 ring-green-500/20' : 'border-[#32b4cd]/30'}`}>
                       <CollapsibleTrigger className="w-full">
                         <CardHeader className="py-3 flex flex-row items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -720,6 +724,11 @@ export default function ChemContratos() {
                               {ext.supplier_name} — {docWithData.nombre_archivo || docWithData.nombre}
                             </CardTitle>
                             <Badge variant="outline" className="text-[10px]">{filledCount} campos</Badge>
+                            {activeDocId === docWithData.id && (
+                              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-[10px]">
+                                <CheckCircle className="w-3 h-3 mr-1" /> Datos en uso
+                              </Badge>
+                            )}
                           </div>
                           <ChevronDown className="w-4 h-4" />
                         </CardHeader>
@@ -844,10 +853,33 @@ export default function ChemContratos() {
 
             {/* Datos consolidados del proveedor (editables) */}
             <div className="border-t pt-4 mt-4">
-              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
-                Datos consolidados del proveedor
+                Ficha de condiciones del proveedor
               </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Estos son los datos oficiales del proveedor que se usarán en el análisis. Puedes rellenarlos automáticamente desde cualquier contrato o editarlos manualmente.
+              </p>
+
+              {/* Context bar: which contract data comes from */}
+              {activeDocId && activeDocName && (
+                <div className="mb-3 p-2.5 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm">
+                    <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-green-800 dark:text-green-200">
+                      Datos cargados desde: <strong>{activeDocName}</strong>
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs text-green-700 dark:text-green-300 h-7"
+                    onClick={() => { setActiveDocId(null); setActiveDocName(null); }}
+                  >
+                    Desmarcar
+                  </Button>
+                </div>
+              )}
 
               <Card className="mb-3">
                 <CardContent className="p-3">
