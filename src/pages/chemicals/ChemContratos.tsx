@@ -72,6 +72,36 @@ export default function ChemContratos() {
     enabled: !!selectedAudit,
   });
 
+  // All project documents (for Facturas tab - project-wide view)
+  const { data: allProjectDocs = [] } = useQuery({
+    queryKey: ['chem-all-project-docs', projectId],
+    queryFn: async () => {
+      const { data, error } = await externalSupabase
+        .from('chem_contract_documents')
+        .select('id, nombre, tipo, estado_extraccion, datos_extraidos, created_at, audit_id, chem_contract_audits(supplier_id, chem_suppliers(nombre))')
+        .eq('project_id', projectId!)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!projectId,
+  });
+
+  // Price history (extracted invoice data)
+  const { data: priceHistory = [] } = useQuery({
+    queryKey: ['chem-price-history', projectId],
+    queryFn: async () => {
+      const { data, error } = await externalSupabase
+        .from('chem_price_history')
+        .select('*, chem_products(nombre_comercial)')
+        .eq('project_id', projectId!)
+        .order('mes', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!projectId,
+  });
+
   // Creating an audit: first create supplier, then audit referencing supplier_id
   const createAuditMutation = useMutation({
     mutationFn: async (nombre: string) => {
@@ -193,6 +223,8 @@ export default function ChemContratos() {
       const response = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/extract-invoices`, { method: 'POST' });
       const result = await response.json();
       toast.success(`Extracción de facturas iniciada — procesando ${result.documents_to_process || 'los'} documentos.`);
+      queryClient.invalidateQueries({ queryKey: ['chem-all-project-docs', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['chem-price-history', projectId] });
       startPolling();
     } catch {
       toast.error('No se pudo iniciar la extracción de facturas');
@@ -206,9 +238,10 @@ export default function ChemContratos() {
   const isPhase2Complete = (doc: any) => doc.datos_extraidos?.supplier_name;
   const hasDocsReadyForExtraction = documents.some((d: any) => isPhase1Complete(d) && !isPhase2Complete(d));
   const hasDocsForInvoiceExtraction = documents.some((d: any) => isPhase1Complete(d));
+  const hasProjectDocsForExtraction = allProjectDocs.some((d: any) => d.estado_extraccion === 'completado' && d.datos_extraidos?.raw_text);
 
   const openUploadForInvoices = () => {
-    setUploadTipo('factura');
+    setUploadTipo('otro');
     setShowUploadModal(true);
   };
 
@@ -238,7 +271,11 @@ export default function ChemContratos() {
       setUploadFile(null);
       setUploadTipo('otro');
     } catch (err: any) {
-      toast.error(`Error: ${err.message}`);
+      if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        toast.error('No se pudo conectar con el servidor. Verifica tu conexión o inténtalo más tarde.');
+      } else {
+        toast.error(`Error: ${err.message}`);
+      }
     } finally {
       setUploading(false);
     }
@@ -618,7 +655,7 @@ export default function ChemContratos() {
                         <SelectItem value="email_tarifa">Email tarifa</SelectItem>
                         <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
                         <SelectItem value="adenda">Adenda</SelectItem>
-                        <SelectItem value="factura">Factura</SelectItem>
+                        
                         <SelectItem value="otro">Otro</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1252,42 +1289,134 @@ export default function ChemContratos() {
           </TabsContent>
 
           {/* Facturas */}
-          <TabsContent value="facturas">
+          <TabsContent value="facturas" className="space-y-4">
+            {/* Documentos del proyecto */}
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">Facturas</CardTitle>
+                  <CardTitle className="text-sm">Documentos del proyecto</CardTitle>
                   <Button size="sm" variant="outline" onClick={openUploadForInvoices}>
                     <Upload className="w-4 h-4 mr-1" /> Subir facturas
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {(() => {
-                  const docsWithText = documents.filter((d: any) => isPhase1Complete(d));
-                  return (
-                    <div className="text-center py-4 space-y-2">
-                      <Receipt className="w-8 h-8 mx-auto text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">
-                        {docsWithText.length === 0
-                          ? 'No hay documentos disponibles. Sube facturas (PDF, Excel) con el botón de arriba.'
-                          : `${docsWithText.length} documento${docsWithText.length > 1 ? 's' : ''} disponible${docsWithText.length > 1 ? 's' : ''} para extracción de facturas.`
-                        }
-                      </p>
-                    </div>
-                  );
-                })()}
-                <div className="flex justify-center">
-                  <Button
-                    onClick={handleExtractInvoices}
-                    disabled={extractingInvoices || !hasDocsForInvoiceExtraction}
-                    className="border-[#32b4cd] text-[#32b4cd] hover:bg-[#32b4cd]/10"
-                    variant="outline"
-                  >
-                    {extractingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Receipt className="w-4 h-4 mr-2" />}
-                    Extraer datos de todos los documentos
-                  </Button>
-                </div>
+              <CardContent>
+                {allProjectDocs.length === 0 ? (
+                  <div className="text-center py-6 space-y-2">
+                    <FileText className="w-8 h-8 mx-auto text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">No hay documentos en el proyecto. Sube facturas o contratos desde cualquier proveedor.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Archivo</TableHead>
+                        <TableHead>Proveedor</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Fecha</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {allProjectDocs.map((d: any) => (
+                        <TableRow key={d.id}>
+                          <TableCell className="text-sm font-medium">{d.nombre || '—'}</TableCell>
+                          <TableCell className="text-sm">{d.chem_contract_audits?.chem_suppliers?.nombre || '—'}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px]">{d.tipo || 'otro'}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {d.estado_extraccion === 'completado' && (
+                              <Badge className="bg-[#8cb63c]/15 text-[#8cb63c] border-[#8cb63c]/30 text-[10px]">
+                                <CheckCircle className="w-3 h-3 mr-1" /> Completado
+                              </Badge>
+                            )}
+                            {d.estado_extraccion === 'procesando' && (
+                              <Badge className="bg-[#32b4cd]/15 text-[#32b4cd] border-[#32b4cd]/30 text-[10px]">
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Procesando
+                              </Badge>
+                            )}
+                            {d.estado_extraccion === 'pendiente' && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                <Clock className="w-3 h-3 mr-1" /> Pendiente
+                              </Badge>
+                            )}
+                            {d.estado_extraccion === 'error' && (
+                              <Badge variant="destructive" className="text-[10px]">
+                                <XCircle className="w-3 h-3 mr-1" /> Error
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {d.created_at ? format(new Date(d.created_at), 'dd MMM yyyy', { locale: es }) : '—'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Botón extracción */}
+            <div className="flex justify-center">
+              <Button
+                onClick={handleExtractInvoices}
+                disabled={extractingInvoices || !hasProjectDocsForExtraction}
+                className="border-[#32b4cd] text-[#32b4cd] hover:bg-[#32b4cd]/10"
+                variant="outline"
+              >
+                {extractingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Receipt className="w-4 h-4 mr-2" />}
+                Procesar facturas de todos los proveedores
+              </Button>
+            </div>
+
+            {/* Datos extraídos de facturas */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Histórico de precios extraído</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {priceHistory.length === 0 ? (
+                  <div className="text-center py-6 space-y-2">
+                    <Receipt className="w-8 h-8 mx-auto text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">No hay datos de facturas extraídos. Sube documentos y procesa las facturas.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Producto</TableHead>
+                        <TableHead>Mes</TableHead>
+                        <TableHead className="text-right">Importe (€)</TableHead>
+                        <TableHead className="text-right">Cantidad (kg)</TableHead>
+                        <TableHead className="text-right">Precio medio (€/kg)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {priceHistory.map((ph: any) => {
+                        const precioMedio = ph.cantidad_kg && ph.importe_facturado ? (ph.importe_facturado / ph.cantidad_kg) : null;
+                        return (
+                          <TableRow key={ph.id}>
+                            <TableCell className="text-sm font-medium">{ph.chem_products?.nombre_comercial || '—'}</TableCell>
+                            <TableCell className="text-sm">
+                              {ph.mes ? format(new Date(ph.mes), 'MMM yyyy', { locale: es }) : '—'}
+                            </TableCell>
+                            <TableCell className="text-sm text-right font-mono">
+                              {ph.importe_facturado != null ? ph.importe_facturado.toLocaleString('es-ES', { minimumFractionDigits: 2 }) : '—'}
+                            </TableCell>
+                            <TableCell className="text-sm text-right font-mono">
+                              {ph.cantidad_kg != null ? ph.cantidad_kg.toLocaleString('es-ES') : '—'}
+                            </TableCell>
+                            <TableCell className="text-sm text-right font-mono">
+                              {precioMedio != null ? precioMedio.toFixed(4) : '—'}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
