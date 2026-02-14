@@ -18,6 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { ChevronDown, Plus, Upload, AlertTriangle, DollarSign, Building2, Trash2, FileText, ExternalLink, Loader2, ClipboardList, Receipt, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { ChemInvoicesTab } from '@/components/chemicals/invoices';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -1305,137 +1306,9 @@ export default function ChemContratos() {
             </div>
           </TabsContent>
 
-          {/* Facturas */}
+          {/* Facturas — nuevo sistema v2 */}
           <TabsContent value="facturas" className="space-y-4">
-            {/* Documentos del proyecto */}
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">Documentos del proyecto</CardTitle>
-                  <Button size="sm" variant="outline" onClick={openUploadForInvoices}>
-                    <Upload className="w-4 h-4 mr-1" /> Subir facturas
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {allProjectDocs.length === 0 ? (
-                  <div className="text-center py-6 space-y-2">
-                    <FileText className="w-8 h-8 mx-auto text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">No hay documentos en el proyecto. Sube facturas o contratos desde cualquier proveedor.</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Archivo</TableHead>
-                        <TableHead>Proveedor</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Fecha</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {allProjectDocs.map((d: any) => (
-                        <TableRow key={d.id}>
-                          <TableCell className="text-sm font-medium">{d.nombre_archivo || '—'}</TableCell>
-                          <TableCell className="text-sm">{d.chem_contract_audits?.chem_suppliers?.nombre || '—'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-[10px]">{d.tipo_documento || 'otro'}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            {d.estado_extraccion === 'completado' && (
-                              <Badge className="bg-[#8cb63c]/15 text-[#8cb63c] border-[#8cb63c]/30 text-[10px]">
-                                <CheckCircle className="w-3 h-3 mr-1" /> Completado
-                              </Badge>
-                            )}
-                            {d.estado_extraccion === 'procesando' && (
-                              <Badge className="bg-[#32b4cd]/15 text-[#32b4cd] border-[#32b4cd]/30 text-[10px]">
-                                <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Procesando
-                              </Badge>
-                            )}
-                            {d.estado_extraccion === 'pendiente' && (
-                              <Badge variant="secondary" className="text-[10px]">
-                                <Clock className="w-3 h-3 mr-1" /> Pendiente
-                              </Badge>
-                            )}
-                            {d.estado_extraccion === 'error' && (
-                              <Badge variant="destructive" className="text-[10px]">
-                                <XCircle className="w-3 h-3 mr-1" /> Error
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {d.created_at ? format(new Date(d.created_at), 'dd MMM yyyy', { locale: es }) : '—'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Botón extracción */}
-            <div className="flex justify-center">
-              <Button
-                onClick={handleExtractInvoices}
-                disabled={extractingInvoices || !hasProjectDocsForExtraction}
-                className="border-[#32b4cd] text-[#32b4cd] hover:bg-[#32b4cd]/10"
-                variant="outline"
-              >
-                {extractingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Receipt className="w-4 h-4 mr-2" />}
-                Procesar facturas de todos los proveedores
-              </Button>
-            </div>
-
-            {/* Datos extraídos de facturas */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Histórico de precios extraído</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {priceHistory.length === 0 ? (
-                  <div className="text-center py-6 space-y-2">
-                    <Receipt className="w-8 h-8 mx-auto text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">No hay datos de facturas extraídos. Sube documentos y procesa las facturas.</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Mes</TableHead>
-                        <TableHead className="text-right">Importe (€)</TableHead>
-                        <TableHead className="text-right">Cantidad (kg)</TableHead>
-                        <TableHead className="text-right">Precio medio (€/kg)</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {priceHistory.map((ph: any) => {
-                        const precioMedio = ph.cantidad_kg && ph.importe_facturado ? (ph.importe_facturado / ph.cantidad_kg) : null;
-                        return (
-                          <TableRow key={ph.id}>
-                            <TableCell className="text-sm font-medium">{ph.chem_products?.nombre_comercial || '—'}</TableCell>
-                            <TableCell className="text-sm">
-                              {ph.mes ? format(new Date(ph.mes), 'MMM yyyy', { locale: es }) : '—'}
-                            </TableCell>
-                            <TableCell className="text-sm text-right font-mono">
-                              {ph.importe_facturado != null ? ph.importe_facturado.toLocaleString('es-ES', { minimumFractionDigits: 2 }) : '—'}
-                            </TableCell>
-                            <TableCell className="text-sm text-right font-mono">
-                              {ph.cantidad_kg != null ? ph.cantidad_kg.toLocaleString('es-ES') : '—'}
-                            </TableCell>
-                            <TableCell className="text-sm text-right font-mono">
-                              {precioMedio != null ? precioMedio.toFixed(4) : '—'}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
+            <ChemInvoicesTab projectId={projectId!} />
           </TabsContent>
         </Tabs>
       </div>
