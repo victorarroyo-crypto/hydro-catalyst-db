@@ -310,7 +310,7 @@ export function AppSidebar() {
                           <CollapsibleTrigger asChild>
                             <SidebarMenuSubButton
                               className={cn(
-                                'transition-all duration-200 cursor-pointer',
+                                'transition-all duration-200 cursor-pointer h-auto min-h-[2rem] py-1.5',
                                 isScoutingActive
                                   ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                                   : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
