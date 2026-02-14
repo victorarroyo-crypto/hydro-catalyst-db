@@ -8,12 +8,13 @@ const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
 export function useChemInvoices(projectId: string | undefined, auditId?: string) {
   const queryClient = useQueryClient();
+  const auditParam = auditId ? `?audit_id=${auditId}` : '';
 
   // List invoices
   const invoicesQuery = useQuery({
-    queryKey: ['chem-invoices', projectId],
+    queryKey: ['chem-invoices', projectId, auditId],
     queryFn: async (): Promise<ChemInvoice[]> => {
-      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices`);
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices${auditParam}`);
       if (!res.ok) throw new Error('Error cargando facturas');
       const data = await res.json();
       return data.invoices || data || [];
@@ -23,9 +24,9 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
 
   // Alerts
   const alertsQuery = useQuery({
-    queryKey: ['chem-invoice-alerts', projectId],
+    queryKey: ['chem-invoice-alerts', projectId, auditId],
     queryFn: async (): Promise<ChemInvoiceAlert[]> => {
-      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoice-alerts`);
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoice-alerts${auditParam}`);
       if (!res.ok) throw new Error('Error cargando alertas');
       const data = await res.json();
       return data.alerts || data || [];
@@ -35,15 +36,22 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
 
   // Summary
   const summaryQuery = useQuery({
-    queryKey: ['chem-invoice-summary', projectId],
+    queryKey: ['chem-invoice-summary', projectId, auditId],
     queryFn: async (): Promise<InvoiceSummary | null> => {
-      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoice-summary`);
+      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoice-summary${auditParam}`);
       if (!res.ok) return null;
       const data = await res.json();
       return data.summary || null;
     },
     enabled: !!projectId,
   });
+
+  // Helper to invalidate all invoice-related queries for this project+audit
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId, auditId] });
+    queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId, auditId] });
+    queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId, auditId] });
+  };
 
   // Update invoice
   const updateInvoiceMutation = useMutation({
@@ -57,8 +65,7 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
+      invalidateAll();
       toast.success('Factura actualizada');
     },
     onError: () => toast.error('Error al actualizar factura'),
@@ -76,7 +83,7 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId, auditId] });
       toast.success('Línea actualizada');
     },
     onError: () => toast.error('Error al actualizar línea'),
@@ -94,8 +101,8 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId, auditId] });
+      queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId, auditId] });
       toast.success('Alerta actualizada');
     },
     onError: () => toast.error('Error al actualizar alerta'),
@@ -110,9 +117,7 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
     mutationFn: async () => {
       if (!auditId) throw new Error('Se requiere un contrato seleccionado para analizar facturas');
       const url = `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/analyze-invoices?audit_id=${auditId}`;
-      const res = await fetch(url, {
-        method: 'POST',
-      });
+      const res = await fetch(url, { method: 'POST' });
       if (!res.ok) throw new Error('Error iniciando análisis');
       return res.json();
     },
@@ -122,10 +127,9 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
       setAnalyzingPolling(true);
       if (analyzePollingRef.current) clearInterval(analyzePollingRef.current);
       analyzePollingRef.current = setInterval(() => {
-        queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId] });
-        queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
+        queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId, auditId] });
+        queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId, auditId] });
       }, 5000);
-      // Stop after 2 minutes max
       setTimeout(() => {
         if (analyzePollingRef.current) {
           clearInterval(analyzePollingRef.current);
@@ -136,7 +140,7 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
     onError: () => toast.error('Error al iniciar análisis'),
   });
 
-  // Stop analyze polling when NEW alerts are detected (count exceeds initial)
+  // Stop analyze polling when NEW alerts are detected
   useEffect(() => {
     if (analyzingPolling && alertsQuery.data && alertsQuery.data.length > initialAlertCountRef.current) {
       if (analyzePollingRef.current) clearInterval(analyzePollingRef.current);
@@ -158,14 +162,12 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
     mutationFn: async () => {
       if (!auditId) throw new Error('Se requiere un contrato seleccionado para vincular productos');
       const url = `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices/auto-link-products?audit_id=${auditId}`;
-      const res = await fetch(url, {
-        method: 'POST',
-      });
+      const res = await fetch(url, { method: 'POST' });
       if (!res.ok) throw new Error('Error vinculando productos');
       return res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId, auditId] });
       toast.success(`${data.linked || 0} líneas vinculadas, ${data.unlinked || 0} sin match`);
     },
     onError: () => toast.error('Error al vincular productos'),
@@ -181,14 +183,13 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
+      invalidateAll();
       toast.success('Factura eliminada');
     },
     onError: () => toast.error('Error al eliminar factura'),
   });
 
-  // When filtering by audit, fetch document IDs belonging to that audit
+  // When filtering by audit, fetch document IDs belonging to that audit (safety net)
   const auditDocsQuery = useQuery({
     queryKey: ['chem-audit-doc-ids', auditId],
     queryFn: async (): Promise<string[]> => {
@@ -204,8 +205,7 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
 
   const auditDocIds = useMemo(() => new Set(auditDocsQuery.data || []), [auditDocsQuery.data]);
 
-  // Deduplicate invoices by numero_factura + fecha_factura + importe_total
-  // AND delete real duplicates from the database
+  // Deduplicate invoices
   const deduplicatedInvoices = useMemo(() => {
     const raw = invoicesQuery.data || [];
     const seen = new Map<string, ChemInvoice>();
@@ -239,18 +239,17 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
       }
       if (deleted > 0) {
         toast.success(`${deleted} factura${deleted > 1 ? 's' : ''} duplicada${deleted > 1 ? 's' : ''} eliminada${deleted > 1 ? 's' : ''} de la base de datos`);
-        queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId] });
-        queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
+        invalidateAll();
       }
     };
     deleteAll();
-  }, [deduplicatedInvoices.duplicateIds, projectId, queryClient]);
+  }, [deduplicatedInvoices.duplicateIds, projectId, auditId, queryClient]);
 
+  // Client-side safety net filter (backend should already filter by audit_id)
   const filteredInvoices = auditId
     ? deduplicatedInvoices.unique.filter(i => i.document_id && auditDocIds.has(i.document_id))
     : deduplicatedInvoices.unique;
 
-  // Filter alerts by matching invoice_ids from filtered invoices
   const filteredInvoiceIds = useMemo(() => new Set(filteredInvoices.map(i => i.id)), [filteredInvoices]);
 
   const filteredAlerts = auditId
@@ -275,10 +274,6 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
     autoLinkProducts: autoLinkMutation.mutate,
     autoLinking: autoLinkMutation.isPending,
     deleteInvoice: deleteInvoiceMutation.mutate,
-    refetchAll: () => {
-      queryClient.invalidateQueries({ queryKey: ['chem-invoices', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
-    },
+    refetchAll: invalidateAll,
   };
 }
