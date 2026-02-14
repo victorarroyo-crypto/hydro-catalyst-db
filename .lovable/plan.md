@@ -1,74 +1,40 @@
 
 
-# Rediseno de la pestana Condiciones: Claridad por contrato
+# Mejora de claridad: seleccion automatica al abrir contrato
 
-## Problema actual
-Hay 3 secciones desplegables con datos extraidos de cada contrato (solo lectura) y debajo un unico formulario editable ("Datos consolidados"). No queda claro a que contrato corresponden los datos editables ni cual es el contrato "activo" cuyos datos se estan usando.
+## Cambios propuestos
 
-## Solucion propuesta: Integrar formulario editable dentro de cada contrato
+### 1. Titulo dinamico con nombre del proveedor
+El titulo "Ficha de condiciones del proveedor" pasara a mostrar el nombre real:
+- **"Ficha de condiciones de INQUIDE"** (cuando hay un contrato activo/abierto)
+- **"Ficha de condiciones del proveedor"** (solo si no hay ninguno seleccionado)
 
-En lugar de tener los contratos arriba y un formulario suelto abajo, cada contrato tendra su propia seccion completa con dos partes:
+### 2. Seleccion automatica al abrir desplegable
+Cuando el usuario abre (expande) un contrato arriba, automaticamente:
+- Ese contrato se marca como activo (borde verde + badge "Datos en uso")
+- El titulo del formulario de abajo cambia al nombre de ese proveedor
+- La barra de contexto se actualiza con el nombre del archivo
 
-1. **Datos extraidos por IA** (solo lectura, con fondo azul claro) -- lo que ya existe
-2. **Campos editables** (formulario) -- lo que ahora esta abajo, pero replicado dentro de cada contrato
+No hace falta pulsar "Rellenar campos" para que el formulario se vincule visualmente al contrato. El boton "Rellenar campos" sigue existiendo para copiar datos al formulario, pero la vinculacion visual es inmediata al abrir.
 
-### Flujo del usuario
+### 3. Eliminar boton "Desmarcar"
+Se quita el boton "Desmarcar" de la barra de contexto. Si el usuario abre otro contrato, simplemente cambia el activo.
 
-```text
-Contrato 1: "INQUIDE - contrato_2024.pdf"
-+-----------------------------------------------+
-| Extraido por IA (lectura)                     |
-|   Plazo pago: 60 dias | Duracion: 24 meses   |
-+-----------------------------------------------+
-| [Boton: Copiar extraidos a campos editables]  |
-+-----------------------------------------------+
-| Campos editables (formulario)                 |
-|   Plazo pago: [60]  | Duracion: [24]          |
-|   ... (todos los campos)                      |
-|   [Guardar]                                   |
-+-----------------------------------------------+
+### 4. Barra de contexto simplificada
+En lugar de "Datos cargados desde: archivo.pdf", mostrara:
+- **"Proveedor: INQUIDE | Documento: contrato_2024.pdf"**
 
-Contrato 2: "PROQUIMIA - condiciones.pdf"
-+-----------------------------------------------+
-| ... misma estructura ...                      |
-+-----------------------------------------------+
+## Detalles tecnicos
 
-Contrato 3: "..."
-+-----------------------------------------------+
-| ... misma estructura ...                      |
-+-----------------------------------------------+
-```
+Cambios en `src/pages/chemicals/ChemContratos.tsx`:
 
-### Pero hay un problema de datos...
+1. **Convertir Collapsible a controlado**: Cambiar de `defaultOpen` a `open` + `onOpenChange` para cada contrato. Cuando `onOpenChange(true)`, se ejecuta `setActiveDocId(docId)` y `setActiveDocName(nombre)`.
 
-Actualmente solo existe UN registro en `chem_contract_audits` por proveedor (no por documento). Esto significa que los "datos editables" solo pueden guardarse en un sitio. Hay dos opciones:
+2. **Titulo dinamico**: Reemplazar el texto fijo "Ficha de condiciones del proveedor" por una interpolacion que use `activeDocName` para mostrar el nombre del proveedor extraido de `ext.supplier_name`.
 
-**Opcion A (recomendada, sin cambios en BD):** Mantener un solo registro editable pero presentarlo de forma clara. En lugar de integrarlo en cada contrato, se muestra asi:
+3. **Eliminar boton Desmarcar**: Quitar el `Button` de "Desmarcar" y su `onClick`.
 
-- Los 3 contratos arriba como estan (solo lectura, desplegables)
-- Al pulsar "Rellenar campos" en un contrato, se resalta visualmente ese contrato como "activo" (borde verde, badge "Datos en uso")
-- El formulario editable de abajo muestra un indicador claro: **"Editando datos basados en: INQUIDE - contrato_2024.pdf"** con enlace para cambiar de contrato fuente
-- Se anade una barra de contexto entre los contratos y el formulario que dice de donde vienen los datos
+4. **Actualizar barra de contexto**: Reformatear para mostrar proveedor + documento claramente.
 
-**Opcion B (requiere cambio en BD):** Crear un campo `document_id_source` en `chem_contract_audits` para registrar de que documento provienen los datos, y potencialmente permitir multiples audits por proveedor (uno por contrato).
-
-## Plan de implementacion (Opcion A)
-
-### Cambios en `src/pages/chemicals/ChemContratos.tsx`:
-
-1. **Anadir estado** `activeDocId` para rastrear que documento fue usado para rellenar los campos
-2. **Marcar visualmente** el contrato activo con borde verde y badge "Datos en uso"
-3. **Anadir barra indicadora** entre los contratos y el formulario editable que muestre:
-   - Nombre del documento fuente
-   - Fecha en que se aplicaron los datos
-   - Boton para cambiar a otro contrato
-4. **Actualizar `handleAutoFill`** para que al pulsar "Rellenar campos" en un contrato, se marque ese como activo (guardando `docId` en estado local)
-5. **Renombrar seccion** de "Datos consolidados del proveedor" a algo mas claro como "Ficha de condiciones del proveedor" con subtitulo explicativo
-6. **Eliminar ambiguedad** anadiendo un texto explicativo: "Estos son los datos oficiales del proveedor que se usaran en el analisis. Puedes rellenarlos automaticamente desde cualquier contrato o editarlos manualmente."
-
-### Resultado visual esperado
-
-- Contratos extraidos: cards con fondo azul, solo lectura, el activo con borde verde
-- Barra indicadora: "Datos cargados desde: contrato_2024.pdf [Cambiar]"
-- Formulario editable: mismo que ahora pero con contexto claro de su proposito
+5. **Estado de apertura controlado**: Anadir estado `openDocId` (o reusar `activeDocId`) para controlar que Collapsible esta abierto, de forma que al abrir uno se cierre el anterior y se actualice el contexto.
 
