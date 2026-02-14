@@ -94,35 +94,55 @@ export interface ChemInvoiceAlert {
   chem_suppliers?: { nombre: string };
 }
 
+export interface ProductBaseline {
+  producto: string;
+  precio_medio: number;
+  precio_medio_ponderado?: number;
+  precio_medio_ponderado_ma?: number | null;
+  concentracion?: number | null;
+  concentracion_media?: number | null;
+  tco_kg?: number;
+  tco_extra_total?: number;
+  volumen_total_kg: number;
+  volumen_anual_kg?: number;
+  gasto_anual?: number;
+  num_facturas: number;
+  precio_kg_ma: number | null;
+  tendencia?: 'subiendo' | 'bajando' | 'estable' | 'sin datos';
+  variacion_pct?: number;
+  formatos?: Record<string, number>;
+}
+
 export interface InvoiceSummary {
   project_id: string;
-  total_invoices: number;
-  total_lines: number;
-  total_gasto: number;
-  periodo: { desde: string; hasta: string };
-  desglose_costes: {
+  total_invoices?: number;
+  facturas_analizadas?: number;
+  total_lines?: number;
+  total_gasto?: number;
+  gasto_total?: number;
+  periodo?: { desde: string; hasta: string };
+  periodo_inicio?: string;
+  periodo_fin?: string;
+  desglose_costes?: {
     productos: number;
     portes: number;
     recargos: number;
     servicios: number;
     descuentos: number;
-    pct_no_producto: number;
+    pct_no_producto?: number;
   };
-  baselines: {
-    producto: string;
-    precio_medio: number;
-    volumen_total_kg: number;
-    num_facturas: number;
-    concentracion: number | null;
-    precio_kg_ma: number | null;
-  }[];
-  alertas: {
+  pct_costes_no_producto?: number;
+  baselines?: ProductBaseline[];
+  baseline_por_producto?: ProductBaseline[];
+  alertas?: {
     total: number;
     pendientes: number;
     por_tipo: Record<string, number>;
-    ahorro_potencial_eur: number;
+    por_severidad?: Record<string, number>;
+    ahorro_potencial_eur?: number;
+    ahorro_potencial_total?: number;
   };
-  suppliers: {
+  suppliers?: {
     supplier_id: string;
     nombre: string;
     num_facturas: number;

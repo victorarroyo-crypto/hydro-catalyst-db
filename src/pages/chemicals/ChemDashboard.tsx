@@ -1,233 +1,313 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, DollarSign, Package, Building2, TrendingUp, FileWarning, Clock, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Receipt, AlertTriangle, TrendingDown, TrendingUp, Minus, DollarSign, Loader2, RefreshCw, BarChart3 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { useChemInvoices } from '@/components/chemicals/invoices/useChemInvoices';
+import type { InvoiceSummary, ProductBaseline, ChemInvoiceAlert } from '@/components/chemicals/invoices/types';
+import { formatEUR, formatEURCurrency, SEVERITY_CONFIG } from '@/components/chemicals/invoices/types';
 
-const formatCurrency = (val: number | null | undefined) => {
-  if (!val) return '0 €';
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+// Corporate colors
+const COLORS = {
+  teal: '#307177',
+  blue: '#32b4cd',
+  green: '#8cb63c',
+  orange: '#ffa720',
 };
 
-const getGapColor = (gap: number) => {
-  if (gap < 5) return 'text-green-600';
-  if (gap < 15) return 'text-yellow-600';
-  if (gap < 30) return 'text-orange-600';
-  return 'text-red-600';
-};
+const DONUT_COLORS = [COLORS.teal, COLORS.blue, COLORS.orange, '#9b59b6', COLORS.green];
 
-const PARETO_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--muted-foreground))'];
-const TIPO_PRECIO_COLORS = ['hsl(217, 91%, 60%)', 'hsl(270, 60%, 60%)', 'hsl(220, 10%, 60%)'];
+function compactCurrency(val: number): string {
+  if (val >= 1_000_000) return `€${(val / 1_000_000).toFixed(1)}M`;
+  if (val >= 1_000) return `€${(val / 1_000).toFixed(1)}K`;
+  return `€${val.toFixed(0)}`;
+}
+
+// Helper to normalize the summary from either API format
+function normalizeSummary(raw: InvoiceSummary) {
+  const totalInvoices = raw.total_invoices ?? raw.facturas_analizadas ?? 0;
+  const totalGasto = raw.total_gasto ?? raw.gasto_total ?? 0;
+  const desglose = raw.desglose_costes ?? { productos: 0, portes: 0, recargos: 0, servicios: 0, descuentos: 0 };
+  const pctNoProducto = desglose.pct_no_producto ?? raw.pct_costes_no_producto ?? 0;
+  const baselines = raw.baselines ?? raw.baseline_por_producto ?? [];
+  const alertas = raw.alertas ?? { total: 0, pendientes: 0, por_tipo: {}, ahorro_potencial_eur: 0 };
+  const ahorroPotencial = alertas.ahorro_potencial_eur ?? alertas.ahorro_potencial_total ?? 0;
+
+  return { totalInvoices, totalGasto, desglose, pctNoProducto, baselines, alertas, ahorroPotencial, suppliers: raw.suppliers ?? [] };
+}
+
+const TENDENCIA_ICON: Record<string, React.ReactNode> = {
+  subiendo: <TrendingUp className="w-3.5 h-3.5 text-red-500" />,
+  bajando: <TrendingDown className="w-3.5 h-3.5 text-green-500" />,
+  estable: <Minus className="w-3.5 h-3.5 text-muted-foreground" />,
+  'sin datos': <Minus className="w-3.5 h-3.5 text-muted-foreground" />,
+};
 
 export default function ChemDashboard() {
   const { projectId } = useParams();
+  const { summary, summaryLoading, alerts, alertsLoading, analyzeInvoices, analyzingInvoices, refetchAll } = useChemInvoices(projectId);
 
-  const { data: products = [] } = useQuery({
-    queryKey: ['chem-products', projectId],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('chem_products')
-        .select('*, chem_suppliers!proveedor_actual_id(nombre)')
-        .eq('project_id', projectId!)
-        .order('consumo_anual_kg', { ascending: false });
-      if (error) {
-        const { data: fb, error: fbErr } = await externalSupabase.from('chem_products').select('*').eq('project_id', projectId!).order('consumo_anual_kg', { ascending: false });
-        if (fbErr) throw fbErr;
-        return fb || [];
-      }
-      return data || [];
-    },
-    enabled: !!projectId,
-  });
+  if (summaryLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
-  const { data: audits = [] } = useQuery({
-    queryKey: ['chem-audits', projectId],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('chem_contract_audits')
-        .select('*, chem_suppliers(nombre)')
-        .eq('project_id', projectId!);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!projectId,
-  });
+  if (!summary) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center py-24 space-y-4">
+        <Receipt className="w-12 h-12 text-muted-foreground" />
+        <p className="text-muted-foreground text-center">No hay datos de resumen disponibles.<br />Sube facturas y ejecuta el análisis para generar el dashboard.</p>
+        <Button onClick={() => analyzeInvoices()} disabled={analyzingInvoices}>
+          {analyzingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+          Ejecutar Análisis
+        </Button>
+      </div>
+    );
+  }
 
-  const { data: savings = [] } = useQuery({
-    queryKey: ['chem-savings', projectId],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase.from('chem_savings').select('*').eq('project_id', projectId!);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!projectId,
-  });
+  const s = normalizeSummary(summary);
+  const pendingAlerts = alerts.filter(a => a.estado === 'pendiente');
+  const criticalAlerts = pendingAlerts.filter(a => a.severidad === 'critica' || a.severidad === 'alta').slice(0, 5);
 
-  const { data: baselines = [] } = useQuery({
-    queryKey: ['chem-baselines', projectId],
-    queryFn: async () => {
-      const { data, error } = await externalSupabase.from('chem_baselines').select('*').eq('project_id', projectId!);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!projectId,
-  });
-
-  // KPIs - use external column names
-  const gastoTotal = products.reduce((sum: number, p: any) => sum + ((p.precio_unitario_actual || 0) * (p.consumo_anual_kg || 0)), 0);
-  const numProductos = products.length;
-  const proveedoresUnicos = new Set(products.map((p: any) => p.chem_suppliers?.nombre || p.proveedor_actual_id).filter(Boolean)).size;
-  
-  // Calculate potencial ahorro client-side
-  const potencialAhorro = products.reduce((sum: number, p: any) => {
-    const conc = p.concentracion_porcentaje || 100;
-    const precioMA = p.precio_unitario_actual && conc > 0 ? p.precio_unitario_actual / (conc / 100) : 0;
-    const gap = p.precio_benchmark && p.precio_benchmark > 0 ? precioMA - p.precio_benchmark : 0;
-    return sum + (gap > 0 ? gap * (conc / 100) * (p.consumo_anual_kg || 0) : 0);
-  }, 0);
-  
-  const ahorroConseguido = savings.reduce((sum: number, s: any) => sum + (s.ahorro_real_mes || 0), 0);
-  const ahorroProgress = potencialAhorro > 0 ? (ahorroConseguido / potencialAhorro) * 100 : 0;
-
-  // Scoring medio (calculated client-side)
-  const calcScoreMedia = (a: any) => {
-    const scores = [a.score_precio, a.score_condiciones, a.score_servicio, a.score_logistica].filter(v => v != null) as number[];
-    return scores.length > 0 ? scores.reduce((s, v) => s + v, 0) / scores.length : null;
-  };
-  const auditsConScore = audits.map((a: any) => ({ ...a, scoreMedia: calcScoreMedia(a) })).filter((a: any) => a.scoreMedia != null);
-  const scoreMedio = auditsConScore.length > 0 ? auditsConScore.reduce((s: number, a: any) => s + a.scoreMedia, 0) / auditsConScore.length : 0;
-  const proveedoresRojo = auditsConScore.filter((a: any) => a.scoreMedia < 2.5).length;
+  // KPI data
+  const kpis = [
+    { label: 'Gasto Total', value: compactCurrency(s.totalGasto), color: COLORS.teal, icon: <DollarSign className="w-5 h-5" /> },
+    { label: 'Facturas Analizadas', value: s.totalInvoices.toString(), color: COLORS.blue, icon: <Receipt className="w-5 h-5" /> },
+    { label: 'Alertas Pendientes', value: (s.alertas.pendientes ?? pendingAlerts.length).toString(), color: (s.alertas.pendientes ?? pendingAlerts.length) > 0 ? COLORS.orange : COLORS.green, icon: <AlertTriangle className="w-5 h-5" /> },
+    { label: 'Ahorro Potencial', value: compactCurrency(s.ahorroPotencial), color: COLORS.green, icon: <TrendingDown className="w-5 h-5" /> },
+  ];
 
   // Donut data
-  const paretoData = ['commodity', 'semi-especialidad', 'especialidad'].map(cls => ({
-    name: cls.charAt(0).toUpperCase() + cls.slice(1),
-    value: products.filter((p: any) => p.clasificacion_pareto === cls).reduce((s: number, p: any) => s + ((p.precio_unitario_actual || 0) * (p.consumo_anual_kg || 0)), 0),
-  })).filter(d => d.value > 0);
+  const donutData = [
+    { name: 'Productos', value: s.desglose.productos, pct: 0 },
+    { name: 'Portes', value: s.desglose.portes, pct: 0 },
+    { name: 'Recargos', value: s.desglose.recargos, pct: 0 },
+    { name: 'Servicios', value: s.desglose.servicios, pct: 0 },
+    { name: 'Descuentos', value: Math.abs(s.desglose.descuentos ?? 0), pct: 0 },
+  ].filter(d => d.value > 0);
+  const donutTotal = donutData.reduce((acc, d) => acc + d.value, 0);
+  donutData.forEach(d => { d.pct = donutTotal > 0 ? (d.value / donutTotal) * 100 : 0; });
 
-  const tipoPrecioData = ['fijo', 'indexado', 'spot'].map(tipo => ({
-    name: tipo.charAt(0).toUpperCase() + tipo.slice(1),
-    value: products.filter((p: any) => p.tipo_precio === tipo).reduce((s: number, p: any) => s + ((p.precio_unitario_actual || 0) * (p.consumo_anual_kg || 0)), 0),
-  })).filter(d => d.value > 0);
-
-  // Top 10 by spend
-  const top10 = products.slice(0, 10).map((p: any) => {
-    const gasto = (p.precio_unitario_actual || 0) * (p.consumo_anual_kg || 0);
-    const conc = p.concentracion_porcentaje || 100;
-    const precioMA = conc > 0 ? (p.precio_unitario_actual || 0) / (conc / 100) : 0;
-    const gap = p.precio_benchmark && p.precio_benchmark > 0 ? ((precioMA - p.precio_benchmark) / p.precio_benchmark) * 100 : null;
-    return { ...p, gasto, precioMA, gap };
-  });
-
-  // Alertas
-  const now = new Date();
-  const in60Days = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
-  const contratosVencen = audits.filter((a: any) => a.fecha_vencimiento && new Date(a.fecha_vencimiento) < in60Days && new Date(a.fecha_vencimiento) > now).length;
-  const rappelsNoCobrados = audits.filter((a: any) => a.rappel_existe && !a.rappel_cobrado).length;
-  const productsConGap30 = products.filter((p: any) => {
-    const conc = p.concentracion_porcentaje || 100;
-    const precioMA = conc > 0 ? (p.precio_unitario_actual || 0) / (conc / 100) : 0;
-    return p.precio_benchmark && p.precio_benchmark > 0 && ((precioMA - p.precio_benchmark) / p.precio_benchmark) * 100 > 30;
-  }).length;
-  const baselinesSinFirmar = baselines.filter((b: any) => !b.firmado).length;
-
-  const alertas = [
-    contratosVencen > 0 && { icon: Clock, color: 'text-red-500 bg-red-50 dark:bg-red-950', text: `${contratosVencen} contratos vencen en <60 días` },
-    rappelsNoCobrados > 0 && { icon: DollarSign, color: 'text-orange-500 bg-orange-50 dark:bg-orange-950', text: `${rappelsNoCobrados} rappels no cobrados` },
-    proveedoresRojo > 0 && { icon: AlertCircle, color: 'text-red-500 bg-red-50 dark:bg-red-950', text: `${proveedoresRojo} proveedores con score <2.5` },
-    productsConGap30 > 0 && { icon: AlertTriangle, color: 'text-red-500 bg-red-50 dark:bg-red-950', text: `${productsConGap30} productos con gap >30%` },
-    baselinesSinFirmar > 0 && { icon: FileWarning, color: 'text-yellow-500 bg-yellow-50 dark:bg-yellow-950', text: `${baselinesSinFirmar} baselines sin firmar` },
-  ].filter(Boolean) as any[];
+  // Top 10 baselines
+  const top10 = [...s.baselines]
+    .sort((a, b) => ((b.gasto_anual ?? b.precio_medio * b.volumen_total_kg) - (a.gasto_anual ?? a.precio_medio * a.volumen_total_kg)))
+    .slice(0, 10);
 
   return (
     <div className="p-6 space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card><CardContent className="p-4"><div className="flex items-center gap-3"><DollarSign className="w-8 h-8 text-primary" /><div><p className="text-sm text-muted-foreground">Gasto total anual</p><p className="text-2xl font-bold">{formatCurrency(gastoTotal)}</p></div></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-3"><Package className="w-8 h-8 text-primary" /><div><p className="text-sm text-muted-foreground">Nº productos</p><p className="text-2xl font-bold">{numProductos}</p></div></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-3"><Building2 className="w-8 h-8 text-primary" /><div><p className="text-sm text-muted-foreground">Nº proveedores</p><p className="text-2xl font-bold">{proveedoresUnicos}</p></div></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-3"><TrendingUp className="w-8 h-8 text-green-600" /><div><p className="text-sm text-muted-foreground">Potencial ahorro</p><p className="text-2xl font-bold">{formatCurrency(potencialAhorro)}</p></div></div></CardContent></Card>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map(kpi => (
+          <Card key={kpi.label} className="relative overflow-hidden">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${kpi.color}20` }}>
+                  <div style={{ color: kpi.color }}>{kpi.icon}</div>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold" style={{ color: kpi.color }}>{kpi.value}</p>
+                  <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Ahorro progress */}
-      {potencialAhorro > 0 && (
-        <Card><CardContent className="p-4">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium">Ahorro conseguido vs potencial</span>
-            <span className="text-sm text-muted-foreground">{formatCurrency(ahorroConseguido)} / {formatCurrency(potencialAhorro)} ({ahorroProgress.toFixed(1)}%)</span>
-          </div>
-          <Progress value={ahorroProgress} className="h-3" />
-        </CardContent></Card>
-      )}
+      {/* Donut + Non-product cost warning */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Desglose de Costes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {donutData.length > 0 ? (
+              <div className="flex items-center gap-6">
+                <ResponsiveContainer width="50%" height={220}>
+                  <PieChart>
+                    <Pie data={donutData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2}>
+                      {donutData.map((_, i) => <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => formatEURCurrency(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex-1 space-y-2">
+                  {donutData.map((d, i) => (
+                    <div key={d.name} className="flex items-center gap-2 text-sm">
+                      <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                      <span className="flex-1">{d.name}</span>
+                      <span className="font-mono text-xs">{d.pct.toFixed(1)}%</span>
+                      <span className="font-mono text-xs text-muted-foreground w-20 text-right">{formatEURCurrency(d.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-8">Sin datos de desglose</p>
+            )}
 
-      {/* Charts + Scoring */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Distribución Pareto (por gasto)</CardTitle></CardHeader>
-          <CardContent>
-            {paretoData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart><Pie data={paretoData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80}>{paretoData.map((_, i) => <Cell key={i} fill={PARETO_COLORS[i % PARETO_COLORS.length]} />)}</Pie><Tooltip formatter={(v: number) => formatCurrency(v)} /><Legend /></PieChart>
-              </ResponsiveContainer>
-            ) : <p className="text-sm text-muted-foreground text-center py-8">Sin datos</p>}
+            {/* Non-product cost warning */}
+            {s.pctNoProducto > 0 && (
+              <div className={`mt-4 p-3 rounded-lg flex items-center gap-2 text-sm ${s.pctNoProducto > 10 ? 'bg-orange-50 text-orange-800 dark:bg-orange-950 dark:text-orange-300' : 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-300'}`}>
+                {s.pctNoProducto > 10 ? <AlertTriangle className="w-4 h-4 shrink-0" /> : <TrendingDown className="w-4 h-4 shrink-0" />}
+                <span>% Costes No-Producto: <strong>{s.pctNoProducto.toFixed(1)}%</strong> {s.pctNoProducto > 10 ? '(objetivo: <10%)' : '✓'}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        {/* Critical Alerts */}
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Distribución tipo precio (por gasto)</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" style={{ color: COLORS.orange }} />
+              Alertas Críticas
+              {pendingAlerts.length > 0 && (
+                <Badge variant="destructive" className="text-[10px] ml-auto">{pendingAlerts.length} pendientes</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            {tipoPrecioData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart><Pie data={tipoPrecioData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80}>{tipoPrecioData.map((_, i) => <Cell key={i} fill={TIPO_PRECIO_COLORS[i % TIPO_PRECIO_COLORS.length]} />)}</Pie><Tooltip formatter={(v: number) => formatCurrency(v)} /><Legend /></PieChart>
-              </ResponsiveContainer>
-            ) : <p className="text-sm text-muted-foreground text-center py-8">Sin datos</p>}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Salud contractual</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-center py-4">
-              <p className="text-4xl font-bold">{scoreMedio > 0 ? scoreMedio.toFixed(1) : '—'}</p>
-              <p className="text-sm text-muted-foreground">Scoring medio</p>
-              {proveedoresRojo > 0 && <Badge variant="destructive" className="mt-2">{proveedoresRojo} proveedores con score &lt;2.5</Badge>}
-            </div>
+            {criticalAlerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">Sin alertas críticas pendientes 🎉</p>
+            ) : (
+              <div className="space-y-2">
+                {criticalAlerts.map(alert => {
+                  const sevConfig = SEVERITY_CONFIG[alert.severidad];
+                  return (
+                    <div key={alert.id} className={`p-3 rounded-lg border ${sevConfig.border}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge className={`text-[10px] ${sevConfig.color}`}>{sevConfig.label}</Badge>
+                            {alert.chem_suppliers?.nombre && (
+                              <span className="text-xs text-muted-foreground truncate">{alert.chem_suppliers.nombre}</span>
+                            )}
+                          </div>
+                          <p className="text-xs line-clamp-2">{alert.descripcion}</p>
+                        </div>
+                        {alert.impacto_estimado_eur != null && alert.impacto_estimado_eur > 0 && (
+                          <span className="text-xs font-semibold whitespace-nowrap" style={{ color: COLORS.green }}>
+                            {formatEURCurrency(alert.impacto_estimado_eur)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {pendingAlerts.length > criticalAlerts.length && (
+                  <p className="text-xs text-muted-foreground text-center pt-1">
+                    +{pendingAlerts.length - criticalAlerts.length} alertas más en la pestaña Contratos → Facturas
+                  </p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Alertas */}
-      {alertas.length > 0 && (
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Alertas</CardTitle></CardHeader><CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {alertas.map((a, i) => (<div key={i} className={`flex items-center gap-2 p-3 rounded-lg ${a.color}`}><a.icon className="w-4 h-4 shrink-0" /><span className="text-sm">{a.text}</span></div>))}
-          </div>
-        </CardContent></Card>
-      )}
-
-      {/* Top 10 */}
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Top 10 productos por gasto</CardTitle></CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader><TableRow><TableHead>Producto</TableHead><TableHead>Proveedor</TableHead><TableHead className="text-right">Gasto anual</TableHead><TableHead className="text-right">Gap %</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {top10.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-4 text-muted-foreground">Añade productos en Inventario</TableCell></TableRow>
-              ) : top10.map((p: any) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.nombre_comercial}</TableCell>
-                  <TableCell>{p.chem_suppliers?.nombre || '—'}</TableCell>
-                  <TableCell className="text-right font-mono">{formatCurrency(p.gasto)}</TableCell>
-                  <TableCell className={`text-right font-mono font-bold ${p.gap != null ? getGapColor(p.gap) : ''}`}>{p.gap != null ? `${p.gap.toFixed(1)}%` : '—'}</TableCell>
+      {/* Baseline table (Top 10) */}
+      {top10.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Baseline por Producto (Top 10)</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Producto</TableHead>
+                  <TableHead className="text-xs text-right">€/kg</TableHead>
+                  <TableHead className="text-xs text-right">€/kg MA</TableHead>
+                  <TableHead className="text-xs text-right">Conc. %</TableHead>
+                  <TableHead className="text-xs text-right">Vol. (kg)</TableHead>
+                  <TableHead className="text-xs text-right">Gasto</TableHead>
+                  <TableHead className="text-xs text-center">Tend.</TableHead>
+                  <TableHead className="text-xs text-center">Facturas</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {top10.map((bl, i) => {
+                  const precioKg = bl.precio_medio_ponderado ?? bl.precio_medio;
+                  const precioMA = bl.precio_medio_ponderado_ma ?? bl.precio_kg_ma;
+                  const conc = bl.concentracion_media ?? bl.concentracion;
+                  const vol = bl.volumen_anual_kg ?? bl.volumen_total_kg;
+                  const gasto = bl.gasto_anual ?? precioKg * vol;
+                  const tend = bl.tendencia ?? 'sin datos';
+
+                  return (
+                    <TableRow key={i}>
+                      <TableCell className="text-xs font-medium max-w-[200px] truncate">{bl.producto}</TableCell>
+                      <TableCell className="text-xs text-right font-mono">{formatEUR(precioKg, 4)}</TableCell>
+                      <TableCell className="text-xs text-right font-mono font-semibold">{precioMA != null ? formatEUR(precioMA, 3) : '—'}</TableCell>
+                      <TableCell className="text-xs text-right font-mono">{conc != null ? `${conc.toFixed(0)}%` : '—'}</TableCell>
+                      <TableCell className="text-xs text-right font-mono">{vol.toLocaleString('es-ES')}</TableCell>
+                      <TableCell className="text-xs text-right font-mono">{formatEURCurrency(gasto)}</TableCell>
+                      <TableCell className="text-xs text-center">{TENDENCIA_ICON[tend]}</TableCell>
+                      <TableCell className="text-xs text-center">{bl.num_facturas}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Supplier breakdown */}
+      {s.suppliers.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Gasto por Proveedor</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Proveedor</TableHead>
+                  <TableHead className="text-xs text-center">Facturas</TableHead>
+                  <TableHead className="text-xs text-right">Gasto total</TableHead>
+                  <TableHead className="text-xs text-center">Alertas pend.</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {s.suppliers.map(sup => (
+                  <TableRow key={sup.supplier_id}>
+                    <TableCell className="text-xs font-medium">{sup.nombre}</TableCell>
+                    <TableCell className="text-xs text-center">{sup.num_facturas}</TableCell>
+                    <TableCell className="text-xs text-right font-mono">{formatEURCurrency(sup.gasto_total)}</TableCell>
+                    <TableCell className="text-xs text-center">
+                      {sup.alertas_pendientes > 0 ? (
+                        <Badge variant="destructive" className="text-[10px]">{sup.alertas_pendientes}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-3">
+        <Button onClick={() => analyzeInvoices()} disabled={analyzingInvoices} style={{ backgroundColor: COLORS.teal }}>
+          {analyzingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+          Ejecutar Análisis
+        </Button>
+        <Button variant="outline" onClick={() => refetchAll()}>
+          <BarChart3 className="w-4 h-4 mr-2" />
+          Refrescar datos
+        </Button>
+      </div>
     </div>
   );
 }
