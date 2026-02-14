@@ -8,6 +8,7 @@
  * - Generic/placeholder names
  * - Potential duplicates
  */
+import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 
@@ -175,23 +176,39 @@ function mapTechnology(record: Record<string, unknown>): QualityIssue {
 }
 
 export function useDataQualityStats() {
-  // Fetch all technologies for analysis
-  const { data: technologies, isLoading, refetch } = useQuery({
+  // Fetch all technologies for analysis (paginated to avoid 1000-row limit)
+  const { data: technologies, isLoading, refetch: rawRefetch } = useQuery({
     queryKey: ['data-quality-technologies'],
     queryFn: async () => {
       const selectFields = Object.values(COLUMNS).join(',');
+      const allRecords: Record<string, unknown>[] = [];
+      const PAGE_SIZE = 1000;
+      let offset = 0;
+      let hasMore = true;
 
-      const { data, error } = await externalSupabase
-        .from('technologies')
-        .select(selectFields)
-        .order(COLUMNS.nombre);
+      while (hasMore) {
+        const { data, error } = await externalSupabase
+          .from('technologies')
+          .select(selectFields)
+          .order(COLUMNS.nombre)
+          .range(offset, offset + PAGE_SIZE - 1);
 
-      if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return ((data as any[]) || []).map((record) => mapTechnology(record as Record<string, unknown>));
+        if (error) throw error;
+        const records = (data as any[]) || [];
+        allRecords.push(...records);
+        hasMore = records.length === PAGE_SIZE;
+        offset += PAGE_SIZE;
+      }
+
+      return allRecords.map((record) => mapTechnology(record as Record<string, unknown>));
     },
-    staleTime: 1000 * 60 * 1, // 1 minute - reduced for faster refresh after edits
+    staleTime: 0, // Always consider stale so refetch always hits the server
   });
+
+  // Force a true refresh that bypasses cache
+  const refetch = useCallback(() => {
+    return rawRefetch({ cancelRefetch: true });
+  }, [rawRefetch]);
 
   // Calculate statistics
   const stats: QualityStats = {
