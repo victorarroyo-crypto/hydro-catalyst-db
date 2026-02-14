@@ -251,6 +251,25 @@ export default function ChemContratos() {
     }
   };
 
+  // Robust helper to distinguish invoices from contracts
+  const isInvoiceDoc = (doc: any): boolean => {
+    const nombre = (doc.nombre_archivo || doc.nombre || '').toLowerCase();
+    // 1. tipo_documento === 'otro' with invoice-like name
+    if (doc.tipo_documento === 'otro' && nombre.includes('factura')) return true;
+    // 2. raw_text contains invoice indicators
+    const rawText = (doc.datos_extraidos?.raw_text || '').toUpperCase();
+    if (rawText.includes('FACTURA') && (rawText.includes('IVA') || rawText.includes('BASE IMPONIBLE'))) {
+      // But exclude if it also has contract-specific fields
+      const hasContractFields = doc.datos_extraidos?.duracion_contrato_meses || doc.datos_extraidos?.clausula_salida;
+      if (!hasContractFields) return true;
+    }
+    // 3. Known contract types are never invoices
+    const contractTypes = ['contrato_formal', 'condiciones_generales', 'email_tarifa', 'oferta_aceptada', 'adenda'];
+    if (contractTypes.includes(doc.tipo_documento)) return false;
+    // 4. tipo_documento === 'otro' without invoice indicators → not invoice
+    return false;
+  };
+
   // Helpers for document status
   const isPhase1Complete = (doc: any) => doc.estado_extraccion === 'completado' && doc.datos_extraidos?.raw_text;
   const isPhase2Complete = (doc: any) => doc.datos_extraidos?.supplier_name;
@@ -392,10 +411,7 @@ export default function ChemContratos() {
               </CardHeader>
               <CardContent>
                 {(() => {
-                  const contractDocs = documents.filter((d: any) => {
-                    const isInvoice = d.tipo_documento === 'otro' && d.nombre_archivo?.toLowerCase().includes('factura');
-                    return !isInvoice;
-                  });
+                  const contractDocs = documents.filter((d: any) => !isInvoiceDoc(d));
                   if (contractDocs.length === 0) return (
                     <div className="text-center py-8 space-y-2">
                       <FileText className="w-10 h-10 mx-auto text-muted-foreground" />
@@ -600,15 +616,6 @@ export default function ChemContratos() {
                   {extractingContracts ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ClipboardList className="w-4 h-4 mr-2" />}
                   Extraer cláusulas de contratos
                 </Button>
-                <Button
-                  onClick={handleExtractInvoices}
-                  disabled={extractingInvoices || !hasDocsForInvoiceExtraction}
-                  variant="outline"
-                  className="border-[#32b4cd] text-[#32b4cd] hover:bg-[#32b4cd]/10"
-                >
-                  {extractingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Receipt className="w-4 h-4 mr-2" />}
-                  Extraer datos de facturas y contratos
-                </Button>
               </div>
             )}
 
@@ -659,7 +666,7 @@ export default function ChemContratos() {
           <TabsContent value="condiciones" className="space-y-4">
             {/* Per-document extracted sections */}
             {(() => {
-              const docsWithData = documents.filter((d: any) => d.datos_extraidos?.supplier_name);
+              const docsWithData = documents.filter((d: any) => d.datos_extraidos?.supplier_name && !isInvoiceDoc(d));
               if (docsWithData.length === 0) return (
                 <Card>
                   <CardContent className="p-4 text-center text-sm text-muted-foreground">
@@ -1265,83 +1272,63 @@ export default function ChemContratos() {
           {/* Facturas — nuevo sistema v2 */}
           <TabsContent value="facturas" className="space-y-4">
             {/* Documentos de factura subidos */}
+            {/* Compact invoice PDFs + upload + extract buttons */}
             {(() => {
-              const invoiceDocs = documents.filter((d: any) => {
-                return d.tipo_documento === 'otro' && d.nombre_archivo?.toLowerCase().includes('factura');
-              });
+              const invoiceDocs = documents.filter((d: any) => isInvoiceDoc(d));
+              const hasExtractable = invoiceDocs.some((d: any) => d.estado_extraccion === 'completado');
               return (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <FileText className="w-4 h-4" />
-                        Facturas subidas ({invoiceDocs.length})
-                      </CardTitle>
-                      <Button size="sm" variant="outline" onClick={openUploadForInvoices}>
-                        <Upload className="w-4 h-4 mr-1" /> Subir factura
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {invoiceDocs.length === 0 ? (
-                      <div className="text-center py-6 space-y-2">
-                        <Receipt className="w-8 h-8 mx-auto text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">No hay facturas subidas para este proveedor.</p>
-                        <Button size="sm" variant="ghost" onClick={openUploadForInvoices}>
-                          <Upload className="w-4 h-4 mr-1" /> Subir primera factura
-                        </Button>
+                <>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <FileText className="w-4 h-4" />
+                          PDFs de facturas ({invoiceDocs.length})
+                        </CardTitle>
+                        <div className="flex gap-2">
+                          {hasExtractable && (
+                            <Button
+                              size="sm"
+                              onClick={handleExtractInvoices}
+                              disabled={extractingInvoices}
+                              className="bg-[#32b4cd] hover:bg-[#32b4cd]/90 text-white"
+                            >
+                              {extractingInvoices ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Receipt className="w-4 h-4 mr-1" />}
+                              Extraer datos
+                            </Button>
+                          )}
+                          <Button size="sm" variant="outline" onClick={openUploadForInvoices}>
+                            <Upload className="w-4 h-4 mr-1" /> Subir factura
+                          </Button>
+                        </div>
                       </div>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Archivo</TableHead>
-                            <TableHead>Estado</TableHead>
-                            <TableHead>Fecha subida</TableHead>
-                            <TableHead className="w-16">Acciones</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                    </CardHeader>
+                    {invoiceDocs.length > 0 && (
+                      <CardContent className="pt-0">
+                        <div className="flex flex-wrap gap-2">
                           {invoiceDocs.map((d: any) => (
-                            <TableRow key={d.id}>
-                              <TableCell className="text-xs font-medium">{d.nombre_archivo || d.nombre}</TableCell>
-                              <TableCell>
-                                <Badge variant={d.estado_extraccion === 'completado' ? 'default' : 'secondary'} className="text-[10px]">
-                                  {d.estado_extraccion === 'completado' ? '✓ Texto extraído' : d.estado_extraccion || 'Pendiente'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {d.created_at ? format(new Date(d.created_at), 'dd/MM/yyyy HH:mm', { locale: es }) : '—'}
-                              </TableCell>
-                              <TableCell>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocMutation.mutate(d.id)}>
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
+                            <div key={d.id} className="flex items-center gap-1.5 text-xs bg-muted/50 rounded px-2 py-1">
+                              <FileText className="w-3 h-3 text-muted-foreground" />
+                              <span className="max-w-[200px] truncate">{d.nombre_archivo || d.nombre}</span>
+                              {d.estado_extraccion === 'completado' ? (
+                                <CheckCircle className="w-3 h-3 text-green-500" />
+                              ) : (
+                                <Clock className="w-3 h-3 text-muted-foreground" />
+                              )}
+                              <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => deleteDocMutation.mutate(d.id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
                           ))}
-                        </TableBody>
-                      </Table>
+                        </div>
+                      </CardContent>
                     )}
-                  </CardContent>
-                </Card>
+                  </Card>
+                </>
               );
             })()}
 
-            {/* Extracción y análisis de facturas */}
-            {documents.some((d: any) => d.tipo_documento === 'otro' && d.nombre_archivo?.toLowerCase().includes('factura') && d.estado_extraccion === 'completado') && (
-              <Button
-                onClick={handleExtractInvoices}
-                disabled={extractingInvoices}
-                className="bg-[#32b4cd] hover:bg-[#32b4cd]/90 text-white"
-                size="sm"
-              >
-                {extractingInvoices ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Receipt className="w-4 h-4 mr-1" />}
-                Extraer datos de facturas
-              </Button>
-            )}
-
-            {/* Resultados procesados */}
+            {/* Resultados procesados por Railway */}
             <ChemInvoicesTab projectId={projectId!} />
           </TabsContent>
         </Tabs>
