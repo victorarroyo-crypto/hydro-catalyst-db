@@ -110,7 +110,6 @@ const advisorSubItems = [
 ];
 
 const supervisionSubItems = [
-  { title: 'Control de Revisiones', url: '/quality-control', icon: ClipboardCheck },
   { title: 'Control de Calidad BD', url: '/data-quality', icon: Database },
 ];
 
