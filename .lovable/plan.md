@@ -1,78 +1,40 @@
 
 
-## Plan: Conectar el flujo completo de extraccion y analisis de facturas
+## Plan: Boton "Ver PDF" en la lista de facturas
 
-### Problema raiz
+### Objetivo
+Agregar un boton para abrir el PDF original de cada factura directamente desde la tabla de analisis de facturas.
 
-Hay dos desconexiones criticas:
+### Como funciona la conexion
 
-1. **"Extraer datos"** llama a `startPolling()`, pero ese polling solo busca contratos (`supplier_name` en `chem_contract_documents`). Nunca invalida las queries de facturas (`chem-invoices`, `chem-invoice-alerts`, `chem-invoice-summary`), asi que `ChemInvoicesTab` nunca se actualiza.
+Cada factura (`chem_invoices`) tiene un campo `document_id` que apunta al registro en `chem_contract_documents`, donde esta almacenada la URL del archivo (`file_url`). El plan es resolver esa URL y mostrar un boton para abrir el PDF en una nueva pestana.
 
-2. **"Analizar Facturas"** hace un unico `setTimeout` de 10 segundos para refrescar alertas. Si Railway tarda mas, el usuario no ve nada. No hay feedback visual de progreso.
+### Cambios
 
-### Solucion
+#### 1. Resolver las URLs de documentos (`ChemContratos.tsx`)
 
-#### 1. Crear un polling dedicado para facturas en `ChemContratos.tsx`
+- Cuando se cargan las facturas, hacer una consulta adicional a `chem_contract_documents` con los `document_id` de las facturas para obtener las `file_url` correspondientes.
+- Pasar un mapa `{ [document_id]: file_url }` como prop al componente `ChemInvoicesTab`.
 
-Nueva funcion `startInvoicePolling()` que:
-- Cada 5 segundos consulta el endpoint `/invoices` de Railway
-- Invalida `chem-invoices`, `chem-invoice-alerts` y `chem-invoice-summary`
-- Para cuando detecta que hay facturas procesadas (o tras 3 minutos maximo)
-- Muestra estado visual de "Procesando facturas..." con spinner
+#### 2. Boton "Ver PDF" en la tabla de facturas (`ChemInvoicesList.tsx`)
 
-`handleExtractInvoices` llamara a `startInvoicePolling()` en vez del `startPolling()` actual.
+- Agregar una nueva columna con un icono de "ver documento" (icono `FileText` o `ExternalLink`) en cada fila de factura.
+- El boton solo se muestra si la factura tiene `document_id` y se encontro una URL valida.
+- Al pulsar, abre el PDF en una nueva pestana usando `convertStorageUrl()` del helper existente (para convertir URLs `storage://` si es necesario).
 
-#### 2. Indicador visual de procesamiento en la seccion de PDFs
+#### 3. Tambien en el detalle expandido
 
-Agregar un banner/estado entre la card de PDFs y el `ChemInvoicesTab`:
-- Mientras el polling esta activo: "Extrayendo datos de facturas..." con spinner y barra de progreso
-- Cuando termina: desaparece automaticamente
+- Dentro de `InvoiceDetail`, agregar un boton mas visible "Ver factura original (PDF)" en la cabecera del detalle expandido, para que sea facil acceder al documento cuando se esta revisando la informacion extraida.
 
-Se usara un nuevo estado `invoicePollingActive` para controlar la visibilidad.
-
-#### 3. Polling para "Analizar Facturas" en `useChemInvoices.ts`
-
-Reemplazar el `setTimeout` unico de 10s por un polling real:
-- Cada 5 segundos invalida `chem-invoice-alerts` y `chem-invoice-summary`
-- Para cuando detecta alertas nuevas o tras 2 minutos
-- Muestra "Analizando..." en el boton mientras esta activo (ya lo hace parcialmente con `isPending`, pero necesita extenderse al polling)
-
-#### 4. Mensaje contextual cuando no hay facturas procesadas
-
-En `ChemInvoicesTab`, cuando `invoices.length === 0` y no esta cargando:
-- Mostrar mensaje: "No hay facturas procesadas. Sube PDFs de facturas y pulsa 'Extraer datos' para comenzar."
-- El boton "Analizar Facturas" mostrara tooltip explicativo: "Primero extrae los datos de las facturas subidas"
-
-### Cambios por archivo
+### Archivos a modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/pages/chemicals/ChemContratos.tsx` | Crear `startInvoicePolling()` con invalidacion de queries de facturas. Agregar estado `invoicePollingActive`. Mostrar banner de procesamiento. Cambiar `handleExtractInvoices` para usar el nuevo polling. |
-| `src/components/chemicals/invoices/useChemInvoices.ts` | Reemplazar `setTimeout(10s)` en `analyzeInvoicesMutation` por polling real con intervalo de 5s y maximo 2 min. Exponer estado `analyzingPolling` para UI. |
-| `src/components/chemicals/invoices/ChemInvoicesTab.tsx` | Agregar mensaje vacio contextual cuando no hay facturas. Extender el estado de "Analizando" para cubrir el polling post-analisis. |
+| `src/pages/chemicals/ChemContratos.tsx` | Query para resolver `document_id` a `file_url`. Pasar mapa de URLs a `ChemInvoicesTab`. |
+| `src/components/chemicals/invoices/ChemInvoicesTab.tsx` | Recibir y propagar el mapa de URLs de documentos. |
+| `src/components/chemicals/invoices/ChemInvoicesList.tsx` | Agregar columna con boton "Ver PDF" en la tabla y boton en el detalle expandido. |
 
-### Flujo resultante
+### Resultado
 
-```text
-Usuario sube PDFs ──> Railway extrae texto (fase 1, automatico)
-                          |
-Usuario pulsa "Extraer datos"
-                          |
-    ┌─────────────────────┴──────────────────────┐
-    │  Banner: "Extrayendo datos de facturas..."  │
-    │  Polling cada 5s invalida chem-invoices     │
-    │  Barra de progreso visible                  │
-    └─────────────────────┬──────────────────────┘
-                          |
-    Railway termina ──> Polling detecta facturas ──> Tabla se llena
-                          |
-Usuario pulsa "Analizar Facturas"
-                          |
-    ┌─────────────────────┴──────────────────────┐
-    │  Boton: "Analizando..."                     │
-    │  Polling cada 5s invalida alerts/summary    │
-    └─────────────────────┬──────────────────────┘
-                          |
-    Railway termina ──> Alertas y resumen aparecen
-```
+El usuario podra abrir el PDF original de cualquier factura con un solo clic, tanto desde la tabla como desde el detalle expandido, facilitando la comparacion visual entre el documento original y los datos extraidos por la IA.
 
