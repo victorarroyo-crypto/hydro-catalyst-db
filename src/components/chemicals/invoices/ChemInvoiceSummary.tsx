@@ -33,12 +33,15 @@ export function ChemInvoiceSummary({ summary, loading }: Props) {
     );
   }
 
+  const alertas = summary.alertas ?? { pendientes: 0, ahorro_potencial_eur: 0, total: 0, por_tipo: {} };
+  const desglose = summary.desglose_costes ?? { productos: 0, portes: 0, recargos: 0, servicios: 0, descuentos: 0, pct_no_producto: 0 };
+
   const kpis = [
-    { label: 'Total Facturas', value: summary.total_invoices.toString(), icon: <Receipt className="w-5 h-5" /> },
+    { label: 'Total Facturas', value: (summary.total_invoices ?? 0).toString(), icon: <Receipt className="w-5 h-5" /> },
     { label: 'Gasto Total', value: formatEURCurrency(summary.total_gasto), icon: <TrendingDown className="w-5 h-5" /> },
-    { label: 'Alertas Pend.', value: summary.alertas.pendientes.toString(), icon: <AlertTriangle className="w-5 h-5" />, highlight: summary.alertas.pendientes > 0 },
-    { label: 'Ahorro Potencial', value: formatEURCurrency(summary.alertas.ahorro_potencial_eur), icon: <TrendingDown className="w-5 h-5" />, highlight: true, green: true },
-    { label: '% No Producto', value: `${summary.desglose_costes.pct_no_producto.toFixed(1)}%`, icon: <Percent className="w-5 h-5" />, highlight: summary.desglose_costes.pct_no_producto > 15 },
+    { label: 'Alertas Pend.', value: (alertas.pendientes ?? 0).toString(), icon: <AlertTriangle className="w-5 h-5" />, highlight: (alertas.pendientes ?? 0) > 0 },
+    { label: 'Ahorro Potencial', value: formatEURCurrency(alertas.ahorro_potencial_eur), icon: <TrendingDown className="w-5 h-5" />, highlight: true, green: true },
+    { label: '% No Producto', value: `${(desglose.pct_no_producto ?? 0).toFixed(1)}%`, icon: <Percent className="w-5 h-5" />, highlight: (desglose.pct_no_producto ?? 0) > 15 },
   ];
 
   return (
@@ -65,13 +68,13 @@ export function ChemInvoiceSummary({ summary, loading }: Props) {
         </CardHeader>
         <CardContent>
           {[
-            { label: 'Productos', value: summary.desglose_costes.productos, color: 'bg-primary/60' },
-            { label: 'Portes', value: summary.desglose_costes.portes, color: 'bg-blue-500' },
-            { label: 'Recargos', value: summary.desglose_costes.recargos, color: 'bg-orange-500' },
-            { label: 'Servicios', value: summary.desglose_costes.servicios, color: 'bg-purple-500' },
-            { label: 'Descuentos', value: summary.desglose_costes.descuentos, color: 'bg-green-500' },
+            { label: 'Productos', value: desglose.productos, color: 'bg-primary/60' },
+            { label: 'Portes', value: desglose.portes, color: 'bg-blue-500' },
+            { label: 'Recargos', value: desglose.recargos, color: 'bg-orange-500' },
+            { label: 'Servicios', value: desglose.servicios, color: 'bg-purple-500' },
+            { label: 'Descuentos', value: desglose.descuentos, color: 'bg-green-500' },
           ].map(item => {
-            const pct = summary.total_gasto > 0 ? (Math.abs(item.value) / summary.total_gasto * 100) : 0;
+            const pct = (summary.total_gasto ?? 0) > 0 ? (Math.abs(item.value) / (summary.total_gasto ?? 1) * 100) : 0;
             return (
               <div key={item.label} className="flex items-center gap-2 text-xs mb-1.5">
                 <span className="w-24">{item.label}</span>
