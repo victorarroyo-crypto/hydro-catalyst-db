@@ -1,30 +1,30 @@
 
-# Arreglar la pestaña Facturas: subida y extracción
 
-## Problemas detectados
+# Corregir pestaña Facturas: 3 bugs pendientes
 
-### Problema 1: El botón "Subir facturas" no funciona correctamente
-El botón abre el mismo modal de subida de documentos que la pestaña "Documentos", pero siempre sube los archivos con tipo `contrato_formal`. No hay forma de indicar que el documento es una factura.
+## Problema 1: Boton "Extraer datos de facturas" en pestaña Documentos sigue deshabilitado
+En la linea 594 del archivo, el boton de extraccion de facturas que aparece en la pestana Documentos todavia usa `hasDocsReadyForExtraction` (que requiere Phase 1 completa Y Phase 2 incompleta). Solo se corrigio el boton de la pestana Facturas pero no el de la pestana Documentos.
 
-### Problema 2: El botón "Extraer datos de facturas" está siempre deshabilitado
-El botón usa la condición `hasDocsReadyForExtraction`, que comprueba si hay documentos con texto extraído (Phase 1) pero sin datos estructurados (Phase 2). Como los 3 documentos actuales ya tienen Phase 2 completada, la condición siempre es `false` y el botón queda gris e inactivo.
+**Solucion**: Cambiar `hasDocsReadyForExtraction` a `hasDocsForInvoiceExtraction` en la linea 594.
 
-## Solución propuesta
+## Problema 2: Subida de documentos falla ("Failed to fetch")
+El modal de subida usa `handleUploadDocument` que requiere `selectedAudit` en la linea 217. Si no hay un audit seleccionado (por ejemplo si se accede desde la pestana Facturas sin haber seleccionado proveedor), la funcion retorna sin hacer nada. Ademas, tras subir, resetea el tipo a `contrato_formal` (linea 239), lo que pierde la seleccion de "factura".
 
-### Cambio 1: Botón "Subir facturas" abre el modal con tipo pre-seleccionado
-Cuando se pulse "Subir facturas" desde la pestaña Facturas, el modal de subida se abrirá con el tipo de documento pre-configurado como `factura` en vez de `contrato_formal`.
+**Solucion**: 
+- Cambiar el reset del tipo tras subida: en vez de forzar `contrato_formal`, mantener el tipo actual o usar un valor por defecto mas neutro como `otro`.
+- Verificar que `selectedAudit` existe antes de permitir subir y mostrar mensaje claro si no hay proveedor seleccionado.
 
-### Cambio 2: Condición del botón de extracción de facturas independiente
-Crear una condición separada para facturas que no dependa de Phase 2 de contratos. El botón "Extraer datos de facturas" se habilitará si hay al menos un documento con Phase 1 completada (tiene `raw_text`), independientemente de si ya tiene datos de contrato extraídos.
+## Problema 3: Texto del boton de extraccion no refleja lo que hace
+El boton dice "Extraer datos de facturas" pero realmente procesa todos los documentos (contratos y facturas). 
 
-### Cambio 3: Mejorar la pestaña Facturas con más contexto
-Añadir un mensaje más claro que explique el flujo: primero subir facturas (PDF/Excel), luego extraer datos. Mostrar cuántos documentos hay disponibles para extracción.
+**Solucion**: Renombrar a "Extraer datos de documentos" o "Extraer facturas y contratos" para que sea claro.
 
-## Detalles técicos
+## Cambios tecnicos
 
 Archivo: `src/pages/chemicals/ChemContratos.tsx`
 
-1. Añadir una función `openUploadForInvoices` que haga `setUploadTipo('factura'); setShowUploadModal(true)` y usarla en el botón "Subir facturas".
-2. Crear `hasDocsForInvoiceExtraction` = `documents.some(d => isPhase1Complete(d))` -- sin el filtro `!isPhase2Complete`.
-3. Usar `hasDocsForInvoiceExtraction` en el `disabled` del botón de la pestaña Facturas en lugar de `hasDocsReadyForExtraction`.
-4. Actualizar el texto explicativo de la pestaña para indicar cuántos documentos están disponibles.
+1. **Linea 594**: Cambiar `disabled={extractingInvoices || !hasDocsReadyForExtraction}` a `disabled={extractingInvoices || !hasDocsForInvoiceExtraction}`
+2. **Linea 239**: Cambiar `setUploadTipo('contrato_formal')` a `setUploadTipo('otro')` para no sobreescribir la seleccion
+3. **Linea 599**: Cambiar texto de "Extraer datos de facturas" a "Extraer datos de facturas y contratos" (pestana Documentos)
+4. **Linea 1288**: Cambiar texto del boton en pestana Facturas a "Extraer datos de todos los documentos" para claridad
+
