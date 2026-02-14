@@ -40,13 +40,14 @@ export function ChemInvoicesTab({ projectId, auditId }: Props) {
   // Build document_id -> file_url map for PDF buttons
   const documentIds = useMemo(() => invoices.filter(inv => inv.document_id).map(inv => inv.document_id!), [invoices]);
 
-  const { data: docUrls = [] } = useQuery({
+  // Fetch document URLs and audit_id for supplier name resolution
+  const { data: docData = [] } = useQuery({
     queryKey: ['chem-doc-urls', projectId, documentIds],
     queryFn: async () => {
       if (documentIds.length === 0) return [];
       const { data, error } = await externalSupabase
         .from('chem_contract_documents')
-        .select('id, file_url')
+        .select('id, file_url, audit_id')
         .in('id', documentIds);
       if (error) throw error;
       return data || [];
@@ -54,13 +55,57 @@ export function ChemInvoicesTab({ projectId, auditId }: Props) {
     enabled: !!projectId && documentIds.length > 0,
   });
 
+  // Fetch audit proveedor_nombre for supplier resolution
+  const auditIds = useMemo(() => {
+    const ids = new Set<string>();
+    docData.forEach((d: any) => { if (d.audit_id) ids.add(d.audit_id); });
+    return Array.from(ids);
+  }, [docData]);
+
+  const { data: auditSuppliers = [] } = useQuery({
+    queryKey: ['chem-audit-suppliers', projectId, auditIds],
+    queryFn: async () => {
+      if (auditIds.length === 0) return [];
+      const { data, error } = await externalSupabase
+        .from('chem_contract_audits')
+        .select('id, proveedor_nombre')
+        .in('id', auditIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: auditIds.length > 0,
+  });
+
   const documentUrlMap = useMemo(() => {
     const map: Record<string, string> = {};
-    docUrls.forEach((d: any) => {
+    docData.forEach((d: any) => {
       if (d.file_url) map[d.id] = d.file_url;
     });
     return map;
-  }, [docUrls]);
+  }, [docData]);
+
+  // Build document_id -> proveedor_nombre map
+  const docSupplierMap = useMemo(() => {
+    const auditMap = new Map<string, string>();
+    auditSuppliers.forEach((a: any) => { if (a.proveedor_nombre) auditMap.set(a.id, a.proveedor_nombre); });
+    const map: Record<string, string> = {};
+    docData.forEach((d: any) => {
+      if (d.audit_id && auditMap.has(d.audit_id)) {
+        map[d.id] = auditMap.get(d.audit_id)!;
+      }
+    });
+    return map;
+  }, [docData, auditSuppliers]);
+
+  // Enrich invoices with supplier name from audit when chem_suppliers is null
+  const enrichedInvoices = useMemo(() => {
+    return invoices.map(inv => {
+      if (inv.chem_suppliers?.nombre || !inv.document_id) return inv;
+      const nombre = docSupplierMap[inv.document_id];
+      if (!nombre) return inv;
+      return { ...inv, chem_suppliers: { nombre } };
+    });
+  }, [invoices, docSupplierMap]);
 
   const openChemPdf = useCallback(async (fileUrl: string) => {
     // For http(s) URLs, open directly
@@ -150,7 +195,7 @@ export function ChemInvoicesTab({ projectId, auditId }: Props) {
 
         <TabsContent value="facturas">
           <ChemInvoicesList
-            invoices={invoices}
+            invoices={enrichedInvoices}
             loading={invoicesLoading}
             onUpdateInvoice={updateInvoice}
             onDeleteInvoice={deleteInvoice}
