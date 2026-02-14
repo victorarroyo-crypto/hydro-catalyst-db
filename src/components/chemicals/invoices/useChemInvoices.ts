@@ -108,7 +108,10 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
 
   const analyzeInvoicesMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/analyze-invoices`, {
+      const url = auditId
+        ? `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/analyze-invoices?audit_id=${auditId}`
+        : `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/analyze-invoices`;
+      const res = await fetch(url, {
         method: 'POST',
       });
       if (!res.ok) throw new Error('Error iniciando análisis');
@@ -154,7 +157,10 @@ export function useChemInvoices(projectId: string | undefined, auditId?: string)
   // Auto-link products
   const autoLinkMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices/auto-link-products`, {
+      const url = auditId
+        ? `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices/auto-link-products?audit_id=${auditId}`
+        : `${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices/auto-link-products`;
+      const res = await fetch(url, {
         method: 'POST',
       });
       if (!res.ok) throw new Error('Error vinculando productos');
