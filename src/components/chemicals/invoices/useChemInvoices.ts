@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import type { ChemInvoice, ChemInvoiceAlert, InvoiceSummary } from './types';
 
 const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
-export function useChemInvoices(projectId: string | undefined, supplierId?: string) {
+export function useChemInvoices(projectId: string | undefined, auditId?: string) {
   const queryClient = useQueryClient();
 
   // List invoices
@@ -183,17 +184,36 @@ export function useChemInvoices(projectId: string | undefined, supplierId?: stri
     onError: () => toast.error('Error al eliminar factura'),
   });
 
-  const filteredInvoices = supplierId
-    ? (invoicesQuery.data || []).filter(i => i.supplier_id === supplierId)
+  // When filtering by audit, fetch document IDs belonging to that audit
+  const auditDocsQuery = useQuery({
+    queryKey: ['chem-audit-doc-ids', auditId],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await externalSupabase
+        .from('chem_contract_documents')
+        .select('id')
+        .eq('audit_id', auditId!);
+      if (error) throw error;
+      return (data || []).map((d: any) => d.id);
+    },
+    enabled: !!auditId,
+  });
+
+  const auditDocIds = useMemo(() => new Set(auditDocsQuery.data || []), [auditDocsQuery.data]);
+
+  const filteredInvoices = auditId
+    ? (invoicesQuery.data || []).filter(i => i.document_id && auditDocIds.has(i.document_id))
     : (invoicesQuery.data || []);
 
-  const filteredAlerts = supplierId
-    ? (alertsQuery.data || []).filter(a => a.supplier_id === supplierId)
+  // Filter alerts by matching invoice_ids from filtered invoices
+  const filteredInvoiceIds = useMemo(() => new Set(filteredInvoices.map(i => i.id)), [filteredInvoices]);
+
+  const filteredAlerts = auditId
+    ? (alertsQuery.data || []).filter(a => a.invoice_id && filteredInvoiceIds.has(a.invoice_id))
     : (alertsQuery.data || []);
 
   return {
     invoices: filteredInvoices,
-    invoicesLoading: invoicesQuery.isLoading,
+    invoicesLoading: invoicesQuery.isLoading || (!!auditId && auditDocsQuery.isLoading),
     alerts: filteredAlerts,
     alertsLoading: alertsQuery.isLoading,
     summary: summaryQuery.data,
