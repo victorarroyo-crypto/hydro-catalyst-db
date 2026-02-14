@@ -83,14 +83,25 @@ export default function ChemDashboard() {
     { label: 'Ahorro Potencial', value: compactCurrency(s.ahorroPotencial), color: COLORS.green, icon: <TrendingDown className="w-5 h-5" /> },
   ];
 
-  // Donut data
-  const donutData = [
-    { name: 'Productos', value: s.desglose.productos, pct: 0 },
-    { name: 'Portes', value: s.desglose.portes, pct: 0 },
-    { name: 'Recargos', value: s.desglose.recargos, pct: 0 },
-    { name: 'Servicios', value: s.desglose.servicios, pct: 0 },
-    { name: 'Descuentos', value: Math.abs(s.desglose.descuentos ?? 0), pct: 0 },
-  ].filter(d => d.value > 0);
+  // Donut data — breakdown by product
+  const donutData = s.baselines
+    .map(b => ({
+      name: b.producto,
+      value: b.gasto_anual ?? (b.precio_medio * b.volumen_total_kg),
+      pct: 0,
+    }))
+    .filter(d => d.value > 0)
+    .sort((a, b) => b.value - a.value);
+
+  // Group small slices into "Otros" if more than 8 products
+  if (donutData.length > 8) {
+    const top7 = donutData.slice(0, 7);
+    const rest = donutData.slice(7);
+    const otrosValue = rest.reduce((sum, d) => sum + d.value, 0);
+    donutData.length = 0;
+    donutData.push(...top7, { name: 'Otros', value: otrosValue, pct: 0 });
+  }
+
   const donutTotal = donutData.reduce((acc, d) => acc + d.value, 0);
   donutData.forEach(d => { d.pct = donutTotal > 0 ? (d.value / donutTotal) * 100 : 0; });
 
@@ -124,7 +135,7 @@ export default function ChemDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Desglose de Costes</CardTitle>
+            <CardTitle className="text-sm">Desglose por Producto</CardTitle>
           </CardHeader>
           <CardContent>
             {donutData.length > 0 ? (
