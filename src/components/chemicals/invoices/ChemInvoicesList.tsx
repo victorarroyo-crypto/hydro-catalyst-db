@@ -4,7 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronDown, ChevronRight, Trash2, Package, Truck, AlertTriangle, ArrowDown, Clock, Wrench, HelpCircle, Loader2, Link } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trash2, Package, Truck, AlertTriangle, ArrowDown, Clock, Wrench, HelpCircle, Loader2, Link, ExternalLink } from 'lucide-react';
+import { openDocumentUrl } from '@/utils/storageUrlHelper';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { ChemInvoice, ChemInvoiceLine, LineType } from './types';
@@ -17,6 +18,7 @@ interface Props {
   onDeleteInvoice: (invoiceId: string) => void;
   onAutoLink: () => void;
   autoLinking: boolean;
+  documentUrlMap: Record<string, string>;
 }
 
 const LINE_ICONS: Partial<Record<LineType, React.ReactNode>> = {
@@ -29,7 +31,7 @@ const LINE_ICONS: Partial<Record<LineType, React.ReactNode>> = {
   otro: <HelpCircle className="w-3.5 h-3.5" />,
 };
 
-export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteInvoice, onAutoLink, autoLinking }: Props) {
+export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteInvoice, onAutoLink, autoLinking, documentUrlMap }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterSupplier, setFilterSupplier] = useState<string>('all');
   const [filterEstado, setFilterEstado] = useState<string>('all');
@@ -124,6 +126,7 @@ export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteI
                 <TableHead className="text-center">Líneas</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-center">Confianza</TableHead>
+                <TableHead className="w-20" />
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -162,18 +165,32 @@ export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteI
                         ) : '—'}
                       </TableCell>
                       <TableCell>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={e => { e.stopPropagation(); onDeleteInvoice(inv.id); }}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          {inv.document_id && documentUrlMap[inv.document_id] && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-[#32b4cd]"
+                              title="Ver PDF"
+                              onClick={e => { e.stopPropagation(); openDocumentUrl(documentUrlMap[inv.document_id!]); }}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={e => { e.stopPropagation(); onDeleteInvoice(inv.id); }}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
 
                     {/* Expanded detail */}
                     {isExpanded && (
                       <TableRow>
-                        <TableCell colSpan={9} className="p-0 bg-muted/20">
+                        <TableCell colSpan={10} className="p-0 bg-muted/20">
                           <InvoiceDetail
                             invoice={inv}
+                            pdfUrl={inv.document_id ? documentUrlMap[inv.document_id] : undefined}
                             onUpdateEstado={(estado) => onUpdateInvoice({ invoiceId: inv.id, data: { estado } })}
                           />
                         </TableCell>
@@ -190,7 +207,7 @@ export function ChemInvoicesList({ invoices, loading, onUpdateInvoice, onDeleteI
   );
 }
 
-function InvoiceDetail({ invoice, onUpdateEstado }: { invoice: ChemInvoice; onUpdateEstado: (estado: string) => void }) {
+function InvoiceDetail({ invoice, pdfUrl, onUpdateEstado }: { invoice: ChemInvoice; pdfUrl?: string; onUpdateEstado: (estado: string) => void }) {
   const lines = invoice.lines || [];
 
   const desglose = useMemo(() => {
@@ -229,6 +246,11 @@ function InvoiceDetail({ invoice, onUpdateEstado }: { invoice: ChemInvoice; onUp
               <SelectItem value="confirmado">Confirmado</SelectItem>
             </SelectContent>
           </Select>
+          {pdfUrl && (
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openDocumentUrl(pdfUrl)}>
+              <ExternalLink className="w-3.5 h-3.5 mr-1" /> Ver PDF
+            </Button>
+          )}
         </div>
       </div>
 
