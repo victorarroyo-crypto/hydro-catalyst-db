@@ -236,7 +236,7 @@ export default function ChemContratos() {
       toast.success('Documento subido correctamente');
       setShowUploadModal(false);
       setUploadFile(null);
-      setUploadTipo('contrato_formal');
+      setUploadTipo('otro');
     } catch (err: any) {
       toast.error(`Error: ${err.message}`);
     } finally {
@@ -591,12 +591,12 @@ export default function ChemContratos() {
                 </Button>
                 <Button
                   onClick={handleExtractInvoices}
-                  disabled={extractingInvoices || !hasDocsReadyForExtraction}
+                  disabled={extractingInvoices || !hasDocsForInvoiceExtraction}
                   variant="outline"
                   className="border-[#32b4cd] text-[#32b4cd] hover:bg-[#32b4cd]/10"
                 >
                   {extractingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Receipt className="w-4 h-4 mr-2" />}
-                  Extraer datos de facturas
+                  Extraer datos de facturas y contratos
                 </Button>
               </div>
             )}
@@ -1285,7 +1285,7 @@ export default function ChemContratos() {
                     variant="outline"
                   >
                     {extractingInvoices ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Receipt className="w-4 h-4 mr-2" />}
-                    Extraer datos de facturas
+                    Extraer datos de todos los documentos
                   </Button>
                 </div>
               </CardContent>
