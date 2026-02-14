@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 import { useParams } from 'react-router-dom';
+import { processTracker } from '@/lib/processTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { API_URL } from '@/lib/api';
@@ -181,7 +182,7 @@ export default function ChemContratos() {
     onError: () => toast.error('Error al eliminar'),
   });
 
-  // Cleanup polling on unmount
+  // Cleanup polling on unmount (but don't clear process tracker - backend continues)
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -189,10 +190,30 @@ export default function ChemContratos() {
     };
   }, []);
 
+  // Auto-resume polling for active processes on mount
+  useEffect(() => {
+    if (!projectId) return;
+    const activeInvoice = processTracker.getActive('chem-invoice-extraction', projectId);
+    if (activeInvoice && !invoicePollingActive) {
+      console.log('[ProcessTracker] Resuming invoice extraction polling for', projectId);
+      setInvoicePollingActive(true);
+      startInvoicePolling();
+    }
+    const activeContract = processTracker.getActive('chem-contract-extraction', projectId);
+    if (activeContract && !pollingRef.current) {
+      console.log('[ProcessTracker] Resuming contract extraction polling for', projectId);
+      startPolling(activeContract.metadata?.docIds);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
   // Dedicated invoice polling: invalidates chem-invoices queries until data appears
   const startInvoicePolling = useCallback(() => {
     if (invoicePollingRef.current) clearInterval(invoicePollingRef.current);
     setInvoicePollingActive(true);
+    // Track process for resilience across navigation
+    if (projectId) processTracker.start('chem-invoice-extraction', projectId, 180000);
+    const initialInvoiceCount = queryClient.getQueryData<any[]>(['chem-invoices', projectId])?.length || 0;
     invoicePollingRef.current = setInterval(async () => {
       try {
         const res = await fetch(`${RAILWAY_URL}/api/chem-consulting/projects/${projectId}/invoices`);
@@ -204,9 +225,10 @@ export default function ChemContratos() {
           queryClient.invalidateQueries({ queryKey: ['chem-invoice-alerts', projectId] });
           queryClient.invalidateQueries({ queryKey: ['chem-invoice-summary', projectId] });
           queryClient.invalidateQueries({ queryKey: ['chem-all-project-docs', projectId] });
-          if (invoices.length > 0) {
+          if (invoices.length > initialInvoiceCount) {
             if (invoicePollingRef.current) clearInterval(invoicePollingRef.current);
             setInvoicePollingActive(false);
+            if (projectId) processTracker.complete('chem-invoice-extraction', projectId);
             toast.success(`${invoices.length} factura${invoices.length > 1 ? 's' : ''} procesada${invoices.length > 1 ? 's' : ''} correctamente`);
           }
         }
@@ -217,6 +239,7 @@ export default function ChemContratos() {
       if (invoicePollingRef.current) {
         clearInterval(invoicePollingRef.current);
         setInvoicePollingActive(false);
+        if (projectId) processTracker.complete('chem-invoice-extraction', projectId);
         toast.info('Tiempo de espera agotado. Recarga la página para ver si hay facturas procesadas.');
       }
     }, 180000);
@@ -224,18 +247,23 @@ export default function ChemContratos() {
 
   const startPolling = useCallback((docIds?: string[]) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
+    // Track process for resilience across navigation
+    if (projectId) processTracker.start('chem-contract-extraction', projectId, 180000, { docIds, auditId: selectedAudit });
     pollingRef.current = setInterval(async () => {
+      const auditId = selectedAudit || processTracker.getActive('chem-contract-extraction', projectId!)?.metadata?.auditId;
+      if (!auditId) return;
       const { data } = await externalSupabase
         .from('chem_contract_documents')
         .select('id, datos_extraidos, confianza_extraccion, estado_extraccion')
-        .eq('audit_id', selectedAudit!);
+        .eq('audit_id', auditId);
       const targetDocs = docIds 
         ? data?.filter((d: any) => docIds.includes(d.id))
         : data;
       const hasStructured = targetDocs?.some((d: any) => d.datos_extraidos?.supplier_name);
       if (hasStructured) {
         if (pollingRef.current) clearInterval(pollingRef.current);
-        queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, selectedAudit] });
+        if (projectId) processTracker.complete('chem-contract-extraction', projectId);
+        queryClient.invalidateQueries({ queryKey: ['chem-contract-docs', projectId, auditId] });
         toast.success('Extracción completada — las cláusulas del contrato han sido extraídas.');
       }
     }, 5000);

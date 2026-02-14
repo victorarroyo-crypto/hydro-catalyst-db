@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { processTracker } from '@/lib/processTracker';
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
   ArrowLeft, 
@@ -88,10 +89,22 @@ export default function ConsultoriaDiagnostico() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const [workflowId, setWorkflowId] = useState<string | null>(() => {
+    // Restore from process tracker on mount
+    if (!id) return null;
+    const active = processTracker.getActive('consultoria-diagnosis', id);
+    return active?.metadata?.workflowId || null;
+  });
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [pollingStartTime, setPollingStartTime] = useState<number | null>(null);
+  const [isRunning, setIsRunning] = useState(() => {
+    if (!id) return false;
+    return !!processTracker.getActive('consultoria-diagnosis', id);
+  });
+  const [pollingStartTime, setPollingStartTime] = useState<number | null>(() => {
+    if (!id) return null;
+    const active = processTracker.getActive('consultoria-diagnosis', id);
+    return active?.startedAt || null;
+  });
 
   const POLLING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -120,6 +133,7 @@ export default function ConsultoriaDiagnostico() {
           setWorkflowId(null);
           setWorkflowStatus(null);
           setPollingStartTime(null);
+          if (id) processTracker.complete('consultoria-diagnosis', id);
           toast.error("El diagnóstico ha tardado demasiado. Por favor, inténtalo de nuevo.");
           return;
         }
@@ -138,6 +152,7 @@ export default function ConsultoriaDiagnostico() {
           setWorkflowId(null);
           setWorkflowStatus(null);
           setPollingStartTime(null);
+          if (id) processTracker.complete('consultoria-diagnosis', id);
           await refetchFindings();
           toast.success("Diagnóstico completado - Los hallazgos han sido actualizados");
         } else if (status.status === 'failed') {
@@ -146,6 +161,7 @@ export default function ConsultoriaDiagnostico() {
           setWorkflowId(null);
           setWorkflowStatus(null);
           setPollingStartTime(null);
+          if (id) processTracker.complete('consultoria-diagnosis', id);
           toast.error(status.error_message || "Error en el diagnóstico");
         }
       } catch (error) {
@@ -188,6 +204,7 @@ export default function ConsultoriaDiagnostico() {
       if (data.workflow_id) {
         setWorkflowId(data.workflow_id);
         setWorkflowStatus({ id: data.workflow_id, status: 'running', progress_percentage: 0 });
+        processTracker.start('consultoria-diagnosis', id, POLLING_TIMEOUT_MS, { workflowId: data.workflow_id });
         toast.success('Diagnóstico iniciado');
       } else {
         throw new Error('No se recibió workflow_id');
