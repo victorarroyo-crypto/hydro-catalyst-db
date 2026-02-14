@@ -5,7 +5,7 @@ import type { ChemInvoice, ChemInvoiceAlert, InvoiceSummary } from './types';
 
 const RAILWAY_URL = 'https://watertech-scouting-production.up.railway.app';
 
-export function useChemInvoices(projectId: string | undefined) {
+export function useChemInvoices(projectId: string | undefined, supplierId?: string) {
   const queryClient = useQueryClient();
 
   // List invoices
@@ -183,10 +183,18 @@ export function useChemInvoices(projectId: string | undefined) {
     onError: () => toast.error('Error al eliminar factura'),
   });
 
+  const filteredInvoices = supplierId
+    ? (invoicesQuery.data || []).filter(i => i.supplier_id === supplierId)
+    : (invoicesQuery.data || []);
+
+  const filteredAlerts = supplierId
+    ? (alertsQuery.data || []).filter(a => a.supplier_id === supplierId)
+    : (alertsQuery.data || []);
+
   return {
-    invoices: invoicesQuery.data || [],
+    invoices: filteredInvoices,
     invoicesLoading: invoicesQuery.isLoading,
-    alerts: alertsQuery.data || [],
+    alerts: filteredAlerts,
     alertsLoading: alertsQuery.isLoading,
     summary: summaryQuery.data,
     summaryLoading: summaryQuery.isLoading,
