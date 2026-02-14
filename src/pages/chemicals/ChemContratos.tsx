@@ -1300,23 +1300,26 @@ export default function ChemContratos() {
         <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Subir documento</DialogTitle>
+              <DialogTitle>{uploadTipo === 'otro' ? 'Subir factura' : 'Subir documento'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div>
-                <Label>Tipo de documento</Label>
-                <Select value={uploadTipo} onValueChange={setUploadTipo}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="contrato_formal">Contrato formal</SelectItem>
-                    <SelectItem value="condiciones_generales">Condiciones generales</SelectItem>
-                    <SelectItem value="email_tarifa">Email tarifa</SelectItem>
-                    <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
-                    <SelectItem value="adenda">Adenda</SelectItem>
-                    <SelectItem value="otro">Otro / Factura</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {uploadTipo === 'otro' ? (
+                <p className="text-sm text-muted-foreground">El archivo se clasificará automáticamente como factura.</p>
+              ) : (
+                <div>
+                  <Label>Tipo de documento</Label>
+                  <Select value={uploadTipo} onValueChange={setUploadTipo}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="contrato_formal">Contrato formal</SelectItem>
+                      <SelectItem value="condiciones_generales">Condiciones generales</SelectItem>
+                      <SelectItem value="email_tarifa">Email tarifa</SelectItem>
+                      <SelectItem value="oferta_aceptada">Oferta aceptada</SelectItem>
+                      <SelectItem value="adenda">Adenda</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div>
                 <Label>Archivo</Label>
                 <Input
