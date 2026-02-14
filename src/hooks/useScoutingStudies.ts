@@ -417,7 +417,7 @@ export function useStudyLonglist(studyId: string | undefined) {
     },
     enabled: !!studyId,
     refetchInterval: 3000,
-    refetchIntervalInBackground: false,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
 }

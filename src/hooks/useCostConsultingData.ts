@@ -167,14 +167,15 @@ export const useCostProject = (projectId?: string) => {
       return data as CostProject;
     },
     enabled: !!projectId,
-    // Polling activo si está en proceso
+    // Polling activo si está en proceso - también en background
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (status === 'extracting' || status === 'processing' || status === 'analyzing' || status === 'uploading') {
         return 3000; // Poll cada 3 segundos
       }
       return false;
-    }
+    },
+    refetchIntervalInBackground: true,
   });
 };
 
