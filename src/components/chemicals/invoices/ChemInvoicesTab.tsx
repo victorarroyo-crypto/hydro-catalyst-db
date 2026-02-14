@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, BarChart3, AlertTriangle, Receipt, FileText, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useQuery } from '@tanstack/react-query';
+import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { useChemInvoices } from './useChemInvoices';
 import { ChemInvoicesList } from './ChemInvoicesList';
 import { ChemInvoiceAlerts } from './ChemInvoiceAlerts';
@@ -32,6 +34,30 @@ export function ChemInvoicesTab({ projectId }: Props) {
 
   const pendingAlerts = alerts.filter(a => a.estado === 'pendiente').length;
 
+  // Build document_id -> file_url map for PDF buttons
+  const documentIds = useMemo(() => invoices.filter(inv => inv.document_id).map(inv => inv.document_id!), [invoices]);
+
+  const { data: docUrls = [] } = useQuery({
+    queryKey: ['chem-doc-urls', projectId, documentIds],
+    queryFn: async () => {
+      if (documentIds.length === 0) return [];
+      const { data, error } = await externalSupabase
+        .from('chem_contract_documents')
+        .select('id, file_url')
+        .in('id', documentIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!projectId && documentIds.length > 0,
+  });
+
+  const documentUrlMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    docUrls.forEach((d: any) => {
+      if (d.file_url) map[d.id] = d.file_url;
+    });
+    return map;
+  }, [docUrls]);
   return (
     <div className="space-y-4">
       {/* Top action bar */}
@@ -99,6 +125,7 @@ export function ChemInvoicesTab({ projectId }: Props) {
             onDeleteInvoice={deleteInvoice}
             onAutoLink={() => autoLinkProducts()}
             autoLinking={autoLinking}
+            documentUrlMap={documentUrlMap}
           />
         </TabsContent>
 
