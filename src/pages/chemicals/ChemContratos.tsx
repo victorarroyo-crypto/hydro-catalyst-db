@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { API_URL } from '@/lib/api';
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,15 +51,13 @@ export default function ChemContratos() {
   const invoicePollingRef = useRef<NodeJS.Timeout | null>(null);
   const [invoicePollingActive, setInvoicePollingActive] = useState(false);
 
-  // Query audits with JOIN to get supplier name
+  // Query audits via Railway API
   const { data: audits = [] } = useQuery({
     queryKey: ['chem-audits', projectId],
     queryFn: async () => {
-      const { data, error } = await externalSupabase
-        .from('chem_contract_audits')
-        .select('*, chem_suppliers(nombre)')
-        .eq('project_id', projectId!);
-      if (error) throw error;
+      const res = await fetch(`${API_URL}/api/chem-consulting/projects/${projectId}/audits`);
+      if (!res.ok) throw new Error('Error cargando auditorías');
+      const data = await res.json();
       return data || [];
     },
     enabled: !!projectId,
@@ -128,20 +128,13 @@ export default function ChemContratos() {
   // Creating an audit: first create supplier, then audit referencing supplier_id
   const createAuditMutation = useMutation({
     mutationFn: async (nombre: string) => {
-      // First create the supplier
-      const { data: supplier, error: supplierError } = await externalSupabase
-        .from('chem_suppliers')
-        .insert({ nombre, project_id: projectId! })
-        .select()
-        .single();
-      if (supplierError) throw supplierError;
-
-      // Then create the audit referencing the supplier
-      const { error } = await externalSupabase.from('chem_contract_audits').insert({
-        project_id: projectId!,
-        supplier_id: supplier.id,
+      const res = await fetch(`${API_URL}/api/chem-consulting/projects/${projectId}/audits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proveedor_nombre: nombre }),
       });
-      if (error) throw error;
+      if (!res.ok) throw new Error('Error al crear auditoría');
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chem-audits', projectId] });
@@ -157,8 +150,13 @@ export default function ChemContratos() {
 
   const updateAuditMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const { error } = await externalSupabase.from('chem_contract_audits').update(data).eq('id', id);
-      if (error) throw error;
+      const res = await fetch(`${API_URL}/api/chem-consulting/projects/${projectId}/audits/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Error al actualizar');
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chem-audits', projectId] });
@@ -381,7 +379,7 @@ export default function ChemContratos() {
   const currentAudit = audits.find((a: any) => a.id === selectedAudit);
 
   // Helper to get supplier name from joined data
-  const getSupplierName = (audit: any) => audit?.chem_suppliers?.nombre || '—';
+  const getSupplierName = (audit: any) => audit?.chem_suppliers?.nombre || audit?.proveedor_nombre || audit?.supplier_name || '—';
 
   const getScoreBar = (score: number | null, label: string) => {
     const val = score || 0;
@@ -1052,10 +1050,18 @@ export default function ChemContratos() {
                         <Label className="text-xs">Take-or-pay</Label>
                       </div>
                       {currentAudit.take_or_pay && (
-                        <div>
-                          <Label className="text-xs">Detalle penalización</Label>
-                          <Textarea value={currentAudit.penalizacion_take_or_pay ?? ''} onChange={e => updateField('penalizacion_take_or_pay', e.target.value)} className="h-16" />
-                        </div>
+                        <>
+                          <div>
+                            <Label className="text-xs">Detalle penalización</Label>
+                            <Textarea value={currentAudit.penalizacion_take_or_pay ?? ''} onChange={e => updateField('penalizacion_take_or_pay', e.target.value)} className="h-16" />
+                          </div>
+                          {!currentAudit.banda_volumen_min && (
+                            <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-200 text-xs">
+                              <AlertTriangle className="w-4 h-4 inline mr-1" />
+                              ⚠️ Take-or-Pay sin banda de flexibilidad. Riesgo de penalización si baja el consumo. Ver Manual Cap. 6.3
+                            </div>
+                          )}
+                        </>
                       )}
                     </CardContent>
                   </CollapsibleContent>
@@ -1107,8 +1113,9 @@ export default function ChemContratos() {
                             <Label className="text-xs">Simetría subida/bajada</Label>
                           </div>
                           {!currentAudit.simetria_subida_bajada && currentAudit.formula_revision_existe && (
-                            <div className="p-2 rounded text-xs bg-yellow-50 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
-                              ⚠ Fórmula asimétrica: las subidas se aplican diferente que las bajadas
+                            <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-200 text-xs">
+                              <AlertTriangle className="w-4 h-4 inline mr-1" />
+                              ⚠️ Cláusula de revisión asimétrica. El precio sube con el índice pero no baja. Negociar simetría.
                             </div>
                           )}
                           <div className="grid grid-cols-2 gap-3">
@@ -1161,9 +1168,9 @@ export default function ChemContratos() {
                             </Tooltip>
                           </TooltipProvider>
                           {currentAudit.rappel_existe && !currentAudit.rappel_cobrado && (
-                            <div className="p-3 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-200 flex items-center gap-2">
-                              <DollarSign className="w-4 h-4" />
-                              <span className="text-sm font-medium">RAPPEL PACTADO NO COBRADO — Ahorro inmediato</span>
+                            <div className="p-3 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-200 text-xs">
+                              <AlertTriangle className="w-4 h-4 inline mr-1" />
+                              ⚠️ Rappel no cobrado. Verificar con proveedor si se ha emitido nota de abono.
                             </div>
                           )}
                         </>
@@ -1258,13 +1265,18 @@ export default function ChemContratos() {
               {/* Sección Scoring */}
               <Card>
                 <CardHeader className="py-3">
-                  <CardTitle className="text-sm">⭐ Scoring</CardTitle>
+                  <CardTitle className="text-sm">⭐ Scoring (1-4)</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
                   <div className="grid grid-cols-2 gap-3">
-                    {(['score_precio', 'score_condiciones', 'score_servicio', 'score_logistica'] as const).map(field => (
+                    {([
+                      { field: 'score_precio', label: 'Precio', low: 'Caro', high: 'Competitivo' },
+                      { field: 'score_condiciones', label: 'Condiciones', low: 'Rígidas', high: 'Flexibles' },
+                      { field: 'score_servicio', label: 'Servicio', low: 'Básico', high: 'Excelente' },
+                      { field: 'score_logistica', label: 'Logística', low: 'Deficiente', high: 'Óptima' },
+                    ] as const).map(({ field, label, low, high }) => (
                       <div key={field}>
-                        <Label className="text-xs capitalize">{field.replace('score_', '')}</Label>
+                        <Label className="text-xs">{label} <span className="text-muted-foreground">({low} → {high})</span></Label>
                         <Select value={currentAudit[field]?.toString() ?? ''} onValueChange={v => {
                           updateField(field, parseFloat(v));
                         }}>
@@ -1276,11 +1288,31 @@ export default function ChemContratos() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Radar Chart */}
+                  {scoreMedia != null && (
+                    <div className="flex flex-col items-center pt-2">
+                      <ResponsiveContainer width="100%" height={250}>
+                        <RadarChart data={[
+                          { axis: 'Precio', value: currentAudit.score_precio || 0, fullMark: 4 },
+                          { axis: 'Condiciones', value: currentAudit.score_condiciones || 0, fullMark: 4 },
+                          { axis: 'Servicio', value: currentAudit.score_servicio || 0, fullMark: 4 },
+                          { axis: 'Logística', value: currentAudit.score_logistica || 0, fullMark: 4 },
+                        ]}>
+                          <PolarGrid />
+                          <PolarAngleAxis dataKey="axis" className="text-xs" />
+                          <PolarRadiusAxis angle={90} domain={[0, 4]} tickCount={5} className="text-xs" />
+                          <Radar name="Score" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
                   <div className="text-center pt-2">
                     <span className="text-2xl font-bold">{scoreMedia ? scoreMedia.toFixed(1) : '—'}</span>
                     <span className="text-sm text-muted-foreground ml-2">media</span>
                     {scoreMedia != null && scoreMedia < 2.5 && (
-                      <p className="text-red-600 text-sm font-semibold mt-1">PRIORIDAD RENEGOCIACIÓN</p>
+                      <p className="text-destructive text-sm font-semibold mt-1">PRIORIDAD RENEGOCIACIÓN</p>
                     )}
                   </div>
                 </CardContent>
