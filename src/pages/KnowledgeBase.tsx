@@ -1615,8 +1615,8 @@ export default function KnowledgeBase() {
       console.error('Download error:', error);
       // Check if it's a document without stored URL (processed before fix)
       const errorMsg = error?.message || '';
-      if (errorMsg.includes('500') || errorMsg.includes('not found') || errorMsg.includes('no file_url')) {
-        toast.error('Este documento fue procesado antes del fix de URLs. Reprocésalo para habilitar la descarga.');
+      if (errorMsg.includes('404') || errorMsg.includes('500') || errorMsg.includes('not found') || errorMsg.includes('no file_url') || errorMsg.includes('Document not found')) {
+        toast.error('Este documento no está disponible para descarga. Reprocésalo primero para habilitar la descarga.');
       } else if (errorMsg.includes('blocked') || errorMsg.includes('CORS')) {
         toast.error('Descarga bloqueada. Desactiva tu ad-blocker temporalmente.');
       } else {
